@@ -1,0 +1,21 @@
+{
+  "name": "nexus-agentic-os",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-tenant WhatsApp Business agentic OS serving Zipicka, Juris Prime, Juris Prime Legal, SFS International, and Atif Ali Production.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:worker": "npm run dev:worker -w apps/api",
+    "build": "npm run build -w packages/shared -w packages/db -w packages/agents && npm run build -w apps/api -w apps/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
