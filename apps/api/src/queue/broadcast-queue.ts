@@ -2,7 +2,7 @@ import { Queue } from "bullmq";
 import type { BroadcastSendJob } from "@nexus/shared";
 import { getRedisConnection } from "./queue.js";
 
-export const BROADCAST_SEND_QUEUE = "whatsapp:broadcast-send";
+export const BROADCAST_SEND_QUEUE = "whatsapp-broadcast-send"; // BullMQ rejects ":" in queue names
 
 let broadcastQueue: Queue<BroadcastSendJob> | undefined;
 export function getBroadcastSendQueue(): Queue<BroadcastSendJob> {

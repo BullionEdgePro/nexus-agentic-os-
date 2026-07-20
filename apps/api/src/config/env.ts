@@ -1,4 +1,12 @@
-import "dotenv/config";
+import { config } from "dotenv";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+// `npm run dev -w apps/api` runs with cwd = apps/api, so dotenv's default
+// "look for .env in process.cwd()" misses the monorepo-root .env entirely —
+// load it explicitly, regardless of which directory this was launched from.
+const here = dirname(fileURLToPath(import.meta.url));
+config({ path: join(here, "..", "..", "..", "..", ".env") });
 
 function required(name: string): string {
   const value = process.env[name];

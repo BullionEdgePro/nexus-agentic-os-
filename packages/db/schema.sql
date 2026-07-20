@@ -1,7 +1,6 @@
 -- Nexus Agentic OS — multi-tenant WhatsApp Business ecosystem schema.
 -- Target: PostgreSQL 15+ (Supabase). Run top to bottom on a fresh database.
-
-create extension if not exists "pgcrypto";
+-- gen_random_uuid() is built into core since PG13, so no pgcrypto extension is required.
 
 -- ============================================================
 -- Tenancy
