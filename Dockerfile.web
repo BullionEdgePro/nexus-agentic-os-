@@ -1,0 +1,41 @@
+# Multi-stage build: compile in `builder` (needs the full workspace + dev
+# deps), ship only the pruned Next.js standalone output in `runner`.
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY apps/api/package.json ./apps/api/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/agents/package.json ./packages/agents/package.json
+COPY packages/governance/package.json ./packages/governance/package.json
+
+RUN npm ci
+
+COPY . .
+
+# NEXT_PUBLIC_* vars are inlined into the client bundle at build time, not
+# read at container runtime — they must be passed as --build-arg, setting
+# plain runtime env vars for these on the `web` service does nothing.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+
+RUN npm run build --workspace=@nexus/web
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+# .next/standalone already contains a pruned node_modules with only what
+# this app actually imports — .next/static and public/ are deliberately
+# excluded from it by Next.js and must be copied in separately, or every
+# CSS/JS asset request 404s at runtime (verified locally before writing this).
+COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/apps/web/public ./apps/web/public
+
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]

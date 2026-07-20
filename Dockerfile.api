@@ -1,0 +1,29 @@
+# Builds the image shared by both the API server and the BullMQ worker —
+# docker-compose overrides `command` per service (see docker-compose.prod.yml).
+#
+# Runtime uses tsx directly against TypeScript source rather than a tsc
+# build step: workspace packages (@nexus/db, @nexus/agents, etc.) resolve via
+# their package.json "main" pointing at src/*.ts, which plain `node` cannot
+# execute — tsx transpiles on the fly regardless of which workspace the
+# import crosses into. See apps/api/package.json's start/start:worker scripts.
+FROM node:20-alpine AS base
+WORKDIR /app
+
+# Copy just the manifests first so `npm ci` is cached unless a dependency
+# actually changed, independent of source edits.
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/agents/package.json ./packages/agents/package.json
+COPY packages/governance/package.json ./packages/governance/package.json
+
+RUN npm ci --omit=dev
+
+COPY . .
+
+ENV NODE_ENV=production
+EXPOSE 8080
+
+CMD ["npx", "tsx", "apps/api/src/index.ts"]

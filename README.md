@@ -14,6 +14,9 @@ packages/
   shared/     Types shared across every workspace
 ```
 
+Deploying to a live server? See [DEPLOY.md](DEPLOY.md) (targets a Hostinger
+VPS, but the Docker stack works on any VPS with Docker + a public IP).
+
 ## 1. Local infrastructure
 
 Requires Docker (Postgres 16 + Redis 7):
