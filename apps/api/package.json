@@ -9,7 +9,8 @@
     "build": "tsc --noEmit",
     "start": "tsx src/index.ts",
     "start:worker": "tsx src/worker.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --experimental-test-module-mocks --test test/*.test.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

@@ -15,7 +15,8 @@
     "db:seed": "npm run seed -w packages/db",
     "build": "npm run typecheck --workspaces --if-present && npm run build -w apps/web",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test -w apps/api"
   },
   "engines": {
     "node": ">=20"

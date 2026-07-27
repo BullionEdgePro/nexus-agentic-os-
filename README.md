@@ -57,6 +57,7 @@ npm run dev:web      # Unified Inbox, :3000
 ```
 
 `npm run typecheck` / `npm run build` run across every workspace.
+`npm run test` runs the reliability regression suite (see below).
 
 The seed data (`packages/db/seed.sql`) inserts the 5 organizations with
 **placeholder** `whatsapp_phone_number_id` values (`000000000000001`..`5`)
@@ -103,6 +104,28 @@ after the tunnel URL changes.
    attempt to state something not in its context — the processor logs
    `AI reply blocked by governance evaluation` and the conversation flips to
    human handoff instead of sending the risky reply.
+
+## AI agent reliability guarantee
+
+The message processor (`apps/api/src/queue/processor.ts`) makes one hard
+guarantee: **a customer is never left in silence.** If anything in the AI
+reply pipeline fails — the Anthropic API is down, rate-limited, or the key
+is bad; the WhatsApp send fails; a database write fails right after a
+successful send — the contact still gets a reply (a fallback message if the
+real one never went out) and the conversation is automatically flagged for
+human handoff, rather than the message silently dying in a BullMQ retry
+queue with no one aware a customer is waiting.
+
+It's also careful not to double up: if the real AI reply already reached
+the customer and only the *bookkeeping* afterward fails, it does **not**
+send a second, confusing "looping in a specialist" message on top of a
+reply that already went through — it just escalates.
+
+This is covered by an automated regression suite (`apps/api/test/`, run via
+`npm run test`) that simulates all three cases — AI failure, post-send
+failure, and the happy path — with every external dependency (Anthropic,
+WhatsApp, Postgres, Redis) mocked, so it runs with zero real infrastructure.
+If you touch `processor.ts`, run this before deploying.
 
 ## 6. Broadcasts
 
