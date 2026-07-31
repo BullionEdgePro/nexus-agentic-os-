@@ -1,4 +1,6 @@
-// Command-deck visual effects: custom cursor + animated ribbon backdrop.
+// Command-deck visual effects: custom cursor + a faint animated schematic
+// backdrop (thin ink trace lines + small square "solder point" marks — the
+// "routing plate" motif, kept ambient rather than decorative).
 // Called from a useEffect; returns a cleanup that removes every listener and
 // cancels animation frames so React unmounts don't leak.
 
@@ -11,8 +13,10 @@ export function initDeckFx(root: HTMLElement): () => void {
     const dot = root.querySelector<HTMLElement>(".cur-dot");
     const ring = root.querySelector<HTMLElement>(".cur-ring");
     if (dot && ring) {
-      let mx = window.innerWidth / 2,
-        my = window.innerHeight / 2,
+      // Start off-screen so the ring doesn't flash at viewport-center before
+      // the first real mousemove.
+      let mx = -100,
+        my = -100,
         rx = mx,
         ry = my,
         raf = 0;
@@ -69,50 +73,45 @@ export function initDeckFx(root: HTMLElement): () => void {
     };
     size();
     window.addEventListener("resize", size);
-    const ribbons = Array.from({ length: 5 }, (_, i) => ({
+    const traces = Array.from({ length: 5 }, (_, i) => ({
       o: i * 1.3,
-      a: 60 + i * 26,
+      a: 50 + i * 20,
       sp: 0.0007 + i * 0.00016,
-      y: 0.28 + i * 0.11,
-      hue: 200 + i * 8,
+      y: 0.24 + i * 0.13,
     }));
-    const parts = Array.from({ length: 60 }, () => ({
+    const marks = Array.from({ length: 46 }, () => ({
       x: Math.random(),
       y: Math.random(),
-      z: Math.random() * 0.8 + 0.2,
-      s: Math.random() * 0.0004 + 0.0001,
+      z: Math.random() * 0.7 + 0.3,
+      s: Math.random() * 0.0003 + 0.00008,
     }));
     const draw = () => {
       ctx.clearRect(0, 0, W, H);
-      ctx.globalCompositeOperation = "lighter";
-      ribbons.forEach((r) => {
+      // thin ink trace lines — flat, low-alpha, no glow blending
+      traces.forEach((r) => {
         ctx.beginPath();
-        for (let x = -40; x <= W + 40; x += 14) {
+        for (let x = -40; x <= W + 40; x += 16) {
           const y =
             H * r.y +
             Math.sin(x * 0.0032 + t * r.sp * 1000 + r.o) * r.a +
             Math.sin(x * 0.0011 - t * r.sp * 600) * r.a * 0.5;
           x === -40 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
-        const g = ctx.createLinearGradient(0, 0, W, 0);
-        g.addColorStop(0, "rgba(47,109,255,0)");
-        g.addColorStop(0.5, `hsla(${r.hue},100%,62%,.16)`);
-        g.addColorStop(1, "rgba(56,224,255,0)");
-        ctx.strokeStyle = g;
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = "rgba(22,22,15,.05)";
+        ctx.lineWidth = 1;
         ctx.stroke();
       });
-      parts.forEach((pt) => {
+      // small square "solder point" marks along the traces
+      marks.forEach((pt) => {
         pt.x += pt.s;
         if (pt.x > 1.05) pt.x = -0.05;
         const px = pt.x * W,
-          py = pt.y * H + Math.sin(t * 0.5 + pt.y * 10) * 8;
-        ctx.beginPath();
-        ctx.arc(px, py, pt.z * 1.6, 0, 6.28);
-        ctx.fillStyle = `rgba(120,180,255,${pt.z * 0.4})`;
-        ctx.fill();
+          py = pt.y * H + Math.sin(t * 0.5 + pt.y * 10) * 8,
+          sz = pt.z * 2.2;
+        ctx.strokeStyle = `rgba(29,63,191,${pt.z * 0.22})`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px - sz / 2, py - sz / 2, sz, sz);
       });
-      ctx.globalCompositeOperation = "source-over";
       if (!reduce) t += 1;
       raf = requestAnimationFrame(draw);
     };
