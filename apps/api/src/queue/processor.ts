@@ -1,5 +1,6 @@
 import type { Job } from "bullmq";
 import type {
+  ConversationMetricInput,
   InboundWebhookJob,
   MessageDto,
   Organization,
@@ -11,16 +12,57 @@ import {
   recordInboundMessage,
   insertOutboundMessage,
   insertEvaluation,
+  recordConversationMetric,
   setConversationHandoff,
 } from "@nexus/db";
 import { routeToDomainAgent, loadRecentHistory } from "@nexus/agents";
-import { evaluateOutgoingMessage } from "@nexus/governance";
+import { evaluateOutgoingMessage, shouldEscalateReply } from "@nexus/governance";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
 
 const FALLBACK_REPLY =
   "Thanks for your message — I want to make sure you get an accurate answer, so I'm looping in a specialist from our team. They'll follow up shortly.";
+
+// Map the tool the agent chose to a coarse intent label for analytics. A tool
+// call is a strong, free, deterministic intent signal — no extra LLM call.
+// A reply with no tool use is treated as a general inquiry (intent = null).
+const TOOL_INTENT: Record<string, string> = {
+  check_inventory: "inventory_inquiry",
+  book_appointment: "appointment_booking",
+};
+
+function deriveIntent(toolCalls: Array<{ name: string }>): string | null {
+  for (const call of toolCalls) {
+    const intent = TOOL_INTENT[call.name];
+    if (intent) return intent;
+  }
+  return null;
+}
+
+// Time from the customer's message to our reply, in ms. Guards against clock
+// skew / malformed timestamps and caps at 24h so a stray value can't overflow
+// the metrics int column or pollute the analytics.
+function firstResponseMsFrom(inboundTimestamp: string): number | null {
+  const inboundMs = Number(inboundTimestamp) * 1000;
+  if (!Number.isFinite(inboundMs) || inboundMs <= 0) return null;
+  const elapsed = Date.now() - inboundMs;
+  if (elapsed < 0 || elapsed > 86_400_000) return null;
+  return Math.round(elapsed);
+}
+
+// Analytics must never take down the reply pipeline: record metrics
+// best-effort and swallow any failure with a log.
+async function recordMetricBestEffort(input: ConversationMetricInput): Promise<void> {
+  try {
+    await recordConversationMetric(input);
+  } catch (err) {
+    logger.error(
+      { conversationId: input.conversationId, err },
+      "Failed to record conversation metric (non-fatal analytics write)"
+    );
+  }
+}
 
 export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Promise<void> {
   const { payload, phoneNumberId } = job.data;
@@ -136,7 +178,7 @@ async function processSingleTextMessage(
       conversationHistory: history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
     });
 
-    const shouldEscalate = evaluation.piiFlagged || evaluation.hallucinationRisk === "high";
+    const shouldEscalate = shouldEscalateReply(evaluation, organization.slug);
     const finalText = shouldEscalate ? FALLBACK_REPLY : result.text;
 
     await sendWhatsAppText(phoneNumberId, message.from, finalText);
@@ -175,6 +217,18 @@ async function processSingleTextMessage(
         "AI reply blocked by governance evaluation, escalated to human handoff"
       );
     }
+
+    // Analytics: token spend, who owns the resolution now, the classified
+    // intent, and time-to-first-response. Best-effort — see recordMetricBestEffort.
+    await recordMetricBestEffort({
+      organizationId: organization.id,
+      conversationId,
+      intent: deriveIntent(result.toolCalls),
+      resolvedBy: shouldEscalate ? "human_agent" : "ai_agent",
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+      firstResponseMs: firstResponseMsFrom(message.timestamp),
+    });
   } catch (err) {
     logger.error({ conversationId, sentToCustomer, err }, "AI reply pipeline failed");
 

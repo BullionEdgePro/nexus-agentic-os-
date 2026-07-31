@@ -3,7 +3,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 
-const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversationHandoff: [] };
+const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversationHandoff: [], recordConversationMetric: [] };
 
 mock.module("@nexus/db", {
   exports: {
@@ -17,6 +17,7 @@ mock.module("@nexus/db", {
     }),
     insertOutboundMessage: async (input) => { calls.insertOutboundMessage.push(input); return { id: "out-1", ...input, status: "sent", createdAt: "now" }; },
     insertEvaluation: async () => {},
+    recordConversationMetric: async (input) => { calls.recordConversationMetric.push(input); },
     setConversationHandoff: async (id, val) => { calls.setConversationHandoff.push({ id, val }); },
   },
 });
@@ -25,14 +26,20 @@ mock.module("@nexus/agents", {
   exports: {
     routeToDomainAgent: async () => ({
       config: { id: "agent-1" },
-      respond: async () => ({ text: "Yes, we have that in stock!", toolCalls: [], usage: { inputTokens: 1, outputTokens: 1 } }),
+      respond: async () => ({ text: "Yes, we have that in stock!", toolCalls: [], usage: { inputTokens: 12, outputTokens: 7 } }),
     }),
     loadRecentHistory: async () => [],
   },
 });
 
 mock.module("@nexus/governance", {
-  exports: { evaluateOutgoingMessage: async () => ({ piiFlagged: false, hallucinationRisk: "low" }) },
+  exports: {
+    evaluateOutgoingMessage: async () => ({ piiFlagged: false, hallucinationRisk: "low" }),
+    shouldEscalateReply: (evaluation, slug) =>
+      evaluation.piiFlagged ||
+      evaluation.hallucinationRisk === "high" ||
+      (evaluation.hallucinationRisk === "medium" && (slug === "juris-prime-legal" || slug === "juris-prime")),
+  },
 });
 
 mock.module(new URL("../src/lib/whatsapp-client.ts", import.meta.url), {
@@ -77,5 +84,9 @@ test("happy path: no failures anywhere — real reply sent once, no escalation",
   assert.equal(calls.insertOutboundMessage[0].senderType, "ai_agent");
   assert.equal(calls.insertOutboundMessage[0].senderId, "agent-1");
   assert.equal(calls.setConversationHandoff.length, 0, "no escalation should happen on the happy path");
-  console.log("PASS: happy path unchanged — one real reply sent, no escalation");
+  assert.equal(calls.recordConversationMetric.length, 1, "exactly one analytics row should be recorded");
+  assert.equal(calls.recordConversationMetric[0].resolvedBy, "ai_agent", "AI resolved it, no escalation");
+  assert.equal(calls.recordConversationMetric[0].inputTokens, 12, "token usage should be persisted, not discarded");
+  assert.equal(calls.recordConversationMetric[0].outputTokens, 7);
+  console.log("PASS: happy path unchanged — one real reply sent, no escalation, analytics recorded");
 });

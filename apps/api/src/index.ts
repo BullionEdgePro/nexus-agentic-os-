@@ -6,6 +6,7 @@ import { whatsappWebhook } from "./webhook/whatsapp.js";
 import { organizationsRoute } from "./routes/organizations.js";
 import { conversationsRoute } from "./routes/conversations.js";
 import { broadcastsRoute } from "./routes/broadcasts.js";
+import { metricsRoute } from "./routes/metrics.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { logger } from "./lib/logger.js";
 
@@ -18,6 +19,7 @@ app.route("/webhooks/whatsapp", whatsappWebhook);
 app.route("/api/organizations", organizationsRoute);
 app.route("/api/conversations", conversationsRoute);
 app.route("/api/broadcasts", broadcastsRoute);
+app.route("/api/metrics", metricsRoute);
 
 const server = serve({ fetch: app.fetch, port: env.apiPort }, (info) => {
   logger.info(`Nexus API listening on http://localhost:${info.port}`);

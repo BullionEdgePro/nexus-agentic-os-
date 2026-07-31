@@ -125,6 +125,38 @@ export interface GovernanceEvaluation {
   notes?: string;
 }
 
+// ============================================================
+// Analytics
+// ============================================================
+
+export type ResolvedBy = "ai_agent" | "human_agent" | "unresolved";
+
+/** One row written to conversation_metrics per handled inbound message. */
+export interface ConversationMetricInput {
+  organizationId: string;
+  conversationId: string;
+  intent?: string | null;
+  resolvedBy: ResolvedBy;
+  inputTokens: number;
+  outputTokens: number;
+  firstResponseMs?: number | null;
+  resolutionMs?: number | null;
+}
+
+/** Aggregated snapshot powering the command-deck overview. */
+export interface OverviewMetrics {
+  hasData: boolean;
+  activeConversations: number;
+  messagesToday: number;
+  aiResolutionPct: number | null;
+  avgFirstResponseMs: number | null;
+  governanceHolds: number;
+  tokensUsed: number;
+  intents: { intent: string; count: number }[];
+  tenants: { slug: string; name: string; messageCount: number; openConversations: number }[];
+  feed: { org: string; senderType: SenderType; body: string; createdAt: string }[];
+}
+
 export type AudienceFilter = Record<string, unknown>; // matched via jsonb containment against contacts.attributes
 
 export interface CreateBroadcastInput {

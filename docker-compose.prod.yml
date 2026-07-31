@@ -77,6 +77,12 @@ services:
         NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
         NEXT_PUBLIC_WS_URL: wss://${API_DOMAIN}/ws
     restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Command-deck operator login (/login → /deck). Set these in .env for prod;
+      # the defaults keep the demo working out of the box.
+      NEXUS_OPERATOR_PASSWORD: ${NEXUS_OPERATOR_PASSWORD:-demo1234}
+      NEXUS_SESSION_SECRET: ${NEXUS_SESSION_SECRET:-nexus-dev-secret-change-me}
     depends_on:
       - api
 

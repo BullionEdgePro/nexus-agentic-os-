@@ -5,3 +5,14 @@
 {$WEB_DOMAIN} {
 	reverse_proxy web:3000
 }
+
+# Publish the app on the bare domain too. Caddy fetches a Let's Encrypt cert
+# for these automatically once their DNS A records point at this VPS; until
+# then the api/web subdomains above keep serving normally.
+nexusagenticos.com {
+	reverse_proxy web:3000
+}
+
+www.nexusagenticos.com {
+	redir https://nexusagenticos.com{uri} permanent
+}

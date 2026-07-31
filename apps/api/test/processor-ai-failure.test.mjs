@@ -18,6 +18,7 @@ mock.module("@nexus/db", {
     }),
     insertOutboundMessage: async (input) => { calls.insertOutboundMessage.push(input); return { id: "out-1", ...input, status: "sent", createdAt: "now" }; },
     insertEvaluation: async () => {},
+    recordConversationMetric: async () => {},
     setConversationHandoff: async (id, val) => { calls.setConversationHandoff.push({ id, val }); },
   },
 });
@@ -33,7 +34,13 @@ mock.module("@nexus/agents", {
 });
 
 mock.module("@nexus/governance", {
-  exports: { evaluateOutgoingMessage: async () => ({ piiFlagged: false, hallucinationRisk: "low" }) },
+  exports: {
+    evaluateOutgoingMessage: async () => ({ piiFlagged: false, hallucinationRisk: "low" }),
+    shouldEscalateReply: (evaluation, slug) =>
+      evaluation.piiFlagged ||
+      evaluation.hallucinationRisk === "high" ||
+      (evaluation.hallucinationRisk === "medium" && (slug === "juris-prime-legal" || slug === "juris-prime")),
+  },
 });
 
 mock.module(new URL("../src/lib/whatsapp-client.ts", import.meta.url), {

@@ -1,4 +1,10 @@
-import type { BusinessSlug, ConversationSummary, MessageDto, Organization } from "@nexus/shared";
+import type {
+  BusinessSlug,
+  ConversationSummary,
+  MessageDto,
+  Organization,
+  OverviewMetrics,
+} from "@nexus/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -16,6 +22,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getOrganizations(): Promise<{ organizations: Organization[] }> {
   return request("/api/organizations");
+}
+
+export function getOverview(): Promise<{ metrics: OverviewMetrics }> {
+  return request("/api/metrics/overview");
 }
 
 export function getConversations(orgSlug: BusinessSlug): Promise<{ conversations: ConversationSummary[] }> {

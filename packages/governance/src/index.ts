@@ -4,6 +4,7 @@ import { evaluateHallucinationRisk, type HallucinationCheckInput } from "./hallu
 
 export * from "./pii.js";
 export * from "./hallucination.js";
+export * from "./policy.js";
 
 export interface EvaluateOutgoingMessageInput extends HallucinationCheckInput {}
 
