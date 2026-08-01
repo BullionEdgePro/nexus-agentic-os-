@@ -17,7 +17,7 @@ values
 on conflict (slug) do nothing;
 
 insert into agent_configs (organization_id, name, system_prompt, model, tools, is_active)
-select o.id, v.name, v.system_prompt, 'claude-sonnet-5', v.tools::jsonb, true
+select o.id, v.name, v.system_prompt, 'gemini-2.5-flash', v.tools::jsonb, true
 from organizations o
 join (
   values

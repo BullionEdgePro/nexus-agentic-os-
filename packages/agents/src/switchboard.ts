@@ -1,6 +1,6 @@
 import { getPool, findOrganizationByPhoneNumberId } from "@nexus/db";
 import type { AgentConfig, InboundMessageEvent } from "@nexus/shared";
-import { AnthropicDomainAgent } from "./domain-agent.js";
+import { GeminiDomainAgent } from "./gemini-domain-agent.js";
 import type { ConversationTurn, DomainAgent } from "./types.js";
 
 interface AgentConfigRow {
@@ -48,7 +48,7 @@ export async function routeToDomainAgent(phoneNumberId: string): Promise<DomainA
   );
   if (!rows[0]) return null;
 
-  return new AnthropicDomainAgent(toAgentConfig(rows[0]), organization.slug);
+  return new GeminiDomainAgent(toAgentConfig(rows[0]), organization.slug);
 }
 
 export async function loadRecentHistory(
