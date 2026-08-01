@@ -4,6 +4,7 @@ import { INBOUND_WEBHOOK_QUEUE, getRedisConnection } from "./queue/queue.js";
 import { processInboundWebhookJob } from "./queue/processor.js";
 import { BROADCAST_SEND_QUEUE } from "./queue/broadcast-queue.js";
 import { processBroadcastSendJob } from "./queue/broadcast-processor.js";
+import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
 const inboundWorker = new Worker<InboundWebhookJob>(INBOUND_WEBHOOK_QUEUE, processInboundWebhookJob, {
@@ -31,6 +32,26 @@ broadcastWorker.on("failed", (job, err) =>
 );
 
 logger.info("Nexus background workers started (inbound webhook + broadcast send)");
+
+// Verify every configured model is actually callable. A model that 404s does
+// not crash anything — it just makes every customer receive the generic
+// fallback reply while the system looks healthy — so it has to be shouted
+// about at boot or nobody finds out. Best-effort: a failure to run the check
+// itself must never stop the workers from processing messages.
+preflightModels()
+  .then((results) => {
+    for (const r of results) {
+      if (r.ok) {
+        logger.info({ model: r.model, tenants: r.tenants }, "Model preflight OK");
+      } else {
+        logger.error(
+          { model: r.model, tenants: r.tenants, err: r.error },
+          "MODEL PREFLIGHT FAILED — these tenants will fall back on every message until the model is fixed"
+        );
+      }
+    }
+  })
+  .catch((err) => logger.warn({ err }, "Model preflight could not run"));
 
 async function shutdown() {
   logger.info("Shutting down workers...");
