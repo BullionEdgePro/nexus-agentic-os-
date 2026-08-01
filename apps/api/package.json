@@ -16,6 +16,7 @@
     "@hono/node-server": "^1.13.7",
     "@nexus/agents": "*",
     "@nexus/db": "*",
+    "@nexus/employees": "*",
     "@nexus/governance": "*",
     "@nexus/shared": "*",
     "bullmq": "^5.28.0",

@@ -1,5 +1,6 @@
 import { getPool, findOrganizationByPhoneNumberId } from "@nexus/db";
-import type { AgentConfig, InboundMessageEvent } from "@nexus/shared";
+import type { AgentConfig, BusinessSlug, Employee, InboundMessageEvent } from "@nexus/shared";
+import { composeTwinSystemPrompt } from "@nexus/employees";
 import { GeminiDomainAgent } from "./gemini-domain-agent.js";
 import type { ConversationTurn, DomainAgent } from "./types.js";
 
@@ -35,6 +36,47 @@ function toAgentConfig(row: AgentConfigRow): AgentConfig {
  * needed (e.g. sub-brand disambiguation within one WhatsApp number).
  */
 export async function routeToDomainAgent(phoneNumberId: string): Promise<DomainAgent | null> {
+  const resolved = await loadActiveAgentConfig(phoneNumberId);
+  if (!resolved) return null;
+  return new GeminiDomainAgent(resolved.config, resolved.slug);
+}
+
+/**
+ * Employee-aware routing (Employee Agent Layer).
+ *
+ * Same tenant agent, with the employee's twin persona layered on top of the
+ * organization's system prompt. Passing a null employee — or one whose twin
+ * is disabled — returns exactly what routeToDomainAgent would, so a tenant
+ * that has not onboarded employees is byte-for-byte unaffected by this path.
+ */
+export async function routeToEmployeeTwin(
+  phoneNumberId: string,
+  employee: Employee | null
+): Promise<DomainAgent | null> {
+  const resolved = await loadActiveAgentConfig(phoneNumberId);
+  if (!resolved) return null;
+
+  if (!employee || !employee.twinEnabled) {
+    return new GeminiDomainAgent(resolved.config, resolved.slug);
+  }
+
+  const twinConfig: AgentConfig = {
+    ...resolved.config,
+    systemPrompt: composeTwinSystemPrompt({
+      organizationPrompt: resolved.config.systemPrompt,
+      employee,
+    }),
+    // An employee's own knowledge namespace wins over the tenant default so
+    // one employee's SOPs never leak into another's answers.
+    ragCollection: employee.knowledgeCollection ?? resolved.config.ragCollection,
+  };
+
+  return new GeminiDomainAgent(twinConfig, resolved.slug);
+}
+
+async function loadActiveAgentConfig(
+  phoneNumberId: string
+): Promise<{ config: AgentConfig; slug: BusinessSlug } | null> {
   const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
   if (!organization) return null;
 
@@ -48,7 +90,7 @@ export async function routeToDomainAgent(phoneNumberId: string): Promise<DomainA
   );
   if (!rows[0]) return null;
 
-  return new GeminiDomainAgent(toAgentConfig(rows[0]), organization.slug);
+  return { config: toAgentConfig(rows[0]), slug: organization.slug };
 }
 
 export async function loadRecentHistory(

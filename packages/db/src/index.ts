@@ -5,3 +5,4 @@ export * from "./conversations.js";
 export * from "./evaluations.js";
 export * from "./metrics.js";
 export * from "./broadcasts.js";
+export * from "./employees.js";

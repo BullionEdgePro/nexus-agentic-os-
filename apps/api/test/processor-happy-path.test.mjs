@@ -19,12 +19,13 @@ mock.module("@nexus/db", {
     insertEvaluation: async () => {},
     recordConversationMetric: async (input) => { calls.recordConversationMetric.push(input); },
     setConversationHandoff: async (id, val) => { calls.setConversationHandoff.push({ id, val }); },
+    findEmployeeForConversation: async () => null, // org-level tenant, no employee assigned
   },
 });
 
 mock.module("@nexus/agents", {
   exports: {
-    routeToDomainAgent: async () => ({
+    routeToEmployeeTwin: async () => ({
       config: { id: "agent-1" },
       respond: async () => ({ text: "Yes, we have that in stock!", toolCalls: [], usage: { inputTokens: 12, outputTokens: 7 } }),
     }),

@@ -7,15 +7,18 @@ import type {
   WhatsAppTextMessage,
   WhatsAppWebhookEntry,
 } from "@nexus/shared";
+import type { Employee } from "@nexus/shared";
 import {
   findOrganizationByPhoneNumberId,
+  findEmployeeForConversation,
   recordInboundMessage,
   insertOutboundMessage,
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
 } from "@nexus/db";
-import { routeToDomainAgent, loadRecentHistory } from "@nexus/agents";
+import { routeToEmployeeTwin, loadRecentHistory } from "@nexus/agents";
+import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { evaluateOutgoingMessage, shouldEscalateReply } from "@nexus/governance";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
@@ -143,7 +146,27 @@ async function processSingleTextMessage(
     return;
   }
 
-  const agent = await routeToDomainAgent(phoneNumberId);
+  // Employee Agent Layer. Resolved best-effort on purpose: a tenant that has
+  // not onboarded employees resolves to null and takes exactly the original
+  // org-level path, and a failure looking employees up must degrade to that
+  // same path rather than break a reply flow that worked before this layer
+  // existed.
+  const employee = await resolveAssignedEmployee(conversationId);
+  const presence = employee ? resolvePresence(employee) : null;
+
+  if (employee && presence && !presence.shouldTwinRespond) {
+    // The human owns this conversation right now (they are online and opted
+    // into human_first, or their twin is switched off). This is a deliberate,
+    // recorded handoff rather than silence — the deck shows it as human-owned.
+    logger.debug(
+      { conversationId, employeeId: employee.id, presence: presence.status },
+      "Employee is handling this conversation — twin standing down"
+    );
+    await flagHandoffBestEffort(organization, conversationId);
+    return;
+  }
+
+  const agent = await routeToEmployeeTwin(phoneNumberId, employee);
   if (!agent) {
     logger.warn({ organizationId: organization.id }, "No active agent configured for organization");
     return;
@@ -178,7 +201,20 @@ async function processSingleTextMessage(
       conversationHistory: history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
     });
 
-    const shouldEscalate = shouldEscalateReply(evaluation, organization.slug);
+    // Deterministic backstop for the twin's identity rules: the prompt forbids
+    // reproducing the employee's digital signature, but a prompt is guidance,
+    // not a guarantee. Signing machine-generated text with a person's
+    // attestation is a misrepresentation we refuse to send, so it escalates
+    // to that human exactly like a governance failure would.
+    const signatureLeak = employee ? containsDigitalSignature(result.text, employee) : false;
+    if (signatureLeak) {
+      logger.error(
+        { conversationId, employeeId: employee?.id },
+        "Twin reply reproduced the employee's digital signature — blocked and escalated"
+      );
+    }
+
+    const shouldEscalate = shouldEscalateReply(evaluation, organization.slug) || signatureLeak;
     const finalText = shouldEscalate ? FALLBACK_REPLY : result.text;
 
     await sendWhatsAppText(phoneNumberId, message.from, finalText);
@@ -191,6 +227,7 @@ async function processSingleTextMessage(
       senderType: shouldEscalate ? "system" : "ai_agent",
       senderId: shouldEscalate ? undefined : agent.config.id,
       body: finalText,
+      employeeId: employee?.id ?? null,
     });
 
     await insertEvaluation(organization.id, outboundDto.id, evaluation);
@@ -241,6 +278,27 @@ async function processSingleTextMessage(
     } else {
       await sendFallbackBestEffort(organization, phoneNumberId, message.from, conversationId, contactId);
     }
+  }
+}
+
+/**
+ * Look up the employee who owns this conversation.
+ *
+ * Never throws. An inactive employee is treated as no employee so their
+ * conversations fall back to the organization agent rather than going quiet,
+ * and a lookup failure does the same — the Employee Agent Layer must be
+ * incapable of making the pre-existing reply path worse.
+ */
+async function resolveAssignedEmployee(conversationId: string): Promise<Employee | null> {
+  try {
+    const employee = await findEmployeeForConversation(conversationId);
+    return employee?.isActive ? employee : null;
+  } catch (err) {
+    logger.error(
+      { conversationId, err },
+      "Employee lookup failed — falling back to organization-level agent"
+    );
+    return null;
   }
 }
 

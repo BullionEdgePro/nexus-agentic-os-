@@ -109,6 +109,8 @@ export interface InsertOutboundMessageInput {
   senderId?: string;
   body: string;
   waMessageId?: string;
+  /** Employee this reply is attributed to (their twin authored it). */
+  employeeId?: string | null;
 }
 
 export async function insertOutboundMessage(input: InsertOutboundMessageInput): Promise<MessageDto> {
@@ -122,8 +124,8 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
     created_at: string;
   }>(
     `insert into messages
-       (organization_id, conversation_id, contact_id, wa_message_id, direction, sender_type, sender_id, message_type, body, status)
-     values ($1, $2, $3, $4, 'outbound', $5, $6, 'text', $7, 'sent')
+       (organization_id, conversation_id, contact_id, wa_message_id, direction, sender_type, sender_id, message_type, body, status, employee_id)
+     values ($1, $2, $3, $4, 'outbound', $5, $6, 'text', $7, 'sent', $8)
      returning id, conversation_id, direction, sender_type, body, status, created_at`,
     [
       input.organizationId,
@@ -133,6 +135,7 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
       input.senderType,
       input.senderId ?? null,
       input.body,
+      input.employeeId ?? null,
     ]
   );
   const row = rows[0];

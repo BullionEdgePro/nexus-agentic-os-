@@ -20,6 +20,10 @@ services:
       - nexus-postgres-data:/var/lib/postgresql/data
       - ./packages/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./packages/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+      # Migrations run after the baseline on a FRESH volume. An existing
+      # database is never touched by initdb — apply these with
+      # `npm run db:migrate` instead (idempotent, safe to re-run).
+      - ./packages/db/migrations:/docker-entrypoint-initdb.d/03-migrations
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nexus -d nexus"]
       interval: 5s

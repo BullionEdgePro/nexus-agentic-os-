@@ -20,12 +20,13 @@ mock.module("@nexus/db", {
     insertEvaluation: async () => {},
     recordConversationMetric: async () => {},
     setConversationHandoff: async (id, val) => { calls.setConversationHandoff.push({ id, val }); },
+    findEmployeeForConversation: async () => null, // org-level tenant, no employee assigned
   },
 });
 
 mock.module("@nexus/agents", {
   exports: {
-    routeToDomainAgent: async () => ({
+    routeToEmployeeTwin: async () => ({
       config: { id: "agent-1" },
       respond: async () => { throw new Error("simulated Anthropic outage (401 invalid api key)"); },
     }),

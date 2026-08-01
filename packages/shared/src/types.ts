@@ -157,6 +157,86 @@ export interface OverviewMetrics {
   feed: { org: string; senderType: SenderType; body: string; createdAt: string }[];
 }
 
+// ============================================================
+// Employee Agent Layer
+// ============================================================
+
+export type PresenceStatus =
+  | "online"
+  | "offline"
+  | "idle"
+  | "busy"
+  | "ai_handling"
+  | "meeting"
+  | "vacation"
+  | "emergency";
+
+export type PresenceSource = "manual" | "schedule" | "calendar" | "auto_idle" | "system";
+
+/** A single working window on one weekday, in the employee's own timezone. */
+export interface TimeWindow {
+  start: string; // "09:00"
+  end: string; // "18:00"
+}
+
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+/** Weekday → working windows. A missing or empty day means "not working". */
+export type WeeklySchedule = Partial<Record<Weekday, TimeWindow[]>>;
+
+export interface Employee {
+  id: string;
+  organizationId: string;
+  employeeCode: string;
+  fullName: string;
+  email?: string | null;
+  avatarUrl?: string | null;
+  jobTitle?: string | null;
+  department?: string | null;
+  permissions: Record<string, unknown>;
+
+  whatsappPhoneNumberId?: string | null;
+  whatsappNumber?: string | null;
+
+  timezone: string;
+  workingHours: WeeklySchedule;
+  breakSchedule: WeeklySchedule;
+
+  languages: string[];
+  skills: string[];
+  expertise: string[];
+
+  twinEnabled: boolean;
+  aiPersonality?: string | null;
+  responseStyle?: string | null;
+  knowledgeCollection?: string | null;
+  escalationRules: Record<string, unknown>;
+  twinDisclosure?: string | null;
+
+  /**
+   * Human-only attestation. Never exposed to the twin — see
+   * packages/employees/src/twin.ts.
+   */
+  digitalSignature?: string | null;
+
+  manualPresence?: PresenceStatus | null;
+  manualPresenceUntil?: string | null;
+  lastSeenAt?: string | null;
+  humanFirst: boolean;
+
+  isActive: boolean;
+}
+
+/** Outcome of the presence engine for one employee at one instant. */
+export interface ResolvedPresence {
+  status: PresenceStatus;
+  source: PresenceSource;
+  /** True when the AI twin should generate the reply for this employee now. */
+  shouldTwinRespond: boolean;
+  /** Human-readable justification, surfaced in the deck and in logs. */
+  reason: string;
+}
+
 export type AudienceFilter = Record<string, unknown>; // matched via jsonb containment against contacts.attributes
 
 export interface CreateBroadcastInput {
