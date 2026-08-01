@@ -29,3 +29,18 @@ test("non-strict tenants tolerate MEDIUM risk (send the reply)", () => {
   assert.equal(shouldEscalateReply(medium, "atif-ali-production"), false);
   console.log("PASS: per-tenant governance strictness works — law firm is held to a higher bar");
 });
+
+test("an unknown tenant is held to the STRICT bar, not the lenient one", () => {
+  // Migration 002 removed the 5-tenant cap, so this module will eventually be
+  // handed slugs it has never seen. A newly onboarded tenant is the one we
+  // understand least, so the default must be caution — the previous
+  // denylist shape would have silently sent unverifiable claims here.
+  for (const slug of ["a-new-law-firm", "some-medical-clinic", ""]) {
+    assert.equal(
+      shouldEscalateReply(medium, slug),
+      true,
+      `unrecognized tenant "${slug}" must default to escalating medium risk`
+    );
+  }
+  console.log("PASS: unrecognized tenants fail safe (escalate) rather than fail open");
+});
