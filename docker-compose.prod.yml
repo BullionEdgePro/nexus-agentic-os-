@@ -49,7 +49,10 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://nexus:${POSTGRES_PASSWORD}@postgres:5432/nexus
       REDIS_URL: redis://redis:6379
-      WEB_ORIGIN: https://${WEB_DOMAIN}
+      # Comma-separated CORS allowlist. The same web build is served from BOTH
+      # app.<domain> and the bare <domain> (see Caddyfile), so both must be
+      # allowed — listing only one makes the other silently render an empty UI.
+      WEB_ORIGIN: https://${WEB_DOMAIN},https://${ROOT_DOMAIN}
     depends_on:
       postgres:
         condition: service_healthy

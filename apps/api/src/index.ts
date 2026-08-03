@@ -12,7 +12,7 @@ import { logger } from "./lib/logger.js";
 
 const app = new Hono();
 
-app.use("/api/*", cors({ origin: env.webOrigin }));
+app.use("/api/*", cors({ origin: env.webOrigins }));
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 app.route("/webhooks/whatsapp", whatsappWebhook);
