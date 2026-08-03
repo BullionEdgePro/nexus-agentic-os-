@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getPool } from "@nexus/db";
+import { EMBEDDING_MODEL } from "@nexus/knowledge";
 
 export interface ModelPreflightResult {
   model: string;
@@ -36,12 +37,24 @@ export async function preflightModels(): Promise<ModelPreflightResult[]> {
      where a.is_active = true
      group by model`
   );
-  if (rows.length === 0) return [];
-
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-  return Promise.all(
-    rows.map(async ({ model, tenants }) => {
+  // The embedding model is subject to exactly the same silent-retirement risk
+  // as the chat models, and its failure is even quieter: retrieval just returns
+  // nothing, so the agent answers ungrounded instead of visibly falling back.
+  const embeddingCheck: Promise<ModelPreflightResult> = ai.models
+    .embedContent({ model: EMBEDDING_MODEL, contents: ["ping"] })
+    .then(() => ({ model: EMBEDDING_MODEL, tenants: ["<embeddings>"], ok: true }))
+    .catch((err: unknown) => ({
+      model: EMBEDDING_MODEL,
+      tenants: ["<embeddings>"],
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    }));
+
+  return Promise.all([
+    embeddingCheck,
+    ...rows.map(async ({ model, tenants }) => {
       try {
         // Smallest possible real call — a bad model name fails here the same
         // way it would on a customer's message, which is the point.
@@ -59,6 +72,6 @@ export async function preflightModels(): Promise<ModelPreflightResult[]> {
           error: err instanceof Error ? err.message : String(err),
         };
       }
-    })
-  );
+    }),
+  ]);
 }

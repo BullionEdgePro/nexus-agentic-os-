@@ -71,7 +71,7 @@ export async function routeToEmployeeTwin(
     ragCollection: employee.knowledgeCollection ?? resolved.config.ragCollection,
   };
 
-  return new GeminiDomainAgent(twinConfig, resolved.slug);
+  return new GeminiDomainAgent(twinConfig, resolved.slug, employee.id);
 }
 
 async function loadActiveAgentConfig(

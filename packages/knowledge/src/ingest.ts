@@ -1,0 +1,170 @@
+import { createHash } from "node:crypto";
+import { getPool } from "@nexus/db";
+import { chunkText } from "./chunk.js";
+import { embedTexts, EMBEDDING_MODEL } from "./embed.js";
+
+export type SourceKind = "text" | "url" | "file" | "faq" | "sop";
+
+export interface IngestSourceInput {
+  organizationId: string;
+  employeeId?: string | null;
+  title: string;
+  content: string;
+  kind?: SourceKind;
+  uri?: string | null;
+}
+
+export interface IngestResult {
+  sourceId: string;
+  chunks: number;
+  /** True when the content hash was unchanged and no re-embedding happened. */
+  skipped: boolean;
+}
+
+function hashContent(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+/**
+ * Ingest text into a tenant's knowledge base: chunk, embed, and index it.
+ *
+ * Idempotent by content hash. Re-ingesting unchanged content is a no-op, which
+ * is what makes a scheduled re-crawl affordable — the cost of checking a source
+ * that has not changed is one hash comparison rather than a full re-embed. On
+ * the free tier, where quota is the binding constraint, that difference decides
+ * whether periodic re-indexing is viable at all.
+ *
+ * Chunk replacement runs in a transaction: a source is never left half-indexed,
+ * because a partially-replaced source would silently answer from a mix of old
+ * and new content with no indication anything was wrong.
+ */
+export async function ingestTextSource(input: IngestSourceInput): Promise<IngestResult> {
+  const pool = getPool();
+  const contentHash = hashContent(input.content);
+  const kind = input.kind ?? "text";
+
+  // Reuse an existing source row for this (tenant, title, uri) so re-ingesting
+  // updates in place instead of accumulating duplicates.
+  const { rows: existing } = await pool.query<{ id: string; content_hash: string | null }>(
+    `select id, content_hash from knowledge_sources
+     where organization_id = $1 and title = $2
+       and uri is not distinct from $3
+       and employee_id is not distinct from $4`,
+    [input.organizationId, input.title, input.uri ?? null, input.employeeId ?? null]
+  );
+
+  if (existing[0] && existing[0].content_hash === contentHash) {
+    await pool.query(`update knowledge_sources set last_checked_at = now() where id = $1`, [
+      existing[0].id,
+    ]);
+    return { sourceId: existing[0].id, chunks: 0, skipped: true };
+  }
+
+  const sourceId = existing[0]?.id
+    ? await updateSource(existing[0].id, contentHash)
+    : await insertSource(input, kind, contentHash);
+
+  try {
+    const chunks = chunkText(input.content);
+    if (chunks.length === 0) {
+      await markIndexed(sourceId, 0);
+      return { sourceId, chunks: 0, skipped: false };
+    }
+
+    // Embed BEFORE opening the transaction. Embedding is the slow, failure-prone
+    // network step; holding a database transaction open across it would pin a
+    // connection for seconds and roll back on any API hiccup.
+    const vectors = await embedTexts(chunks.map((c) => c.content));
+
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(`delete from knowledge_chunks where source_id = $1`, [sourceId]);
+
+      for (const [i, chunk] of chunks.entries()) {
+        await client.query(
+          `insert into knowledge_chunks
+             (source_id, organization_id, employee_id, chunk_index, content,
+              token_estimate, embedding, embedding_model)
+           values ($1, $2, $3, $4, $5, $6, $7::real[], $8)`,
+          [
+            sourceId,
+            input.organizationId,
+            input.employeeId ?? null,
+            chunk.index,
+            chunk.content,
+            chunk.tokenEstimate,
+            vectors[i],
+            EMBEDDING_MODEL,
+          ]
+        );
+      }
+
+      await client.query(
+        `update knowledge_sources
+         set status = 'indexed', last_indexed_at = now(), last_checked_at = now(), error = null
+         where id = $1`,
+        [sourceId]
+      );
+      await client.query("commit");
+    } catch (err) {
+      await client.query("rollback");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    return { sourceId, chunks: chunks.length, skipped: false };
+  } catch (err) {
+    // Record why indexing failed on the row itself. A source stuck in 'failed'
+    // with its error is diagnosable; one that silently returns nothing at query
+    // time is not.
+    await pool.query(
+      `update knowledge_sources set status = 'failed', error = $2, last_checked_at = now()
+       where id = $1`,
+      [sourceId, err instanceof Error ? err.message : String(err)]
+    );
+    throw err;
+  }
+}
+
+async function insertSource(
+  input: IngestSourceInput,
+  kind: SourceKind,
+  contentHash: string
+): Promise<string> {
+  const { rows } = await getPool().query<{ id: string }>(
+    `insert into knowledge_sources
+       (organization_id, employee_id, kind, uri, title, content_hash, status)
+     values ($1, $2, $3, $4, $5, $6, 'pending')
+     returning id`,
+    [
+      input.organizationId,
+      input.employeeId ?? null,
+      kind,
+      input.uri ?? null,
+      input.title,
+      contentHash,
+    ]
+  );
+  return rows[0].id;
+}
+
+async function updateSource(sourceId: string, contentHash: string): Promise<string> {
+  await getPool().query(
+    `update knowledge_sources
+     set content_hash = $2, version = version + 1, status = 'pending', error = null
+     where id = $1`,
+    [sourceId, contentHash]
+  );
+  return sourceId;
+}
+
+async function markIndexed(sourceId: string, _chunks: number): Promise<void> {
+  await getPool().query(
+    `update knowledge_sources
+     set status = 'indexed', last_indexed_at = now(), last_checked_at = now(), error = null
+     where id = $1`,
+    [sourceId]
+  );
+}

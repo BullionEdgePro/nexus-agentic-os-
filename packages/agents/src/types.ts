@@ -11,6 +11,12 @@ export interface ToolContext {
   organizationId: string;
   businessSlug: BusinessSlug;
   contactWaId: string;
+  /**
+   * Set when an employee's twin is answering. Scopes knowledge retrieval to
+   * tenant-wide sources plus that employee's own, so one employee's SOPs never
+   * surface in another's answers.
+   */
+  employeeId?: string | null;
 }
 
 export interface AgentReplyResult {

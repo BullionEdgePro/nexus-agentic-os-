@@ -21,7 +21,9 @@ const MAX_TOOL_ITERATIONS = 4;
 export class GeminiDomainAgent implements DomainAgent {
   constructor(
     public readonly config: AgentConfig,
-    private readonly businessSlug: BusinessSlug
+    private readonly businessSlug: BusinessSlug,
+    /** Present when this agent is an employee's twin rather than the org agent. */
+    private readonly employeeId: string | null = null
   ) {}
 
   async respond(
@@ -35,6 +37,7 @@ export class GeminiDomainAgent implements DomainAgent {
       organizationId: event.organizationId,
       businessSlug: this.businessSlug,
       contactWaId: event.contactWaId,
+      employeeId: this.employeeId,
     };
 
     const contents: Content[] = [

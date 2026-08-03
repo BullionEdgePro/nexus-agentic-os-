@@ -5,3 +5,4 @@ export * from "./switchboard.js";
 export * from "./preflight.js";
 export * from "./tools/registry.js";
 export * from "./tools/examples.js";
+export * from "./tools/knowledge.js";
