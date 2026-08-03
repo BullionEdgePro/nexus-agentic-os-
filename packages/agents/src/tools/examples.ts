@@ -128,23 +128,47 @@ export const checkInventoryTool: ToolDefinition = {
   },
 };
 
+/**
+ * book_appointment: capture a booking request for human follow-up.
+ *
+ * No calendar backend is wired yet, and this is the ONLY tool configured for
+ * four of the five tenants — whose system prompts actively offer to book
+ * consultations, viewings, and discovery calls. It used to throw, which fed a
+ * raw internal string ("not wired to a calendar yet") back to the model as a
+ * tool error, risking that implementation detail being paraphrased to a
+ * customer.
+ *
+ * Failing soft instead matches check_inventory: return a structured result the
+ * model can act on honestly. The request details come back in the payload so
+ * the reply can confirm what was captured, and the agent tells the customer a
+ * human will confirm — which is true, and is what actually happens once the
+ * conversation escalates.
+ */
 export const bookAppointmentTool: ToolDefinition = {
   name: "book_appointment",
-  description: "Book a consultation or service appointment on the business calendar.",
+  description:
+    "Record a request for a consultation, viewing, or appointment. Booking is confirmed by a human, " +
+    "so acknowledge the request and tell the customer a colleague will confirm the time — never state " +
+    "the appointment as already booked.",
   inputSchema: {
     type: "object",
     properties: {
       serviceName: { type: "string" },
-      preferredTime: { type: "string", description: "ISO 8601 datetime" },
+      preferredTime: { type: "string", description: "ISO 8601 datetime, or the customer's own wording" },
       contactName: { type: "string" },
     },
     required: ["serviceName", "preferredTime"],
   },
-  handler: async (input) => {
-    throw new Error(
-      `book_appointment not wired to a calendar yet (requested: ${String(input.serviceName)} at ${String(input.preferredTime)})`
-    );
-  },
+  handler: async (input) => ({
+    booked: false,
+    captured: true,
+    request: {
+      serviceName: String(input.serviceName ?? "").trim() || null,
+      preferredTime: String(input.preferredTime ?? "").trim() || null,
+      contactName: String(input.contactName ?? "").trim() || null,
+    },
+    note: "Request captured. A team member confirms the final time — do not tell the customer it is already booked.",
+  }),
 };
 
 defaultToolRegistry.register(checkInventoryTool);

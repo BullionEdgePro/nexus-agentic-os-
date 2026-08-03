@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { getPool } from "@nexus/db";
 import { chunkText } from "./chunk.js";
 import { embedTexts, EMBEDDING_MODEL } from "./embed.js";
+import { fetchDocument } from "./fetch-url.js";
 
 export type SourceKind = "text" | "url" | "file" | "faq" | "sop";
 
@@ -23,6 +24,34 @@ export interface IngestResult {
 
 function hashContent(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+/**
+ * Ingest a public web page as a knowledge source.
+ *
+ * Thin wrapper over ingestTextSource: fetching and text extraction are the only
+ * new parts, and everything downstream — hash-based idempotency, chunking,
+ * embedding, transactional replacement — is shared with every other source
+ * type. Re-running this on an unchanged page costs one fetch and one hash
+ * comparison, which is what makes scheduled re-crawls affordable on a
+ * rate-limited free tier.
+ */
+export async function ingestUrlSource(input: {
+  organizationId: string;
+  employeeId?: string | null;
+  url: string;
+  /** Overrides the page's own <title>. */
+  title?: string;
+}): Promise<IngestResult> {
+  const doc = await fetchDocument(input.url);
+  return ingestTextSource({
+    organizationId: input.organizationId,
+    employeeId: input.employeeId ?? null,
+    title: input.title ?? doc.title ?? new URL(doc.url).hostname,
+    content: doc.text,
+    kind: "url",
+    uri: doc.url,
+  });
 }
 
 /**
@@ -67,7 +96,7 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   try {
     const chunks = chunkText(input.content);
     if (chunks.length === 0) {
-      await markIndexed(sourceId, 0);
+      await markIndexed(sourceId);
       return { sourceId, chunks: 0, skipped: false };
     }
 
@@ -160,7 +189,7 @@ async function updateSource(sourceId: string, contentHash: string): Promise<stri
   return sourceId;
 }
 
-async function markIndexed(sourceId: string, _chunks: number): Promise<void> {
+async function markIndexed(sourceId: string): Promise<void> {
   await getPool().query(
     `update knowledge_sources
      set status = 'indexed', last_indexed_at = now(), last_checked_at = now(), error = null

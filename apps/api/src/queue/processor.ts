@@ -33,6 +33,7 @@ const FALLBACK_REPLY =
 const TOOL_INTENT: Record<string, string> = {
   check_inventory: "inventory_inquiry",
   book_appointment: "appointment_booking",
+  search_knowledge: "knowledge_lookup",
 };
 
 function deriveIntent(toolCalls: Array<{ name: string }>): string | null {
