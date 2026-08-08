@@ -47,7 +47,11 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://nexus:${POSTGRES_PASSWORD}@postgres:5432/nexus
+      # Least-privilege role (migration 006). Falls back to the owner role when
+      # APP_DB_* is unset so an existing deployment keeps working, but a
+      # production deploy should set both — the app needs DML only, and running
+      # it as the superuser owner makes row-level security unenforceable.
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/nexus
       REDIS_URL: redis://redis:6379
       # Comma-separated CORS allowlist. The same web build is served from BOTH
       # app.<domain> and the bare <domain> (see Caddyfile), so both must be
@@ -72,7 +76,11 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://nexus:${POSTGRES_PASSWORD}@postgres:5432/nexus
+      # Least-privilege role (migration 006). Falls back to the owner role when
+      # APP_DB_* is unset so an existing deployment keeps working, but a
+      # production deploy should set both — the app needs DML only, and running
+      # it as the superuser owner makes row-level security unenforceable.
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/nexus
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:

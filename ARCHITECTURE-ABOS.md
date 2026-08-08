@@ -43,6 +43,46 @@ across tenants. The structural fix is **Postgres Row-Level Security**, so
 isolation is enforced by the database rather than by reviewer diligence. This
 should land before the tenant count grows, not after.
 
+**Correction (verified in production 2026-08-03): RLS has a prerequisite this
+plan originally missed.** The application connects as `nexus`, which is a
+Postgres **superuser** and the owner of every table:
+
+```
+current_user | session_user | is_superuser
+nexus        | nexus        | t
+```
+
+Superusers bypass row-level security unconditionally — `FORCE ROW LEVEL
+SECURITY` does not apply to them either. Enabling RLS today would deploy
+policies that look protective and enforce nothing: the silent-no-op failure
+mode this system has already produced four times. Running the app as a
+superuser is also a least-privilege violation in its own right, since any SQL
+injection escalates directly to full database control.
+
+The corrected sequence, each step independently verifiable:
+
+1. **Create a least-privilege app role** — not superuser, not table owner, with
+   explicit grants on existing and future tables.
+2. **Cut `DATABASE_URL` over to it and verify.** Do this on its own. Failures
+   here are *loud* (`permission denied`), which makes it a safe step, and
+   rollback is one environment variable.
+3. **Add tenant-context plumbing** — `SET LOCAL app.current_org` per
+   tenant-scoped request, plus an application-level assertion that fails loudly
+   when the context is missing rather than quietly returning nothing.
+4. **Enable RLS + policies**, table by table, verifying row counts after each.
+
+Step 4 is the dangerous one: a wrong policy returns zero rows with no error, so
+it must never ship without the step-3 assertion in front of it.
+
+**Also note a design mismatch to resolve first.** Classic RLS assumes each
+request belongs to one tenant. Here the operator is a *super-user across all
+five tenants* — the inbox deliberately shows every business — and the worker
+must resolve `phone_number_id → organization` before it knows the tenant at
+all. Both are legitimate cross-tenant paths and need an explicit bypass role,
+otherwise step 4 breaks message routing. RLS's value in this system is
+protecting against a forgotten `WHERE` in application code, not against a
+hostile tenant user, because per-tenant logins do not exist yet.
+
 ### 2.3 Autonomous operators contradict the free tier
 Feature 8 specifies 11 always-on operators that "collaborate autonomously",
 plus continuous re-indexing (F2), predictive scoring (F11), and self-evaluation
