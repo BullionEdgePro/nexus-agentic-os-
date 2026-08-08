@@ -104,10 +104,6 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     })),
 }));
 
-export const BUSINESS_OPTIONS: { slug: BusinessSlug; label: string }[] = [
-  { slug: "zipicka", label: "Zipicka" },
-  { slug: "juris-prime", label: "Juris Prime" },
-  { slug: "juris-prime-legal", label: "Juris Prime Legal" },
-  { slug: "sfs-international", label: "SFS International" },
-  { slug: "atif-ali-production", label: "Atif Ali Production" },
-];
+// Re-exported so existing imports keep working; the list itself lives in
+// lib/tenants.ts, which is the only place the five businesses are described.
+export { BUSINESS_OPTIONS } from "./tenants";

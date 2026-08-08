@@ -7,25 +7,21 @@ export async function middleware(req: NextRequest) {
   const session = await verifySession(token);
   const { pathname } = req.nextUrl;
 
-  // Guard the command deck AND the Unified Inbox. Both render every tenant's
-  // customer conversations — names, WhatsApp numbers, message bodies — and the
-  // inbox was once served to anyone who loaded the site.
-  //
-  // `/` is deliberately NOT in this list. It is the public front page now, so
-  // nexusagenticos.com resolves to the site itself instead of bouncing every
-  // visitor to a sign-in URL.
-  const isProtected = pathname.startsWith("/deck") || pathname.startsWith("/inbox");
-  if (isProtected && !session) {
+  // `/` is never redirected, in either direction. It is the single front door:
+  // the page itself decides whether to show the pitch or the console based on
+  // the same session, on the server, before anything is sent. A redirect here
+  // is what produced two landing pages in the first place — one URL for
+  // visitors, another for operators.
+  if (pathname === "/") return NextResponse.next();
+
+  // The remaining screens render tenant data — customer names, WhatsApp
+  // numbers, message bodies — so they stay behind the session, and an
+  // unauthenticated visitor is sent to the sign-in section of the front page
+  // rather than to a separate login URL.
+  if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = "/";
     url.hash = "signin";
-    return NextResponse.redirect(url);
-  }
-
-  // Already signed in → skip the front page and go straight to work.
-  if (pathname === "/" && session) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/deck";
     return NextResponse.redirect(url);
   }
 

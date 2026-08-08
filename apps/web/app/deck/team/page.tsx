@@ -157,7 +157,7 @@ export default function TeamPage() {
             do, so nobody gets answered twice.
           </p>
         </div>
-        <a className="team-back" href="/deck">
+        <a className="team-back" href="/">
           Back to deck
         </a>
       </header>
