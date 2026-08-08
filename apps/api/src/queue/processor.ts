@@ -19,6 +19,7 @@ import {
 } from "@nexus/db";
 import { routeToEmployeeTwin, loadRecentHistory } from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
+import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
 import { evaluateOutgoingMessage, shouldEscalateReply } from "@nexus/governance";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
@@ -136,6 +137,19 @@ async function processSingleTextMessage(
     organizationSlug: organization.slug,
     conversationId,
     message: inboundDto,
+  });
+
+  // Lead scoring. Best-effort and fire-and-forget for the same reason analytics
+  // is: a scoring failure must never be able to stop a customer getting a
+  // reply. Runs for every inbound message including ones the AI will not
+  // answer, because a message arriving during human handoff is exactly the kind
+  // a human needs prioritized.
+  await scoreLeadBestEffort({
+    organizationId: organization.id,
+    contactId,
+    conversationId,
+    messageId,
+    text: text.body,
   });
 
   const aiPaused = Boolean(aiPausedUntil && new Date(aiPausedUntil).getTime() > Date.now());
@@ -279,6 +293,47 @@ async function processSingleTextMessage(
     } else {
       await sendFallbackBestEffort(organization, phoneNumberId, message.from, conversationId, contactId);
     }
+  }
+}
+
+/**
+ * Score an inbound message for commercial intent, swallowing any failure.
+ *
+ * The prior-message count is read before scoring so a returning contact is
+ * weighted correctly; if that read fails the message is still scored, just
+ * without the returning-contact signal — a slightly worse score beats no score.
+ */
+async function scoreLeadBestEffort(input: {
+  organizationId: string;
+  contactId: string;
+  conversationId: string;
+  messageId: string;
+  text: string;
+}): Promise<void> {
+  try {
+    let priorInboundCount = 0;
+    try {
+      // Subtract the message just recorded so "prior" really means prior.
+      priorInboundCount = Math.max(0, (await countPriorInbound(input.contactId)) - 1);
+    } catch (err) {
+      logger.debug({ err }, "Prior-message count unavailable; scoring without it");
+    }
+
+    const assessment = scoreLead({ text: input.text, priorInboundCount });
+    await recordLeadAssessment({
+      ...assessment,
+      organizationId: input.organizationId,
+      contactId: input.contactId,
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+    });
+
+    logger.debug(
+      { conversationId: input.conversationId, score: assessment.score, priority: assessment.priority },
+      "Lead assessed"
+    );
+  } catch (err) {
+    logger.error({ conversationId: input.conversationId, err }, "Lead scoring failed (non-fatal)");
   }
 }
 

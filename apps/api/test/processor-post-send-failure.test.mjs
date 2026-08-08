@@ -25,6 +25,9 @@ mock.module("@nexus/db", {
     recordConversationMetric: async () => {},
     setConversationHandoff: async (id, val) => { calls.setConversationHandoff.push({ id, val }); },
     findEmployeeForConversation: async () => null, // org-level tenant, no employee assigned
+    // @nexus/leads imports getPool statically; a missing export fails at module
+    // load, before any try/catch in the processor can intervene.
+    getPool: () => ({ query: async () => ({ rows: [] }) }),
   },
 });
 

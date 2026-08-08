@@ -18,6 +18,7 @@
     "@nexus/db": "*",
     "@nexus/employees": "*",
     "@nexus/governance": "*",
+    "@nexus/leads": "*",
     "@nexus/shared": "*",
     "bullmq": "^5.28.0",
     "dotenv": "^16.4.5",
