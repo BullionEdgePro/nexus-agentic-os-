@@ -46,6 +46,92 @@ export function sendMessage(conversationId: string, text: string): Promise<{ mes
   });
 }
 
+// ============================================================
+// Team
+// ============================================================
+
+export interface TeamMember {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  email?: string | null;
+  jobTitle?: string | null;
+  whatsappNumber?: string | null;
+  twinEnabled: boolean;
+  isActive: boolean;
+  whatsappReady: boolean;
+  presence: { status: string; source: string; shouldTwinRespond: boolean };
+}
+
+export interface DirectContact {
+  url: string;
+  message: string;
+  sendingAs: string | null;
+}
+
+export interface AssignedConversation {
+  conversationId: string;
+  contactWaId: string;
+  contactName: string | null;
+  lastMessagePreview: string | null;
+  lastMessageAt: string | null;
+  isHumanHandoff: boolean;
+  businessName: string;
+  businessSlug: string;
+  directContact: DirectContact | null;
+}
+
+export function getTeam(orgSlug: BusinessSlug): Promise<{ employees: TeamMember[] }> {
+  return request(`/api/organizations/${orgSlug}/employees`);
+}
+
+export function addTeamMember(
+  orgSlug: BusinessSlug,
+  input: { fullName: string; jobTitle?: string; email?: string; whatsappNumber?: string }
+): Promise<{ employee: TeamMember }> {
+  return request(`/api/organizations/${orgSlug}/employees`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function removeTeamMember(orgSlug: BusinessSlug, employeeId: string): Promise<{ deactivated: boolean }> {
+  return request(`/api/organizations/${orgSlug}/employees/${employeeId}`, { method: "DELETE" });
+}
+
+export function getAssignedConversations(
+  orgSlug: BusinessSlug,
+  employeeId: string
+): Promise<{ conversations: AssignedConversation[] }> {
+  return request(`/api/organizations/${orgSlug}/employees/${employeeId}/conversations`);
+}
+
+export function assignConversation(
+  conversationId: string,
+  employeeId: string | null
+): Promise<{ conversationId: string; employeeId: string | null }> {
+  return request(`/api/conversations/${conversationId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ employeeId }),
+  });
+}
+
+/**
+ * Hand a customer to an employee's personal WhatsApp.
+ *
+ * Returns the link AND pauses the AI on the platform number — the pause is the
+ * reason this is a request rather than a URL the browser could assemble itself.
+ */
+export function takeToOwnWhatsApp(
+  conversationId: string,
+  employeeId: string
+): Promise<DirectContact & { aiPaused: boolean }> {
+  return request(`/api/conversations/${conversationId}/direct-contact`, {
+    method: "POST",
+    body: JSON.stringify({ employeeId }),
+  });
+}
+
 export function setHandoff(
   conversationId: string,
   isHumanHandoff: boolean

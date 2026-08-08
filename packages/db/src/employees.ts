@@ -121,6 +121,168 @@ export async function assignConversationToEmployee(
   ]);
 }
 
+export interface CreateEmployeeInput {
+  organizationId: string;
+  employeeCode: string;
+  fullName: string;
+  email?: string | null;
+  jobTitle?: string | null;
+  department?: string | null;
+  /** The employee's own WhatsApp, used for direct customer contact. */
+  whatsappNumber?: string | null;
+  timezone?: string;
+  languages?: string[];
+  skills?: string[];
+  twinEnabled?: boolean;
+  aiPersonality?: string | null;
+  responseStyle?: string | null;
+  humanFirst?: boolean;
+}
+
+/**
+ * Add an employee to a business.
+ *
+ * Upserts on `(organization_id, employee_code)` — the natural key the schema
+ * already enforces — so re-submitting the same person updates their profile
+ * rather than failing on a constraint. Onboarding a team is exactly the kind of
+ * task someone does twice by accident, and a duplicate-key error at that moment
+ * is indistinguishable from "the save didn't work".
+ *
+ * `digital_signature` is deliberately not settable here. It is a human-only
+ * attestation the AI twin must never reproduce (see packages/employees/twin.ts),
+ * so it does not belong in the same form as job title and skills.
+ */
+export async function createEmployee(input: CreateEmployeeInput): Promise<Employee> {
+  const { rows } = await getPool().query<EmployeeRow>(
+    `insert into employees (
+       organization_id, employee_code, full_name, email, job_title, department,
+       whatsapp_number, timezone, languages, skills, twin_enabled,
+       ai_personality, response_style, human_first
+     ) values ($1,$2,$3,$4,$5,$6,$7,coalesce($8,'Asia/Dubai'),$9,$10,coalesce($11,true),$12,$13,coalesce($14,false))
+     on conflict (organization_id, employee_code) do update set
+       full_name      = excluded.full_name,
+       email          = excluded.email,
+       job_title      = excluded.job_title,
+       department     = excluded.department,
+       whatsapp_number = excluded.whatsapp_number,
+       timezone       = excluded.timezone,
+       languages      = excluded.languages,
+       skills         = excluded.skills,
+       twin_enabled   = excluded.twin_enabled,
+       ai_personality = excluded.ai_personality,
+       response_style = excluded.response_style,
+       human_first    = excluded.human_first,
+       is_active      = true,
+       updated_at     = now()
+     returning ${EMPLOYEE_COLUMNS}`,
+    [
+      input.organizationId,
+      input.employeeCode,
+      input.fullName,
+      input.email ?? null,
+      input.jobTitle ?? null,
+      input.department ?? null,
+      input.whatsappNumber ?? null,
+      input.timezone ?? null,
+      input.languages ?? [],
+      input.skills ?? [],
+      input.twinEnabled ?? null,
+      input.aiPersonality ?? null,
+      input.responseStyle ?? null,
+      input.humanFirst ?? null,
+    ]
+  );
+  return toEmployee(rows[0]);
+}
+
+/**
+ * Take an employee off the rota without deleting them.
+ *
+ * Their conversations, messages and presence history stay attributed — deleting
+ * the row would orphan every message they ever handled. `resolveAssignedEmployee`
+ * already treats an inactive employee as no employee, so their conversations
+ * fall back to the organization agent rather than going quiet.
+ */
+export async function deactivateEmployee(employeeId: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update employees set is_active = false, updated_at = now() where id = $1 and is_active = true`,
+    [employeeId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+export interface AssignedConversation {
+  conversationId: string;
+  contactId: string;
+  contactWaId: string;
+  contactName: string | null;
+  lastMessagePreview: string | null;
+  lastMessageAt: string | null;
+  isHumanHandoff: boolean;
+  businessName: string;
+  businessSlug: string;
+}
+
+/**
+ * The conversations one employee is responsible for.
+ *
+ * Reads the business from `routed_organization_id` where the switchboard set
+ * one, falling back to the conversation's owning organization. On a shared
+ * number those differ: every conversation is owned by the number's owner, so
+ * using `organization_id` here would label every customer as Zipicka's
+ * regardless of which business the enquiry was actually routed to.
+ */
+export async function listConversationsForEmployee(
+  employeeId: string
+): Promise<AssignedConversation[]> {
+  const { rows } = await getPool().query<{
+    conversation_id: string;
+    contact_id: string;
+    wa_id: string;
+    contact_name: string | null;
+    last_message_preview: string | null;
+    last_message_at: string | null;
+    is_human_handoff: boolean;
+    business_name: string;
+    business_slug: string;
+  }>(
+    `select c.id              as conversation_id,
+            ct.id             as contact_id,
+            ct.wa_id,
+            ct.display_name   as contact_name,
+            lm.body           as last_message_preview,
+            lm.created_at     as last_message_at,
+            c.is_human_handoff,
+            o.name            as business_name,
+            o.slug            as business_slug
+       from conversations c
+       join contacts ct on ct.id = c.contact_id
+       join organizations o on o.id = coalesce(c.routed_organization_id, c.organization_id)
+       left join lateral (
+         select body, created_at from messages
+         where conversation_id = c.id
+         order by created_at desc
+         limit 1
+       ) lm on true
+      where c.employee_id = $1
+      order by coalesce(lm.created_at, c.opened_at) desc
+      limit 100`,
+    [employeeId]
+  );
+
+  return rows.map((row) => ({
+    conversationId: row.conversation_id,
+    contactId: row.contact_id,
+    contactWaId: row.wa_id,
+    contactName: row.contact_name,
+    lastMessagePreview: row.last_message_preview,
+    lastMessageAt: row.last_message_at,
+    isHumanHandoff: row.is_human_handoff,
+    businessName: row.business_name,
+    businessSlug: row.business_slug,
+  }));
+}
+
 /** Append-only presence history — never updated, only inserted. */
 export async function recordPresenceEvent(input: {
   organizationId: string;

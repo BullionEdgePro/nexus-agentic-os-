@@ -296,6 +296,14 @@ export default function DeckPage() {
             </svg>
             <span className="tip">Unified Inbox</span>
           </a>
+          <a title="Team" href="/deck/team">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <circle cx="9" cy="8" r="3.1" />
+              <path d="M2.5 20c0-3.3 2.9-5.6 6.5-5.6s6.5 2.3 6.5 5.6" />
+              <path d="M16.5 5.6a3.1 3.1 0 0 1 0 5.9M18 14.8c2.1.7 3.5 2.5 3.5 5.2" />
+            </svg>
+            <span className="tip">Team</span>
+          </a>
           <a title="Domain Agents">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <circle cx="12" cy="7" r="3.2" />

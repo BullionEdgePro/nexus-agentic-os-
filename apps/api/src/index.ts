@@ -8,6 +8,7 @@ import { conversationsRoute } from "./routes/conversations.js";
 import { broadcastsRoute } from "./routes/broadcasts.js";
 import { metricsRoute } from "./routes/metrics.js";
 import { knowledgeRoute } from "./routes/knowledge.js";
+import { employeesRoute, conversationAssignmentRoute } from "./routes/employees.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import { logger } from "./lib/logger.js";
@@ -31,7 +32,11 @@ app.route("/api/organizations", organizationsRoute);
 // Same mount point: knowledge is addressed per organization
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.
 app.route("/api/organizations", knowledgeRoute);
+app.route("/api/organizations", employeesRoute);
 app.route("/api/conversations", conversationsRoute);
+// Assignment and the personal-WhatsApp handoff hang off a conversation id,
+// so they compose onto the same /api/conversations router.
+app.route("/api/conversations", conversationAssignmentRoute);
 app.route("/api/broadcasts", broadcastsRoute);
 app.route("/api/metrics", metricsRoute);
 

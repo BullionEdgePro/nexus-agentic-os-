@@ -1,0 +1,111 @@
+/* ============================================================
+   Team — who answers, and from which phone.
+   Inherits the routing-plate tokens from deck.css; everything here
+   is scoped under .team-root so it cannot reach the deck itself.
+   ============================================================ */
+
+.team-root { padding: 40px clamp(20px, 5vw, 56px) 72px; display: flex; flex-direction: column; gap: 26px; }
+
+.team-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.team-head h1 { font-family: var(--display); font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.02em; line-height: 1.1; text-wrap: balance; margin-top: 6px; }
+.team-root .eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--blueprint); }
+.team-lede { margin-top: 10px; max-width: 56ch; color: var(--ink-soft); }
+
+.team-back {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink); text-decoration: none; border: 1px solid var(--line-strong);
+  border-radius: 100px; padding: 8px 16px; white-space: nowrap;
+}
+.team-back:hover { border-color: var(--blueprint); color: var(--blueprint); }
+
+/* ---------- business tabs ---------- */
+
+.team-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.team-tabs button {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  padding: 7px 14px; border-radius: 100px; border: 1px solid var(--line-strong);
+  background: transparent; color: var(--graphite); cursor: pointer;
+}
+.team-tabs button:hover { color: var(--ink); border-color: var(--ink-soft); }
+.team-tabs button.on { background: var(--ink); border-color: var(--ink); color: var(--vellum); }
+
+/* ---------- messages ---------- */
+
+.team-msg { font-family: var(--mono); font-size: 12px; padding: 11px 14px; border-radius: var(--r-sm); border: 1px solid; }
+.team-msg.ok  { color: var(--good); border-color: rgba(63, 107, 74, .4); background: rgba(63, 107, 74, .07); }
+.team-msg.bad { color: var(--crit); border-color: rgba(162, 59, 46, .4); background: rgba(162, 59, 46, .07); }
+
+/* ---------- panels ---------- */
+
+.team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 22px; align-items: start; }
+
+.team-panel { background: var(--vellum-card); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+.team-panel h2 { font-family: var(--display); font-size: 18px; letter-spacing: -0.01em; }
+.team-panel h3 { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--pencil); }
+.team-empty { color: var(--graphite); font-size: 14px; }
+.team-note { font-size: 12.5px; color: var(--graphite); border-top: 1px dashed var(--line-strong); padding-top: 12px; }
+
+/* ---------- roster ---------- */
+
+.team-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.team-list li { display: flex; align-items: stretch; gap: 6px; }
+
+.team-member {
+  flex: 1; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px;
+  text-align: left; padding: 11px 13px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: transparent; cursor: pointer; min-width: 0;
+}
+.team-member:hover { border-color: var(--line-strong); }
+.team-member.on { border-color: var(--blueprint); background: var(--blueprint-soft); }
+.team-member .who { display: flex; flex-direction: column; min-width: 0; }
+.team-member .nm { font-weight: 500; font-size: 14px; }
+.team-member .rl { font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--pencil); }
+.team-member .wa { font-family: var(--mono); font-size: 10.5px; color: var(--graphite); white-space: nowrap; }
+/* A filled node means the person is on and answering; hollow means their AI
+   twin is covering. One filled state only, so the roster is scannable. */
+.team-member .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px var(--pencil); }
+.team-member .dot.live { background: var(--blueprint); box-shadow: none; }
+
+.team-remove {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line);
+  background: transparent; color: var(--pencil); cursor: pointer;
+}
+.team-remove:hover:not(:disabled) { color: var(--crit); border-color: rgba(162, 59, 46, .45); }
+.team-remove:disabled { opacity: .45; cursor: default; }
+
+/* ---------- add form ---------- */
+
+.team-form { display: flex; flex-direction: column; gap: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+.team-form label { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--pencil); }
+.team-form input {
+  font-family: var(--sans); font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--ink);
+  padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--vellum);
+}
+.team-form input:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 1px; border-color: transparent; }
+.team-form small { font-family: var(--sans); font-size: 11.5px; letter-spacing: 0; text-transform: none; color: var(--graphite); }
+
+.team-root .btn {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 12px 18px; border-radius: 100px; border: 1px solid var(--ink);
+  background: var(--ink); color: var(--vellum); cursor: pointer; align-self: flex-start;
+}
+.team-root .btn:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.team-root .btn:disabled { opacity: .45; cursor: default; }
+.team-root .btn.small { padding: 9px 14px; font-size: 10.5px; }
+
+/* ---------- assigned customers ---------- */
+
+.cust-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.cust-list li { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.cust-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.cust-head .nm { font-weight: 500; }
+.cust-head .biz { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--pencil); white-space: nowrap; }
+.cust-last { font-size: 13px; color: var(--graphite); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cust-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.tag {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: 100px; border: 1px solid var(--line-strong); color: var(--graphite);
+}
+.tag.bad { color: var(--crit); border-color: rgba(162, 59, 46, .45); }
