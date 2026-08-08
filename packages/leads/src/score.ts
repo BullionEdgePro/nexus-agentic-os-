@@ -140,8 +140,25 @@ const PITCH_RULE: Rule = {
     // Promotional register. Genuine customers do not advertise at you.
     "special offer", "limited time", "best price", "low price", "premium data",
     "latest updates", "exclusive", "available for sale", "for sale",
+
+    // Advertising inventory the SENDER holds. "available" alone is ambiguous —
+    // it appears in "is this available?" (buyer) and "data available"
+    // (seller) — so the pairing carries the signal, not the word.
+    "data available", "leads available", "database", "investor data", "owner data",
   ],
 };
+
+/**
+ * WhatsApp bold (*like this*) wrapping the opening line.
+ *
+ * A marketing convention: broadcast tools bold the headline, real customers
+ * asking a question do not. Structural like the caps check, so it does not
+ * depend on this week's spam vocabulary.
+ */
+function hasBroadcastHeader(original: string): boolean {
+  const firstLine = original.trim().split("\n")[0] ?? "";
+  return /^\*.+\*$/.test(firstLine.trim()) && firstLine.length > 15;
+}
 
 /**
  * Broadcast blasts SHOUT.
@@ -205,6 +222,7 @@ export function scoreLead(input: ScoreInput): LeadAssessment {
 
   const pitchMatches = matchPhrases(text, PITCH_RULE.phrases);
   if (looksLikeBroadcast(input.text)) pitchMatches.push("shouted/broadcast formatting");
+  if (hasBroadcastHeader(input.text)) pitchMatches.push("bolded broadcast header");
 
   if (pitchMatches.length > 0) {
     // Negative weight grows with evidence too: several pitch markers together

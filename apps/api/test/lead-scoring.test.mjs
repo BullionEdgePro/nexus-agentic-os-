@@ -52,6 +52,7 @@ test("real production spam is not ranked as a hot lead", () => {
     "🏢PREMIUM DATA – MAY 2026 UPDATE",
     "🏙SHARJAH EXCLUSIVE VIP AREAS – 2026 🏙 AE N",
     "Do you need any data??",
+    "*Latest Owner, buyer and investor data available*\n📁March 2026",
   ];
   for (const text of spam) {
     const r = scoreLead({ text });
