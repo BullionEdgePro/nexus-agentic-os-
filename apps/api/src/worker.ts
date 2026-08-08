@@ -4,6 +4,8 @@ import { INBOUND_WEBHOOK_QUEUE, getRedisConnection } from "./queue/queue.js";
 import { processInboundWebhookJob } from "./queue/processor.js";
 import { BROADCAST_SEND_QUEUE } from "./queue/broadcast-queue.js";
 import { processBroadcastSendJob } from "./queue/broadcast-processor.js";
+import { KNOWLEDGE_REINDEX_QUEUE, scheduleKnowledgeReindex } from "./queue/reindex-queue.js";
+import { processKnowledgeReindexJob } from "./queue/reindex-processor.js";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -21,6 +23,17 @@ const broadcastWorker = new Worker<BroadcastSendJob>(BROADCAST_SEND_QUEUE, proce
   limiter: { max: 20, duration: 1000 },
 });
 
+// Concurrency 1: a refresh cycle is embedding-bound, and running cycles in
+// parallel would multiply spend against a rate-limited quota for no gain.
+const reindexWorker = new Worker(KNOWLEDGE_REINDEX_QUEUE, processKnowledgeReindexJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+
+reindexWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Knowledge re-index job failed")
+);
+
 inboundWorker.on("completed", (job) => logger.debug({ jobId: job.id }, "Processed inbound webhook job"));
 inboundWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Failed to process inbound webhook job")
@@ -31,7 +44,13 @@ broadcastWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Failed to process broadcast send job")
 );
 
-logger.info("Nexus background workers started (inbound webhook + broadcast send)");
+logger.info("Nexus background workers started (inbound webhook + broadcast send + knowledge re-index)");
+
+// Idempotent — replaces the existing schedule rather than stacking one per
+// deploy. Best-effort: a scheduling failure must not stop message processing.
+scheduleKnowledgeReindex()
+  .then(() => logger.info("Knowledge re-index scheduled (every 6h)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule knowledge re-index"));
 
 // Verify every configured model is actually callable. A model that 404s does
 // not crash anything — it just makes every customer receive the generic
@@ -55,7 +74,7 @@ preflightModels()
 
 async function shutdown() {
   logger.info("Shutting down workers...");
-  await Promise.all([inboundWorker.close(), broadcastWorker.close()]);
+  await Promise.all([inboundWorker.close(), broadcastWorker.close(), reindexWorker.close()]);
   process.exit(0);
 }
 process.on("SIGINT", shutdown);

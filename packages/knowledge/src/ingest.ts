@@ -126,15 +126,26 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   const contentHash = hashContent(input.content);
   const kind = input.kind ?? "text";
 
-  // Reuse an existing source row for this (tenant, title, uri) so re-ingesting
-  // updates in place instead of accumulating duplicates.
-  const { rows: existing } = await pool.query<{ id: string; content_hash: string | null }>(
-    `select id, content_hash from knowledge_sources
-     where organization_id = $1 and title = $2
-       and uri is not distinct from $3
-       and employee_id is not distinct from $4`,
-    [input.organizationId, input.title, input.uri ?? null, input.employeeId ?? null]
-  );
+  // Identify an existing source by URI when there is one, falling back to
+  // title only for inline text that has no origin.
+  //
+  // Matching on title as well would break re-indexing: a page whose <title>
+  // changes between crawls (a promo banner, a renamed section) would fail to
+  // match its own row and silently create a duplicate source, so the knowledge
+  // base would then hold and cite BOTH the old and new copies of that page.
+  const { rows: existing } = input.uri
+    ? await pool.query<{ id: string; content_hash: string | null }>(
+        `select id, content_hash from knowledge_sources
+         where organization_id = $1 and uri = $2
+           and employee_id is not distinct from $3`,
+        [input.organizationId, input.uri, input.employeeId ?? null]
+      )
+    : await pool.query<{ id: string; content_hash: string | null }>(
+        `select id, content_hash from knowledge_sources
+         where organization_id = $1 and title = $2 and uri is null
+           and employee_id is not distinct from $3`,
+        [input.organizationId, input.title, input.employeeId ?? null]
+      );
 
   if (existing[0] && existing[0].content_hash === contentHash) {
     await pool.query(`update knowledge_sources set last_checked_at = now() where id = $1`, [
@@ -144,7 +155,7 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   }
 
   const sourceId = existing[0]?.id
-    ? await updateSource(existing[0].id, contentHash)
+    ? await updateSource(existing[0].id, contentHash, input.title)
     : await insertSource(input, kind, contentHash);
 
   try {
@@ -233,12 +244,18 @@ async function insertSource(
   return rows[0].id;
 }
 
-async function updateSource(sourceId: string, contentHash: string): Promise<string> {
+async function updateSource(
+  sourceId: string,
+  contentHash: string,
+  title: string
+): Promise<string> {
+  // Title is refreshed too — the row is identified by URI, so a retitled page
+  // should show its current name rather than the one it had at first crawl.
   await getPool().query(
     `update knowledge_sources
-     set content_hash = $2, version = version + 1, status = 'pending', error = null
+     set content_hash = $2, title = $3, version = version + 1, status = 'pending', error = null
      where id = $1`,
-    [sourceId, contentHash]
+    [sourceId, contentHash, title]
   );
   return sourceId;
 }
