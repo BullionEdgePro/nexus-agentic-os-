@@ -1,168 +1,355 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useInboxStore, BUSINESS_OPTIONS } from "@/lib/store";
-import { useInboxSocket } from "@/lib/use-inbox-socket";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { initDeckFx } from "@/lib/deck-fx";
+import { fontVariables } from "@/lib/fonts";
+import "./deck/deck.css";
 
-export default function InboxPage() {
-  useInboxSocket();
+const BrandMark = () => (
+  <span className="brand-mark">
+    <svg viewBox="0 0 32 32" fill="none">
+      <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="#16160f" strokeWidth="1.3" />
+      <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" fill="none" stroke="#1d3fbf" strokeWidth="1.2" />
+      <circle cx="16" cy="16" r="2" fill="#1d3fbf" />
+    </svg>
+  </span>
+);
 
-  const selectedOrg = useInboxStore((s) => s.selectedOrg);
-  const setSelectedOrg = useInboxStore((s) => s.setSelectedOrg);
-  const conversations = useInboxStore((s) => s.conversations);
-  const isLoadingConversations = useInboxStore((s) => s.isLoadingConversations);
-  const selectedConversationId = useInboxStore((s) => s.selectedConversationId);
-  const selectConversation = useInboxStore((s) => s.selectConversation);
-  const setHumanHandoff = useInboxStore((s) => s.setHumanHandoff);
-  const sendMessage = useInboxStore((s) => s.sendMessage);
-  const messagesByConversation = useInboxStore((s) => s.messagesByConversation);
-  const loadConversations = useInboxStore((s) => s.loadConversations);
+// The five businesses on the switchboard. `live` means answering customers on
+// WhatsApp today — not merely configured. Shown honestly rather than lighting
+// every node green: a status board that says everything is live when it isn't
+// is the same class of defect as a health check that only proves nothing threw.
+const PLATE_NODES = [
+  { ref: "N-01", nm: "Zipicka", rl: "E-commerce", ang: -90, live: true },
+  { ref: "N-02", nm: "Juris Prime", rl: "Attestation & Notary", ang: -18, live: false },
+  { ref: "N-03", nm: "Juris Prime Legal", rl: "Law Firm", ang: 54, live: false },
+  { ref: "N-04", nm: "SFS International", rl: "Real Estate", ang: 126, live: false },
+  { ref: "N-05", nm: "Atif Ali Production", rl: "Digital Studio", ang: 198, live: false },
+];
 
-  const [draft, setDraft] = useState("");
-  const [isSending, setIsSending] = useState(false);
+function RoutingPlate() {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [nodes, setNodes] = useState<{ meta: (typeof PLATE_NODES)[number]; x: number; y: number }[]>([]);
+  const [links, setLinks] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
 
   useEffect(() => {
-    loadConversations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOrg]);
+    const el = boardRef.current;
+    if (!el) return;
+    const layout = () => {
+      const bw = el.clientWidth;
+      const bh = el.clientHeight;
+      const cx = bw / 2;
+      const cy = bh / 2;
+      const R = Math.min(bw, bh) * 0.36;
+      const ns = PLATE_NODES.map((meta) => {
+        const a = (meta.ang * Math.PI) / 180;
+        return { meta, x: cx + Math.cos(a) * R * 1.15, y: cy + Math.sin(a) * R };
+      });
+      setNodes(ns);
+      setLinks(ns.map((n) => ({ x1: cx, y1: cy, x2: n.x, y2: n.y })));
+    };
+    layout();
+    const ro = new ResizeObserver(layout);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  const activeConversation = conversations.find((c) => c.id === selectedConversationId);
-  const messages = selectedConversationId ? messagesByConversation[selectedConversationId] ?? [] : [];
+  return (
+    <div className="plate">
+      <div className="plate-titleblock">
+        <span>
+          PLATE <b>NEXUS-01</b>
+        </span>
+        <span>
+          REV <b>A</b>
+        </span>
+        <span>
+          SCALE <b>— LIVE</b>
+        </span>
+        <span>
+          NODES <b>{PLATE_NODES.length}</b>
+        </span>
+      </div>
+      <div className="plate-body" ref={boardRef}>
+        <svg>
+          {links.map((l, i) => (
+            <line
+              key={i}
+              x1={l.x1}
+              y1={l.y1}
+              x2={l.x2}
+              y2={l.y2}
+              stroke="rgba(22,22,15,.32)"
+              strokeWidth="1"
+              strokeDasharray="3 4"
+            />
+          ))}
+        </svg>
+        <div className="plate-core">
+          <div>
+            <b>NEXUS</b>
+            <span>Switchboard</span>
+          </div>
+        </div>
+        {nodes.map((n) => (
+          <div className="plate-node" key={n.meta.ref} style={{ left: n.x, top: n.y }}>
+            <div className="ref">{n.meta.ref}</div>
+            <div className="nm">{n.meta.nm}</div>
+            <div className="rl">{n.meta.rl}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  async function handleSend() {
-    if (!selectedConversationId || !draft.trim()) return;
-    setIsSending(true);
+export default function LoginPage() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  // Starts empty. These fields used to be pre-filled with demo credentials,
+  // which was harmless while this page sat behind a redirect and unhelpful the
+  // moment it became the public front page: it advertised a working-looking
+  // password to every visitor, and in production — where NEXUS_OPERATOR_PASSWORD
+  // is set — pressing the button with it would simply fail.
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (rootRef.current) return initDeckFx(rootRef.current);
+  }, []);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!/.+@.+\..+/.test(email.trim())) {
+      setError("Enter a valid email to continue.");
+      return;
+    }
+    if (password.trim().length < 4) {
+      setError("Password must be at least 4 characters.");
+      return;
+    }
+    setBusy(true);
     try {
-      await sendMessage(selectedConversationId, draft.trim());
-      setDraft("");
-    } finally {
-      setIsSending(false);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+      });
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(b.error ?? "Sign-in failed. Please try again.");
+        setBusy(false);
+        return;
+      }
+      router.push("/deck");
+      router.refresh();
+    } catch {
+      setError("Network error — please try again.");
+      setBusy(false);
     }
   }
 
   return (
-    <div className="grid h-full grid-cols-[220px_320px_1fr]">
-      <aside className="border-r border-neutral-800 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-          Businesses
-        </h2>
-        <ul className="space-y-1">
-          {BUSINESS_OPTIONS.map((option) => (
-            <li key={option.slug}>
-              <button
-                onClick={() => setSelectedOrg(option.slug)}
-                className={`w-full rounded px-2 py-1.5 text-left text-sm ${
-                  selectedOrg === option.slug
-                    ? "bg-neutral-800 text-white"
-                    : "text-neutral-400 hover:bg-neutral-900"
-                }`}
-              >
-                {option.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
+    <div className={`deck-root ${fontVariables}`} ref={rootRef}>
+      <canvas className="bg" />
+      <div className="grid-overlay" />
+      <div className="vignette" />
+      <div className="cur-ring" />
+      <div className="cur-dot" />
 
-      <section className="border-r border-neutral-800 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-          Conversations
-        </h2>
-        {isLoadingConversations ? (
-          <p className="text-sm text-neutral-500">Loading…</p>
-        ) : conversations.length === 0 ? (
-          <p className="text-sm text-neutral-500">No conversations yet for this business.</p>
-        ) : (
-          <ul className="space-y-1">
-            {conversations.map((conversation) => (
-              <li key={conversation.id}>
-                <button
-                  onClick={() => selectConversation(conversation.id)}
-                  className={`w-full rounded px-2 py-2 text-left ${
-                    selectedConversationId === conversation.id
-                      ? "bg-neutral-800"
-                      : "hover:bg-neutral-900"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
-                      {conversation.contactName ?? conversation.contactWaId}
-                    </span>
-                    {conversation.isHumanHandoff && (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">
-                        human
-                      </span>
-                    )}
-                  </div>
-                  <p className="truncate text-xs text-neutral-500">
-                    {conversation.lastMessagePreview ?? "No messages yet"}
-                  </p>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <nav className="nav">
+        <div className="brand">
+          <BrandMark />
+          <span className="brand-name">
+            <b>NEXUS</b> <span>AGENTIC OS</span>
+          </span>
+        </div>
+        <div className="nav-links">
+          <a href="#plate">Schematic</a>
+          <a href="#stats">Reliability</a>
+          <a href="#signin" className="btn ghost" style={{ padding: "9px 16px" }}>
+            Sign in
+          </a>
+        </div>
+      </nav>
 
-      <section className="flex flex-col p-4">
-        {!activeConversation ? (
-          <p className="text-sm text-neutral-500">Select a conversation to view messages.</p>
-        ) : (
-          <>
-            <header className="mb-3 flex items-center justify-between border-b border-neutral-800 pb-3">
-              <div>
-                <h1 className="text-base font-semibold">
-                  {activeConversation.contactName ?? activeConversation.contactWaId}
-                </h1>
-                <p className="text-xs text-neutral-500">{activeConversation.contactWaId}</p>
-              </div>
-              <label className="flex items-center gap-2 text-xs text-neutral-400">
-                Human handoff
-                <input
-                  type="checkbox"
-                  checked={activeConversation.isHumanHandoff}
-                  onChange={(e) => setHumanHandoff(activeConversation.id, e.target.checked)}
-                />
-              </label>
-            </header>
-            <div className="flex-1 space-y-2 overflow-y-auto">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`max-w-md rounded px-3 py-2 text-sm ${
-                    message.direction === "inbound"
-                      ? "bg-neutral-800"
-                      : "ml-auto bg-blue-600 text-white"
-                  }`}
-                >
-                  {message.body}
-                </div>
-              ))}
+      <section className="hero" id="plate">
+        <div className="hero-copy">
+          <div className="eyebrow">Fig. 01 — Switchboard schematic · Live</div>
+          <h1>
+            One console routes <em>every conversation.</em>
+          </h1>
+          <div className="hero-sub">
+            <p>
+              Route, govern, and resolve every WhatsApp conversation across five businesses from a
+              single deck — with AI that never leaves a customer in silence.
+            </p>
+            <div className="cta-row">
+              <a href="#signin" className="btn">
+                Enter the deck
+              </a>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-              className="mt-3 flex gap-2 border-t border-neutral-800 pt-3"
-            >
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Reply as a human agent…"
-                className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm outline-none placeholder:text-neutral-600"
-              />
-              <button
-                type="submit"
-                disabled={isSending || !draft.trim()}
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium disabled:opacity-50"
-              >
-                Send
-              </button>
-            </form>
-          </>
-        )}
+          </div>
+        </div>
+
+        <RoutingPlate />
       </section>
+
+      <div className="dither" />
+
+      <section className="stat-band" id="stats">
+        <div className="stat-band-item">
+          <div className="num">05</div>
+          <div className="lbl">Independent businesses routed from one Switchboard</div>
+        </div>
+        <div className="stat-band-item">
+          <div className="num">24H</div>
+          <div className="lbl">Automatic AI pause the moment a human agent replies</div>
+        </div>
+        <div className="stat-band-item">
+          <div className="num">2/2</div>
+          <div className="lbl">Governance checks every AI reply clears — PII scan, hallucination judge</div>
+        </div>
+      </section>
+
+      <section className="feature-band">
+        <div className="feature-inner">
+          <div className="eyebrow">What the deck watches</div>
+          <h2>Every reply is routed, checked, and logged before it reaches a customer.</h2>
+          <div className="feature-grid">
+            <div className="feature-card">
+              <div className="ref">N-01</div>
+              <h3>Switchboard routing</h3>
+              <p>
+                Five businesses share one WhatsApp number. Each message is classified by what it
+                actually asks — in English or Arabic — and when the signal is ambiguous the
+                switchboard asks the customer instead of guessing.
+              </p>
+            </div>
+            <div className="feature-card">
+              <div className="ref">N-02</div>
+              <h3>Governance gate</h3>
+              <p>
+                Every AI reply is scanned for PII and checked by an independent grounding judge
+                before it&rsquo;s allowed to send — the law firm is held to a stricter bar.
+              </p>
+            </div>
+            <div className="feature-card">
+              <div className="ref">N-03</div>
+              <h3>Never left in silence</h3>
+              <p>
+                If the AI pipeline fails for any reason, a fallback reply still goes out and the
+                conversation is flagged for a human to follow up.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="dither flip" />
+
+      <section className="signin" id="signin">
+        <div className="signin-copy">
+          <h2>Built for the operator, not the crowd.</h2>
+          <p>
+            One operator account per deck. Sign in to watch routing, governance, and resolution
+            across every business in real time.
+          </p>
+          <div className="tenant-list">
+            {PLATE_NODES.map((t) => (
+              <div className="row" key={t.ref}>
+                <span className={t.live ? "dot live" : "dot"} />
+                <span className="name">{t.nm}</span>
+                <span className="role">{t.rl}</span>
+                <span className="state">{t.live ? "live" : "onboarding"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <form className="auth-card" onSubmit={onSubmit} autoComplete="off">
+          <h3>Sign in to your deck</h3>
+          <div className="sub">nexusagenticos.com</div>
+
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <div className="inp">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="m3 7 9 6 9-6" />
+              </svg>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@nexusagenticos.com"
+              />
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="pass">Password</label>
+            <div className="inp">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <rect x="4" y="10" width="16" height="10" rx="2" />
+                <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+              </svg>
+              <input
+                id="pass"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••"
+              />
+            </div>
+          </div>
+
+          <div className="rowline">
+            <label
+              onClick={(e) => {
+                e.preventDefault();
+                setRemember((v) => !v);
+              }}
+            >
+              <span className={`chk${remember ? " on" : ""}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="m5 12 5 5L20 6" />
+                </svg>
+              </span>
+              Keep me signed in
+            </label>
+            <a href="#" onClick={(e) => e.preventDefault()}>
+              Forgot?
+            </a>
+          </div>
+
+          <button className="btn" type="submit" disabled={busy}>
+            {busy ? "Initializing…" : "Enter command deck"}
+            {!busy && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14m-6-6 6 6-6 6" />
+              </svg>
+            )}
+          </button>
+          <div className="errline">{error}</div>
+
+          <div className="divider">Secured session</div>
+          <div className="hint">
+            Operator access only. Sessions are signed and expire on their own.
+          </div>
+        </form>
+      </section>
+
+      <footer className="site-foot">
+        <span>NEXUS AGENTIC OS · nexusagenticos.com</span>
+        <span>PLATE NEXUS-01 · REV A</span>
+      </footer>
     </div>
   );
 }

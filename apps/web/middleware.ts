@@ -7,18 +7,23 @@ export async function middleware(req: NextRequest) {
   const session = await verifySession(token);
   const { pathname } = req.nextUrl;
 
-  // Guard the command deck AND the Unified Inbox. The inbox renders every
-  // tenant's customer conversations — names, WhatsApp numbers, message bodies —
-  // and was previously served to anyone who loaded the site.
-  const isProtected = pathname === "/" || pathname.startsWith("/deck");
+  // Guard the command deck AND the Unified Inbox. Both render every tenant's
+  // customer conversations — names, WhatsApp numbers, message bodies — and the
+  // inbox was once served to anyone who loaded the site.
+  //
+  // `/` is deliberately NOT in this list. It is the public front page now, so
+  // nexusagenticos.com resolves to the site itself instead of bouncing every
+  // visitor to a sign-in URL.
+  const isProtected = pathname.startsWith("/deck") || pathname.startsWith("/inbox");
   if (isProtected && !session) {
     const url = req.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/";
+    url.hash = "signin";
     return NextResponse.redirect(url);
   }
 
-  // Already signed in → skip the login screen.
-  if (pathname === "/login" && session) {
+  // Already signed in → skip the front page and go straight to work.
+  if (pathname === "/" && session) {
     const url = req.nextUrl.clone();
     url.pathname = "/deck";
     return NextResponse.redirect(url);
@@ -28,5 +33,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/deck/:path*", "/login"],
+  matcher: ["/", "/deck/:path*", "/inbox/:path*"],
 };

@@ -216,7 +216,7 @@ export default function DeckPage() {
     } catch {
       /* ignore */
     }
-    router.push("/login");
+    router.push("/");
     router.refresh();
   }
 
@@ -290,7 +290,7 @@ export default function DeckPage() {
             </svg>
             <span className="tip">Overview</span>
           </a>
-          <a title="Unified Inbox" href="/">
+          <a title="Unified Inbox" href="/inbox">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" />
             </svg>
