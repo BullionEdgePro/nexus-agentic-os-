@@ -48,14 +48,32 @@ export function operatorPassword(): string {
   return process.env.NEXUS_OPERATOR_PASSWORD || "demo1234";
 }
 
-export async function signSession(email: string): Promise<string> {
-  const body = b64url(textBytes(JSON.stringify({ sub: email, exp: Date.now() + TTL_MS })));
+/**
+ * What a session says about its bearer.
+ *
+ * The scope is signed INTO the token rather than looked up per request, so an
+ * employee cannot widen it without forging an HMAC. A scope re-derived from a
+ * client-supplied id is only ever as trustworthy as that id.
+ */
+export interface SessionClaims {
+  role: "operator" | "employee";
+  employeeId?: string;
+  organizationId?: string;
+  organizationSlug?: string;
+}
+
+export async function signSession(email: string, claims: SessionClaims = { role: "operator" }): Promise<string> {
+  const body = b64url(
+    textBytes(JSON.stringify({ sub: email, exp: Date.now() + TTL_MS, ...claims }))
+  );
   const key = await hmacKey(sessionSecret());
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, textBytes(body)));
   return body + "." + b64url(sig);
 }
 
-export async function verifySession(token: string | undefined): Promise<{ sub: string } | null> {
+export async function verifySession(
+  token: string | undefined
+): Promise<({ sub: string } & SessionClaims) | null> {
   if (!token) return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
@@ -64,9 +82,29 @@ export async function verifySession(token: string | undefined): Promise<{ sub: s
     const key = await hmacKey(sessionSecret());
     const ok = await crypto.subtle.verify("HMAC", key, fromB64url(sig), textBytes(body));
     if (!ok) return null;
-    const payload = JSON.parse(new TextDecoder().decode(fromB64url(body))) as { sub: string; exp: number };
+    const payload = JSON.parse(new TextDecoder().decode(fromB64url(body))) as {
+      sub: string;
+      exp: number;
+    } & Partial<SessionClaims>;
     if (!payload.exp || Date.now() > payload.exp) return null;
-    return { sub: payload.sub };
+
+    // An employee claim is honoured only when complete. A token saying
+    // "employee" without naming a business would otherwise read as an operator
+    // — failing open on a malformed token is how a scoping bug becomes a leak.
+    if (payload.role === "employee") {
+      if (!payload.employeeId || !payload.organizationId || !payload.organizationSlug) return null;
+      return {
+        sub: payload.sub,
+        role: "employee",
+        employeeId: payload.employeeId,
+        organizationId: payload.organizationId,
+        organizationSlug: payload.organizationSlug,
+      };
+    }
+
+    // Tokens issued before scoping existed carry no role, and were only ever
+    // given to the operator password.
+    return { sub: payload.sub, role: "operator" };
   } catch {
     return null;
   }

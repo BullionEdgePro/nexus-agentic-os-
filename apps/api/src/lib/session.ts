@@ -39,10 +39,30 @@ async function hmacKey(secret: string) {
   ]);
 }
 
+/**
+ * Who a request is acting as.
+ *
+ * `operator` is the account that owns every business and sees all of them.
+ * `employee` belongs to exactly one, named by `organizationSlug`, and the
+ * middleware refuses any request for a different tenant.
+ *
+ * The scope is carried IN the signed token rather than looked up per request.
+ * That is not a performance choice — it means an employee cannot widen their
+ * own scope without forging an HMAC, whereas a scope re-derived from a
+ * client-supplied id is only as trustworthy as the id.
+ */
+export interface SessionScope {
+  sub: string;
+  role: "operator" | "employee";
+  employeeId?: string;
+  organizationId?: string;
+  organizationSlug?: string;
+}
+
 export async function verifySessionToken(
   token: string | undefined,
   secret: string
-): Promise<{ sub: string } | null> {
+): Promise<SessionScope | null> {
   if (!token) return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
@@ -56,9 +76,32 @@ export async function verifySessionToken(
     const payload = JSON.parse(new TextDecoder().decode(fromB64url(body))) as {
       sub?: string;
       exp?: number;
+      role?: string;
+      employeeId?: string;
+      organizationId?: string;
+      organizationSlug?: string;
     };
     if (!payload.sub || !payload.exp || Date.now() > payload.exp) return null;
-    return { sub: payload.sub };
+
+    // An employee claim is only honoured when it is complete. A token that says
+    // "employee" without naming a tenant would otherwise fall through to the
+    // operator branch and be granted everything — failing open on a malformed
+    // token is how a scoping bug becomes a data breach.
+    if (payload.role === "employee") {
+      if (!payload.employeeId || !payload.organizationId || !payload.organizationSlug) return null;
+      return {
+        sub: payload.sub,
+        role: "employee",
+        employeeId: payload.employeeId,
+        organizationId: payload.organizationId,
+        organizationSlug: payload.organizationSlug,
+      };
+    }
+
+    // Tokens issued before this change carry no role. They were only ever
+    // issued to the operator password, so treating them as operator preserves
+    // existing sessions without widening anyone's access.
+    return { sub: payload.sub, role: "operator" };
   } catch {
     return null;
   }

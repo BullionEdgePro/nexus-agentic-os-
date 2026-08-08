@@ -211,6 +211,95 @@ export async function deactivateEmployee(employeeId: string): Promise<boolean> {
   return (rowCount ?? 0) > 0;
 }
 
+/**
+ * Store a freshly issued access code hash, replacing any previous one.
+ *
+ * Reissuing is the whole recovery story: there is no reset flow because there
+ * is nothing to reset to — the operator generates a new code and hands it over,
+ * which immediately invalidates the old one.
+ */
+export async function setEmployeeAccessCodeHash(
+  employeeId: string,
+  hash: string
+): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update employees
+        set access_code_hash = $2, access_code_set_at = now(), updated_at = now()
+      where id = $1 and is_active = true`,
+    [employeeId, hash]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+export interface EmployeeLoginCandidate {
+  id: string;
+  organizationId: string;
+  organizationSlug: string;
+  organizationName: string;
+  fullName: string;
+  employeeCode: string;
+  accessCodeHash: string | null;
+}
+
+/**
+ * Find who is trying to sign in, by email or employee code.
+ *
+ * Returns the hash for the caller to verify rather than taking the code itself,
+ * so the comparison stays in one place (`verifyAccessCode`, constant-time) and
+ * this layer never handles a secret.
+ *
+ * Both identifiers are matched case-insensitively — neither is typed carefully
+ * — and only active employees are considered, so deactivating someone revokes
+ * their login in the same action that takes them off the rota.
+ */
+export async function findEmployeeForLogin(
+  identifier: string
+): Promise<EmployeeLoginCandidate | null> {
+  const needle = identifier.trim().toLowerCase();
+  if (!needle) return null;
+
+  const { rows } = await getPool().query<{
+    id: string;
+    organization_id: string;
+    slug: string;
+    org_name: string;
+    full_name: string;
+    employee_code: string;
+    access_code_hash: string | null;
+  }>(
+    `select e.id, e.organization_id, o.slug, o.name as org_name,
+            e.full_name, e.employee_code, e.access_code_hash
+       from employees e
+       join organizations o on o.id = e.organization_id
+      where e.is_active = true
+        and o.is_active = true
+        and (lower(e.email) = $1 or lower(e.employee_code) = $1)
+      limit 2`,
+    [needle]
+  );
+
+  // Two matches means the identifier is ambiguous across businesses — an
+  // employee code like "ivan" can legitimately exist in more than one tenant.
+  // Refusing is correct: signing them into whichever row sorted first would
+  // hand someone another business's customer history.
+  if (rows.length !== 1) return null;
+
+  const row = rows[0];
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    organizationSlug: row.slug,
+    organizationName: row.org_name,
+    fullName: row.full_name,
+    employeeCode: row.employee_code,
+    accessCodeHash: row.access_code_hash,
+  };
+}
+
+export async function recordEmployeeLogin(employeeId: string): Promise<void> {
+  await getPool().query(`update employees set last_login_at = now() where id = $1`, [employeeId]);
+}
+
 export interface AssignedConversation {
   conversationId: string;
   contactId: string;

@@ -9,6 +9,7 @@ import {
   removeTeamMember,
   getAssignedConversations,
   takeToOwnWhatsApp,
+  issueAccessCode,
   type TeamMember,
   type AssignedConversation,
 } from "@/lib/api";
@@ -27,6 +28,7 @@ export default function TeamPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [credential, setCredential] = useState<{ name: string; signInAs: string; code: string } | null>(null);
 
   const loadTeam = useCallback(async (slug: BusinessSlug) => {
     setError("");
@@ -42,6 +44,9 @@ export default function TeamPage() {
   useEffect(() => {
     setSelected(null);
     setAssigned([]);
+    // A shown code belongs to one person at one business; it must not survive
+    // a switch to another team's panel.
+    setCredential(null);
     loadTeam(business);
   }, [business, loadTeam]);
 
@@ -68,6 +73,28 @@ export default function TeamPage() {
       setForm(BLANK);
       setNotice(`${employee.fullName} added to ${labelFor(business)}.`);
       await loadTeam(business);
+    } catch (err) {
+      setError(readable(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Issue this person a sign-in code.
+   *
+   * Held in component state rather than re-fetched, because it cannot be
+   * re-fetched — the server keeps only a hash. If the operator navigates away
+   * before passing it on, the fix is to issue another, which is why the panel
+   * says so rather than implying it can be looked up.
+   */
+  async function onIssueCode(member: TeamMember) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const issued = await issueAccessCode(business, member.id);
+      setCredential({ name: issued.employee.fullName, signInAs: issued.signInAs, code: issued.accessCode });
     } catch (err) {
       setError(readable(err));
     } finally {
@@ -155,6 +182,29 @@ export default function TeamPage() {
         <section className="team-panel">
           <h2>{labelFor(business)} team</h2>
 
+          {credential && (
+            <div className="cred">
+              <h3>Sign-in for {credential.name}</h3>
+              <dl>
+                <div>
+                  <dt>Sign in as</dt>
+                  <dd>{credential.signInAs}</dd>
+                </div>
+                <div>
+                  <dt>Access code</dt>
+                  <dd className="code">{credential.code}</dd>
+                </div>
+              </dl>
+              <p>
+                Shown once — only a hash is stored, so this cannot be displayed again. Pass it on
+                now; if it is lost, issue another and this one stops working.
+              </p>
+              <button type="button" className="btn small" onClick={() => setCredential(null)}>
+                Done
+              </button>
+            </div>
+          )}
+
           {team.length === 0 ? (
             <p className="team-empty">Nobody added yet. The AI answers every conversation for this business.</p>
           ) : (
@@ -174,6 +224,15 @@ export default function TeamPage() {
                     <span className="wa">
                       {member.whatsappReady ? member.whatsappNumber : "no WhatsApp number"}
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="team-remove alt"
+                    disabled={busy}
+                    onClick={() => onIssueCode(member)}
+                    title={`Give ${member.fullName} their own sign-in`}
+                  >
+                    Sign-in code
                   </button>
                   <button
                     type="button"

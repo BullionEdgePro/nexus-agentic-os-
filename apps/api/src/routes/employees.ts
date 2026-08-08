@@ -12,8 +12,15 @@ import {
   setConversationHandoff,
   pauseAiForContact,
   getConversationRouting,
+  setEmployeeAccessCodeHash,
 } from "@nexus/db";
-import { buildDirectContact, normalizeWhatsAppNumber, resolvePresence } from "@nexus/employees";
+import {
+  buildDirectContact,
+  normalizeWhatsAppNumber,
+  resolvePresence,
+  generateAccessCode,
+  hashAccessCode,
+} from "@nexus/employees";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
 
@@ -125,6 +132,53 @@ employeesRoute.delete("/:slug/employees/:employeeId", async (c) => {
 
   const changed = await deactivateEmployee(employee.id);
   return c.json({ deactivated: changed, employeeId: employee.id });
+});
+
+/**
+ * Issue this employee a sign-in code.
+ *
+ * The code is generated server-side and returned exactly once, in this
+ * response. It is never stored in readable form and cannot be fetched again —
+ * a code the operator can look up later is a code sitting in a database waiting
+ * for whoever gets that far. Lost it? Issue another; that invalidates the old
+ * one in the same write.
+ *
+ * Operator-only. An employee who could mint credentials for their colleagues
+ * could mint one for a colleague in another business, and the scope check would
+ * dutifully honour it.
+ */
+employeesRoute.post("/:slug/employees/:employeeId/access-code", async (c) => {
+  const scope = c.get("scope");
+  if (scope?.role !== "operator") {
+    return c.json({ error: "Only the operator can issue access codes." }, 403);
+  }
+
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const employee = await findEmployeeById(c.req.param("employeeId"));
+  if (!employee || employee.organizationId !== organization.id) {
+    return c.json({ error: "Employee not found" }, 404);
+  }
+  if (!employee.isActive) {
+    return c.json({ error: "That employee is no longer active." }, 400);
+  }
+
+  const accessCode = generateAccessCode();
+  const stored = await setEmployeeAccessCodeHash(employee.id, hashAccessCode(accessCode));
+  if (!stored) return c.json({ error: "Could not set an access code for that employee." }, 500);
+
+  logger.info(
+    { organizationSlug: organization.slug, employeeId: employee.id },
+    "Access code issued for employee"
+  );
+
+  return c.json({
+    accessCode,
+    // What they sign in WITH, so the operator can pass on both halves in one go.
+    signInAs: employee.email ?? employee.employeeCode,
+    employee: { id: employee.id, fullName: employee.fullName },
+  });
 });
 
 /** Everything this employee is responsible for, with a ready-to-tap link each. */

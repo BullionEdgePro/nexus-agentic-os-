@@ -99,6 +99,22 @@ export function removeTeamMember(orgSlug: BusinessSlug, employeeId: string): Pro
   return request(`/api/organizations/${orgSlug}/employees/${employeeId}`, { method: "DELETE" });
 }
 
+/**
+ * Issue a sign-in code for an employee.
+ *
+ * The code comes back exactly once and is never readable again — reissuing is
+ * the whole recovery story, and it invalidates the previous code in the same
+ * write.
+ */
+export function issueAccessCode(
+  orgSlug: BusinessSlug,
+  employeeId: string
+): Promise<{ accessCode: string; signInAs: string; employee: { fullName: string } }> {
+  return request(`/api/organizations/${orgSlug}/employees/${employeeId}/access-code`, {
+    method: "POST",
+  });
+}
+
 export function getAssignedConversations(
   orgSlug: BusinessSlug,
   employeeId: string
