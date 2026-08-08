@@ -4,7 +4,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { htmlToText, extractTitle, decodeEntities, isBlockedAddress } from "@nexus/knowledge";
+import {
+  htmlToText,
+  extractTitle,
+  decodeEntities,
+  isBlockedAddress,
+  stripSharedBoilerplate,
+} from "@nexus/knowledge";
 
 // ============================================================
 // HTML → text
@@ -66,6 +72,61 @@ test("title is extracted for use as the source name", () => {
 test("extraction handles an empty or tag-only document without throwing", () => {
   assert.equal(htmlToText(""), "");
   assert.equal(htmlToText("<div></div>"), "");
+});
+
+// ============================================================
+// Cross-page boilerplate removal
+// ============================================================
+// Structural chrome (nav/footer) is dropped by tag, but plenty of boilerplate
+// sits in the body — a storefront cart drawer appears on every page. Embedded
+// as prose it lands in the first chunk of every document and flattens ranking.
+
+test("lines repeated across every page are removed as chrome", () => {
+  const pages = [
+    "Skip to content\nView cart\nShipping Policy\nWe deliver across all seven emirates.",
+    "Skip to content\nView cart\nRefund Policy\nYou have 30 days to request a return.",
+    "Skip to content\nView cart\nPrivacy Policy\nWe never sell your personal data.",
+  ];
+  const cleaned = stripSharedBoilerplate(pages);
+
+  for (const page of cleaned) {
+    assert.ok(!page.includes("Skip to content"), "chrome must be gone");
+    assert.ok(!page.includes("View cart"), "chrome must be gone");
+  }
+  assert.match(cleaned[0], /seven emirates/, "page-specific content must survive");
+  assert.match(cleaned[1], /30 days/);
+  assert.match(cleaned[2], /never sell/);
+});
+
+test("a long repeated line is kept — it is more likely real shared policy than chrome", () => {
+  const shared =
+    "All orders are subject to our standard terms and conditions as published on this website.";
+  const pages = [`${shared}\nAlpha page.`, `${shared}\nBeta page.`, `${shared}\nGamma page.`];
+  const cleaned = stripSharedBoilerplate(pages);
+  assert.ok(cleaned[0].includes(shared), "long repeated content must not be stripped as chrome");
+});
+
+test("too few documents means no judgement is made", () => {
+  // With one or two pages there is not enough signal to tell chrome from content.
+  const pages = ["Skip to content\nOnly page."];
+  assert.deepEqual(stripSharedBoilerplate(pages), pages);
+});
+
+test("the threshold is conservative — a line below it is treated as content", () => {
+  // "Menu" is on 3 of 4 pages (0.75), under the 0.8 default, so it survives.
+  // Erring toward keeping text is the right bias: wrongly dropping a line
+  // silently deletes knowledge, while wrongly keeping one only adds noise.
+  const pages = ["Menu\nOne.", "Menu\nTwo.", "Menu\nThree.", "Unique line\nFour."];
+  const cleaned = stripSharedBoilerplate(pages);
+  assert.ok(cleaned[0].includes("Menu"), "3-of-4 is below threshold and must be kept");
+  assert.match(cleaned[3], /Unique line/, "a line appearing once must survive");
+});
+
+test("a line on every page IS removed once the threshold is met", () => {
+  const pages = ["Menu\nOne.", "Menu\nTwo.", "Menu\nThree.", "Menu\nFour."];
+  const cleaned = stripSharedBoilerplate(pages);
+  assert.ok(!cleaned[0].includes("Menu"), "4-of-4 is chrome");
+  assert.match(cleaned[0], /One\./, "content still survives");
 });
 
 // ============================================================

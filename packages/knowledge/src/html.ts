@@ -54,6 +54,69 @@ function safeFromCodePoint(code: number): string {
   }
 }
 
+export interface BoilerplateOptions {
+  /** Fraction of documents a line must appear in to count as chrome. */
+  threshold?: number;
+  /** Lines longer than this are never treated as chrome. */
+  maxLineLength?: number;
+  /** Below this many documents there is not enough signal to judge. */
+  minDocuments?: number;
+}
+
+/**
+ * Remove lines that repeat across most pages of the same site.
+ *
+ * Dropping nav/header/footer elements catches structural chrome, but plenty of
+ * boilerplate lives outside those tags — Shopify's cart drawer ("Skip to
+ * content", "View cart", "Check out") sits in the body of every page. Embedded
+ * as prose it lands in the first chunk of every document, so a query about
+ * checkout matches every page equally and the ranking carries no information.
+ *
+ * Frequency across sibling pages is the signal that identifies it without
+ * hardcoding any site's markup: content is page-specific, chrome is not.
+ *
+ * Two guards keep it from eating real content. It needs several documents
+ * before it will judge anything, and it only removes SHORT lines — a repeated
+ * long sentence is more likely to be a genuine shared policy statement than
+ * navigation furniture.
+ */
+export function stripSharedBoilerplate(
+  documents: string[],
+  options: BoilerplateOptions = {}
+): string[] {
+  const threshold = options.threshold ?? 0.8;
+  const maxLineLength = options.maxLineLength ?? 80;
+  const minDocuments = options.minDocuments ?? 3;
+
+  if (documents.length < minDocuments) return documents;
+
+  const documentCount = new Map<string, number>();
+  for (const doc of documents) {
+    const seen = new Set(
+      doc
+        .split("\n")
+        .map((line) => line.trim().toLowerCase())
+        .filter((line) => line.length > 0 && line.length <= maxLineLength)
+    );
+    for (const line of seen) documentCount.set(line, (documentCount.get(line) ?? 0) + 1);
+  }
+
+  const required = Math.ceil(documents.length * threshold);
+  const chrome = new Set(
+    [...documentCount.entries()].filter(([, count]) => count >= required).map(([line]) => line)
+  );
+  if (chrome.size === 0) return documents;
+
+  return documents.map((doc) =>
+    doc
+      .split("\n")
+      .filter((line) => !chrome.has(line.trim().toLowerCase()))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
+}
+
 /** Extract the <title> for use as a source title when none is supplied. */
 export function extractTitle(html: string): string | null {
   const match = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);

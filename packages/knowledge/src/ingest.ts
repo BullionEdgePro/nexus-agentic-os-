@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { getPool } from "@nexus/db";
 import { chunkText } from "./chunk.js";
 import { embedTexts, EMBEDDING_MODEL } from "./embed.js";
-import { fetchDocument } from "./fetch-url.js";
+import { fetchDocument, type FetchedDocument } from "./fetch-url.js";
+import { stripSharedBoilerplate } from "./html.js";
 
 export type SourceKind = "text" | "url" | "file" | "faq" | "sop";
 
@@ -24,6 +25,59 @@ export interface IngestResult {
 
 function hashContent(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+/**
+ * Ingest several pages of the same site together.
+ *
+ * Ingesting as a set rather than one at a time is what makes cross-page
+ * boilerplate removal possible: chrome is only identifiable by comparing
+ * sibling pages, so a page ingested alone keeps its nav furniture forever.
+ * This is the entry point a crawler should use.
+ *
+ * A page that fails to fetch does not abort the batch — the rest still index,
+ * and the failure is returned so the caller can report it.
+ */
+export async function ingestUrlSet(input: {
+  organizationId: string;
+  employeeId?: string | null;
+  urls: string[];
+}): Promise<Array<IngestResult & { url: string } | { url: string; error: string }>> {
+  const fetched = await Promise.all(
+    input.urls.map(async (url) => {
+      try {
+        return { url, doc: await fetchDocument(url) };
+      } catch (err) {
+        return { url, error: err instanceof Error ? err.message : String(err) };
+      }
+    })
+  );
+
+  const ok = fetched.filter((f): f is { url: string; doc: FetchedDocument } => "doc" in f);
+  const cleaned = stripSharedBoilerplate(ok.map((f) => f.doc.text));
+
+  const results: Array<IngestResult & { url: string } | { url: string; error: string }> = [];
+  for (const failure of fetched.filter((f): f is { url: string; error: string } => "error" in f)) {
+    results.push(failure);
+  }
+
+  for (const [i, entry] of ok.entries()) {
+    try {
+      const result = await ingestTextSource({
+        organizationId: input.organizationId,
+        employeeId: input.employeeId ?? null,
+        title: entry.doc.title ?? new URL(entry.doc.url).hostname,
+        content: cleaned[i],
+        kind: "url",
+        uri: entry.doc.url,
+      });
+      results.push({ ...result, url: entry.url });
+    } catch (err) {
+      results.push({ url: entry.url, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  return results;
 }
 
 /**
