@@ -11,7 +11,13 @@ create table organizations (
   slug                        text not null unique
                               check (slug in ('zipicka', 'juris-prime', 'juris-prime-legal', 'sfs-international', 'atif-ali-production')),
   name                        text not null,
-  whatsapp_phone_number_id    text not null unique,
+  -- NOT unique. Several businesses share one WhatsApp number (the switchboard,
+  -- migrations 007-010); which of them owns a given conversation is decided by
+  -- `is_number_owner` plus a deterministic ORDER BY, not by this column being
+  -- distinct. It was `unique` originally, and migration 010 drops that on
+  -- existing databases — keeping it here would have quietly reintroduced it on
+  -- every fresh install.
+  whatsapp_phone_number_id    text not null,
   whatsapp_business_account_id text not null,
   timezone                    text not null default 'Asia/Dubai',
   is_active                   boolean not null default true,

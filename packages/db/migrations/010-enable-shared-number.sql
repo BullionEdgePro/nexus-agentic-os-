@@ -18,6 +18,73 @@
 -- from the data rather than stored as a flag that can drift out of sync.
 
 -- ------------------------------------------------------------
+-- The uniqueness that made sharing impossible
+-- ------------------------------------------------------------
+--
+-- `organizations.whatsapp_phone_number_id` carried a UNIQUE constraint from the
+-- original schema, where one number belonged to exactly one tenant. That was a
+-- correct thing to assert at the time and it is the whole premise this
+-- migration overturns, so it has to go first — the update below fails on it
+-- otherwise, which is exactly what happened on the first attempt.
+--
+-- What the constraint was really protecting was `findOrganizationByPhoneNumberId`
+-- returning exactly one row. That guarantee has already been replaced by
+-- something better suited to a shared number: an explicit `is_number_owner`
+-- flag and a deterministic ORDER BY (migration 009). Dropping it removes a
+-- guard whose job is already done, not a guard with nothing behind it.
+--
+-- Written to find the constraint rather than name it, because a database
+-- created from schema.sql and one grown through migrations can name the same
+-- constraint differently, and a hardcoded name that silently matches nothing
+-- would leave the failure to be discovered by the UPDATE.
+do $$
+declare
+  constraint_name text;
+  index_name text;
+begin
+  select con.conname into constraint_name
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_attribute att on att.attrelid = rel.oid and att.attnum = any(con.conkey)
+   where rel.relname = 'organizations'
+     and con.contype = 'u'
+     and att.attname = 'whatsapp_phone_number_id'
+     and array_length(con.conkey, 1) = 1
+   limit 1;
+
+  if constraint_name is not null then
+    execute format('alter table organizations drop constraint %I', constraint_name);
+    raise notice 'Dropped unique constraint % on whatsapp_phone_number_id', constraint_name;
+  end if;
+
+  -- A bare unique INDEX (no constraint) enforces the same thing and would be
+  -- missed by the query above.
+  select cls.relname into index_name
+    from pg_index idx
+    join pg_class cls on cls.oid = idx.indexrelid
+    join pg_class tbl on tbl.oid = idx.indrelid
+    join pg_attribute att on att.attrelid = tbl.oid and att.attnum = any(idx.indkey)
+   where tbl.relname = 'organizations'
+     and idx.indisunique
+     and not idx.indisprimary
+     and att.attname = 'whatsapp_phone_number_id'
+     and idx.indnatts = 1
+   limit 1;
+
+  if index_name is not null then
+    execute format('drop index %I', index_name);
+    raise notice 'Dropped unique index % on whatsapp_phone_number_id', index_name;
+  end if;
+end
+$$;
+
+-- Lookup by number happens on every inbound webhook, so the column still needs
+-- an index — just not a unique one.
+create index if not exists idx_organizations_phone_number_id
+  on organizations (whatsapp_phone_number_id)
+  where whatsapp_phone_number_id is not null;
+
+-- ------------------------------------------------------------
 -- Guard: refuse to run if the source number is not there
 -- ------------------------------------------------------------
 --
