@@ -191,7 +191,7 @@ Auth and least-privilege done. RLS steps 3–4 outstanding.
 |---|---|---|
 | 1 | Employee Agent Layer | ✅ Built. Open: calendar presence, twin handback generator, employee CRUD UI |
 | 2 | Knowledge Ingestion | ✅ Core + URL connector. Remaining connectors phased by real demand |
-| 3 | Lead Intelligence | ✅ Rules-based. English-only; model second once labels exist |
+| 3 | Lead Intelligence | ✅ Rules-based, EN + AR. Model second once labels exist |
 | 4 | Campaign Engine | ⛔ Not started. Highest-risk feature in the program |
 | 5 | Neural Brain | ⛔ Not started. Needs PII redaction gate first |
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
@@ -285,9 +285,11 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 
 ### 9.5 Known limitations in shipped features
 
-- **Lead scoring is English-only.** UAE traffic will include Arabic, which
-  scores 0 and floors at `low` — degrades rather than fails, but should be fixed
-  before scores drive routing.
+- ~~**Lead scoring is English-only.**~~ **Fixed 2026-08-03.** Now bilingual
+  English + Arabic, compared after orthographic normalisation (diacritics,
+  alef/yaa/taa-marbuta variants, Arabic-Indic digits) so real spelling variation
+  matches. Languages beyond those still score 0 and floor at `low` — a
+  deliberate floor, not a failure: the lead reaches the inbox, just unranked.
 - **Rules are whack-a-mole against adversarial senders.** One spam message still
   reads 30/normal after two rounds of hardening. This is the argument for
   *rules first, model second*, not for more rules.

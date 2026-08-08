@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { scoreLead } from "@nexus/leads";
+import { scoreLead, normalizeForMatch } from "@nexus/leads";
 
 test("a buying question scores as purchase intent", () => {
   const r = scoreLead({ text: "Hi, how much is the pet shampoo and do you have it in stock?" });
@@ -115,10 +115,74 @@ test("scores stay within 0-100 at both extremes", () => {
   assert.ok(pitch.score >= 0, `score must never go negative, got ${pitch.score}`);
 });
 
+// ============================================================
+// Arabic
+// ============================================================
+// The tenants are UAE-based. An English-only scorer floored every Arabic
+// customer at 'low' — the worst possible bias, since it buried exactly the
+// local buyers these businesses most want to reach.
+
+test("an Arabic price question is recognised as purchase intent", () => {
+  // "How much is this? Is it available?"
+  const r = scoreLead({ text: "السلام عليكم، بكم هذا المنتج؟ هل هو متوفر؟" });
+  assert.equal(r.category, "purchase_intent");
+  assert.notEqual(r.priority, "low");
+});
+
+test("an Arabic complaint is urgent, like its English counterpart", () => {
+  // "My order arrived damaged, I want a refund."
+  const r = scoreLead({ text: "طلبي وصل تالف وأريد استرداد المبلغ" });
+  assert.equal(r.category, "complaint");
+  assert.equal(r.priority, "urgent");
+});
+
+test("an Arabic booking request is recognised", () => {
+  // "I would like to book an appointment for a consultation."
+  const r = scoreLead({ text: "أرغب في حجز موعد للاستشارة" });
+  assert.ok(["booking_intent", "legal_inquiry"].includes(r.category));
+  assert.notEqual(r.priority, "low");
+});
+
+test("an Arabic cold pitch is pushed down, not up", () => {
+  // "We are a company offering services... do you need...?"
+  const r = scoreLead({ text: "نحن شركة نقدم خدمات تسويق، هل تحتاج عرض خاص؟" });
+  assert.equal(r.category, "inbound_pitch");
+  assert.equal(r.priority, "low");
+});
+
+test("Arabic spelling variants match the same rule", () => {
+  // Arabic is written with interchangeable letterforms; matching raw strings
+  // would catch one spelling and miss the rest, which reads as "Arabic
+  // support" while failing on most real messages.
+  const withHamza = scoreLead({ text: "أريد أشتري هذا" });   // أ
+  const without = scoreLead({ text: "اريد اشتري هذا" });     // ا
+  assert.equal(withHamza.category, without.category);
+  assert.equal(withHamza.score, without.score);
+
+  const taaMarbuta = scoreLead({ text: "هل هي متوفرة؟" });   // ة
+  const haa = scoreLead({ text: "هل هي متوفره؟" });          // ه
+  assert.equal(taaMarbuta.score, haa.score);
+});
+
+test("diacritics do not defeat matching", () => {
+  // Harakat are decorative; the same word with and without them must score alike.
+  const withTashkeel = scoreLead({ text: "بِكَمْ هذا؟" });
+  const plain = scoreLead({ text: "بكم هذا؟" });
+  assert.equal(withTashkeel.score, plain.score);
+});
+
+test("normalizeForMatch folds the variants it claims to", () => {
+  assert.equal(normalizeForMatch("أإآ"), "ااا");
+  assert.equal(normalizeForMatch("متوفرة"), "متوفره");
+  assert.equal(normalizeForMatch("مُتَوَفِّر"), "متوفر");
+  assert.equal(normalizeForMatch("١٢٣"), "123", "Arabic-Indic digits fold to ASCII");
+  assert.equal(normalizeForMatch("HOW MUCH"), "how much", "English is unaffected apart from case");
+});
+
 test("an unrecognised message lands at low, not at an error", () => {
-  // Arabic and other non-English text scores 0 today — a documented limitation.
-  // It must degrade to a floor, never throw, so the lead still reaches the inbox.
-  for (const text of ["", "👋", "مرحبا كيف حالك", "asdfghjkl"]) {
+  // Languages beyond English and Arabic still score 0 — a deliberate floor
+  // rather than a failure: the lead reaches the inbox, just unranked.
+  for (const text of ["", "👋", "asdfghjkl", "你好我想买"]) {
     const r = scoreLead({ text });
     assert.equal(r.priority, "low");
     assert.equal(r.category, "general_inquiry");

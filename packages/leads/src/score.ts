@@ -51,11 +51,14 @@ const MAX_EVIDENCE_BONUS = 12;
  * truth. Rules are transparent, debuggable, and produce the labelled history a
  * model would later need.
  *
- * KNOWN LIMITATION: matching is English-only. The tenants are UAE-based and
- * real traffic will include Arabic, which scores 0 here and lands at 'normal'.
- * That is a deliberate floor rather than a silent failure — an unscored lead
- * still appears in the inbox — but it is the first thing to fix before this is
- * relied on for routing.
+ * Bilingual: English and Arabic. The tenants are UAE-based, so an English-only
+ * scorer would have silently floored every Arabic customer at 'low' — the worst
+ * possible bias, since it would have buried exactly the local buyers these
+ * businesses most want to reach. Phrases and input are compared after
+ * orthographic normalisation (see normalizeForMatch).
+ *
+ * Any other language still scores 0 and floors at 'low'. That is a deliberate
+ * floor rather than a failure — the lead still reaches the inbox unranked.
  */
 const RULES: readonly Rule[] = [
   {
@@ -65,6 +68,10 @@ const RULES: readonly Rule[] = [
     phrases: [
       "how much", "price", "cost", "buy", "order", "purchase", "in stock",
       "available", "delivery", "ship to", "discount", "payment",
+      // Arabic. "بكم" and "كم سعر" are the everyday ways of asking a price in
+      // the Gulf; "متوفر" is the stock question customers actually send.
+      "بكم", "كم سعر", "كم السعر", "السعر", "سعر", "اشتري", "اريد اشتري",
+      "اطلب", "متوفر", "متوفره", "التوصيل", "توصيل", "شحن", "الدفع", "خصم",
     ],
   },
   {
@@ -74,6 +81,7 @@ const RULES: readonly Rule[] = [
     phrases: [
       "appointment", "consultation", "book a", "schedule", "meeting",
       "viewing", "visit", "available slot", "discovery call",
+      "موعد", "حجز", "احجز", "استشاره", "مقابله", "زياره",
     ],
   },
   {
@@ -83,6 +91,8 @@ const RULES: readonly Rule[] = [
     phrases: [
       "lawyer", "legal", "contract", "license", "licence", "court",
       "visa", "trademark", "company formation", "attorney",
+      "محامي", "قانوني", "عقد", "رخصه", "ترخيص", "تاشيره", "محكمه",
+      "تاسيس شركه", "علامه تجاريه",
     ],
   },
   {
@@ -95,18 +105,26 @@ const RULES: readonly Rule[] = [
     phrases: [
       "complaint", "refund", "broken", "damaged", "defective", "wrong item",
       "never arrived", "not working", "disappointed", "unacceptable",
+      "شكوي", "شكوه", "استرجاع", "استرداد", "مكسور", "تالف", "خربان",
+      "لم يصل", "ما وصل", "غلط", "خطا", "مش شغال", "لا يعمل", "زعلان",
     ],
   },
   {
     name: "high_value",
     weight: 20,
     category: "high_value",
-    phrases: ["bulk", "wholesale", "quantity", "corporate", "how many can", "large order"],
+    phrases: [
+      "bulk", "wholesale", "quantity", "corporate", "how many can", "large order",
+      "بالجمله", "جمله", "كميه", "كميات", "طلبيه كبيره",
+    ],
   },
   {
     name: "urgency",
     weight: 18,
-    phrases: ["urgent", "asap", "immediately", "today", "right now", "emergency"],
+    phrases: [
+      "urgent", "asap", "immediately", "today", "right now", "emergency",
+      "عاجل", "ضروري", "بسرعه", "اليوم", "حالا", "الان", "مستعجل",
+    ],
   },
 ];
 
@@ -145,6 +163,13 @@ const PITCH_RULE: Rule = {
     // it appears in "is this available?" (buyer) and "data available"
     // (seller) — so the pairing carries the signal, not the word.
     "data available", "leads available", "database", "investor data", "owner data",
+
+    // Arabic equivalents. "نحن شركة" (we are a company) and "نقدم خدمات" (we
+    // offer services) are the standard openings of an Arabic cold pitch, and
+    // "هل تحتاج" / "هل ترغب" (do you need / would you like) carry the same
+    // second-person selling direction as their English counterparts.
+    "نحن شركه", "نقدم خدمات", "نقدم لكم", "شركتنا", "هل تحتاج", "هل ترغب",
+    "عرض خاص", "افضل سعر", "تواصل معنا", "خدماتنا", "لدينا قاعده بيانات",
   ],
 };
 
@@ -178,6 +203,58 @@ function looksLikeBroadcast(original: string): boolean {
   return upper / letters.length > 0.4;
 }
 
+/**
+ * Normalise text so Arabic matches survive real-world spelling variation.
+ *
+ * Arabic is written with optional diacritics and several interchangeable
+ * letterforms, so the same word arrives spelled differently every time:
+ * أريد / اريد, متوفرة / متوفره, كَم / كم. Matching raw strings would catch one
+ * spelling and miss the rest — which reads as "Arabic support" while failing on
+ * most real messages.
+ *
+ * Applied to both the input and the phrase lists so the two are compared in the
+ * same normal form. Harmless for English.
+ */
+export function normalizeForMatch(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      // Tashkeel (harakat) and the superscript alef — decorative, not semantic.
+      .replace(/[ً-ْٰ]/g, "")
+      // Tatweel: a kashida stretching character with no meaning.
+      .replace(/ـ/g, "")
+      // Alef with any hamza/madda → bare alef.
+      .replace(/[آأإٱ]/g, "ا")
+      // Alef maqsura → yaa; these are freely interchanged in practice.
+      .replace(/ى/g, "ي")
+      // Taa marbuta → haa; likewise (متوفرة vs متوفره).
+      .replace(/ة/g, "ه")
+      // Hamza carriers → their base letters.
+      .replace(/ؤ/g, "و")
+      .replace(/ئ/g, "ي")
+      // Arabic-Indic digits → ASCII, so numbers compare consistently.
+      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+  );
+}
+
+/**
+ * Phrase lists normalised once and cached per rule.
+ *
+ * Scoring runs on every inbound message, so re-normalising ~150 static phrases
+ * each time would be pure waste. The rules are module constants, so the cache
+ * can never go stale.
+ */
+const PHRASE_CACHE = new WeakMap<Rule, string[]>();
+function normalizedPhrases(rule: Rule): string[] {
+  let cached = PHRASE_CACHE.get(rule);
+  if (!cached) {
+    cached = rule.phrases.map(normalizeForMatch);
+    PHRASE_CACHE.set(rule, cached);
+  }
+  return cached;
+}
+
 function matchPhrases(haystack: string, phrases: string[]): string[] {
   return phrases.filter((phrase) => haystack.includes(phrase));
 }
@@ -189,7 +266,8 @@ function matchPhrases(haystack: string, phrases: string[]): string[] {
  * path, and the whole policy is unit-testable without infrastructure.
  */
 export function scoreLead(input: ScoreInput): LeadAssessment {
-  const text = input.text.toLowerCase();
+  // Both sides compared in the same normal form — see normalizeForMatch.
+  const text = normalizeForMatch(input.text);
   const signals: LeadSignal[] = [];
 
   let score = 0;
@@ -198,7 +276,7 @@ export function scoreLead(input: ScoreInput): LeadAssessment {
   let bestWeight = 0;
 
   for (const rule of RULES) {
-    const matched = matchPhrases(text, rule.phrases);
+    const matched = matchPhrases(text, normalizedPhrases(rule));
     if (matched.length === 0) continue;
 
     // More matching phrases is stronger evidence: "how much" AND "in stock"
@@ -220,7 +298,7 @@ export function scoreLead(input: ScoreInput): LeadAssessment {
     }
   }
 
-  const pitchMatches = matchPhrases(text, PITCH_RULE.phrases);
+  const pitchMatches = matchPhrases(text, normalizedPhrases(PITCH_RULE));
   if (looksLikeBroadcast(input.text)) pitchMatches.push("shouted/broadcast formatting");
   if (hasBroadcastHeader(input.text)) pitchMatches.push("bolded broadcast header");
 
