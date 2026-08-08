@@ -73,3 +73,18 @@ export async function verifySession(token: string | undefined): Promise<{ sub: s
 }
 
 export const SESSION_MAX_AGE = TTL_MS / 1000;
+
+/**
+ * Cookie Domain attribute.
+ *
+ * The browser talks to the API on a sibling host (app.example.com →
+ * api.example.com). A host-only cookie is never sent there, so the API could
+ * not authenticate browser traffic at all. Setting the parent domain makes the
+ * session travel to both, and because they share a registrable domain the
+ * request is same-site — a SameSite=Lax cookie still applies.
+ *
+ * Unset in local development, where everything is on localhost already.
+ */
+export function sessionCookieDomain(): string | undefined {
+  return process.env.SESSION_COOKIE_DOMAIN || undefined;
+}

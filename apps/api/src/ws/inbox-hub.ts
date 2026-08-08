@@ -2,6 +2,8 @@ import type { ServerType } from "@hono/node-server";
 import { WebSocketServer, WebSocket } from "ws";
 import type { InboxSocketEvent } from "@nexus/shared";
 import { subscribeToInboxEvents } from "../lib/pubsub.js";
+import { verifySessionToken, readCookie, SESSION_COOKIE } from "../lib/session.js";
+import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 
 interface Client {
@@ -27,13 +29,29 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      const organizationSlug = url.searchParams.get("org");
-      const client: Client = { socket: ws, organizationSlug };
-      clients.add(client);
-      ws.on("close", () => clients.delete(client));
-      ws.on("error", () => clients.delete(client));
-    });
+
+    // This socket streams live customer messages, so it needs the same
+    // authentication as the REST routes. Browsers cannot set headers on a
+    // WebSocket handshake, but they DO send cookies — which is exactly the
+    // credential the operator session already uses.
+    void (async () => {
+      const token = readCookie(request.headers.cookie, SESSION_COOKIE);
+      const session = await verifySessionToken(token, env.sessionSecret);
+      if (!session) {
+        logger.warn("Rejected unauthenticated WebSocket upgrade on the inbox stream");
+        socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        const organizationSlug = url.searchParams.get("org");
+        const client: Client = { socket: ws, organizationSlug };
+        clients.add(client);
+        ws.on("close", () => clients.delete(client));
+        ws.on("error", () => clients.delete(client));
+      });
+    })();
   });
 
   const unsubscribe = subscribeToInboxEvents((event: InboxSocketEvent) => {

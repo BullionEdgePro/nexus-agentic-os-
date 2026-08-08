@@ -7,8 +7,11 @@ export async function middleware(req: NextRequest) {
   const session = await verifySession(token);
   const { pathname } = req.nextUrl;
 
-  // Guard the command deck: no valid session → send to login.
-  if (pathname.startsWith("/deck") && !session) {
+  // Guard the command deck AND the Unified Inbox. The inbox renders every
+  // tenant's customer conversations — names, WhatsApp numbers, message bodies —
+  // and was previously served to anyone who loaded the site.
+  const isProtected = pathname === "/" || pathname.startsWith("/deck");
+  if (isProtected && !session) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -25,5 +28,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/deck/:path*", "/login"],
+  matcher: ["/", "/deck/:path*", "/login"],
 };

@@ -47,4 +47,15 @@ export const env = {
     return required("META_ACCESS_TOKEN");
   },
   metaGraphApiVersion: process.env.META_GRAPH_API_VERSION ?? "v21.0",
+
+  /** Shared with apps/web so one operator login authenticates the UI and the API. */
+  sessionSecret: process.env.NEXUS_SESSION_SECRET ?? "nexus-dev-secret-change-me",
+
+  /**
+   * Service-to-service bearer token for non-browser callers (scripts, future
+   * integrations). Optional: when unset, only session cookies are accepted,
+   * which is the safer default — an empty token must never authenticate
+   * anything.
+   */
+  apiToken: process.env.NEXUS_API_TOKEN ?? "",
 };

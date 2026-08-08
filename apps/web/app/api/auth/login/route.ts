@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { signSession, operatorPassword, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
+import {
+  signSession,
+  operatorPassword,
+  sessionCookieDomain,
+  SESSION_COOKIE,
+  SESSION_MAX_AGE,
+} from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -28,6 +34,7 @@ export async function POST(req: Request) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
+    domain: sessionCookieDomain(),
     maxAge: SESSION_MAX_AGE,
   });
   return res;

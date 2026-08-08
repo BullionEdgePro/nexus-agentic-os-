@@ -53,6 +53,10 @@ services:
       # app.<domain> and the bare <domain> (see Caddyfile), so both must be
       # allowed — listing only one makes the other silently render an empty UI.
       WEB_ORIGIN: https://${WEB_DOMAIN},https://${ROOT_DOMAIN}
+      # Must match the web service: the API authenticates browser traffic by
+      # verifying the same operator session the web app signs.
+      NEXUS_SESSION_SECRET: ${NEXUS_SESSION_SECRET:-nexus-dev-secret-change-me}
+      NEXUS_API_TOKEN: ${NEXUS_API_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,6 +94,9 @@ services:
       # the defaults keep the demo working out of the box.
       NEXUS_OPERATOR_PASSWORD: ${NEXUS_OPERATOR_PASSWORD:-demo1234}
       NEXUS_SESSION_SECRET: ${NEXUS_SESSION_SECRET:-nexus-dev-secret-change-me}
+      # Parent domain, so the session cookie is also sent to api.<domain>.
+      # Leading dot form (".example.com") is the portable spelling.
+      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
     depends_on:
       - api
 
