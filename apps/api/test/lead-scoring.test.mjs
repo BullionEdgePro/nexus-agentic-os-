@@ -43,6 +43,46 @@ test("a pitch containing buying words still classifies as a pitch", () => {
   assert.equal(r.category, "inbound_pitch", "being a pitch overrides which words it contains");
 });
 
+// These are REAL messages from the production inbox. The first version of this
+// scorer ranked the top one as the hottest lead in the account — it is someone
+// selling data TO Zipicka. Pinned here so that regression cannot return.
+test("real production spam is not ranked as a hot lead", () => {
+  const spam = [
+    "Do you want to purchase latest updates in very low price",
+    "🏢PREMIUM DATA – MAY 2026 UPDATE",
+    "🏙SHARJAH EXCLUSIVE VIP AREAS – 2026 🏙 AE N",
+    "Do you need any data??",
+  ];
+  for (const text of spam) {
+    const r = scoreLead({ text });
+    assert.equal(r.priority, "low", `"${text.slice(0, 40)}" must not be prioritised (got ${r.priority}/${r.score})`);
+  }
+});
+
+test("direction is what separates a buyer from a seller", () => {
+  // Both contain purchase vocabulary; only one is a customer.
+  const seller = scoreLead({ text: "Do you want to purchase our latest product list?" });
+  const buyer = scoreLead({ text: "I want to purchase this, how much is it?" });
+
+  assert.equal(seller.category, "inbound_pitch");
+  assert.equal(seller.priority, "low");
+  assert.equal(buyer.category, "purchase_intent");
+  assert.notEqual(buyer.priority, "low");
+});
+
+test("a shouted broadcast is treated as promotional regardless of vocabulary", () => {
+  // Structural signal, so it survives spam changing its wording next week.
+  const shouted = scoreLead({ text: "MEGA OFFER THIS WEEK ONLY GRAB YOUR SPOT NOW" });
+  assert.ok(
+    shouted.signals.some((s) => s.matched.includes("shouted/broadcast formatting")),
+    "all-caps blasts should register as broadcast"
+  );
+
+  // ...but a short shout is not evidence of anything.
+  const normal = scoreLead({ text: "OK thanks" });
+  assert.ok(!normal.signals.some((s) => s.name === "inbound_pitch"));
+});
+
 test("urgency lifts the score but is not a category on its own", () => {
   const plain = scoreLead({ text: "How much is delivery?" });
   const urgent = scoreLead({ text: "How much is delivery? I need it today, urgent." });

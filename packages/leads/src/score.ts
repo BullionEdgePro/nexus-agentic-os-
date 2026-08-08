@@ -123,11 +123,43 @@ const PITCH_RULE: Rule = {
   weight: -35,
   category: "inbound_pitch",
   phrases: [
+    // Self-description — the sender introducing their own business.
     "we are a", "we provide", "we offer", "our company", "manufacturer",
     "partnership", "collaborate", "seo", "web design", "lead generation",
     "data provider", "years of experience", "b2b", "supplier", "we specialize",
+    "we can provide", "we sell",
+
+    // DIRECTION is the real discriminator, and the first version missed it.
+    // "Do you want to purchase X" is someone selling TO us; "how much is X"
+    // is someone buying FROM us. Both contain purchase vocabulary, so keyword
+    // matching alone scored a spam blast as the hottest lead in the inbox.
+    // Second-person offers are the sender pitching, not asking.
+    "do you want to", "do you need any", "do you need a", "are you interested",
+    "are you looking for", "would you like to buy", "contact us for", "dm for",
+
+    // Promotional register. Genuine customers do not advertise at you.
+    "special offer", "limited time", "best price", "low price", "premium data",
+    "latest updates", "exclusive", "available for sale", "for sale",
   ],
 };
+
+/**
+ * Broadcast blasts SHOUT.
+ *
+ * Promotional spam is disproportionately upper-case ("PREMIUM DATA — MAY 2026
+ * UPDATE"), while real customers type normally. A cheap structural signal that
+ * needs no keyword list and generalises past whatever vocabulary this week's
+ * spam happens to use.
+ *
+ * Ignores short strings, where a single shouted word ("OK", "HELP") proves
+ * nothing.
+ */
+function looksLikeBroadcast(original: string): boolean {
+  const letters = original.replace(/[^a-z]/gi, "");
+  if (letters.length < 20) return false;
+  const upper = letters.replace(/[^A-Z]/g, "").length;
+  return upper / letters.length > 0.4;
+}
 
 function matchPhrases(haystack: string, phrases: string[]): string[] {
   return phrases.filter((phrase) => haystack.includes(phrase));
@@ -172,9 +204,15 @@ export function scoreLead(input: ScoreInput): LeadAssessment {
   }
 
   const pitchMatches = matchPhrases(text, PITCH_RULE.phrases);
+  if (looksLikeBroadcast(input.text)) pitchMatches.push("shouted/broadcast formatting");
+
   if (pitchMatches.length > 0) {
-    signals.push({ name: PITCH_RULE.name, weight: PITCH_RULE.weight, matched: pitchMatches });
-    score += PITCH_RULE.weight;
+    // Negative weight grows with evidence too: several pitch markers together
+    // must be able to overwhelm the buying vocabulary a pitch borrows.
+    const bonus = Math.min((pitchMatches.length - 1) * EVIDENCE_BONUS, MAX_EVIDENCE_BONUS);
+    const weight = PITCH_RULE.weight - bonus;
+    signals.push({ name: PITCH_RULE.name, weight, matched: pitchMatches });
+    score += weight;
     // A pitch is what this message IS, regardless of which buying words it
     // happens to contain, so it overrides the category outright.
     bestCategory = "inbound_pitch";
