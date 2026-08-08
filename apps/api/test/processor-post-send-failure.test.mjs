@@ -28,6 +28,16 @@ mock.module("@nexus/db", {
     // @nexus/leads imports getPool statically; a missing export fails at module
     // load, before any try/catch in the processor can intervene.
     getPool: () => ({ query: async () => ({ rows: [] }) }),
+    // Switchboard. An empty business list means this number is NOT shared, so
+    // routing short-circuits and these scenarios exercise the same path they
+    // did before the switchboard existed. The rest are here because the
+    // processor imports them statically — a missing export is a module-load
+    // failure, which no try/catch inside the processor can catch.
+    findOrganizationById: async () => null,
+    findSharedNumberBusinesses: async () => [],
+    getConversationRouting: async () => null,
+    setConversationRouting: async () => {},
+    recordTriagePrompt: async () => {},
   },
 });
 
@@ -38,6 +48,9 @@ mock.module("@nexus/agents", {
       respond: async () => ({ text: "Sure — that item is in stock, want me to hold one for you?", toolCalls: [], usage: { inputTokens: 1, outputTokens: 1 } }),
     }),
     loadRecentHistory: async () => [],
+    classifyBusiness: () => ({ kind: 'unknown' }),
+    buildTriageMessage: () => 'which business?',
+    resolveTriageReply: () => null,
   },
 });
 

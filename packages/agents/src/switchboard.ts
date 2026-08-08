@@ -1,5 +1,5 @@
-import { getPool, findOrganizationByPhoneNumberId } from "@nexus/db";
-import type { AgentConfig, BusinessSlug, Employee, InboundMessageEvent } from "@nexus/shared";
+import { getPool } from "@nexus/db";
+import type { AgentConfig, Employee, InboundMessageEvent, Organization } from "@nexus/shared";
 import { composeTwinSystemPrompt } from "@nexus/employees";
 import { GeminiDomainAgent } from "./gemini-domain-agent.js";
 import type { ConversationTurn, DomainAgent } from "./types.js";
@@ -29,16 +29,25 @@ function toAgentConfig(row: AgentConfigRow): AgentConfig {
 }
 
 /**
- * Switchboard: LangGraph node 1. Evaluates the inbound phone_number_id,
- * resolves the owning organization, and loads that organization's active
- * Domain Agent. Raw-API mode today (no graph runtime); swap this function's
- * body for a LangGraph StateGraph node if multi-step routing state is later
- * needed (e.g. sub-brand disambiguation within one WhatsApp number).
+ * The tenant an agent is being loaded for.
+ *
+ * Takes the resolved organization rather than a phone_number_id because a
+ * number no longer identifies a tenant: several businesses can share one, and
+ * which of them is being served is decided upstream by the business router. A
+ * number-keyed lookup would quietly load the number owner's agent — and the
+ * number owner's governance policy — for every business on the line.
  */
-export async function routeToDomainAgent(phoneNumberId: string): Promise<DomainAgent | null> {
-  const resolved = await loadActiveAgentConfig(phoneNumberId);
-  if (!resolved) return null;
-  return new GeminiDomainAgent(resolved.config, resolved.slug);
+export type AgentTenant = Pick<Organization, "id" | "slug">;
+
+/**
+ * Switchboard: LangGraph node 1. Loads the tenant's active Domain Agent.
+ * Raw-API mode today (no graph runtime); swap this function's body for a
+ * LangGraph StateGraph node if multi-step routing state is later needed.
+ */
+export async function routeToDomainAgent(tenant: AgentTenant): Promise<DomainAgent | null> {
+  const config = await loadActiveAgentConfig(tenant.id);
+  if (!config) return null;
+  return new GeminiDomainAgent(config, tenant.slug);
 }
 
 /**
@@ -50,47 +59,40 @@ export async function routeToDomainAgent(phoneNumberId: string): Promise<DomainA
  * that has not onboarded employees is byte-for-byte unaffected by this path.
  */
 export async function routeToEmployeeTwin(
-  phoneNumberId: string,
+  tenant: AgentTenant,
   employee: Employee | null
 ): Promise<DomainAgent | null> {
-  const resolved = await loadActiveAgentConfig(phoneNumberId);
-  if (!resolved) return null;
+  const config = await loadActiveAgentConfig(tenant.id);
+  if (!config) return null;
 
   if (!employee || !employee.twinEnabled) {
-    return new GeminiDomainAgent(resolved.config, resolved.slug);
+    return new GeminiDomainAgent(config, tenant.slug);
   }
 
   const twinConfig: AgentConfig = {
-    ...resolved.config,
+    ...config,
     systemPrompt: composeTwinSystemPrompt({
-      organizationPrompt: resolved.config.systemPrompt,
+      organizationPrompt: config.systemPrompt,
       employee,
     }),
     // An employee's own knowledge namespace wins over the tenant default so
     // one employee's SOPs never leak into another's answers.
-    ragCollection: employee.knowledgeCollection ?? resolved.config.ragCollection,
+    ragCollection: employee.knowledgeCollection ?? config.ragCollection,
   };
 
-  return new GeminiDomainAgent(twinConfig, resolved.slug, employee.id);
+  return new GeminiDomainAgent(twinConfig, tenant.slug, employee.id);
 }
 
-async function loadActiveAgentConfig(
-  phoneNumberId: string
-): Promise<{ config: AgentConfig; slug: BusinessSlug } | null> {
-  const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
-  if (!organization) return null;
-
+async function loadActiveAgentConfig(organizationId: string): Promise<AgentConfig | null> {
   const { rows } = await getPool().query<AgentConfigRow>(
     `select id, organization_id, name, system_prompt, model, tools, rag_collection, is_active
      from agent_configs
      where organization_id = $1 and is_active = true
      order by created_at asc
      limit 1`,
-    [organization.id]
+    [organizationId]
   );
-  if (!rows[0]) return null;
-
-  return { config: toAgentConfig(rows[0]), slug: organization.slug };
+  return rows[0] ? toAgentConfig(rows[0]) : null;
 }
 
 export async function loadRecentHistory(

@@ -10,14 +10,26 @@ import type {
 import type { Employee } from "@nexus/shared";
 import {
   findOrganizationByPhoneNumberId,
+  findOrganizationById,
   findEmployeeForConversation,
+  findSharedNumberBusinesses,
+  getConversationRouting,
+  setConversationRouting,
+  recordTriagePrompt,
   recordInboundMessage,
   insertOutboundMessage,
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
 } from "@nexus/db";
-import { routeToEmployeeTwin, loadRecentHistory } from "@nexus/agents";
+import type { SharedNumberBusiness } from "@nexus/db";
+import {
+  routeToEmployeeTwin,
+  loadRecentHistory,
+  classifyBusiness,
+  buildTriageMessage,
+  resolveTriageReply,
+} from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
 import { evaluateOutgoingMessage, shouldEscalateReply } from "@nexus/governance";
@@ -27,6 +39,11 @@ import { logger } from "../lib/logger.js";
 
 const FALLBACK_REPLY =
   "Thanks for your message — I want to make sure you get an accurate answer, so I'm looping in a specialist from our team. They'll follow up shortly.";
+
+// How many times a customer may be handed the triage menu before a human takes
+// over. Bounded because the failure mode is a loop: if someone's messages never
+// classify and never answer the menu, re-asking forever is worse than silence.
+const MAX_TRIAGE_ATTEMPTS = 3;
 
 // Map the tool the agent chose to a coarse intent label for analytics. A tool
 // call is a strong, free, deterministic intent signal — no extra LLM call.
@@ -161,6 +178,25 @@ async function processSingleTextMessage(
     return;
   }
 
+  // Switchboard. On a dedicated number this resolves to the owning tenant
+  // immediately and costs one indexed query; on a shared number it decides
+  // which business the enquiry is for, or asks.
+  //
+  // Deliberately placed before the agent is loaded and before governance is
+  // evaluated, because the routed tenant selects BOTH — answering first and
+  // attributing afterwards would mean the number owner's policy had already
+  // approved the reply.
+  const decision = await resolveServingOrganization({
+    phoneNumberId,
+    conversationId,
+    contactId,
+    contactWaId: message.from,
+    owner: organization,
+    text: text.body,
+  });
+  if (decision.kind === "asked") return; // triage question sent; wait for the answer
+  const serving = decision.organization;
+
   // Employee Agent Layer. Resolved best-effort on purpose: a tenant that has
   // not onboarded employees resolves to null and takes exactly the original
   // org-level path, and a failure looking employees up must degrade to that
@@ -181,9 +217,9 @@ async function processSingleTextMessage(
     return;
   }
 
-  const agent = await routeToEmployeeTwin(phoneNumberId, employee);
+  const agent = await routeToEmployeeTwin(serving, employee);
   if (!agent) {
-    logger.warn({ organizationId: organization.id }, "No active agent configured for organization");
+    logger.warn({ organizationId: serving.id }, "No active agent configured for organization");
     return;
   }
 
@@ -199,7 +235,10 @@ async function processSingleTextMessage(
     const history = await loadRecentHistory(conversationId);
     const result = await agent.respond(
       {
-        organizationId: organization.id,
+        // The routed tenant, not the number owner: this scopes knowledge
+        // retrieval, so passing the owner here would let a shared number answer
+        // a legal question out of the retail knowledge base.
+        organizationId: serving.id,
         contactWaId: message.from,
         contactName,
         messageId: message.id,
@@ -229,7 +268,11 @@ async function processSingleTextMessage(
       );
     }
 
-    const shouldEscalate = shouldEscalateReply(evaluation, organization.slug) || signatureLeak;
+    // Governance is the routed tenant's, not the number owner's — this is the
+    // whole reason routing happens before the reply is composed. `juris-prime-legal`
+    // escalates at medium hallucination risk and `zipicka` does not; using the
+    // owner's slug here would silently apply retail thresholds to legal answers.
+    const shouldEscalate = shouldEscalateReply(evaluation, serving.slug) || signatureLeak;
     const finalText = shouldEscalate ? FALLBACK_REPLY : result.text;
 
     await sendWhatsAppText(phoneNumberId, message.from, finalText);
@@ -293,6 +336,203 @@ async function processSingleTextMessage(
     } else {
       await sendFallbackBestEffort(organization, phoneNumberId, message.from, conversationId, contactId);
     }
+  }
+}
+
+/**
+ * Which business this message is for.
+ *
+ * `asked` means a triage question went out and nothing further should happen
+ * for this message — the customer's answer arrives as the next inbound message
+ * and is resolved against the menu we just sent.
+ */
+type ServingDecision =
+  | { kind: "serve"; organization: Organization }
+  | { kind: "asked" };
+
+/**
+ * Decide which tenant answers, on a number that may be shared.
+ *
+ * The important property is that this degrades to the pre-switchboard
+ * behaviour in every failure case. A dedicated number, a lookup failure, a
+ * routed tenant that has since been deactivated — all of them resolve to the
+ * number's owner and take exactly the path that existed before routing did.
+ * A customer never goes silent because triage could not make up its mind.
+ *
+ * Note the asymmetry in what "safe" means here. Refusing to route costs a
+ * question; routing wrongly puts an enquiry in front of an agent operating
+ * under a different business's governance policy. That is why an ambiguous
+ * message asks rather than picking the most likely candidate.
+ */
+async function resolveServingOrganization(ctx: {
+  phoneNumberId: string;
+  conversationId: string;
+  contactId: string;
+  contactWaId: string;
+  owner: Organization;
+  text: string;
+}): Promise<ServingDecision> {
+  let businesses: SharedNumberBusiness[];
+  try {
+    businesses = await findSharedNumberBusinesses(ctx.phoneNumberId);
+  } catch (err) {
+    logger.error(
+      { conversationId: ctx.conversationId, err },
+      "Shared-number lookup failed — serving the number's owner"
+    );
+    return { kind: "serve", organization: ctx.owner };
+  }
+
+  // Fewer than two tenants on this number means there is nothing to triage:
+  // the number identifies the business on its own, as it always did.
+  if (businesses.length < 2) return { kind: "serve", organization: ctx.owner };
+
+  let state = null;
+  try {
+    state = await getConversationRouting(ctx.conversationId);
+  } catch (err) {
+    logger.error({ conversationId: ctx.conversationId, err }, "Routing state read failed");
+  }
+
+  // Already triaged. Routing is sticky: re-classifying every message would let
+  // one off-topic word move a live conversation, and its governance, mid-thread.
+  if (state?.routedOrganizationId) {
+    const routed = await findOrganizationById(state.routedOrganizationId).catch(() => null);
+    if (routed) return { kind: "serve", organization: routed };
+    logger.warn(
+      { conversationId: ctx.conversationId, routedOrganizationId: state.routedOrganizationId },
+      "Conversation was routed to an organization that is no longer active — re-triaging"
+    );
+  }
+
+  // A bare "2" is only read as an answer if a menu was genuinely sent. Without
+  // this check, a first message of "2" would select the second business —
+  // and its governance — from a menu the customer never saw.
+  if (state?.triagePromptedAt) {
+    const picked = resolveTriageReply(ctx.text, businesses);
+    if (picked) return commitRoute(ctx, picked, ["triage reply"]);
+  }
+
+  const outcome = classifyBusiness(ctx.text, businesses);
+  if (outcome.kind === "routed") return commitRoute(ctx, outcome.business, outcome.matched);
+
+  logger.debug(
+    {
+      conversationId: ctx.conversationId,
+      outcome: outcome.kind,
+      candidates: outcome.kind === "ambiguous" ? outcome.candidates.map((b) => b.slug) : [],
+    },
+    "Cannot determine which business this enquiry is for"
+  );
+
+  if ((state?.triageAttempts ?? 0) >= MAX_TRIAGE_ATTEMPTS) {
+    logger.warn(
+      { conversationId: ctx.conversationId, attempts: state?.triageAttempts },
+      "Triage exhausted — handing the conversation to a human"
+    );
+    await sendFallbackBestEffort(
+      ctx.owner,
+      ctx.phoneNumberId,
+      ctx.contactWaId,
+      ctx.conversationId,
+      ctx.contactId
+    );
+    return { kind: "asked" };
+  }
+
+  await askWhichBusiness(ctx, businesses);
+  return { kind: "asked" };
+}
+
+async function commitRoute(
+  ctx: { conversationId: string; owner: Organization },
+  business: SharedNumberBusiness,
+  matched: string[]
+): Promise<ServingDecision> {
+  const organization = await findOrganizationById(business.id).catch(() => null);
+  if (!organization) {
+    // Classified to a tenant we then could not load. Serving the owner is
+    // wrong-but-answering; the alternative is silence, and the misroute is
+    // recorded here rather than hidden.
+    logger.error(
+      { conversationId: ctx.conversationId, businessSlug: business.slug },
+      "Routed to a business that could not be loaded — falling back to the number owner"
+    );
+    return { kind: "serve", organization: ctx.owner };
+  }
+
+  try {
+    await setConversationRouting(ctx.conversationId, organization.id);
+  } catch (err) {
+    // The routing decision stands for this message even if it failed to
+    // persist; the next message simply re-classifies.
+    logger.error({ conversationId: ctx.conversationId, err }, "Failed to persist routing decision");
+  }
+
+  logger.info(
+    { conversationId: ctx.conversationId, routedTo: organization.slug, matched },
+    "Conversation routed to business"
+  );
+  return { kind: "serve", organization };
+}
+
+/**
+ * Send the triage menu and record that we asked.
+ *
+ * Attributed to the number's owner in the database because the conversation and
+ * contact belong to it — this message is sent by the switchboard, before any
+ * business is on the hook for it, which is exactly why `buildTriageMessage`
+ * makes no claim about price, availability or law.
+ *
+ * The attempt is recorded only after the send succeeds, so a WhatsApp outage
+ * does not burn through the attempt budget and escalate a customer who was
+ * never actually asked anything.
+ */
+async function askWhichBusiness(
+  ctx: {
+    phoneNumberId: string;
+    conversationId: string;
+    contactId: string;
+    contactWaId: string;
+    owner: Organization;
+  },
+  businesses: SharedNumberBusiness[]
+): Promise<void> {
+  const body = buildTriageMessage(businesses);
+
+  try {
+    await sendWhatsAppText(ctx.phoneNumberId, ctx.contactWaId, body);
+  } catch (err) {
+    logger.error({ conversationId: ctx.conversationId, err }, "Failed to send triage question");
+    return;
+  }
+
+  try {
+    await recordTriagePrompt(ctx.conversationId);
+  } catch (err) {
+    // The customer has the menu but we did not record asking. Their reply will
+    // not be read as an ordinal, so they get asked once more — mildly annoying,
+    // and strictly better than treating an unprompted number as a selection.
+    logger.error({ conversationId: ctx.conversationId, err }, "Failed to record triage prompt");
+  }
+
+  try {
+    const outboundDto = await insertOutboundMessage({
+      organizationId: ctx.owner.id,
+      conversationId: ctx.conversationId,
+      contactId: ctx.contactId,
+      senderType: "system",
+      body,
+    });
+    await publishInboxEvent({
+      type: "message",
+      organizationId: ctx.owner.id,
+      organizationSlug: ctx.owner.slug,
+      conversationId: ctx.conversationId,
+      message: outboundDto,
+    });
+  } catch (err) {
+    logger.error({ conversationId: ctx.conversationId, err }, "Failed to record triage question");
   }
 }
 
