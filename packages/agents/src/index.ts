@@ -3,6 +3,7 @@ export * from "./domain-agent.js";
 export * from "./gemini-domain-agent.js";
 export * from "./switchboard.js";
 export * from "./preflight.js";
+export * from "./business-router.js";
 export * from "./tools/registry.js";
 export * from "./tools/examples.js";
 export * from "./tools/knowledge.js";

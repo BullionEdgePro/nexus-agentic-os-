@@ -293,9 +293,11 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 - **Rules are whack-a-mole against adversarial senders.** One spam message still
   reads 30/normal after two rounds of hardening. This is the argument for
   *rules first, model second*, not for more rules.
-- **Knowledge is operable only by script.** Sources were ingested by running
-  node inside the worker container. There is no management API or UI, so the
-  tenant cannot add or remove their own sources.
+- ~~**Knowledge is operable only by script.**~~ **API added 2026-08-03** —
+  `GET/POST/DELETE /api/organizations/:slug/knowledge`, authenticated and
+  tenant-scoped, returning source health rather than bare titles. **Still no
+  UI**, so it remains a curl-level tool rather than something a non-technical
+  owner can use.
 - **Employee layer is dormant.** Zero employees exist, so presence, twins and
   handbacks are live but unexercised.
 - **No OpenTelemetry.** Phase 0 called for traces and structured alerting; only
