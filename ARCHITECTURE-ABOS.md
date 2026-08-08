@@ -4,123 +4,106 @@ Evolving Nexus Agentic OS from a multi-tenant WhatsApp agent platform into an
 Autonomous Business Operating System, **without rewriting the working system
 underneath it.**
 
-This document is the engineering plan of record. It is deliberately opinionated
-about sequencing, because the order these features land in matters more than any
+This is the engineering plan of record. It is deliberately opinionated about
+sequencing, because the order these features land in matters more than any
 individual design.
 
+**Status: 2026-08-03.** Phases 0, 2 and 3 are shipped and verified in
+production. Feature 12 is half done. Section 9 is the register of what has
+*not* been done and why — read that before planning the next block of work.
+
 ---
 
-## 1. Honest baseline (2026-08-01)
+## 1. Baseline — what is actually true
 
-What is actually true today, because the plan has to start from here:
+Revised from the original 2026-08-01 baseline, which is now wrong in most rows.
 
-| Reality | Consequence for this program |
+| Reality | Status |
 |---|---|
-| 1 of 5 tenants has a live WhatsApp number | ABOS features built for "all tenants" have one real user |
-| The Gemini switch has **not yet been confirmed against a live inbound message** | The reply path is unproven since the provider change |
-| Postgres has **no automated backup** | Every table this program adds is also unbacked |
-| Single VPS: 2 vCPU / 4 GB, all services co-resident | Several features below do not fit on this box |
-| `organizations.slug` is a `CHECK` constraint over 5 literal values | **Tenant #6 fails to insert.** Hard blocker for any scale story |
-| AI inference is on Gemini's **free tier** | Free tier is a rate-limited hobby budget, not an autonomous-operator budget |
-
-None of these make the vision wrong. They change what "Phase 1" means.
+| 1 of 5 tenants has a live WhatsApp number | **Still true.** The central constraint on everything below |
+| Gemini reply path unconfirmed | **Resolved.** Real inbound conversation handled end to end, genuine AI replies, token spend recorded |
+| No automated backup | **Was wrong.** Backups existed (nightly since 2026-07-29); the real gap was that nothing *verified* them. Now dumps, test-restores and rotates |
+| `organizations.slug` CHECK caps at 5 tenants | **Resolved** (migration 002). Tenant #6 can now be inserted |
+| App connects as Postgres superuser | **Resolved** (migration 006). Runs as least-privilege `nexus_app` |
+| Public API unauthenticated | **Resolved.** Was returning customer phone numbers to anonymous requests |
+| Single VPS, 2 vCPU / 4 GB, all services co-resident | **Still true.** Several features below do not fit on this box |
+| AI inference on Gemini free tier | **Still true.** Already hit a 429 on a single test model |
 
 ---
 
-## 2. Five constraints that reshape the plan
+## 2. Constraints that reshape the plan
 
-These are the findings a design review has to surface before writing code, not after.
+### 2.1 ~~The tenant ceiling is a CHECK constraint~~ — resolved
+Dropped in migration 002. The paired code fix matters more than the DDL: the
+governance policy keyed off a *denylist* of strict tenants, so a newly onboarded
+tenant would have matched neither entry and fallen through to the most permissive
+branch — at exactly the moment its risk profile is least understood. Inverted to
+an allowlist of the tolerant, so an unrecognised tenant is now held to the
+stricter bar by default.
 
-### 2.1 The tenant ceiling is a `CHECK` constraint
-`schema.sql` pins `organizations.slug` to five hardcoded values. "Scale to
-10,000+ businesses" is blocked at the DDL level on line 12. Removing it is a
-one-line migration and must happen before any onboarding work.
-
-### 2.2 Tenant isolation is currently by convention
+### 2.2 Tenant isolation is by convention — half addressed
 Every query manually passes `organization_id`. That works at 5 tenants and
-becomes a data-breach vector at 10,000 — one forgotten `WHERE` clause leaks
-across tenants. The structural fix is **Postgres Row-Level Security**, so
-isolation is enforced by the database rather than by reviewer diligence. This
-should land before the tenant count grows, not after.
+becomes a data-breach vector at 10,000: one forgotten `WHERE` leaks across
+tenants. The structural fix is Postgres Row-Level Security.
 
-**Correction (verified in production 2026-08-03): RLS has a prerequisite this
-plan originally missed.** The application connects as `nexus`, which is a
-Postgres **superuser** and the owner of every table:
+**The prerequisite the original plan missed.** The app connected as `nexus`, a
+**superuser** owning every table. Superusers bypass RLS unconditionally —
+`FORCE ROW LEVEL SECURITY` included — so any policy shipped then would have
+looked protective and enforced nothing.
 
-```
-current_user | session_user | is_superuser
-nexus        | nexus        | t
-```
+Corrected sequence, each step independently verifiable:
 
-Superusers bypass row-level security unconditionally — `FORCE ROW LEVEL
-SECURITY` does not apply to them either. Enabling RLS today would deploy
-policies that look protective and enforce nothing: the silent-no-op failure
-mode this system has already produced four times. Running the app as a
-superuser is also a least-privilege violation in its own right, since any SQL
-injection escalates directly to full database control.
+1. ~~Create a least-privilege app role~~ **done** (migration 006)
+2. ~~Cut `DATABASE_URL` over and verify~~ **done.** Failures here are loud
+   (`permission denied`), rollback is one env var
+3. **Tenant-context plumbing** — `SET LOCAL app.current_org` per tenant-scoped
+   request, plus an application assertion that fails **loudly** on a missing
+   context rather than quietly returning nothing
+4. **Enable RLS + policies**, table by table, verifying row counts after each
 
-The corrected sequence, each step independently verifiable:
+Step 4 is the dangerous one: a wrong policy returns zero rows with no error. It
+must never ship without the step-3 assertion in front of it.
 
-1. **Create a least-privilege app role** — not superuser, not table owner, with
-   explicit grants on existing and future tables.
-2. **Cut `DATABASE_URL` over to it and verify.** Do this on its own. Failures
-   here are *loud* (`permission denied`), which makes it a safe step, and
-   rollback is one environment variable.
-3. **Add tenant-context plumbing** — `SET LOCAL app.current_org` per
-   tenant-scoped request, plus an application-level assertion that fails loudly
-   when the context is missing rather than quietly returning nothing.
-4. **Enable RLS + policies**, table by table, verifying row counts after each.
-
-Step 4 is the dangerous one: a wrong policy returns zero rows with no error, so
-it must never ship without the step-3 assertion in front of it.
-
-**Also note a design mismatch to resolve first.** Classic RLS assumes each
-request belongs to one tenant. Here the operator is a *super-user across all
-five tenants* — the inbox deliberately shows every business — and the worker
-must resolve `phone_number_id → organization` before it knows the tenant at
-all. Both are legitimate cross-tenant paths and need an explicit bypass role,
-otherwise step 4 breaks message routing. RLS's value in this system is
-protecting against a forgotten `WHERE` in application code, not against a
-hostile tenant user, because per-tenant logins do not exist yet.
+**A design mismatch to resolve first.** Classic RLS assumes one tenant per
+request. Here the operator is *deliberately* a super-user across all five
+tenants — the inbox shows every business — and the worker must resolve
+`phone_number_id → organization` before it knows the tenant at all. Both are
+legitimate cross-tenant paths needing an explicit bypass role, or step 4 breaks
+message routing. RLS's value in this system is protecting against a forgotten
+`WHERE` in application code, not against a hostile tenant user, because
+per-tenant logins do not exist yet.
 
 ### 2.3 Autonomous operators contradict the free tier
-Feature 8 specifies 11 always-on operators that "collaborate autonomously",
-plus continuous re-indexing (F2), predictive scoring (F11), and self-evaluation
-(F14). Continuous multi-agent inference is fundamentally incompatible with a
-free-tier rate limit. Two honest options:
+Feature 8 specifies 11 always-on operators that "collaborate autonomously", plus
+continuous re-indexing, predictive scoring and self-evaluation. Continuous
+multi-agent inference is incompatible with a rate-limited free tier — and this
+is no longer theoretical: `gemini-2.0-flash` returned 429 during a single
+afternoon of testing.
 
-- **Event-triggered operators** (recommended): operators wake on domain events,
-  not on a loop. 10–100× cheaper, and no worse for the user.
-- **Paid inference**: budget for it explicitly as a per-tenant cost line.
+- **Event-triggered operators** (recommended): wake on domain events, not a
+  loop. 10–100× cheaper, no worse for the user
+- **Paid inference**: budget it explicitly as a per-tenant cost line
 
-Continuous autonomous loops on free-tier keys will simply fail under load, and
-the failure mode is customer-visible.
+**This decision is still open and blocks Phase 4.**
 
-### 2.4 The AI Twin, as specified, is a legal exposure
-The spec has the twin serving customers **as** a named employee, learning their
-writing style, carrying their **digital signature**, with no disclosure. For the
-law-firm tenant that is not a nuance — it is a customer forming a professional
-relationship with a machine wearing a named lawyer's identity.
+### 2.4 The AI Twin as specified is a legal exposure — resolved in design
+The spec had the twin serving customers **as** a named employee, in their voice,
+carrying their **digital signature**, undisclosed. For the law-firm tenant that
+is a customer forming a professional relationship with a machine wearing a named
+lawyer's identity.
 
-Both the EU AI Act's transparency duty and US state bot-disclosure statutes point
-the same direction, and the platform's own governance code already treats
-`juris-prime-legal` as a stricter tenant.
-
-**Resolution (implemented, see §4):** the twin acts *for* the employee, never
-*as* them — attributed, disclosed on request, and structurally barred from
-reproducing a digital signature. This preserves essentially all product value
-(fast, on-brand, personally-routed answers) and removes the entire
-misrepresentation risk class.
+**Implemented resolution:** the twin acts *for* an employee, never *as* them.
+`digital_signature` is never read into a prompt, and `containsDigitalSignature()`
+is a deterministic pre-send check wired into the escalation decision — because a
+prompt is guidance, not a guarantee.
 
 ### 2.5 The campaign engine can get the WhatsApp number banned
-Feature 4 says "replace simple bulk messaging". WhatsApp Business is not an
-email list: templates need pre-approval, free-form replies are confined to the
-24-hour service window, opt-in is mandatory, and quality rating decay gets
-numbers restricted. This number was only just recovered from Klaviyo — losing it
-to a policy strike would undo the most expensive work done on this project.
+WhatsApp Business is not an email list: templates need pre-approval, free-form
+replies are confined to the 24-hour window, opt-in is mandatory, and quality-
+rating decay restricts numbers. This number was only just recovered from Klaviyo.
 
-The campaign engine must therefore be **Meta-policy-native**: template registry
-with approval state, opt-out ledger enforced at send time, per-number rate
+The engine must be **Meta-policy-native from the first commit**: template
+registry with approval state, opt-out ledger enforced *at send*, per-number rate
 governor, and quality-rating monitoring that can halt a campaign mid-flight.
 
 ---
@@ -133,166 +116,188 @@ and adding structure rather than replacing it.
 ```
                     ┌──────────────────────────────────────────┐
    WhatsApp ───────▶│  apps/api   webhook · REST · WS          │
-   (+ future        └───────────────┬──────────────────────────┘
-    channels)                       │  domain events
+   (+ future        │  requireAuth on /api/* ✅                │
+    channels)       └───────────────┬──────────────────────────┘
+                                    │  domain events
                     ┌───────────────▼──────────────────────────┐
-                    │  Event bus (Redis Streams)               │
-                    │  message.received · lead.scored ·        │
-                    │  presence.changed · knowledge.updated    │
+                    │  Redis (pub/sub today, Streams later)    │
                     └───┬───────────┬───────────┬──────────────┘
                         │           │           │
               ┌─────────▼──┐ ┌──────▼─────┐ ┌───▼───────────┐
-              │ reply      │ │ operators  │ │ ingestion     │
-              │ worker     │ │ (event-    │ │ worker        │
-              │ (exists)   │ │  triggered)│ │ (F2)          │
+              │ reply      │ │ operators  │ │ knowledge     │
+              │ worker ✅  │ │ (not built)│ │ re-index ✅   │
               └─────────┬──┘ └──────┬─────┘ └───┬───────────┘
                         │           │           │
                     ┌───▼───────────▼───────────▼──────────────┐
-                    │  Postgres  (+ pgvector)  ·  RLS-isolated │
-                    │  write model  →  rollup read models      │
+                    │  Postgres · least-privilege role ✅      │
+                    │  embeddings as normalized real[]          │
+                    │  RLS: not yet (see §2.2)                  │
                     └──────────────────────────────────────────┘
 ```
 
-**Three decisions worth stating explicitly:**
+**Decisions worth stating:**
 
-1. **Redis Streams, not Kafka.** Redis is already in the stack and already
-   carries `publishInboxEvent`. Formalising a typed domain-event envelope over
-   it delivers the event-driven requirement with zero new infrastructure. Kafka
-   is a Phase-4+ conversation, if ever.
+1. **Redis, not Kafka.** Already in the stack and already carries
+   `publishInboxEvent`. A typed domain-event envelope over it delivers the
+   event-driven requirement with zero new infrastructure.
 
-2. **pgvector, not a separate vector database.** Embeddings live in the
-   Postgres already deployed. One fewer service on a 4 GB box, and RAG joins
-   stay in-database next to the tenant filter — which is also how the tenant
-   isolation story stays intact for embeddings.
+2. **No pgvector — deliberately, and contrary to the original plan.** Production
+   runs stock `postgres:16-alpine`, which has no vector extension, and swapping
+   the image of a live database buys nothing at this volume. Embeddings are
+   stored **L2-normalized**, which makes cosine similarity exactly a dot product
+   (`nexus_dot`, migration 003); a sequential scan over a few thousand chunks is
+   single-digit milliseconds. The retrieval contract is written so pgvector is a
+   later internal swap. **Revisit past ~10k chunks per tenant or p95 > 100ms.**
 
-3. **Rollup read models for the deck.** The command deck currently aggregates
-   over live `messages` / `conversation_metrics`. That is fine at today's
-   volume and collapses at scale. Analytics reads move to incrementally-updated
-   rollup tables (the pragmatic 80% of CQRS, without splitting the datastore).
+3. **Rollup read models for the deck.** The deck still aggregates over live
+   tables. Fine now, collapses at scale. Not yet built.
 
 ---
 
-## 4. Phase 1 — Employee Agent Layer ✅ *implemented this session*
+## 4. Shipped
 
-Feature 1, built and merged. The conversation hierarchy is now
-`Tenant → Employee → Conversation`.
+| Phase | What landed |
+|---|---|
+| **0 — Survivability** | Verified backups (dump → test-restore → rotate, nightly); 5-tenant cap removed; governance fails safe for unknown tenants |
+| **1 — Employee Agent Layer** | `employees`, presence engine (pure, DST-aware, overnight shifts, UTC fallback), attributed AI twin with signature backstop, employee-aware routing |
+| **2 — Knowledge** | Schema + chunker + Gemini embeddings + citation-bearing retrieval; URL connector with SSRF guard; cross-page boilerplate stripping; 6-hourly re-indexing; **80 live chunks of real Zipicka content**, retrieval verified against real customer questions |
+| **3 — Lead Intelligence** | Rules-based scoring with signal audit trail; direction-aware spam detection; complaints always urgent |
+| **12 — Security** | API authentication (was fully open, leaking customer PII); WebSocket auth; inbox login gate; app de-privileged from Postgres superuser |
 
-**Schema** (`packages/db/migrations/001-employee-agent-layer.sql`) — idempotent
-and additive: `employees`, `employee_presence_events`, `twin_handbacks`, plus
-nullable `conversations.employee_id` / `messages.employee_id`. Every existing
-row keeps `employee_id = NULL`, which resolves to precisely today's org-level
-behaviour, so the migration is a no-op for live traffic until an employee is
-actually created.
-
-**Presence engine** (`packages/employees/src/presence.ts`) — pure and
-synchronous, so per-tenant scheduling policy is unit-testable with no database
-and adds no latency to the reply path. Resolution precedence: inactive → manual
-override → working-hours schedule. Handles overnight shifts, scheduled breaks,
-DST via the platform tz database, and degrades to UTC rather than throwing on a
-malformed timezone.
-
-**The anti-silence default.** `shouldTwinRespond` is biased toward answering.
-The only case where the twin stands down for an available human is the
-per-employee `human_first` flag, which **defaults to false**. Enabling the
-employee layer therefore cannot introduce customer-facing silence — the failure
-mode this codebase already works hardest to prevent.
-
-**Twin identity guardrails** (`packages/employees/src/twin.ts`) — the tenant's
-governance-bearing prompt stays authoritative and the employee persona layers on
-top; a persona can never loosen a tenant rule. `digital_signature` is never read
-into a prompt, and `containsDigitalSignature()` is a deterministic pre-send
-backstop wired into the processor's escalation decision, because a prompt is
-guidance and not a guarantee.
-
-**Coverage:** 18 tests green (was 7), full monorepo typecheck clean.
-
-**Still open in Feature 1:** calendar integration for presence, twin handback
-summarisation (table exists, generator not built), employee CRUD API + UI.
+**72 tests, typecheck clean across 10 workspaces.**
 
 ---
 
 ## 5. Phase sequencing
 
-Ordered by what unblocks what — not by feature number.
-
-### Phase 0 — Survivability *(do before anything else)*
-Not glamorous, and everything else is worthless without it.
-- Automated `pg_dump` + **restore verification** (an unverified backup is a guess)
-- Confirm a real Gemini reply end-to-end on live traffic
-- Drop the `organizations.slug` CHECK constraint
-- OpenTelemetry traces + structured error alerting
-
-### Phase 2 — Knowledge & Memory *(F2, F10, F5)*
-The substrate every intelligent feature reads from.
-- pgvector; `knowledge_sources` / `knowledge_chunks` with version + freshness
-- Ingestion worker: fetch → parse → OCR → chunk → embed → index, per source type
-- Citation-bearing retrieval — a claim without a source is a hallucination waiting to happen
-- Layered memory maps onto existing structures: working = conversation history,
-  semantic = pgvector, episodic = metrics + summaries, procedural = SOPs
-- Neural Brain (F5) writes markdown into the existing `Nexus-Brain` vault.
-  **Privacy gate:** customer conversations become files on a laptop — redact PII
-  on the way in, and keep customer-derived notes opt-in per tenant.
-
-### Phase 3 — Revenue surface *(F3, F4)*
-- Lead intelligence: intent + score written on the existing metrics path,
-  starting rules-based, upgrading to model-scored once labelled data exists
-- Campaign engine per §2.5 — Meta-policy-native from the first commit
-
-### Phase 4 — Workspace & Operators *(F7, F8, F9)*
-The largest build. Feature 7 alone (boards, gantt, automations, time tracking,
-OKRs) is a product in its own right — scope it to what the five tenants actually
-need before building Monday.com.
-- Operators are **event-triggered**, each owning a bounded domain + tool set
-- Command Center consumes the Phase-2 rollups; no new aggregation paths
-
-### Phase 5 — Intelligence *(F11, F14, F15)*
-Only meaningful once Phases 2–4 have produced data worth reasoning over.
-Predictive BI on ~1 live tenant would be numerology.
-
-### Continuous — Security *(F12)*
-Not a phase. RLS lands in Phase 0/2, audit logging accompanies every table,
-MFA arrives with multi-operator accounts.
+### ✅ Phase 0 — Survivability
+### ✅ Phase 2 — Knowledge
+Remaining: connectors beyond URL (Shopify, Drive, PDFs, OCR); Neural Brain (F5);
+layered memory (F10) formalisation.
+### 🟡 Phase 3 — Revenue surface
+Lead intelligence done. **Campaign engine (F4) not started** — see §2.5.
+### ⛔ Phase 4 — Workspace & Operators
+Blocked on the §2.3 decision. F7 is a product, not a feature.
+### ⛔ Phase 5 — Intelligence
+Blocked on data volume, not engineering.
+### 🟡 Continuous — Security
+Auth and least-privilege done. RLS steps 3–4 outstanding.
 
 ---
 
-## 6. Per-feature notes
+## 6. Per-feature status
 
-Where a feature's design differs meaningfully from its spec.
-
-| # | Feature | Key design decision |
+| # | Feature | Status |
 |---|---|---|
-| 1 | Employee Agent Layer | ✅ Built. Attributed twin, not impersonation |
-| 2 | Knowledge Ingestion | pgvector; 30+ connectors phased by actual tenant demand, not the full list at once |
-| 3 | Lead Intelligence | Rules first, model second — needs labels that don't exist yet |
-| 4 | Campaign Engine | Meta-policy-native; opt-out enforced at send, not at compose |
-| 5 | Neural Brain | Writes to existing vault; PII redaction gate |
-| 6 | PAUL v2 | Prompt/command layer in `.claude/` — no infra, low risk, ship anytime |
-| 7 | Workspace | Scope to real tenant need; full Monday.com parity is years |
-| 8 | Operators | Event-triggered, not always-on (see §2.3) |
-| 9 | Command Center | Reads rollups only |
-| 10 | Memory | Mostly composition over existing structures + pgvector |
-| 11 | Predictive BI | Blocked on data volume, not on engineering |
-| 12 | Security | RLS is the load-bearing piece |
-| 13 | Marketplace | Cross-tenant sharing needs an explicit data-egress policy |
-| 14 | Self-improving AI | Cheap version: track correction rate + escalation rate first |
-| 15 | BI Copilot | Text-to-SQL over rollups, read-only role, tenant-scoped |
+| 1 | Employee Agent Layer | ✅ Built. Open: calendar presence, twin handback generator, employee CRUD UI |
+| 2 | Knowledge Ingestion | ✅ Core + URL connector. Remaining connectors phased by real demand |
+| 3 | Lead Intelligence | ✅ Rules-based. English-only; model second once labels exist |
+| 4 | Campaign Engine | ⛔ Not started. Highest-risk feature in the program |
+| 5 | Neural Brain | ⛔ Not started. Needs PII redaction gate first |
+| 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
+| 7 | Workspace | ⛔ Months of work. Scope hard before starting |
+| 8 | Operators | ⛔ Blocked on §2.3 |
+| 9 | Command Center | 🟡 Deck exists on live queries; rollups not built |
+| 10 | Memory | 🟡 Semantic layer exists; episodic/procedural not formalised |
+| 11 | Predictive BI | ⛔ Blocked on data volume |
+| 12 | Security | 🟡 Auth + least-privilege done; RLS outstanding |
+| 13 | Marketplace | ⛔ Needs a data-egress policy first |
+| 14 | Self-improving AI | ⛔ Cheap version (correction + escalation rate) not built |
+| 15 | BI Copilot | ⛔ Needs rollups (F9) first |
 
 ---
 
 ## 7. What is genuinely hard
 
-Worth naming so it isn't discovered late:
-
-- **Cost per tenant.** Twins + operators + re-indexing + predictions is a large
-  inference bill that scales with tenants. It needs a per-tenant cost model
-  before it needs more features.
-- **Infrastructure.** Ingestion (OCR, media, crawling) will not co-exist with
-  the reply path on 2 vCPU / 4 GB. Workers separate from the API box, or this
-  degrades customer replies — the one thing that must never degrade.
+- **Cost per tenant.** Twins + operators + re-indexing + predictions is an
+  inference bill scaling with tenants. Needs a cost model before more features.
+- **Infrastructure.** OCR, media and crawling will not co-exist with the reply
+  path on 2 vCPU / 4 GB. Workers must move off the API box, or customer replies
+  — the one thing that must never degrade — degrade.
 - **Feature 7 is a product, not a feature.**
-- **Evaluation.** "Self-improving" requires a ground-truth set. Without labelled
+- **Evaluation.** "Self-improving" needs ground truth. Without labelled
   outcomes, F14 measures its own confidence, which is worse than measuring
   nothing.
+
+---
+
+## 8. The failure pattern this system produces
+
+Every serious defect found in this codebase has presented as a **plausible
+normal state, never as an error**:
+
+| Defect | How it looked |
+|---|---|
+| Anthropic credits exhausted | Polite "looping in a specialist" reply |
+| BullMQ `:` in a job id | Webhook 200s, messages silently vanish |
+| Retired Gemini model | Same polite fallback reply |
+| Single-origin CORS | Empty "No conversations yet" on the bare domain |
+| Unauthenticated API | HTTP 200 |
+| `search_knowledge` in no tenant's tool list | Feature deployed, never invoked |
+| Source identified by title | Silent duplicate on re-crawl, both copies cited |
+| App as Postgres superuser | RLS would deploy and enforce nothing |
+
+Containers were green throughout. **Prefer checks that assert expected data
+EXISTS over checks that confirm nothing errored.** `preflightModels()` at worker
+boot exists for exactly this reason: it calls every configured model and logs a
+loud error naming affected tenants, rather than waiting for a customer to
+receive a fallback.
+
+---
+
+## 9. Deferred work — what was not done, and why
+
+Grouped by *what unblocks it*, because the reason matters more than the item.
+
+### 9.1 Blocked on you, not on engineering
+
+- **Onboard tenants 2–5.** Four tenants hold placeholder `phone_number_id`s and
+  physically cannot receive a message. Needs each business's real number, Meta
+  Business Manager access, and a verification code sent to that handset. *This
+  is the single highest-value item in the document* — every feature here is
+  built for five tenants and exercised by one.
+- **Operators: event-triggered or paid inference?** (§2.3) Blocks Phase 4.
+- **Workspace scope.** Full Monday.com parity is years. Boards + tasks tied to
+  conversations is weeks. Someone must choose.
+
+### 9.2 Deliberately not attempted — would have been unsafe
+
+- **RLS policies (F12 steps 3–4).** A wrong policy returns zero rows with no
+  error: empty inbox, worker unable to route. Needs the fail-loud context
+  assertion and a cross-tenant bypass role first (§2.2).
+- **Campaign engine (F4).** Rushed, it costs the WhatsApp number (§2.5).
+
+### 9.3 Genuinely large
+
+- **Workspace (F7)** — months.
+- **Remaining knowledge connectors** — Shopify, Drive, PDFs, OCR, audio. Each is
+  an isolated fetch-and-parse problem now that the pipeline exists; add on real
+  demand rather than building thirty at once.
+- **Rollup read models (F9)** — prerequisite for the Command Center and F15.
+
+### 9.4 Blocked on data, not code
+
+- **Predictive BI (F11)** — one live tenant makes this numerology.
+- **Model-based lead scoring** — needs labelled won/lost outcomes. The current
+  rules are generating exactly that history.
+- **Self-improving AI (F14)** — needs a ground-truth set. The cheap version
+  (track correction rate + escalation rate) is buildable now and is not.
+
+### 9.5 Known limitations in shipped features
+
+- **Lead scoring is English-only.** UAE traffic will include Arabic, which
+  scores 0 and floors at `low` — degrades rather than fails, but should be fixed
+  before scores drive routing.
+- **Rules are whack-a-mole against adversarial senders.** One spam message still
+  reads 30/normal after two rounds of hardening. This is the argument for
+  *rules first, model second*, not for more rules.
+- **Knowledge is operable only by script.** Sources were ingested by running
+  node inside the worker container. There is no management API or UI, so the
+  tenant cannot add or remove their own sources.
+- **Employee layer is dormant.** Zero employees exist, so presence, twins and
+  handbacks are live but unexercised.
+- **No OpenTelemetry.** Phase 0 called for traces and structured alerting; only
+  structured logging exists.
 
 ---
 
