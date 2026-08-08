@@ -41,7 +41,22 @@
   overflow-x: hidden;
 }
 .deck-root * { box-sizing: border-box; }
-@media (pointer: fine) { .deck-root, .deck-root * { cursor: none !important; } }
+/* Hide the native cursor ONLY while the ink crosshair is actually being drawn.
+   `.fx-cursor` is added by initDeckFx when it mounts the replacement and removed
+   when it tears down, so this rule can never outlive the thing it depends on.
+   Without that link, any page reusing .deck-root for its theme tokens lost its
+   mouse pointer entirely and looked completely normal doing it. */
+@media (pointer: fine) {
+  .deck-root.fx-cursor,
+  .deck-root.fx-cursor * { cursor: none !important; }
+}
+
+/* Text fields keep a real caret even on the pages that do draw the crosshair —
+   a crosshair over an input gives no indication you can type there. */
+@media (pointer: fine) {
+  .deck-root.fx-cursor input,
+  .deck-root.fx-cursor textarea { cursor: text !important; }
+}
 .deck-root a { color: inherit; text-decoration: none; }
 .deck-root ::selection { background: var(--blueprint); color: var(--vellum); }
 .deck-root h1, .deck-root h2, .deck-root h3, .deck-root p { margin: 0; }

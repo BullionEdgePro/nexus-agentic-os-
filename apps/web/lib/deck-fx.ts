@@ -13,6 +13,14 @@ export function initDeckFx(root: HTMLElement): () => void {
     const dot = root.querySelector<HTMLElement>(".cur-dot");
     const ring = root.querySelector<HTMLElement>(".cur-ring");
     if (dot && ring) {
+      // Tell the stylesheet the replacement cursor is really here. `cursor:
+      // none` is keyed off this class, so a page that borrows .deck-root for
+      // its theme tokens without mounting these effects keeps its normal mouse
+      // pointer instead of losing it — which is what happened to /deck/team:
+      // the native cursor was hidden and nothing was drawn in its place, so the
+      // page looked perfectly fine and the mouse simply vanished.
+      root.classList.add("fx-cursor");
+
       // Start off-screen so the ring doesn't flash at viewport-center before
       // the first real mousemove.
       let mx = -100,
@@ -47,6 +55,9 @@ export function initDeckFx(root: HTMLElement): () => void {
       };
       loop();
       cleanups.push(() => {
+        // Restore the native cursor before the replacement stops being drawn,
+        // or a React unmount leaves the pointer invisible.
+        root.classList.remove("fx-cursor");
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mousedown", down);
         document.removeEventListener("mouseup", up);
