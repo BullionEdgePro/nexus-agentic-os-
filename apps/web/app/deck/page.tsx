@@ -20,12 +20,21 @@ const STATS: Stat[] = [
 ];
 
 type TenantMeta = { slug: string; ref: string; nm: string; rl: string; st: "live" | "warn"; msg: string; ang: number };
+// `msg` is only the placeholder shown before the API answers — real counts
+// replace it. It reads "—" rather than a plausible number so a deck that failed
+// to load data cannot be mistaken for a quiet one; inventing 512 msgs while the
+// fetch is failing is the same defect class as a health check that only proves
+// nothing threw.
+//
+// `st` is "live" only for tenants actually answering customers today. Zipicka
+// holds the one WhatsApp number; the rest are indexed and keyworded but not yet
+// onboarded, and the law firm additionally runs the strict governance tier.
 const TENANT_META: TenantMeta[] = [
-  { slug: "zipicka", ref: "N-01", nm: "Zipicka", rl: "E-commerce", st: "live", msg: "512 msgs", ang: -90 },
-  { slug: "juris-prime", ref: "N-02", nm: "Juris Prime", rl: "UAE Licensing", st: "live", msg: "188 msgs", ang: -18 },
+  { slug: "zipicka", ref: "N-01", nm: "Zipicka", rl: "E-commerce", st: "live", msg: "—", ang: -90 },
+  { slug: "juris-prime", ref: "N-02", nm: "Juris Prime", rl: "Attestation & Notary", st: "warn", msg: "onboarding", ang: -18 },
   { slug: "juris-prime-legal", ref: "N-03", nm: "Juris Prime Legal", rl: "Law Firm", st: "warn", msg: "strict tier", ang: 54 },
-  { slug: "sfs-international", ref: "N-04", nm: "SFS International", rl: "Real Estate", st: "live", msg: "264 msgs", ang: 126 },
-  { slug: "atif-ali-production", ref: "N-05", nm: "Atif Ali Production", rl: "Digital Studio", st: "live", msg: "96 msgs", ang: 198 },
+  { slug: "sfs-international", ref: "N-04", nm: "SFS International", rl: "Real Estate", st: "warn", msg: "onboarding", ang: 126 },
+  { slug: "atif-ali-production", ref: "N-05", nm: "Atif Ali Production", rl: "Digital Studio", st: "warn", msg: "site offline", ang: 198 },
 ];
 
 const INTENTS = [
