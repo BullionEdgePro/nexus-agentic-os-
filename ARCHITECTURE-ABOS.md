@@ -248,6 +248,7 @@ normal state, never as an error**:
 | App as Postgres superuser | RLS would deploy and enforce nothing |
 | Substring keyword matching | "video **product**ion" routes to the retail store |
 | `rows[0]` of an unordered owner query | Correct today; the conversation owner drifts the day a number is shared |
+| UNIQUE on the shared phone number | Schema looked right; sharing was impossible until the migration ran against prod |
 
 Containers were green throughout. **Prefer checks that assert expected data
 EXISTS over checks that confirm nothing errored.** `preflightModels()` at worker
