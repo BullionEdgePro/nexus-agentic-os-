@@ -163,8 +163,18 @@ and adding structure rather than replacing it.
 | **2 — Knowledge** | Schema + chunker + Gemini embeddings + citation-bearing retrieval; URL connector with SSRF guard; cross-page boilerplate stripping; 6-hourly re-indexing; **80 live chunks of real Zipicka content**, retrieval verified against real customer questions |
 | **3 — Lead Intelligence** | Rules-based scoring with signal audit trail; direction-aware spam detection; complaints always urgent |
 | **12 — Security** | API authentication (was fully open, leaking customer PII); WebSocket auth; inbox login gate; app de-privileged from Postgres superuser |
+| **Switchboard** | One WhatsApp number serving all five businesses. Whole-word bilingual classifier that returns routed / ambiguous / unknown and **refuses to guess**; bounded triage menu; the routed tenant selects the agent, the knowledge scope and the governance policy. Ships inert — engages only when two or more tenants share a number |
 
-**72 tests, typecheck clean across 10 workspaces.**
+**106 tests, typecheck clean across 10 workspaces.**
+
+The switchboard is where the multi-tenant claim is actually tested. Routing is
+not a label on a conversation — it selects which policy approves the reply.
+`juris-prime-legal` escalates at medium hallucination risk and `zipicka` does
+not, so a misroute is not a cosmetic ranking error; it is a legal question
+answered under retail thresholds. That is why classification runs *before* the
+agent is loaded, why an ambiguous message asks instead of picking the stronger
+match, and why a bare "2" only counts as a menu selection once a menu has
+demonstrably been sent.
 
 ---
 
@@ -236,6 +246,8 @@ normal state, never as an error**:
 | `search_knowledge` in no tenant's tool list | Feature deployed, never invoked |
 | Source identified by title | Silent duplicate on re-crawl, both copies cited |
 | App as Postgres superuser | RLS would deploy and enforce nothing |
+| Substring keyword matching | "video **product**ion" routes to the retail store |
+| `rows[0]` of an unordered owner query | Correct today; the conversation owner drifts the day a number is shared |
 
 Containers were green throughout. **Prefer checks that assert expected data
 EXISTS over checks that confirm nothing errored.** `preflightModels()` at worker
