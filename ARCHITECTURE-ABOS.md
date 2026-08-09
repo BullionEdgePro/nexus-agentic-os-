@@ -165,7 +165,7 @@ and adding structure rather than replacing it.
 | **12 — Security** | API authentication (was fully open, leaking customer PII); WebSocket auth; inbox login gate; app de-privileged from Postgres superuser |
 | **Switchboard** | One WhatsApp number serving all five businesses. Whole-word bilingual classifier that returns routed / ambiguous / unknown and **refuses to guess**; bounded triage menu; the routed tenant selects the agent, the knowledge scope and the governance policy. Ships inert — engages only when two or more tenants share a number |
 
-**136 tests, typecheck clean across 10 workspaces.**
+**147 tests, typecheck clean across 10 workspaces. A live self-check () runs the real queries against the real schema — it found a data-loss bug that every unit test missed, because a mocked pool cannot see an ON CONFLICT clause.**
 
 The switchboard is where the multi-tenant claim is actually tested. Routing is
 not a label on a conversation — it selects which policy approves the reply.
@@ -251,6 +251,7 @@ normal state, never as an error**:
 | UNIQUE on the shared phone number | Schema looked right; sharing was impossible until the migration ran against prod |
 | `cursor: none` with no replacement drawn | Page renders perfectly; the mouse pointer is simply gone |
 | A correction applied everywhere a human reads | The agent, reading its own prompt, kept the wrong belief and answered fluently |
+| Upsert assigning every column from excluded | Save reports success; the fields the form omitted are gone |
 
 Containers were green throughout. **Prefer checks that assert expected data
 EXISTS over checks that confirm nothing errored.** `preflightModels()` at worker
