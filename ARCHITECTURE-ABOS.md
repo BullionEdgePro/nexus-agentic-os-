@@ -165,7 +165,7 @@ and adding structure rather than replacing it.
 | **12 — Security** | API authentication (was fully open, leaking customer PII); WebSocket auth; inbox login gate; app de-privileged from Postgres superuser |
 | **Switchboard** | One WhatsApp number serving all five businesses. Whole-word bilingual classifier that returns routed / ambiguous / unknown and **refuses to guess**; bounded triage menu; the routed tenant selects the agent, the knowledge scope and the governance policy. Ships inert — engages only when two or more tenants share a number |
 
-**147 tests, typecheck clean across 10 workspaces. A live self-check () runs the real queries against the real schema — it found a data-loss bug that every unit test missed, because a mocked pool cannot see an ON CONFLICT clause.**
+**147 tests, typecheck clean across 10 workspaces. A live self-check (`apps/api/src/scripts/self-check.ts`) runs the real queries against the real schema — it found a data-loss bug that every unit test missed, because a mocked pool cannot see an ON CONFLICT clause.**
 
 The switchboard is where the multi-tenant claim is actually tested. Routing is
 not a label on a conversation — it selects which policy approves the reply.
