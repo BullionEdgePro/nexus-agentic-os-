@@ -148,6 +148,12 @@ export interface CreateEmployeeInput {
  * task someone does twice by accident, and a duplicate-key error at that moment
  * is indistinguishable from "the save didn't work".
  *
+ * Fields that are not supplied are LEFT ALONE. The first version overwrote them
+ * with null, so saving a corrected name quietly erased the person's email, job
+ * title and WhatsApp number — and with the email went the address they sign in
+ * with, while their access code stayed valid and unusable. Every unit test
+ * passed; a live self-check found it.
+ *
  * `digital_signature` is deliberately not settable here. It is a human-only
  * attestation the AI twin must never reproduce (see packages/employees/twin.ts),
  * so it does not belong in the same form as job title and skills.
@@ -158,20 +164,36 @@ export async function createEmployee(input: CreateEmployeeInput): Promise<Employ
        organization_id, employee_code, full_name, email, job_title, department,
        whatsapp_number, timezone, languages, skills, twin_enabled,
        ai_personality, response_style, human_first
-     ) values ($1,$2,$3,$4,$5,$6,$7,coalesce($8,'Asia/Dubai'),$9,$10,coalesce($11,true),$12,$13,coalesce($14,false))
+     ) values ($1,$2,$3,$4,$5,$6,$7,coalesce($8,'Asia/Dubai'),
+               coalesce($9::text[],'{}'),coalesce($10::text[],'{}'),
+               coalesce($11,true),$12,$13,coalesce($14,false))
+     -- An omitted field KEEPS its stored value. Writing email = excluded.email
+     -- here meant re-submitting a partial form erased everything it did not
+     -- mention: a live self-check saved someone with just a corrected name and
+     -- silently wiped their email, job title and WhatsApp number — taking with
+     -- it the address they sign in with, while leaving their access code valid
+     -- and unusable. Nothing errored.
+     --
+     -- The parameters are read directly rather than through excluded, because
+     -- excluded holds the INSERT row, where the coalesces above have already
+     -- turned "not provided" into a default and lost the distinction.
+     --
+     -- Consequence worth stating: this endpoint cannot clear a field. That is
+     -- the right trade for a form people re-submit — losing data by omission is
+     -- far worse than needing an explicit edit to blank something.
      on conflict (organization_id, employee_code) do update set
        full_name      = excluded.full_name,
-       email          = excluded.email,
-       job_title      = excluded.job_title,
-       department     = excluded.department,
-       whatsapp_number = excluded.whatsapp_number,
-       timezone       = excluded.timezone,
-       languages      = excluded.languages,
-       skills         = excluded.skills,
-       twin_enabled   = excluded.twin_enabled,
-       ai_personality = excluded.ai_personality,
-       response_style = excluded.response_style,
-       human_first    = excluded.human_first,
+       email          = coalesce($4, employees.email),
+       job_title      = coalesce($5, employees.job_title),
+       department     = coalesce($6, employees.department),
+       whatsapp_number = coalesce($7, employees.whatsapp_number),
+       timezone       = coalesce($8, employees.timezone),
+       languages      = coalesce($9, employees.languages),
+       skills         = coalesce($10, employees.skills),
+       twin_enabled   = coalesce($11, employees.twin_enabled),
+       ai_personality = coalesce($12, employees.ai_personality),
+       response_style = coalesce($13, employees.response_style),
+       human_first    = coalesce($14, employees.human_first),
        is_active      = true,
        updated_at     = now()
      returning ${EMPLOYEE_COLUMNS}`,
@@ -184,8 +206,10 @@ export async function createEmployee(input: CreateEmployeeInput): Promise<Employ
       input.department ?? null,
       input.whatsappNumber ?? null,
       input.timezone ?? null,
-      input.languages ?? [],
-      input.skills ?? [],
+      // null, not [] — an empty array is a real value meaning "clear the list",
+      // and passing it for an omitted field would wipe the stored one.
+      input.languages ?? null,
+      input.skills ?? null,
       input.twinEnabled ?? null,
       input.aiPersonality ?? null,
       input.responseStyle ?? null,
