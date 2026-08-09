@@ -10,6 +10,9 @@ import {
   getAssignedConversations,
   takeToOwnWhatsApp,
   issueAccessCode,
+  captureLead,
+  getEmployeeLeads,
+  type EmployeeLead,
   type TeamMember,
   type AssignedConversation,
 } from "@/lib/api";
@@ -29,6 +32,8 @@ export default function TeamPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [credential, setCredential] = useState<{ name: string; signInAs: string; code: string } | null>(null);
+  const [leads, setLeads] = useState<EmployeeLead[]>([]);
+  const [leadForm, setLeadForm] = useState({ whatsappNumber: "", contactName: "", note: "" });
 
   const loadTeam = useCallback(async (slug: BusinessSlug) => {
     setError("");
@@ -55,7 +60,42 @@ export default function TeamPage() {
     getAssignedConversations(business, selected.id)
       .then((r) => setAssigned(r.conversations))
       .catch((err) => setError(readable(err)));
+    getEmployeeLeads(business, selected.id)
+      .then((r) => setLeads(r.leads))
+      .catch((err) => setError(readable(err)));
   }, [selected, business]);
+
+  /**
+   * Log a lead this person won on their own phone.
+   *
+   * Scored by the same engine as an inbound message, so it sorts into the same
+   * pipeline — the note is what gets scored, which is why the field says so.
+   */
+  async function onCaptureLead(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { lead } = await captureLead(business, {
+        employeeId: selected.id,
+        whatsappNumber: leadForm.whatsappNumber.trim(),
+        contactName: leadForm.contactName.trim() || undefined,
+        note: leadForm.note.trim(),
+      });
+      setLeadForm({ whatsappNumber: "", contactName: "", note: "" });
+      setNotice(
+        `Lead logged — scored ${lead.score} (${lead.priority}${lead.isNewContact ? ", new contact" : ", already known"}).`
+      );
+      const { leads: refreshed } = await getEmployeeLeads(business, selected.id);
+      setLeads(refreshed);
+    } catch (err) {
+      setError(readable(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onAdd(event: React.FormEvent) {
     event.preventDefault();
@@ -328,6 +368,74 @@ export default function TeamPage() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {selected && (
+            <form className="lead-form" onSubmit={onCaptureLead}>
+              <h3>Log a lead from {selected.fullName}&rsquo;s WhatsApp</h3>
+              <p className="lead-why">
+                Conversations on a personal phone never reach this system on their own. Log one here
+                and it is scored and ranked alongside everything that arrives on the shared number.
+              </p>
+              <label>
+                Customer&rsquo;s WhatsApp number
+                <input
+                  value={leadForm.whatsappNumber}
+                  onChange={(e) => setLeadForm({ ...leadForm, whatsappNumber: e.target.value })}
+                  placeholder="+971 50 123 4567"
+                  inputMode="tel"
+                  required
+                />
+              </label>
+              <label>
+                Their name
+                <input
+                  value={leadForm.contactName}
+                  onChange={(e) => setLeadForm({ ...leadForm, contactName: e.target.value })}
+                  placeholder="Optional"
+                />
+              </label>
+              <label>
+                What do they want?
+                <textarea
+                  value={leadForm.note}
+                  onChange={(e) => setLeadForm({ ...leadForm, note: e.target.value })}
+                  placeholder="Asking the price for a bulk order, wants delivery to Sharjah"
+                  rows={3}
+                  required
+                />
+                <small>
+                  This is what gets scored. Their actual words work better than a summary — mention
+                  price, quantity, timing or urgency if they did.
+                </small>
+              </label>
+              <button
+                type="submit"
+                className="btn"
+                disabled={busy || !leadForm.whatsappNumber.trim() || !leadForm.note.trim()}
+              >
+                {busy ? "Saving…" : "Log lead"}
+              </button>
+            </form>
+          )}
+
+          {selected && leads.length > 0 && (
+            <div className="lead-list">
+              <h3>From {selected.fullName}&rsquo;s phone</h3>
+              <ul>
+                {leads.map((lead) => (
+                  <li key={lead.assessmentId}>
+                    <div className="lead-head">
+                      <span className="nm">{lead.contactName ?? lead.contactWaId}</span>
+                      <span className={`tag pri-${lead.priority}`}>
+                        {lead.score} · {lead.priority}
+                      </span>
+                    </div>
+                    <p className="lead-note">{lead.note}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {selected && !selected.whatsappReady && (

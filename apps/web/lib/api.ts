@@ -115,6 +115,42 @@ export function issueAccessCode(
   });
 }
 
+export interface EmployeeLead {
+  assessmentId: string;
+  contactWaId: string;
+  contactName: string | null;
+  note: string | null;
+  score: number;
+  priority: string;
+  category: string;
+  createdAt: string;
+  employeeName: string | null;
+}
+
+/**
+ * Log a lead won on an employee's own WhatsApp.
+ *
+ * Follow-up happens on personal phones, so without this the pipeline only ever
+ * showed what arrived on the shared number.
+ */
+export function captureLead(
+  orgSlug: BusinessSlug,
+  input: { employeeId: string; whatsappNumber: string; contactName?: string; note: string }
+): Promise<{ lead: EmployeeLead & { isNewContact: boolean } }> {
+  return request(`/api/organizations/${orgSlug}/leads`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getEmployeeLeads(
+  orgSlug: BusinessSlug,
+  employeeId?: string
+): Promise<{ leads: EmployeeLead[] }> {
+  const q = employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : "";
+  return request(`/api/organizations/${orgSlug}/leads${q}`);
+}
+
 export function getAssignedConversations(
   orgSlug: BusinessSlug,
   employeeId: string

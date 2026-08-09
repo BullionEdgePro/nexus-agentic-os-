@@ -127,3 +127,35 @@
   padding: 4px 9px; border-radius: 100px; border: 1px solid var(--line-strong); color: var(--graphite);
 }
 .tag.bad { color: var(--crit); border-color: rgba(162, 59, 46, .45); }
+
+/* Lead priority. Semantic colour, separate from the blueprint accent, so
+   "needs attention" is legible without reading the number. */
+.tag.pri-urgent { color: var(--crit); border-color: rgba(162, 59, 46, .5); background: rgba(162, 59, 46, .07); }
+.tag.pri-high   { color: var(--warn); border-color: rgba(169, 118, 47, .5); }
+.tag.pri-normal { color: var(--graphite); }
+.tag.pri-low    { color: var(--pencil); }
+
+/* ---------- capturing a lead from a personal phone ---------- */
+
+.lead-form {
+  display: flex; flex-direction: column; gap: 13px;
+  border-top: 1px solid var(--line); padding-top: 18px;
+}
+.lead-form label { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--pencil); }
+.lead-form input,
+.lead-form textarea {
+  font-family: var(--sans); font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--ink);
+  padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--vellum);
+  resize: vertical;
+}
+.lead-form input:focus-visible,
+.lead-form textarea:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 1px; border-color: transparent; }
+.lead-form small { font-family: var(--sans); font-size: 11.5px; letter-spacing: 0; text-transform: none; color: var(--graphite); }
+.lead-why { font-size: 12.5px; color: var(--graphite); max-width: 48ch; }
+
+.lead-list { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+.lead-list ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.lead-list li { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px 13px; display: flex; flex-direction: column; gap: 5px; }
+.lead-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.lead-head .nm { font-weight: 500; font-size: 14px; }
+.lead-note { font-size: 12.5px; color: var(--graphite); }

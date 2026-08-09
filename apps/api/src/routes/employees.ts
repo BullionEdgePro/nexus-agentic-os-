@@ -21,6 +21,7 @@ import {
   generateAccessCode,
   hashAccessCode,
 } from "@nexus/employees";
+import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
 
@@ -179,6 +180,88 @@ employeesRoute.post("/:slug/employees/:employeeId/access-code", async (c) => {
     signInAs: employee.email ?? employee.employeeCode,
     employee: { id: employee.id, fullName: employee.fullName },
   });
+});
+
+/**
+ * Log a lead an employee got on their own WhatsApp.
+ *
+ * The point of the whole employee layer: follow-up happens on personal phones,
+ * and until this existed none of it reached the pipeline. A deal won on an
+ * employee's own number produced nothing the platform could see.
+ *
+ * Scored by the same rules engine as an inbound message so leads are comparable
+ * however they arrived — the input is the employee's account of the enquiry
+ * rather than the customer's own words, which is noisier, and still far better
+ * than a lead nobody recorded.
+ */
+employeesRoute.post("/:slug/leads", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body must be JSON" }, 400);
+  }
+
+  const employeeId = typeof body.employeeId === "string" ? body.employeeId : "";
+  const note = typeof body.note === "string" ? body.note.trim() : "";
+  const rawNumber = typeof body.whatsappNumber === "string" ? body.whatsappNumber : "";
+
+  if (!note) {
+    return c.json({ error: "Add a note about what the customer wants — it is what gets scored." }, 400);
+  }
+
+  const contactWaId = normalizeWhatsAppNumber(rawNumber);
+  if (!contactWaId) {
+    return c.json(
+      { error: "That WhatsApp number is not a valid international number — include the country code." },
+      400
+    );
+  }
+
+  const employee = await findEmployeeById(employeeId);
+  if (!employee || !employee.isActive) {
+    return c.json({ error: "employeeId must name an active employee" }, 400);
+  }
+  // An employee logs leads for their own business only. Without this, someone
+  // could attribute a lead to another tenant's pipeline — and on a shared
+  // number that is every other business on the platform.
+  if (employee.organizationId !== organization.id) {
+    return c.json({ error: "That employee belongs to a different business" }, 400);
+  }
+
+  const lead = await captureEmployeeLead({
+    organizationId: organization.id,
+    employeeId: employee.id,
+    contactWaId,
+    contactName: typeof body.contactName === "string" ? body.contactName : null,
+    note,
+  });
+
+  logger.info(
+    {
+      organizationSlug: organization.slug,
+      employeeId: employee.id,
+      score: lead.score,
+      priority: lead.priority,
+      isNewContact: lead.isNewContact,
+    },
+    "Lead captured from an employee's own WhatsApp"
+  );
+
+  return c.json({ lead }, 201);
+});
+
+/** Leads brought in from personal phones — all of them, or one employee's. */
+employeesRoute.get("/:slug/leads", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const employeeId = c.req.query("employeeId") || null;
+  const leads = await listEmployeeLeads(organization.id, employeeId);
+  return c.json({ leads });
 });
 
 /** Everything this employee is responsible for, with a ready-to-tap link each. */
