@@ -18,6 +18,15 @@ COPY packages/shared/package.json ./packages/shared/package.json
 COPY packages/db/package.json ./packages/db/package.json
 COPY packages/agents/package.json ./packages/agents/package.json
 COPY packages/governance/package.json ./packages/governance/package.json
+# These three were missing. The build still worked, because `COPY . .` below
+# fills the directories before anything runs — but the dependency-cache layer
+# was being computed without them, so adding a dependency to any of these
+# workspaces would not have invalidated it and `npm ci` would have been skipped
+# on a stale layer. A build that silently ships without a new dependency is the
+# same defect shape as everything else in this codebase: nothing errors.
+COPY packages/knowledge/package.json ./packages/knowledge/package.json
+COPY packages/employees/package.json ./packages/employees/package.json
+COPY packages/leads/package.json ./packages/leads/package.json
 
 RUN npm ci --omit=dev
 
