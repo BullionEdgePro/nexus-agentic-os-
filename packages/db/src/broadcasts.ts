@@ -21,8 +21,16 @@ export async function createBroadcast(input: CreateBroadcastInput): Promise<Broa
     scheduled_at: string | null;
     created_at: string;
   }>(
+    // $4 is cast on both uses. Uncast it appeared twice — once as a column
+    // value, where Postgres can infer timestamptz from the column, and once
+    // inside `case when $4 is null`, where there is no type context at all.
+    // With both, it cannot resolve a single type and the statement fails to
+    // prepare: "could not determine data type of parameter $4". This never
+    // worked, which means a broadcast draft could never be created, which means
+    // Send would have failed at its first step regardless of Meta approval.
     `insert into broadcasts (organization_id, template_id, audience_filter, scheduled_at, status)
-     values ($1, $2, $3, $4, case when $4 is null then 'draft' else 'scheduled' end)
+     values ($1, $2, $3::jsonb, $4::timestamptz,
+             case when $4::timestamptz is null then 'draft' else 'scheduled' end)
      returning id, organization_id, template_id, status, audience_filter, scheduled_at, created_at`,
     [input.organizationId, input.templateId, JSON.stringify(input.audienceFilter ?? {}), input.scheduledAt ?? null]
   );

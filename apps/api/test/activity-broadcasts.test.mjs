@@ -430,8 +430,47 @@ test("audience counting uses the column that exists", () => {
   // names the wrong column on purpose, and a file-wide scan would flag the
   // explanation as the defect. Same false-positive class the SQL-comment
   // stripper exists for elsewhere in this suite.
-  const fn = BROADCAST_SQL.slice(BROADCAST_SQL.indexOf("export async function countReachableContacts"));
-  const sql = fn.slice(fn.indexOf("`select"), fn.indexOf("`,"));
+  const sql = sqlOf(BROADCAST_SQL, "countReachableContacts", "`select");
   assert.match(sql, /coalesce\(wa_id, ''\) <> ''/);
   assert.ok(!/whatsapp_number/.test(sql), "contacts has wa_id, not whatsapp_number");
 });
+
+test("a parameter used in two contexts is cast in both", () => {
+  // createBroadcast never worked. $4 appeared as a column value (inferable) and
+  // inside `case when $4 is null` (not inferable), so the statement could not
+  // prepare. Send would have failed at its first step for every user, and no
+  // test could see it — the SQL only fails when Postgres tries to plan it.
+  const sql = sqlOf(BROADCAST_SQL, "createBroadcast", "`insert into");
+  assert.match(sql, /\$4::timestamptz/);
+  assert.ok(
+    !/values \([^)]*\$4,/.test(sql),
+    "$4 must be cast where it is used as a value, not left to inference"
+  );
+  assert.ok(
+    !/case when \$4 is null/.test(sql),
+    "$4 must be cast inside the case expression too"
+  );
+});
+
+/**
+ * The SQL template literal inside one function.
+ *
+ * Searches for the closing backtick FROM the opening one. The first version
+ * searched from zero, so a backtick anywhere in a preceding comment — and the
+ * comment explaining the $4 cast contains `case when $4 is null`, — returned an
+ * end offset before the start and produced an empty string. Every assertion
+ * against it then failed for a reason that had nothing to do with the query.
+ *
+ * That is the third time today a comment has fooled a source-text check. They
+ * are the right tool for intent and a poor one for anything structural.
+ */
+function sqlOf(source, functionName, opener) {
+  const fn = source.slice(source.indexOf(`export async function ${functionName}`));
+  const start = fn.indexOf(opener);
+  if (start === -1) throw new Error(`no ${opener} found in ${functionName}`);
+  const end = fn.indexOf("`,", start);
+  if (end === -1) throw new Error(`unterminated template in ${functionName}`);
+  const sql = fn.slice(start, end);
+  if (sql.length < 20) throw new Error(`empty slice for ${functionName}`);
+  return sql;
+}
