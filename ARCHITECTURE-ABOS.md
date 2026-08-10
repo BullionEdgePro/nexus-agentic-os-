@@ -149,8 +149,11 @@ and adding structure rather than replacing it.
    single-digit milliseconds. The retrieval contract is written so pgvector is a
    later internal swap. **Revisit past ~10k chunks per tenant or p95 > 100ms.**
 
-3. **Rollup read models for the deck.** The deck still aggregates over live
-   tables. Fine now, collapses at scale. Not yet built.
+3. **Rollup read models for the deck.** The first one exists —
+   `agent_quality_daily`, migration 019 — and establishes the pattern: daily
+   grain per business, recomputed over a trailing window rather than
+   accumulated, bounded in the tenant's own timezone. The deck overview still
+   aggregates over live tables and should follow the same shape.
 
 ---
 
@@ -222,12 +225,12 @@ phone number and narrows immediately.
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
 | 7 | Workspace | ⛔ Months of work. Scope hard before starting |
 | 8 | Operators | ⛔ Blocked on §2.3 |
-| 9 | Command Center | 🟡 Deck on live queries, plus team activity. Rollups not built |
+| 9 | Command Center | 🟡 Deck on live queries, plus team activity and agent quality. One rollup table exists (daily quality); the overview still aggregates live |
 | 10 | Memory | 🟡 Semantic layer exists; episodic/procedural not formalised |
 | 11 | Predictive BI | ⛔ Blocked on data volume |
 | 12 | Security | 🟡 Auth, least-privilege and tenant context (steps 1–3) done. Step 4 written, deliberately unapplied |
 | 13 | Marketplace | ⛔ Needs a data-egress policy first |
-| 14 | Self-improving AI | ⛔ Cheap version (correction + escalation rate) not built |
+| 14 | Self-improving AI | 🟡 Cheap version built: escalation, containment and correction rate from human actions. The loop that acts on them is not built |
 | 15 | BI Copilot | ⛔ Needs rollups (F9) first |
 
 ---
