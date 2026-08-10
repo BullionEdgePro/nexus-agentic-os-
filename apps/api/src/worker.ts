@@ -6,6 +6,8 @@ import { BROADCAST_SEND_QUEUE } from "./queue/broadcast-queue.js";
 import { processBroadcastSendJob } from "./queue/broadcast-processor.js";
 import { KNOWLEDGE_REINDEX_QUEUE, scheduleKnowledgeReindex } from "./queue/reindex-queue.js";
 import { processKnowledgeReindexJob } from "./queue/reindex-processor.js";
+import { TEMPLATE_SYNC_QUEUE, scheduleTemplateSync } from "./queue/template-sync-queue.js";
+import { processTemplateSyncJob } from "./queue/template-sync-processor.js";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -30,6 +32,14 @@ const reindexWorker = new Worker(KNOWLEDGE_REINDEX_QUEUE, processKnowledgeReinde
   concurrency: 1,
 });
 
+const templateSyncWorker = new Worker(TEMPLATE_SYNC_QUEUE, processTemplateSyncJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+templateSyncWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Template sync job failed")
+);
+
 reindexWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Knowledge re-index job failed")
 );
@@ -51,6 +61,14 @@ logger.info("Nexus background workers started (inbound webhook + broadcast send 
 scheduleKnowledgeReindex()
   .then(() => logger.info("Knowledge re-index scheduled (every 6h)"))
   .catch((err) => logger.warn({ err }, "Could not schedule knowledge re-index"));
+
+// Meta never tells us when a template's review finishes, so the only way an
+// approval reaches the product is by asking. Without this, a template approved
+// minutes after submission still reads as "awaiting review" until somebody
+// happens to press the check button.
+scheduleTemplateSync()
+  .then(() => logger.info("Template sync scheduled (every 30m)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule template sync"));
 
 // Verify every configured model is actually callable. A model that 404s does
 // not crash anything — it just makes every customer receive the generic
@@ -74,7 +92,12 @@ preflightModels()
 
 async function shutdown() {
   logger.info("Shutting down workers...");
-  await Promise.all([inboundWorker.close(), broadcastWorker.close(), reindexWorker.close()]);
+  await Promise.all([
+    inboundWorker.close(),
+    broadcastWorker.close(),
+    reindexWorker.close(),
+    templateSyncWorker.close(),
+  ]);
   process.exit(0);
 }
 process.on("SIGINT", shutdown);
