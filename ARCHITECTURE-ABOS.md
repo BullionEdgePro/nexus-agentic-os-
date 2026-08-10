@@ -199,11 +199,18 @@ context flows through AsyncLocalStorage, so the fifty-odd existing queries
 became tenant-scoped without being rewritten, and a new one cannot forget to
 opt in. The assertion runs in `warn` mode.
 
-Step 4 (migration 018) is written and **not applied**. The gate is not
-engineering, it is evidence: a policy with no context returns zero rows and no
-error, so it ships only after `DB_TENANT_ASSERT=strict` has run against real
-traffic — customers messaging in, employees signing in — without firing. Boot
-is clean; that is necessary, not sufficient.
+Step 4 (migration 018) is written and **not applied**. The gate is evidence,
+not engineering — and that evidence is now a command rather than a wait.
+
+`apps/api/src/scripts/rls-preflight.ts` runs every read path twice under strict
+mode: wrapped as the application calls them (nothing may fire) and deliberately
+bare (every tenant-scoped path must refuse). The second half is the one worth
+having: a preflight that only proves "wrapped calls are silent" passes just as
+happily when the assertion is switched off.
+
+Soaking real traffic would have taken weeks here and still missed the paths the
+four quiet businesses never exercise. Run the preflight; if it passes, 018 is
+safe to apply.
 
 Two cross-tenant paths remain, both named in code rather than implied: the
 operator console, which is meant to span all five businesses, and the boot

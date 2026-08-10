@@ -181,3 +181,52 @@ test("the inbound write path is scoped and still atomic", () => {
   assert.ok(!/client\.query\("begin"\)/.test(MESSAGES), "the hand-rolled transaction should be gone");
   assert.ok(!/pool\.connect\(\)/.test(MESSAGES), "it must not check out its own connection any more");
 });
+
+// ============================================================
+// The evidence gate for step 4
+// ============================================================
+
+const PREFLIGHT = read("apps", "api", "src", "scripts", "rls-preflight.ts");
+
+test("the preflight runs strict, and sets it before anything reads it", () => {
+  // assertMode() is consulted per query, but the import graph pulls in modules
+  // that may capture config at load. Setting it above the imports removes the
+  // question entirely.
+  assert.match(PREFLIGHT, /process\.env\.DB_TENANT_ASSERT = "strict";/);
+  assert.ok(
+    PREFLIGHT.indexOf('DB_TENANT_ASSERT = "strict"') < PREFLIGHT.indexOf('from "@nexus/db"'),
+    "strict mode must be set before the db package is imported"
+  );
+});
+
+test("it checks both directions, not just the happy one", () => {
+  // A preflight that only proves "wrapped calls are silent" passes just as
+  // happily when the assertion is switched off. The unwrapped half is what
+  // makes the wrapped half mean anything.
+  assert.match(PREFLIGHT, /must be silent/);
+  assert.match(PREFLIGHT, /must refuse/);
+  assert.match(PREFLIGHT, /NO ASSERTION — this table is not guarded/);
+  assert.match(PREFLIGHT, /a test that cannot\s*\n?\s*\*\s*fail is not evidence/);
+});
+
+test("it distinguishes a fired assertion from an unrelated error", () => {
+  // Otherwise a typo in a query reads as "not covered by a context" and sends
+  // someone to fix the middleware instead of the query.
+  assert.match(PREFLIGHT, /const ASSERTION = \/no tenant context\/i/);
+  assert.match(PREFLIGHT, /ASSERTION FIRED — not covered by any context/);
+});
+
+test("cross-tenant and unscoped paths are declared, not inferred", () => {
+  // If the preflight guessed which paths were allowed to span tenants, it would
+  // be guessing about exactly the thing under test.
+  assert.match(PREFLIGHT, /crossTenant\?: boolean/);
+  assert.match(PREFLIGHT, /unscoped\?: boolean/);
+  assert.match(PREFLIGHT, /registry, pooled aggregates/);
+});
+
+test("it refuses to bless the migration on failure", () => {
+  assert.match(PREFLIGHT, /do NOT apply migration 018/);
+  assert.match(PREFLIGHT, /returns zero rows instead of an error/);
+  assert.match(PREFLIGHT, /process\.exit\(allOk \? 0 : 1\)/);
+  console.log("PASS: the RLS gate proves both that contexts cover the app and that the guard is live");
+});
