@@ -1,0 +1,234 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { BusinessSlug } from "@nexus/shared";
+import {
+  getBroadcasts,
+  createBroadcast,
+  sendBroadcast,
+  type BroadcastTemplate,
+  type BroadcastSummary,
+} from "@/lib/api";
+import { fontVariables } from "@/lib/fonts";
+import { TENANTS } from "@/lib/tenants";
+import "../deck.css";
+import "../activity/activity.css";
+import "./broadcasts.css";
+
+/**
+ * Bulk WhatsApp messaging.
+ *
+ * The send engine has existed server-side for a while; what was missing was
+ * any way to drive it. This is that, plus the part such a page usually omits:
+ * a plain statement of why a send would fail before you attempt it.
+ *
+ * WhatsApp does not allow a business to message a customer freely. Outside the
+ * 24-hour window that a customer's own message opens, only a template Meta has
+ * approved may be sent, and only from a verified business with billing set up.
+ * Those are Meta's gates, not this platform's, and none of them can be cleared
+ * from here — so the page names them and links out, rather than presenting a
+ * Send button that returns an error whose real cause is three screens away in
+ * another product.
+ */
+export default function BroadcastsPage() {
+  const [business, setBusiness] = useState<BusinessSlug>("zipicka");
+  const [templates, setTemplates] = useState<BroadcastTemplate[]>([]);
+  const [broadcasts, setBroadcasts] = useState<BroadcastSummary[]>([]);
+  const [reachable, setReachable] = useState(0);
+  const [canSend, setCanSend] = useState(false);
+  const [templateId, setTemplateId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (slug: BusinessSlug) => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getBroadcasts(slug);
+      setTemplates(data.templates);
+      setBroadcasts(data.broadcasts);
+      setReachable(data.reachable);
+      setCanSend(data.canSend);
+      setTemplateId(data.templates.find((t) => t.isApproved)?.id ?? "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load broadcasts.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load(business);
+  }, [business, load]);
+
+  async function handleSend() {
+    if (!templateId) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { broadcast } = await createBroadcast({ organizationSlug: business, templateId });
+      const { enqueued } = await sendBroadcast(broadcast.id);
+      setNotice(`Queued for ${enqueued} ${enqueued === 1 ? "contact" : "contacts"}.`);
+      await load(business);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The send did not go through.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const approved = templates.filter((t) => t.isApproved);
+
+  return (
+    <div className={`deck-root ${fontVariables}`}>
+      <div className="act-root">
+        <a className="act-back" href="/">
+          ← Command deck
+        </a>
+
+        <header className="act-head">
+          <h1>Broadcasts</h1>
+        </header>
+        <p className="act-lede">
+          Send one approved WhatsApp template to every contact of a business at once. Everything
+          goes out from the shared number, so a customer sees the same sender they already know.
+        </p>
+
+        <div className="act-tabs">
+          {TENANTS.map((tenant) => (
+            <button
+              key={tenant.slug}
+              aria-pressed={business === tenant.slug}
+              onClick={() => setBusiness(tenant.slug as BusinessSlug)}
+            >
+              {tenant.ref}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="act-empty">Loading…</div>
+        ) : (
+          <>
+            {!canSend ? (
+              <section className="bc-gate">
+                <h2>Sending is not open yet</h2>
+                <p>
+                  These are WhatsApp&apos;s requirements, and all three are settled in Meta&apos;s
+                  own tools — not here. Until they are met, a send would be rejected by WhatsApp
+                  rather than by this platform.
+                </p>
+                <ol>
+                  <li className={approved.length ? "done" : ""}>
+                    <b>An approved message template.</b>{" "}
+                    {approved.length
+                      ? `${approved.length} approved.`
+                      : `${templates.length} registered, none approved. Submit one in WhatsApp Manager → Message templates, then register it here once Meta approves it.`}
+                  </li>
+                  <li>
+                    <b>A verified business.</b> Business verification is currently incomplete —
+                    Meta is asking for more information. Until it passes, business-initiated
+                    messages stay blocked.
+                  </li>
+                  <li>
+                    <b>A payment method on the WhatsApp account.</b> Without one, the account can
+                    only reply to conversations customers start. Bulk sends are business-initiated,
+                    so they need billing enabled.
+                  </li>
+                </ol>
+                <a
+                  className="bc-out"
+                  href="https://business.facebook.com/wa/manage/message-templates/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open WhatsApp Manager ↗
+                </a>
+              </section>
+            ) : null}
+
+            <section className="bc-compose">
+              <h2 className="act-sub-head">Compose</h2>
+              <div className="bc-row">
+                <label>
+                  <span>Template</span>
+                  <select
+                    value={templateId}
+                    onChange={(event) => setTemplateId(event.target.value)}
+                    disabled={!canSend}
+                  >
+                    {approved.length === 0 ? <option value="">No approved template</option> : null}
+                    {approved.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.metaTemplateName} · {template.language}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="bc-audience">
+                  <span className="act-sub">Audience</span>
+                  <strong>
+                    {reachable} {reachable === 1 ? "contact" : "contacts"}
+                  </strong>
+                </div>
+                <button className="bc-send" onClick={handleSend} disabled={!canSend || !templateId || busy}>
+                  {busy ? "Sending…" : "Send to all"}
+                </button>
+              </div>
+              <p className="bc-warn">
+                This goes to every contact of {label(business)} at once and cannot be recalled once
+                queued.
+              </p>
+            </section>
+
+            {error ? <p className="act-msg">{error}</p> : null}
+            {notice ? <p className="bc-ok">{notice}</p> : null}
+
+            <h2 className="act-sub-head">Past sends</h2>
+            {broadcasts.length === 0 ? (
+              <div className="act-empty">Nothing sent yet.</div>
+            ) : (
+              <div className="act-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Template</th>
+                      <th>Status</th>
+                      <th>Recipients</th>
+                      <th>Delivered</th>
+                      <th>Failed</th>
+                      <th>Sent</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {broadcasts.map((broadcast) => (
+                      <tr key={broadcast.id}>
+                        <td>{broadcast.templateName}</td>
+                        <td>
+                          <span className={`act-flag${broadcast.status === "failed" ? " warn" : ""}`}>
+                            {broadcast.status}
+                          </span>
+                        </td>
+                        <td>{broadcast.recipients}</td>
+                        <td>{broadcast.sent}</td>
+                        <td className={broadcast.failed ? "" : "act-zero"}>{broadcast.failed}</td>
+                        <td>{new Date(broadcast.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function label(slug: BusinessSlug) {
+  return TENANTS.find((tenant) => tenant.slug === slug)?.name ?? slug;
+}

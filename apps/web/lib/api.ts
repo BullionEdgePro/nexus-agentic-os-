@@ -193,3 +193,80 @@ export function setHandoff(
     body: JSON.stringify({ isHumanHandoff }),
   });
 }
+
+export interface EmployeeActivity {
+  employeeId: string;
+  fullName: string;
+  jobTitle: string | null;
+  organizationSlug: string;
+  organizationName: string;
+  isActive: boolean;
+  hasSignIn: boolean;
+  lastLoginAt: string | null;
+  assignedConversations: number;
+  handoffs: number;
+  leadsLogged: number;
+  bestLeadScore: number | null;
+  lastLeadAt: string | null;
+  lastActiveAt: string | null;
+}
+
+export interface ActivityEvent {
+  at: string;
+  employeeName: string | null;
+  organizationSlug: string;
+  kind: "lead" | "handoff";
+  detail: string;
+  score: number | null;
+}
+
+/** Operator-only: what every employee across every business has been doing. */
+export function getActivity(
+  orgSlug?: BusinessSlug
+): Promise<{ employees: EmployeeActivity[]; events: ActivityEvent[] }> {
+  return request(`/api/activity${orgSlug ? `?business=${orgSlug}` : ""}`);
+}
+
+export interface BroadcastTemplate {
+  id: string;
+  metaTemplateName: string;
+  language: string;
+  category: string | null;
+  isApproved: boolean;
+  createdAt: string;
+}
+
+export interface BroadcastSummary {
+  id: string;
+  templateName: string;
+  status: "draft" | "scheduled" | "sending" | "completed" | "failed";
+  recipients: number;
+  sent: number;
+  failed: number;
+  scheduledAt: string | null;
+  createdAt: string;
+}
+
+export function getBroadcasts(orgSlug: BusinessSlug): Promise<{
+  templates: BroadcastTemplate[];
+  broadcasts: BroadcastSummary[];
+  reachable: number;
+  canSend: boolean;
+}> {
+  return request(`/api/broadcasts/${orgSlug}`);
+}
+
+export function createBroadcast(input: {
+  organizationSlug: BusinessSlug;
+  templateId: string;
+  scheduledAt?: string;
+}): Promise<{ broadcast: { id: string } }> {
+  return request("/api/broadcasts", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function sendBroadcast(id: string): Promise<{ broadcastId: string; enqueued: number }> {
+  // The API derives the organization and template from the broadcast row, so
+  // the body carries only an optional audience filter. Sent as `{}` rather than
+  // omitted because the route parses JSON from it.
+  return request(`/api/broadcasts/${id}/send`, { method: "POST", body: "{}" });
+}

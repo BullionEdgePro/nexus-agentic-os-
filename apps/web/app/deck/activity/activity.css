@@ -1,0 +1,164 @@
+/* ============================================================
+   Employee activity — the operator's view of who is doing what.
+   Inherits the routing-plate tokens from deck.css; everything
+   here is scoped under .act-root.
+
+   Laid out as a ledger rather than a dashboard: rows of people
+   with their numbers in fixed columns, because the question this
+   answers is comparative ("who is carrying the load") and a grid
+   of cards makes comparison harder than a table does.
+   ============================================================ */
+
+.act-root { max-width: 1120px; margin: 0 auto; padding: 28px 22px 64px; }
+
+.act-back {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  text-decoration: none;
+}
+.act-back:hover { color: var(--blueprint); }
+
+.act-head { margin: 18px 0 6px; }
+.act-head h1 {
+  font-family: var(--display);
+  font-size: clamp(26px, 4vw, 34px);
+  letter-spacing: -0.02em;
+}
+.act-lede { font-size: 14px; color: var(--graphite); max-width: 62ch; line-height: 1.55; }
+
+.act-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0 16px; }
+.act-tabs button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--graphite);
+  cursor: pointer;
+}
+.act-tabs button[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--vellum);
+}
+
+/* --- the roll of people --- */
+
+.act-table {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  overflow-x: auto;
+}
+.act-table table { width: 100%; border-collapse: collapse; min-width: 700px; }
+
+.act-table th {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  text-align: right;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.act-table th:first-child, .act-table td:first-child { text-align: left; }
+
+.act-table td {
+  padding: 13px 14px;
+  font-size: 13.5px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.act-table tbody tr:last-child td { border-bottom: 0; }
+.act-table tbody tr:hover { background: rgba(0, 0, 0, .02); }
+
+.act-who { display: flex; flex-direction: column; gap: 2px; }
+.act-name { font-weight: 600; }
+.act-sub { font-family: var(--mono); font-size: 10px; color: var(--pencil); letter-spacing: .04em; }
+
+/* Zero is not the same as a number, and should not read like one. */
+.act-zero { color: var(--pencil); }
+
+.act-flag {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: var(--graphite);
+}
+.act-flag.warn { border-color: rgba(162, 59, 46, .4); color: var(--crit); background: rgba(162, 59, 46, .06); }
+
+/* --- the timeline --- */
+
+.act-sub-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+  margin: 34px 0 12px;
+}
+
+.act-feed { display: flex; flex-direction: column; gap: 1px; }
+.act-event {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--vellum-card);
+  font-size: 13px;
+}
+.act-when { font-family: var(--mono); font-size: 10.5px; color: var(--pencil); font-variant-numeric: tabular-nums; }
+.act-detail { color: var(--graphite); }
+.act-detail b { color: var(--ink); font-weight: 600; }
+.act-score { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.act-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r);
+  padding: 26px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--graphite);
+}
+
+.act-msg {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--crit);
+  border: 1px solid rgba(162, 59, 46, .4);
+  background: rgba(162, 59, 46, .07);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+}
+
+.act-caveat {
+  margin-top: 30px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  font-size: 12.5px;
+  color: var(--pencil);
+  line-height: 1.6;
+  max-width: 70ch;
+}
+
+@media (max-width: 620px) {
+  .act-event { grid-template-columns: 1fr; gap: 4px; }
+}

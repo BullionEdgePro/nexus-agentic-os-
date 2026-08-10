@@ -311,31 +311,22 @@ export default function DeckConsole() {
             </svg>
             <span className="tip">Team</span>
           </a>
-          <a title="Domain Agents">
+          {/* Team activity, broadcasts. Domain Agents, Governance and Analytics
+              used to sit here with no href — they rendered, highlighted on
+              hover, and did nothing when clicked, which reads as a broken
+              product rather than an unfinished one. They come back when there
+              is a page behind them. */}
+          <a title="Team Activity" href="/deck/activity">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <circle cx="12" cy="7" r="3.2" />
-              <path d="M5 21c0-3.5 3-6 7-6s7 2.5 7 6" />
+              <path d="M3 12h3.5l2.5-6 3.5 13 2.5-7h6" />
             </svg>
-            <span className="tip">Domain Agents</span>
+            <span className="tip">Team Activity</span>
           </a>
-          <a title="Governance">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" />
-              <path d="m9 12 2 2 4-4" />
-            </svg>
-            <span className="tip">Governance</span>
-          </a>
-          <a title="Broadcasts">
+          <a title="Broadcasts" href="/deck/broadcasts">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M3 11l18-8-8 18-2-8-8-2Z" />
             </svg>
             <span className="tip">Broadcasts</span>
-          </a>
-          <a title="Analytics">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M4 20V10m6 10V4m6 16v-7m4 7H2" />
-            </svg>
-            <span className="tip">Analytics</span>
           </a>
           <span className="sep" />
           <a onClick={signOut} title="Sign out">

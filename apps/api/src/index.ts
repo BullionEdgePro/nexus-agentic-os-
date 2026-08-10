@@ -11,6 +11,7 @@ import { knowledgeRoute } from "./routes/knowledge.js";
 import { employeesRoute, conversationAssignmentRoute } from "./routes/employees.js";
 import { employeeAuthRoute } from "./routes/employee-auth.js";
 import { adminAuthRoute } from "./routes/admin-auth.js";
+import { activityRoute } from "./routes/activity.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
@@ -47,6 +48,11 @@ app.use("/api/conversations/:id/*", requireConversationScope);
 // refused outright rather than served a filtered shape the UI must be trusted
 // to interpret correctly.
 app.use("/api/metrics/*", operatorOnly);
+// Employee activity is management information: an employee must not be able to
+// read their colleagues' numbers, and on a shared platform that would mean
+// every other business's staff as well.
+app.use("/api/activity", operatorOnly);
+app.use("/api/activity/*", operatorOnly);
 app.use("/api/broadcasts", operatorOnly);
 app.use("/api/broadcasts/*", operatorOnly);
 
@@ -67,6 +73,7 @@ app.route("/api/conversations", conversationsRoute);
 app.route("/api/conversations", conversationAssignmentRoute);
 app.route("/api/broadcasts", broadcastsRoute);
 app.route("/api/metrics", metricsRoute);
+app.route("/api/activity", activityRoute);
 
 const server = serve({ fetch: app.fetch, port: env.apiPort }, (info) => {
   logger.info(`Nexus API listening on http://localhost:${info.port}`);

@@ -1,0 +1,109 @@
+/* ============================================================
+   Broadcasts. Shares the ledger tokens from activity.css; only
+   the compose bar and the readiness gate are new.
+   ============================================================ */
+
+/* The gate leads, because on this account it is the whole story
+   — a compose form above an unexplained failure is worse than an
+   explanation above a disabled form. */
+.bc-gate {
+  margin: 22px 0 8px;
+  border: 1px solid rgba(162, 59, 46, .35);
+  background: rgba(162, 59, 46, .05);
+  border-radius: var(--r);
+  padding: 20px 22px;
+}
+.bc-gate h2 {
+  font-family: var(--display);
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.bc-gate > p { font-size: 13.5px; color: var(--graphite); line-height: 1.6; max-width: 68ch; }
+
+.bc-gate ol {
+  margin: 14px 0 4px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.bc-gate li { font-size: 13.5px; color: var(--graphite); line-height: 1.55; }
+.bc-gate li b { color: var(--ink); }
+.bc-gate li.done { color: var(--pencil); }
+.bc-gate li.done b { color: var(--graphite); }
+
+.bc-out {
+  display: inline-block;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+.bc-compose { margin-top: 8px; }
+
+.bc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+  border: 1px solid var(--line);
+  background: var(--vellum-card);
+  border-radius: var(--r);
+  padding: 16px 18px;
+}
+
+.bc-row label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 260px; }
+.bc-row label span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+.bc-row select {
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink);
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--vellum);
+}
+.bc-row select:disabled { opacity: .5; }
+
+.bc-audience { display: flex; flex-direction: column; gap: 4px; padding-bottom: 4px; }
+.bc-audience strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+.bc-send {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 12px 20px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.bc-send:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.bc-send:disabled { opacity: .4; cursor: not-allowed; }
+
+.bc-warn { margin-top: 9px; font-size: 12px; color: var(--pencil); }
+
+.bc-ok {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--blueprint);
+  border: 1px solid rgba(47, 90, 138, .35);
+  background: rgba(47, 90, 138, .06);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+}
