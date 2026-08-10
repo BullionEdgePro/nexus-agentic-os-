@@ -191,7 +191,22 @@ Blocked on the §2.3 decision. F7 is a product, not a feature.
 ### ⛔ Phase 5 — Intelligence
 Blocked on data volume, not engineering.
 ### 🟡 Continuous — Security
-Auth and least-privilege done. RLS steps 3–4 outstanding.
+Auth and least-privilege done. Step 3 — tenant-context plumbing — is deployed:
+context flows through AsyncLocalStorage, so the fifty-odd existing queries
+became tenant-scoped without being rewritten, and a new one cannot forget to
+opt in. The assertion runs in `warn` mode.
+
+Step 4 (migration 018) is written and **not applied**. The gate is not
+engineering, it is evidence: a policy with no context returns zero rows and no
+error, so it ships only after `DB_TENANT_ASSERT=strict` has run against real
+traffic — customers messaging in, employees signing in — without firing. Boot
+is clean; that is necessary, not sufficient.
+
+Two cross-tenant paths remain, both named in code rather than implied: the
+operator console, which is meant to span all five businesses, and the boot
+preflight, which asks whether every configured model still exists. The inbound
+message pipeline is no longer among them — it resolves its tenant from the
+phone number and narrows immediately.
 
 ---
 
@@ -202,15 +217,15 @@ Auth and least-privilege done. RLS steps 3–4 outstanding.
 | 1 | Employee Agent Layer | ✅ Built. Open: calendar presence, twin handback generator, employee CRUD UI |
 | 2 | Knowledge Ingestion | ✅ Core + URL connector. Remaining connectors phased by real demand |
 | 3 | Lead Intelligence | ✅ Rules-based, EN + AR. Model second once labels exist |
-| 4 | Campaign Engine | ⛔ Not started. Highest-risk feature in the program |
+| 4 | Campaign Engine | 🟡 Built and deployed. Templates mirror Meta; five per-business templates submitted. Blocked on Meta billing, not code |
 | 5 | Neural Brain | ⛔ Not started. Needs PII redaction gate first |
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
 | 7 | Workspace | ⛔ Months of work. Scope hard before starting |
 | 8 | Operators | ⛔ Blocked on §2.3 |
-| 9 | Command Center | 🟡 Deck exists on live queries; rollups not built |
+| 9 | Command Center | 🟡 Deck on live queries, plus team activity. Rollups not built |
 | 10 | Memory | 🟡 Semantic layer exists; episodic/procedural not formalised |
 | 11 | Predictive BI | ⛔ Blocked on data volume |
-| 12 | Security | 🟡 Auth + least-privilege done; RLS outstanding |
+| 12 | Security | 🟡 Auth, least-privilege and tenant context (steps 1–3) done. Step 4 written, deliberately unapplied |
 | 13 | Marketplace | ⛔ Needs a data-egress policy first |
 | 14 | Self-improving AI | ⛔ Cheap version (correction + escalation rate) not built |
 | 15 | BI Copilot | ⛔ Needs rollups (F9) first |
