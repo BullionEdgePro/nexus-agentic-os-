@@ -47,7 +47,7 @@ begin
   foreach t in array array[
     'contacts', 'conversations', 'messages', 'employees', 'lead_assessments',
     'knowledge_sources', 'knowledge_chunks', 'message_templates', 'broadcasts',
-    'agent_configs', 'routing_keywords'
+    'agent_configs', 'ai_message_evaluations', 'conversation_metrics'
   ]
   loop
     if to_regclass('public.' || t) is null then

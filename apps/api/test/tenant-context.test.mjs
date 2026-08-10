@@ -122,8 +122,20 @@ test("an unknown slug stays a 404, not a 500", () => {
   assert.match(MIDDLEWARE, /if \(organization\) \{/);
 });
 
-test("the webhook declares why it cannot know its tenant yet", () => {
-  assert.match(PROCESSOR, /withAllTenants\(`inbound webhook: phone_number_id/);
+test("the webhook narrows to its tenant as soon as the lookup answers", () => {
+  // The first attempt wrapped the entire job cross-tenant, on the reasoning
+  // that a WhatsApp message identifies its tenant only by phone number id.
+  // True of the lookup, false of everything after it — and everything after it
+  // is the largest body of tenant-scoped code in the system, which is exactly
+  // where a forgotten WHERE clause would leak one business's customer into
+  // another's. The registry lookup needs no scope at all (organizations is not
+  // tenant data), and the pipeline below it runs scoped to the org it resolved.
+  assert.match(PROCESSOR, /const organization = await findOrganizationByPhoneNumberId\(phoneNumberId\)/);
+  assert.match(PROCESSOR, /return withTenant\(organization\.id, async \(\) => \{/);
+  assert.ok(
+    !/withAllTenants/.test(PROCESSOR),
+    "the message pipeline must not run platform-wide once its tenant is known"
+  );
 });
 
 // ============================================================

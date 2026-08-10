@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { getPool } from "@nexus/db";
+import { getPool, withAllTenants } from "@nexus/db";
 import { EMBEDDING_MODEL } from "@nexus/knowledge";
 
 export interface ModelPreflightResult {
@@ -30,12 +30,20 @@ export interface ModelPreflightResult {
  * refusing to boot and taking down the other tenants with it.
  */
 export async function preflightModels(): Promise<ModelPreflightResult[]> {
-  const { rows } = await getPool().query<{ model: string; tenants: string[] }>(
-    `select model, array_agg(o.slug order by o.slug) as tenants
-     from agent_configs a
-     join organizations o on o.id = a.organization_id
-     where a.is_active = true
-     group by model`
+  // Genuinely cross-tenant: the whole question is "does every configured model
+  // still exist", which has no per-tenant form. Declared rather than assumed —
+  // the point of the context mechanism is that a query spanning every business
+  // is something you write on purpose.
+  const { rows } = await withAllTenants(
+    "boot preflight: every tenant's configured model must be callable",
+    () =>
+      getPool().query<{ model: string; tenants: string[] }>(
+        `select model, array_agg(o.slug order by o.slug) as tenants
+         from agent_configs a
+         join organizations o on o.id = a.organization_id
+         where a.is_active = true
+         group by model`
+      )
   );
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 

@@ -35,8 +35,23 @@ const TENANT_SCOPED_TABLES = [
   "message_templates",
   "broadcasts",
   "agent_configs",
-  "routing_keywords",
+  "ai_message_evaluations",
+  "conversation_metrics",
 ];
+// Not on the list, and each for a reason worth stating:
+//
+//   organizations, admins      — the tenant registry and the people who
+//                                administer it. Scoping the registry to a
+//                                tenant is circular: the lookup that resolves
+//                                which tenant we are is the one that would need
+//                                the answer.
+//   broadcast_recipients       — has no organization_id. It is reached only
+//                                through a broadcast, which is scoped, so the
+//                                policy on the parent is what protects it.
+//   routing_keywords           — not a table at all. It is a column on
+//                                organizations, and listing it here made the
+//                                shared-number lookup look tenant-scoped when
+//                                it is the query that determines the tenant.
 
 /**
  * Strips comments and string literals before looking for table names.

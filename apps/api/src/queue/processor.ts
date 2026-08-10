@@ -21,7 +21,7 @@ import {
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
-  withAllTenants,
+  withTenant,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import {
@@ -90,14 +90,6 @@ async function recordMetricBestEffort(input: ConversationMetricInput): Promise<v
 export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Promise<void> {
   const { payload, phoneNumberId } = job.data;
 
-  // Cross-tenant by necessity, not convenience. A WhatsApp message arrives
-  // identified only by the phone number id it was sent to, and turning that
-  // into an organization is itself a database read — so there is no tenant to
-  // scope to until that read has happened. This is one of the two legitimate
-  // cross-tenant paths named in ARCHITECTURE-ABOS.md §2.2, and it is stated
-  // here rather than assumed so it stays greppable.
-  return withAllTenants(`inbound webhook: phone_number_id ${phoneNumberId}`, async () => {
-
   for (const entry of payload.entry) {
     for (const change of entry.changes) {
       const messages = change.value.messages ?? [];
@@ -110,7 +102,6 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
       }
     }
   }
-  });
 }
 
 async function processSingleTextMessage(
@@ -123,11 +114,21 @@ async function processSingleTextMessage(
 
   const contactName = change.value.contacts?.find((c) => c.wa_id === message.from)?.profile.name;
 
+  // Resolved outside any tenant context, and correctly so: `organizations` is
+  // the tenant registry, not tenant data. Scoping this lookup would be circular
+  // — it is the query that decides which tenant we are.
   const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
   if (!organization) {
     logger.warn({ phoneNumberId }, "No organization mapped to inbound phone_number_id");
     return;
   }
+
+  // From here the tenant is known, so everything below runs scoped to it rather
+  // than platform-wide. Wrapping the whole job cross-tenant would have been
+  // simpler and would have defeated the point: the message pipeline is the
+  // largest body of tenant-scoped code in the system, and it is exactly where a
+  // forgotten WHERE clause would leak one business's customer into another's.
+  return withTenant(organization.id, async () => {
 
   // Deliberately NOT inside the try/catch below: a failure here means an
   // infrastructure problem (DB down), not an AI/agent problem. Let it
@@ -347,6 +348,7 @@ async function processSingleTextMessage(
       await sendFallbackBestEffort(organization, phoneNumberId, message.from, conversationId, contactId);
     }
   }
+  });
 }
 
 /**
