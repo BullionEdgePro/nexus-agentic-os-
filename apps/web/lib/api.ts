@@ -340,3 +340,34 @@ export function askCopilot(orgSlug: BusinessSlug, question: string): Promise<Cop
     body: JSON.stringify({ question }),
   });
 }
+
+export interface KnowledgeSource {
+  id: string;
+  kind: string;
+  title: string;
+  uri: string | null;
+  status: string;
+  version: number;
+  chunks: number;
+  lastIndexedAt: string | null;
+  lastCheckedAt: string | null;
+  error: string | null;
+}
+
+export function getKnowledge(orgSlug: BusinessSlug): Promise<{ sources: KnowledgeSource[] }> {
+  return request(`/api/organizations/${orgSlug}/knowledge`);
+}
+
+export function addKnowledge(
+  orgSlug: BusinessSlug,
+  input: { url?: string; title?: string; content?: string }
+): Promise<{ sourceId: string; chunks: number; unchanged: boolean }> {
+  return request(`/api/organizations/${orgSlug}/knowledge`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function removeKnowledge(orgSlug: BusinessSlug, id: string): Promise<{ ok: true }> {
+  return request(`/api/organizations/${orgSlug}/knowledge/${id}`, { method: "DELETE" });
+}

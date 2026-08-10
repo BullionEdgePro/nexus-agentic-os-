@@ -1,0 +1,206 @@
+/* ============================================================
+   Knowledge. Shares the ledger tokens from activity.css.
+
+   Read as a working list rather than a report: the operator is
+   here to change something, so the add form sits above the list
+   instead of below it.
+   ============================================================ */
+
+.kn-ok, .kn-warn {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+.kn-ok {
+  color: var(--blueprint);
+  border: 1px solid rgba(47, 90, 138, .35);
+  background: rgba(47, 90, 138, .06);
+}
+.kn-warn {
+  color: var(--crit);
+  border: 1px solid rgba(162, 59, 46, .4);
+  background: rgba(162, 59, 46, .07);
+}
+
+/* --- add --- */
+
+.kn-add { margin-top: 8px; }
+
+.kn-modes { display: flex; gap: 7px; margin-bottom: 12px; }
+.kn-modes button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--graphite);
+  cursor: pointer;
+}
+.kn-modes button[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--vellum);
+}
+
+.kn-add form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 18px;
+}
+
+.kn-add label { display: flex; flex-direction: column; gap: 6px; }
+.kn-add label span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.kn-add input,
+.kn-add textarea {
+  font-family: var(--sans);
+  font-size: 14.5px;
+  color: var(--ink);
+  padding: 11px 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--vellum);
+  resize: vertical;
+}
+.kn-add input:focus-visible,
+.kn-add textarea:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.kn-submit {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 12px 22px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.kn-submit:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.kn-submit:disabled { opacity: .45; cursor: default; }
+
+.kn-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: none;
+  color: var(--pencil);
+  margin-left: 8px;
+}
+
+/* --- the list --- */
+
+.kn-list { display: flex; flex-direction: column; gap: 8px; }
+
+.kn-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 14px 16px;
+}
+/* A source that failed to index is not used at all, so it reads as a
+   problem rather than as an entry. */
+.kn-item.bad { border-left-color: var(--crit); }
+
+.kn-main { min-width: 0; }
+.kn-main h3 { font-size: 15px; font-weight: 600; line-height: 1.35; }
+
+.kn-uri {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--blueprint);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.kn-uri.plain { color: var(--pencil); }
+.kn-uri:hover:not(.plain) { text-decoration: underline; }
+
+.kn-error { margin-top: 6px; font-size: 12px; color: var(--crit); line-height: 1.5; }
+
+.kn-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  white-space: nowrap;
+}
+.kn-passages,
+.kn-when { font-family: var(--mono); font-size: 10px; color: var(--pencil); }
+
+.kn-remove,
+.kn-cancel {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--graphite);
+  cursor: pointer;
+  align-self: center;
+}
+.kn-remove:hover { border-color: var(--crit); color: var(--crit); }
+
+.kn-confirm {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--graphite);
+  line-height: 1.5;
+}
+
+.kn-danger {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--crit);
+  background: var(--crit);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.kn-danger:disabled { opacity: .5; cursor: default; }
+
+@media (max-width: 620px) {
+  .kn-item { grid-template-columns: 1fr; }
+  .kn-meta { align-items: flex-start; }
+}
