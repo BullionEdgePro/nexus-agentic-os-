@@ -283,3 +283,40 @@ export function sendBroadcast(id: string): Promise<{ broadcastId: string; enqueu
   // omitted because the route parses JSON from it.
   return request(`/api/broadcasts/${id}/send`, { method: "POST", body: "{}" });
 }
+
+export interface QualityDay {
+  day: string;
+  conversations: number;
+  inboundMessages: number;
+  aiMessages: number;
+  humanMessages: number;
+  aiAnswered: number;
+  escalated: number;
+  aiOnly: number;
+  corrections: number;
+  inputTokens: number;
+  outputTokens: number;
+  isComplete: boolean;
+}
+
+export interface QualitySummary {
+  days: number;
+  conversations: number;
+  aiAnswered: number;
+  escalated: number;
+  corrections: number;
+  outputTokens: number;
+  escalationRate: number | null;
+  containmentRate: number | null;
+}
+
+export function getQuality(
+  orgSlug: BusinessSlug,
+  days = 30
+): Promise<{ trend: QualityDay[]; summary: QualitySummary }> {
+  return request(`/api/quality/${orgSlug}?days=${days}`);
+}
+
+export function refreshQuality(): Promise<{ dayRows: number }> {
+  return request("/api/quality/refresh", { method: "POST" });
+}

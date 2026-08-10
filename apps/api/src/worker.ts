@@ -8,6 +8,8 @@ import { KNOWLEDGE_REINDEX_QUEUE, scheduleKnowledgeReindex } from "./queue/reind
 import { processKnowledgeReindexJob } from "./queue/reindex-processor.js";
 import { TEMPLATE_SYNC_QUEUE, scheduleTemplateSync } from "./queue/template-sync-queue.js";
 import { processTemplateSyncJob } from "./queue/template-sync-processor.js";
+import { QUALITY_ROLLUP_QUEUE, scheduleQualityRollup } from "./queue/quality-queue.js";
+import { processQualityRollupJob } from "./queue/quality-processor.js";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -40,6 +42,14 @@ templateSyncWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Template sync job failed")
 );
 
+const qualityWorker = new Worker(QUALITY_ROLLUP_QUEUE, processQualityRollupJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+qualityWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Quality rollup job failed")
+);
+
 reindexWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Knowledge re-index job failed")
 );
@@ -70,6 +80,13 @@ scheduleTemplateSync()
   .then(() => logger.info("Template sync scheduled (every 30m)"))
   .catch((err) => logger.warn({ err }, "Could not schedule template sync"));
 
+// Hourly rather than nightly: the day an owner most wants to look at is the one
+// happening now, and each run recomputes rather than accumulates, so running it
+// often costs correctness nothing.
+scheduleQualityRollup()
+  .then(() => logger.info("Quality rollup scheduled (hourly)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule quality rollup"));
+
 // Verify every configured model is actually callable. A model that 404s does
 // not crash anything — it just makes every customer receive the generic
 // fallback reply while the system looks healthy — so it has to be shouted
@@ -97,6 +114,7 @@ async function shutdown() {
     broadcastWorker.close(),
     reindexWorker.close(),
     templateSyncWorker.close(),
+    qualityWorker.close(),
   ]);
   process.exit(0);
 }

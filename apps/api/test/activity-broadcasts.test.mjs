@@ -219,3 +219,86 @@ test("the mirror keeps Meta's own words, not a boolean", () => {
   assert.match(MIGRATION_017, /on message_templates \(organization_id, meta_template_id\)/);
   console.log("PASS: template approval mirrors Meta and cannot be asserted locally");
 });
+
+// ============================================================
+// Agent quality — measured by people, not by the agent
+// ============================================================
+
+const QUALITY_SQL = read("packages", "db", "src", "quality.ts");
+const QUALITY_MIGRATION = read("packages", "db", "migrations", "019-agent-quality-rollups.sql");
+const QUALITY_ROLLUP = read("apps", "api", "src", "services", "quality-rollup.ts");
+const QUALITY_PAGE = read("apps", "web", "app", "deck", "quality", "page.tsx");
+
+test("quality is derived from human actions, never from the agent's own judgement", () => {
+  // The trap named in the architecture doc: an agent scoring its own replies
+  // produces a number that rises with fluency and says nothing about whether
+  // anyone was helped. Every column here comes from sender_type — who actually
+  // spoke — not from an evaluation the model wrote about itself.
+  assert.match(QUALITY_SQL, /sender_type = 'human_agent'/);
+  assert.match(QUALITY_SQL, /sender_type = 'ai_agent'/);
+  assert.ok(
+    !/hallucination_risk|ai_message_evaluations/.test(QUALITY_SQL),
+    "quality must not be sourced from the agent's self-assessment"
+  );
+});
+
+test("rollups are recomputed, not accumulated", () => {
+  // A rollup that double-counts on re-run stays plausible while being wrong,
+  // which is this system's signature failure mode.
+  assert.match(QUALITY_SQL, /on conflict \(organization_id, day\) do update/);
+  assert.ok(!/\+\s*excluded\./.test(QUALITY_SQL), "values must be replaced, not added to");
+});
+
+test("days are bounded in the business's own timezone", () => {
+  // Rolling up in UTC would put a Dubai evening conversation on the next day,
+  // shifting every daily figure by four hours.
+  assert.match(QUALITY_SQL, /at time zone \(select zone from tz\)/);
+  assert.match(QUALITY_SQL, /coalesce\(timezone, 'UTC'\)/);
+});
+
+test("a correction requires the human message to directly follow the agent", () => {
+  // Without the adjacency test this would count any human message in a thread
+  // the agent ever touched, conflating "corrected the agent" with "answered a
+  // later, unrelated question".
+  assert.match(QUALITY_SQL, /lag\(sender_type\) over \(/);
+  assert.match(QUALITY_SQL, /sender_type = 'human_agent' and previous = 'ai_agent'/);
+});
+
+test("no traffic yields no rate, not a perfect one", () => {
+  // Four of five businesses currently have zero conversations. Rendering their
+  // escalation rate as 0% would read as flawless performance — the exact
+  // opposite of what an empty denominator means.
+  assert.match(QUALITY_SQL, /total\.aiAnswered > 0 \? total\.escalated \/ total\.aiAnswered : null/);
+  assert.match(QUALITY_PAGE, /if \(rate == null\) return "—"/);
+  assert.match(QUALITY_PAGE, /No conversations to measure/);
+  assert.match(QUALITY_PAGE, /different from perfect quality/);
+});
+
+test("an in-progress day is marked, not shown as a collapse in volume", () => {
+  assert.match(QUALITY_MIGRATION, /is_complete/);
+  assert.match(QUALITY_SQL, /\(select day_end from bounds\) <= now\(\)/);
+  assert.match(QUALITY_PAGE, /day\.isComplete \? "" : " partial"/);
+});
+
+test("the rollup window is trailing, so it self-heals", () => {
+  // A conversation can gain a human reply days after it started, changing
+  // whether that day counts as escalated. A day written once and never
+  // revisited freezes a wrong answer, and a day the worker missed entirely
+  // stays a hole in the chart forever.
+  assert.match(QUALITY_ROLLUP, /WINDOW_DAYS = 3/);
+  assert.match(QUALITY_ROLLUP, /for \(let back = 0; back < windowDays; back\+\+\)/);
+});
+
+test("one failure does not abandon the remaining businesses", () => {
+  assert.match(QUALITY_ROLLUP, /try \{[\s\S]{0,300}\} catch/);
+  assert.match(QUALITY_ROLLUP, /withTenant\(organization\.id/);
+});
+
+test("quality is operator-only, and the page says what it cannot see", () => {
+  assert.match(API_INDEX, /app\.use\("\/api\/quality", operatorOnly\)/);
+  // Personal-phone conversations are invisible, so a conversation resolved that
+  // way looks contained. Stating it prevents a wrong conclusion about an
+  // employee who is doing the work off-platform.
+  assert.match(QUALITY_PAGE, /own phone are invisible/);
+  console.log("PASS: quality comes from human actions, recomputes cleanly, and admits its blind spots");
+});

@@ -1,0 +1,127 @@
+/* ============================================================
+   Agent quality. Shares the ledger tokens from activity.css.
+
+   Scanned rather than read, so state is encoded in form as well
+   as number — a rate that needs attention should be visible
+   before the digits are parsed.
+   ============================================================ */
+
+.q-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin: 22px 0 8px;
+}
+
+.q-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  /* A severity stripe rather than a coloured number: the value stays legible
+     against both themes while the state reads at a glance. */
+  border-left-width: 3px;
+  border-left-color: var(--line-strong);
+}
+.q-card.q-good { border-left-color: var(--blueprint); }
+.q-card.q-warn { border-left-color: #b8860b; }
+.q-card.q-bad  { border-left-color: var(--crit); }
+
+.q-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+.q-value {
+  font-family: var(--display);
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.q-note { font-size: 12px; color: var(--graphite); line-height: 1.45; }
+
+/* --- daily bars --- */
+
+.q-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 180px;
+  padding: 14px 16px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  overflow-x: auto;
+}
+
+.q-col {
+  flex: 1 0 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.q-bar {
+  width: 100%;
+  min-height: 2px;
+  background: var(--blueprint);
+  border-radius: 2px 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  opacity: .85;
+}
+/* Escalations sit at the top of each bar: the whole bar is the day's
+   conversations, the shaded part is what a person had to join. */
+.q-bar-esc {
+  width: 100%;
+  background: var(--crit);
+  border-radius: 2px 2px 0 0;
+}
+
+.q-day {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--pencil);
+  font-variant-numeric: tabular-nums;
+}
+.q-day.partial { color: var(--crit); }
+
+.q-legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--graphite);
+}
+.q-key { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.q-key-ai { background: var(--blueprint); }
+.q-key-esc { background: var(--crit); margin-left: 10px; }
+.q-partial-note { margin-left: auto; color: var(--pencil); }
+
+.q-refresh {
+  margin-top: 16px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.q-refresh:hover:not(:disabled) { border-color: var(--blueprint); color: var(--blueprint); }
+.q-refresh:disabled { opacity: .45; cursor: default; }

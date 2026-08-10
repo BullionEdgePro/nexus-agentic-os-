@@ -12,6 +12,7 @@ import { employeesRoute, conversationAssignmentRoute } from "./routes/employees.
 import { employeeAuthRoute } from "./routes/employee-auth.js";
 import { adminAuthRoute } from "./routes/admin-auth.js";
 import { activityRoute } from "./routes/activity.js";
+import { qualityRoute } from "./routes/quality.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
@@ -54,6 +55,8 @@ app.use("/api/metrics/*", operatorOnly);
 // every other business's staff as well.
 app.use("/api/activity", operatorOnly);
 app.use("/api/activity/*", operatorOnly);
+app.use("/api/quality", operatorOnly);
+app.use("/api/quality/*", operatorOnly);
 app.use("/api/broadcasts", operatorOnly);
 app.use("/api/broadcasts/*", operatorOnly);
 
@@ -82,6 +85,7 @@ app.route("/api/conversations", conversationAssignmentRoute);
 app.route("/api/broadcasts", broadcastsRoute);
 app.route("/api/metrics", metricsRoute);
 app.route("/api/activity", activityRoute);
+app.route("/api/quality", qualityRoute);
 
 const server = serve({ fetch: app.fetch, port: env.apiPort }, (info) => {
   logger.info(`Nexus API listening on http://localhost:${info.port}`);

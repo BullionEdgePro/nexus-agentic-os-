@@ -322,6 +322,12 @@ export default function DeckConsole() {
             </svg>
             <span className="tip">Team Activity</span>
           </a>
+          <a title="Agent Quality" href="/deck/quality">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <path d="M4 20V10m6 10V4m6 16v-7m4 7H2" />
+            </svg>
+            <span className="tip">Agent Quality</span>
+          </a>
           <a title="Broadcasts" href="/deck/broadcasts">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M3 11l18-8-8 18-2-8-8-2Z" />
