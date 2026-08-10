@@ -231,7 +231,7 @@ phone number and narrows immediately.
 | 12 | Security | 🟡 Auth, least-privilege and tenant context (steps 1–3) done. Step 4 written, deliberately unapplied |
 | 13 | Marketplace | ⛔ Needs a data-egress policy first |
 | 14 | Self-improving AI | 🟡 Cheap version built: escalation, containment and correction rate from human actions. The loop that acts on them is not built |
-| 15 | BI Copilot | ⛔ Needs rollups (F9) first |
+| 15 | BI Copilot | 🟡 Built on the quality rollups. Six reviewed queries; the model routes, never writes SQL. Adding a capability means adding a query on purpose |
 
 ---
 
