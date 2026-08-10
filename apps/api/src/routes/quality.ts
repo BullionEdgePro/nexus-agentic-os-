@@ -1,5 +1,11 @@
 import { Hono } from "hono";
-import { findOrganizationBySlug, getQualityTrend, summarise } from "@nexus/db";
+import {
+  findOrganizationBySlug,
+  getQualityTrend,
+  summarise,
+  getSharedGuidance,
+  getBrainStatus,
+} from "@nexus/db";
 import { askCopilot, copilotCapabilities } from "@nexus/agents";
 import { rollUpRecentQuality } from "../services/quality-rollup.js";
 import { logger } from "../lib/logger.js";
@@ -12,6 +18,15 @@ import { logger } from "../lib/logger.js";
  * should read about their colleagues.
  */
 export const qualityRoute = new Hono();
+
+// Platform-wide patterns. Mounted before /:slug so the literal path is not
+// swallowed by the parameter — Hono matches in declaration order, and a
+// business called "shared" is not the failure mode here; the route simply
+// never being reached is.
+qualityRoute.get("/shared", async (c) => {
+  const [patterns, status] = await Promise.all([getSharedGuidance(), getBrainStatus()]);
+  return c.json({ patterns, status });
+});
 
 qualityRoute.get("/:slug", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));

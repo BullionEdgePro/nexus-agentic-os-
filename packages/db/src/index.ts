@@ -11,3 +11,4 @@ export * from "./admins.js";
 export * from "./activity.js";
 export * from "./tenant-context.js";
 export * from "./quality.js";
+export * from "./shared-brain.js";

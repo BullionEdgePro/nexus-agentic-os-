@@ -1,4 +1,4 @@
-import { listOrganizations, rollUpQualityDay, withTenant } from "@nexus/db";
+import { listOrganizations, rollUpQualityDay, rollUpSharedPatterns, withTenant } from "@nexus/db";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -33,6 +33,19 @@ export async function rollUpRecentQuality(windowDays = WINDOW_DAYS): Promise<num
         logger.error({ organization: organization.slug, day, err }, "Quality rollup failed");
       }
     }
+  }
+
+  // The pooled patterns are derived from the same conversation outcomes, so
+  // they are recomputed on the same cycle rather than on one of their own —
+  // two schedules over one source would let the two views disagree, and the
+  // disagreement would be invisible.
+  try {
+    const shared = await rollUpSharedPatterns();
+    logger.info(shared, "Shared patterns recomputed");
+  } catch (err) {
+    // Never fatal to the per-tenant rollups above, which are the ones an owner
+    // actually looks at.
+    logger.error({ err }, "Shared pattern rollup failed");
   }
 
   logger.info({ organizations: organizations.length, dayRows: written }, "Quality rollup complete");
