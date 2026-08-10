@@ -138,7 +138,10 @@ export default function Landing() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+        // Staff mode: this form only ever accepts an employee access code.
+        // Admins have their own entrance at /admin, and this path never calls
+        // the admin verifier — so a bug here cannot mint an admin session.
+        body: JSON.stringify({ email: email.trim(), password: password.trim(), mode: "staff" }),
       });
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string };
@@ -273,7 +276,7 @@ export default function Landing() {
         </div>
 
         <form className="auth-card" onSubmit={onSubmit} autoComplete="off">
-          <h3>Sign in to your deck</h3>
+          <h3>Staff sign-in</h3>
           <div className="sub">nexusagenticos.com</div>
 
           <div className="field">
@@ -288,7 +291,7 @@ export default function Landing() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@nexusagenticos.com"
+                placeholder="your email or staff code"
               />
             </div>
           </div>
@@ -341,7 +344,8 @@ export default function Landing() {
 
           <div className="divider">Secured session</div>
           <div className="hint">
-            Operator access only. Sessions are signed and expire on their own.
+            Sign in with the access code your manager issued you.{" "}
+            <a href="/admin">Administrator sign-in</a> is separate.
           </div>
         </form>
       </section>

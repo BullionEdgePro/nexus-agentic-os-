@@ -10,6 +10,7 @@ import { metricsRoute } from "./routes/metrics.js";
 import { knowledgeRoute } from "./routes/knowledge.js";
 import { employeesRoute, conversationAssignmentRoute } from "./routes/employees.js";
 import { employeeAuthRoute } from "./routes/employee-auth.js";
+import { adminAuthRoute } from "./routes/admin-auth.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
@@ -54,6 +55,7 @@ app.route("/webhooks/whatsapp", whatsappWebhook);
 // Outside /api/*, because requireAuth guards everything under there and a
 // login endpoint that needs a session cannot issue one.
 app.route("/auth", employeeAuthRoute);
+app.route("/auth", adminAuthRoute);
 app.route("/api/organizations", organizationsRoute);
 // Same mount point: knowledge is addressed per organization
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.

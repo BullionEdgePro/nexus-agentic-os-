@@ -57,6 +57,8 @@ export function operatorPassword(): string {
  */
 export interface SessionClaims {
   role: "operator" | "employee";
+  /** Set when the operator session came from a named admin account. */
+  adminId?: string;
   employeeId?: string;
   organizationId?: string;
   organizationSlug?: string;
@@ -104,7 +106,7 @@ export async function verifySession(
 
     // Tokens issued before scoping existed carry no role, and were only ever
     // given to the operator password.
-    return { sub: payload.sub, role: "operator" };
+    return { sub: payload.sub, role: "operator", adminId: payload.adminId };
   } catch {
     return null;
   }

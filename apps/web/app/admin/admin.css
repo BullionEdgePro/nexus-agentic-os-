@@ -1,0 +1,118 @@
+/* ============================================================
+   Administrator sign-in.
+   Inherits the routing-plate tokens from deck.css; scoped under
+   .admin-root so nothing here reaches the deck itself.
+
+   Deliberately austere — no plate, no stats, no pitch. This is the
+   back door for the people who run the platform, and dressing it
+   like the marketing page would only make it easier to mistake for
+   the staff entrance.
+   ============================================================ */
+
+.admin-root {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+}
+
+.admin-card {
+  width: 100%;
+  max-width: 26rem;
+  background: var(--vellum-card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: clamp(24px, 5vw, 34px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-root .eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+}
+
+.admin-card h1 {
+  font-family: var(--display);
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.admin-note { font-size: 13px; color: var(--graphite); }
+
+.admin-card form { display: flex; flex-direction: column; gap: 7px; margin-top: 6px; }
+
+.admin-card label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  margin-top: 8px;
+}
+
+.admin-card input {
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--ink);
+  padding: 11px 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--vellum);
+}
+.admin-card input:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.admin-root .btn {
+  margin-top: 18px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 13px 18px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.admin-root .btn:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.admin-root .btn:disabled { opacity: .45; cursor: default; }
+
+.admin-error {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--crit);
+  border: 1px solid rgba(162, 59, 46, .4);
+  background: rgba(162, 59, 46, .07);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+}
+
+.admin-foot {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--pencil);
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.admin-back {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  text-decoration: none;
+  align-self: flex-start;
+}
+.admin-back:hover { color: var(--blueprint); }
