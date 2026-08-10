@@ -41,8 +41,34 @@ whatsappWebhook.post("/", async (c) => {
   const phoneNumberId = payload.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
   if (!phoneNumberId) {
     // Nothing we can route (e.g. an unrelated field subscription) — ack and drop.
+    logger.info(
+      { wabaId: payload.entry?.[0]?.id, field: payload.entry?.[0]?.changes?.[0]?.field },
+      "Webhook delivery accepted with no phone_number_id — nothing to route"
+    );
     return c.text("OK", 200);
   }
+
+  // Log every accepted delivery, not just rejected ones.
+  //
+  // This route used to log ONLY on an invalid signature, so a successful
+  // delivery left no trace at all. That cost real time: inbound was reported as
+  // broken on the strength of "no webhook entries in the logs", when in fact
+  // every message had arrived and been handled correctly. Silence meant both
+  // "nothing came" and "everything worked", which is no signal.
+  //
+  // The WABA id is included because it is the only place Meta exposes it to us
+  // — `entry[].id` — and the platform had no other record of the real value.
+  const value = payload.entry?.[0]?.changes?.[0]?.value;
+  logger.info(
+    {
+      wabaId: payload.entry?.[0]?.id,
+      phoneNumberId,
+      messages: value?.messages?.length ?? 0,
+      statuses: value?.statuses?.length ?? 0,
+      from: value?.messages?.[0]?.from,
+    },
+    "Inbound webhook accepted"
+  );
 
   // BullMQ reserves ":" as its own Redis-key separator and rejects any
   // custom jobId containing one — join with "-" instead (entry/message ids

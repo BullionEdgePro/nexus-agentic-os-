@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { verifySession, SESSION_COOKIE } from "@/lib/auth";
 import Landing from "./landing";
 import DeckConsole from "./deck-console";
+import TeamWorkspace from "./deck/team/team-workspace";
+import type { BusinessSlug } from "@nexus/shared";
 
 /**
  * nexusagenticos.com — the only front door.
@@ -26,5 +28,25 @@ export default async function Home() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySession(token);
 
-  return session ? <DeckConsole /> : <Landing />;
+  if (!session) return <Landing />;
+
+  // An employee gets their own workspace, not the operator's console.
+  //
+  // The deck opens with the cross-tenant metrics overview, which is
+  // operator-only server side — an employee landing there would watch it 403
+  // and conclude the platform is broken. They came here to see their customers
+  // and log what they won on their own phone, so that is what they get.
+  if (session.role === "employee" && session.employeeId && session.organizationSlug) {
+    return (
+      <TeamWorkspace
+        lockedTo={{
+          slug: session.organizationSlug as BusinessSlug,
+          employeeId: session.employeeId,
+          fullName: session.sub,
+        }}
+      />
+    );
+  }
+
+  return <DeckConsole />;
 }
