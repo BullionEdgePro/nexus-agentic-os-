@@ -99,7 +99,11 @@ async function main() {
   // than a fixture — this is the pairing migration 008 exists to get right.
   const routes: Array<[string, string]> = [
     ["I need true copy attestation for my certificate", "juris-prime"],
-    ["I need a lawyer for a court case", "juris-prime-legal"],
+    // Deliberately NOT "I need a lawyer for a court case" any more. ABR joined
+    // as a second law firm (migration 014), so that phrasing is ambiguous now —
+    // and the ambiguity is the correct answer, asserted separately below.
+    ["company formation in a freezone and a power of attorney", "juris-prime-legal"],
+    ["criminal case, we need to appeal to cassation", "abr"],
     ["do you have a villa for rent", "sfs-international"],
     ["do you have this beauty product in stock", "zipicka"],
     ["أحتاج تصديق شهادة", "juris-prime"],
@@ -114,6 +118,18 @@ async function main() {
   }
   check("a bare greeting asks rather than guessing", classifyBusiness("hi", businesses).kind === "unknown");
 
+  // Two law firms share this number. A vague legal enquiry must ASK which one —
+  // guessing sends a criminal matter to a company-formation desk, and routing
+  // also selects which governance policy approves the reply.
+  const vagueLegal = classifyBusiness("I need a lawyer", businesses);
+  const firms =
+    vagueLegal.kind === "ambiguous" ? vagueLegal.candidates.map((b) => b.slug).sort() : [];
+  check(
+    "a vague legal enquiry asks which firm",
+    vagueLegal.kind === "ambiguous" && firms.join(",") === "abr,juris-prime-legal",
+    vagueLegal.kind === "ambiguous" ? firms.join(" + ") : vagueLegal.kind
+  );
+
   // ---------- knowledge ----------
   console.log("\nKnowledge retrieval");
   const queries: Array<[string, string]> = [
@@ -121,6 +137,7 @@ async function main() {
     ["juris-prime-legal", "can you help with company formation?"],
     ["sfs-international", "how do I contact the agency?"],
     ["zipicka", "how long do I have to return an item?"],
+    ["abr", "do you handle criminal defence and appeals?"],
   ];
   for (const [slug, question] of queries) {
     const organization = await findOrganizationBySlug(slug);
