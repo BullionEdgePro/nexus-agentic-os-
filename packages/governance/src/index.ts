@@ -36,3 +36,4 @@ export async function evaluateOutgoingMessage(
     notes: notes || undefined,
   };
 }
+export * from "./redact.js";

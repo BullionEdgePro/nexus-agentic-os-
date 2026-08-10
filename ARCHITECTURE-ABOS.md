@@ -221,7 +221,7 @@ phone number and narrows immediately.
 | 2 | Knowledge Ingestion | ✅ Core + URL connector. Remaining connectors phased by real demand |
 | 3 | Lead Intelligence | ✅ Rules-based, EN + AR. Model second once labels exist |
 | 4 | Campaign Engine | 🟡 Built and deployed. Templates mirror Meta; five per-business templates submitted. Blocked on Meta billing, not code |
-| 5 | Neural Brain | ⛔ Not started. Needs PII redaction gate first |
+| 5 | Neural Brain | 🟡 The gate it was blocked on is built: redaction fails closed, and what may cross a tenant boundary is an allow-list of structured fields — never prose. The shared store itself is not built |
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
 | 7 | Workspace | ⛔ Months of work. Scope hard before starting |
 | 8 | Operators | ⛔ Blocked on §2.3 |
