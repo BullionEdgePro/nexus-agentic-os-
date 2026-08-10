@@ -15,6 +15,7 @@ import {
   type EmployeeLead,
   type TeamMember,
   type AssignedConversation,
+  type HandoverBrief,
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
@@ -46,6 +47,7 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [brief, setBrief] = useState<{ who: string; brief: HandoverBrief } | null>(null);
   const [credential, setCredential] = useState<{ name: string; signInAs: string; code: string } | null>(null);
   const [leads, setLeads] = useState<EmployeeLead[]>([]);
   const [leadForm, setLeadForm] = useState({ whatsappNumber: "", contactName: "", note: "" });
@@ -199,6 +201,12 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
       setNotice(
         `AI paused on the platform number — ${conversation.contactName ?? conversation.contactWaId} is yours now.`
       );
+      // Kept on the page rather than shown in passing: WhatsApp has already
+      // taken focus by now, so a transient toast would be read by nobody. This
+      // is here when they come back to the tab.
+      if (contact.brief) {
+        setBrief({ who: conversation.contactName ?? conversation.contactWaId, brief: contact.brief });
+      }
       const { conversations } = await getAssignedConversations(business, selected.id);
       setAssigned(conversations);
     } catch (err) {
@@ -245,6 +253,32 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
 
       {error && <p className="team-msg bad">{error}</p>}
       {notice && !error && <p className="team-msg ok">{notice}</p>}
+
+      {brief && (
+        <section className="handover">
+          <div className="handover-head">
+            <span className="handover-label">Before you message {brief.who}</span>
+            <button className="handover-close" onClick={() => setBrief(null)} aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+          {brief.brief.summary ? (
+            <>
+              <p className="handover-body">{brief.brief.summary}</p>
+              <p className="handover-foot">
+                From the last {brief.brief.turnsConsidered}{" "}
+                {brief.brief.turnsConsidered === 1 ? "message" : "messages"} on the platform number.
+                Check it against the thread before promising anything.
+              </p>
+            </>
+          ) : (
+            <p className="handover-foot">
+              {brief.brief.unavailableReason} You still have the conversation — open the thread and
+              read it before replying.
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="team-grid">
         {isOperator && (

@@ -23,6 +23,7 @@ import {
 } from "@nexus/employees";
 import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
 import { publishInboxEvent } from "../lib/pubsub.js";
+import { buildHandoverBrief } from "@nexus/agents";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -408,10 +409,19 @@ conversationAssignmentRoute.post("/:conversationId/direct-contact", async (c) =>
     "Conversation taken to an employee's own WhatsApp — AI paused"
   );
 
+  // Built AFTER the handoff has committed, and never allowed to fail it. The
+  // employee opening WhatsApp is the operation that matters; the brief is a
+  // convenience on top. buildHandoverBrief swallows its own failures and
+  // returns a stated reason, so there is nothing to catch here — but the
+  // ordering is the point: a slow model must not delay the handoff's effects,
+  // only the response that describes them.
+  const brief = await buildHandoverBrief(conversationId);
+
   return c.json({
     ...directContact,
     employee: { id: employee.id, fullName: employee.fullName, jobTitle: employee.jobTitle },
     aiPaused: true,
+    brief,
   });
 });
 

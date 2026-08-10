@@ -217,7 +217,7 @@ phone number and narrows immediately.
 
 | # | Feature | Status |
 |---|---|---|
-| 1 | Employee Agent Layer | ✅ Built. Open: calendar presence, twin handback generator, employee CRUD UI |
+| 1 | Employee Agent Layer | ✅ Built, incl. roster UI and the handover brief. Open: calendar presence (needs a calendar integration) |
 | 2 | Knowledge Ingestion | ✅ Core + URL connector. Remaining connectors phased by real demand |
 | 3 | Lead Intelligence | ✅ Rules-based, EN + AR. Model second once labels exist |
 | 4 | Campaign Engine | 🟡 Built and deployed. Templates mirror Meta; five per-business templates submitted. Blocked on Meta billing, not code |

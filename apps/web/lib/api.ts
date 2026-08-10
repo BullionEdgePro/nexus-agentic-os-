@@ -174,10 +174,16 @@ export function assignConversation(
  * Returns the link AND pauses the AI on the platform number — the pause is the
  * reason this is a request rather than a URL the browser could assemble itself.
  */
+export interface HandoverBrief {
+  summary: string | null;
+  unavailableReason: string | null;
+  turnsConsidered: number;
+}
+
 export function takeToOwnWhatsApp(
   conversationId: string,
   employeeId: string
-): Promise<DirectContact & { aiPaused: boolean }> {
+): Promise<DirectContact & { aiPaused: boolean; brief?: HandoverBrief }> {
   return request(`/api/conversations/${conversationId}/direct-contact`, {
     method: "POST",
     body: JSON.stringify({ employeeId }),
