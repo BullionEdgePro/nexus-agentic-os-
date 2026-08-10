@@ -107,3 +107,27 @@
   border-radius: var(--r-sm);
   padding: 10px 12px;
 }
+
+/* Meta owns the approval answer, so checking for it is a first-class
+   action rather than something buried in a settings page. */
+.bc-syncbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 4px;
+}
+
+.bc-sync {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bc-sync:hover:not(:disabled) { border-color: var(--blueprint); color: var(--blueprint); }
+.bc-sync:disabled { opacity: .45; cursor: default; }

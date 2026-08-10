@@ -148,3 +148,74 @@ function readFileSafe(path) {
     return null;
   }
 }
+
+// ============================================================
+// Templates mirror Meta rather than being declared locally
+// ============================================================
+
+const CLIENT = read("apps", "api", "src", "lib", "whatsapp-client.ts");
+const SYNC = read("apps", "api", "src", "services", "template-sync.ts");
+const MIGRATION_017 = read("packages", "db", "migrations", "017-template-sync.sql");
+
+test("approval is derived from Meta's status in exactly one place", () => {
+  // is_approved used to be a boolean an operator typed in, recording what they
+  // believed rather than what Meta had decided. A stale `true` means a send
+  // that fails at the last hop, after every row and queue job already exists.
+  assert.match(BROADCAST_SQL, /is_approved.*\n?.*\$6 = 'APPROVED'|\$6 = 'APPROVED'/);
+  assert.ok(
+    !/is_approved\s*=\s*true/.test(BROADCAST_SQL.replace(/excluded\.is_approved/g, "")),
+    "nothing may set is_approved to a literal true"
+  );
+});
+
+test("only APPROVED counts as sendable", () => {
+  // Meta reports PENDING, REJECTED, PAUSED and DISABLED as well. Treating any
+  // of them as sendable produces a broadcast that fails per recipient.
+  assert.match(BROADCAST_SQL, /'APPROVED'/);
+  assert.ok(!/'PENDING'|'PAUSED'/.test(BROADCAST_SQL.split("upsertTemplateFromMeta")[1] ?? ""));
+});
+
+test("a failed sync cannot wipe the template list", () => {
+  // An empty response from a failed or permission-denied call would otherwise
+  // mark every template deleted and silently disable bulk messaging platform-wide.
+  assert.match(SYNC, /templates\.length > 0 \? await retireMissingTemplates/);
+});
+
+test("one business failing a sync does not stop the others", () => {
+  const loop = SYNC.slice(SYNC.indexOf("export async function syncAllTemplates"));
+  assert.match(loop, /try \{[\s\S]*?\} catch/);
+});
+
+test("template listing follows Meta's paging", () => {
+  // Reading only the first page silently drops templates past the hundredth,
+  // and the symptom is a template that exists at Meta but never appears here.
+  assert.match(CLIENT, /paging\?\.next/);
+});
+
+test("placeholders are counted distinctly, not by occurrence", () => {
+  // "{{1}} ... {{1}}" is one parameter. Counting it twice makes Meta reject
+  // every send of that template on a parameter-count mismatch.
+  assert.match(CLIENT, /new Set\(body\.text\.match/);
+});
+
+test("a send supplies exactly as many parameters as the template declares", () => {
+  assert.match(BROADCAST_ROUTE, /resolveTemplateParams\(template\.bodyParamCount, contact\.displayName\)/);
+  assert.match(BROADCAST_ROUTE, /if \(count <= 0\) return \[\]/);
+  // An empty string is rejected by Meta as a missing parameter, so unnamed
+  // contacts must still get a real value.
+  assert.match(BROADCAST_ROUTE, /displayName\?\.trim\(\) \|\| "there"/);
+});
+
+test("no components key is sent when the template takes no parameters", () => {
+  assert.match(CLIENT, /bodyParams\.length[\s\S]{0,200}components/);
+});
+
+test("the mirror keeps Meta's own words, not a boolean", () => {
+  assert.match(MIGRATION_017, /add column if not exists status\s+text/);
+  assert.match(MIGRATION_017, /add column if not exists body_param_count/);
+  assert.match(MIGRATION_017, /add column if not exists synced_at/);
+  // Identity is the Meta id, not the name: names are reused across languages
+  // and can be recreated after deletion.
+  assert.match(MIGRATION_017, /on message_templates \(organization_id, meta_template_id\)/);
+  console.log("PASS: template approval mirrors Meta and cannot be asserted locally");
+});

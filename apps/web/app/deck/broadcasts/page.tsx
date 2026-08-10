@@ -6,6 +6,7 @@ import {
   getBroadcasts,
   createBroadcast,
   sendBroadcast,
+  syncTemplates,
   type BroadcastTemplate,
   type BroadcastSummary,
 } from "@/lib/api";
@@ -80,7 +81,25 @@ export default function BroadcastsPage() {
     }
   }
 
+  async function handleSync() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await syncTemplates(business);
+      setNotice(
+        `Read ${result.synced} template${result.synced === 1 ? "" : "s"} from Meta — ${result.approved} approved.`
+      );
+      await load(business);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reach Meta.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const approved = templates.filter((t) => t.isApproved);
+  const pending = templates.filter((t) => !t.isApproved && t.status !== "DELETED");
 
   return (
     <div className={`deck-root ${fontVariables}`}>
@@ -109,6 +128,17 @@ export default function BroadcastsPage() {
           ))}
         </div>
 
+        <div className="bc-syncbar">
+          <button className="bc-sync" onClick={handleSync} disabled={busy}>
+            {busy ? "Checking…" : "Check Meta for updates"}
+          </button>
+          <span className="act-sub">
+            {templates[0]?.syncedAt
+              ? `Last checked ${new Date(templates[0].syncedAt).toLocaleString()}`
+              : "Never checked"}
+          </span>
+        </div>
+
         {loading ? (
           <div className="act-empty">Loading…</div>
         ) : (
@@ -125,8 +155,10 @@ export default function BroadcastsPage() {
                   <li className={approved.length ? "done" : ""}>
                     <b>An approved message template.</b>{" "}
                     {approved.length
-                      ? `${approved.length} approved.`
-                      : `${templates.length} registered, none approved. Submit one in WhatsApp Manager → Message templates, then register it here once Meta approves it.`}
+                      ? `${approved.length} approved and ready.`
+                      : pending.length
+                        ? `${pending.length} submitted, awaiting Meta's review. Approval usually lands within a few hours.`
+                        : "None submitted yet."}
                   </li>
                   <li>
                     <b>A verified business.</b> Business verification is currently incomplete —
@@ -186,6 +218,42 @@ export default function BroadcastsPage() {
 
             {error ? <p className="act-msg">{error}</p> : null}
             {notice ? <p className="bc-ok">{notice}</p> : null}
+
+            <h2 className="act-sub-head">Templates</h2>
+            {templates.length === 0 ? (
+              <div className="act-empty">
+                No templates yet. They are created at Meta and appear here once submitted.
+              </div>
+            ) : (
+              <div className="act-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Template</th>
+                      <th>Language</th>
+                      <th>Category</th>
+                      <th>Meta status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {templates.map((template) => (
+                      <tr key={template.id}>
+                        <td>{template.metaTemplateName}</td>
+                        <td>{template.language}</td>
+                        <td className={template.category ? "" : "act-zero"}>
+                          {template.category ?? "—"}
+                        </td>
+                        <td>
+                          <span className={`act-flag${template.isApproved ? "" : " warn"}`}>
+                            {template.status ?? "unknown"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <h2 className="act-sub-head">Past sends</h2>
             {broadcasts.length === 0 ? (

@@ -42,6 +42,7 @@ export interface BroadcastTemplateInfo {
   metaTemplateName: string;
   language: string;
   isApproved: boolean;
+  bodyParamCount: number;
 }
 
 export async function getBroadcastTemplate(templateId: string): Promise<BroadcastTemplateInfo | null> {
@@ -49,13 +50,20 @@ export async function getBroadcastTemplate(templateId: string): Promise<Broadcas
     meta_template_name: string;
     language: string;
     is_approved: boolean;
+    body_param_count: number;
   }>(
-    `select meta_template_name, language, is_approved from message_templates where id = $1`,
+    `select meta_template_name, language, is_approved, body_param_count
+       from message_templates where id = $1`,
     [templateId]
   );
   const row = rows[0];
   if (!row) return null;
-  return { metaTemplateName: row.meta_template_name, language: row.language, isApproved: row.is_approved };
+  return {
+    metaTemplateName: row.meta_template_name,
+    language: row.language,
+    isApproved: row.is_approved,
+    bodyParamCount: row.body_param_count,
+  };
 }
 
 /**
@@ -66,13 +74,13 @@ export async function getBroadcastTemplate(templateId: string): Promise<Broadcas
 export async function getContactsForAudience(
   organizationId: string,
   audienceFilter: AudienceFilter
-): Promise<Array<{ id: string; waId: string }>> {
-  const { rows } = await getPool().query<{ id: string; wa_id: string }>(
-    `select id, wa_id from contacts
+): Promise<Array<{ id: string; waId: string; displayName: string | null }>> {
+  const { rows } = await getPool().query<{ id: string; wa_id: string; display_name: string | null }>(
+    `select id, wa_id, display_name from contacts
      where organization_id = $1 and attributes @> $2::jsonb`,
     [organizationId, JSON.stringify(audienceFilter ?? {})]
   );
-  return rows.map((row) => ({ id: row.id, waId: row.wa_id }));
+  return rows.map((row) => ({ id: row.id, waId: row.wa_id, displayName: row.display_name }));
 }
 
 export async function createBroadcastRecipients(
@@ -125,6 +133,10 @@ export interface TemplateRow {
   language: string;
   category: string | null;
   isApproved: boolean;
+  /** Meta's verbatim status, so "why can I not send this" has an answer. */
+  status: string | null;
+  bodyParamCount: number;
+  syncedAt: string | null;
   createdAt: string;
 }
 
@@ -143,9 +155,13 @@ export async function listBroadcastTemplates(organizationId: string): Promise<Te
     language: string;
     category: string | null;
     is_approved: boolean;
+    status: string | null;
+    body_param_count: number;
+    synced_at: string | null;
     created_at: string;
   }>(
-    `select id, meta_template_name, language, category, is_approved, created_at
+    `select id, meta_template_name, language, category, is_approved,
+            status, body_param_count, synced_at, created_at
        from message_templates
       where organization_id = $1
       order by is_approved desc, meta_template_name asc`,
@@ -157,6 +173,9 @@ export async function listBroadcastTemplates(organizationId: string): Promise<Te
     language: row.language,
     category: row.category,
     isApproved: row.is_approved,
+    status: row.status,
+    bodyParamCount: row.body_param_count,
+    syncedAt: row.synced_at,
     createdAt: row.created_at,
   }));
 }
@@ -257,4 +276,72 @@ export async function getBroadcast(id: string): Promise<BroadcastRow | null> {
     scheduledAt: row.scheduled_at,
     createdAt: row.created_at,
   };
+}
+
+export interface TemplateMirrorInput {
+  organizationId: string;
+  metaTemplateId: string;
+  name: string;
+  language: string;
+  category: string | null;
+  status: string;
+  bodyParamCount: number;
+}
+
+/**
+ * Writes Meta's answer about one template into our mirror.
+ *
+ * `is_approved` is derived here and nowhere else, so there is exactly one place
+ * that decides what "approved" means. Meta reports several non-sending states —
+ * PENDING, REJECTED, PAUSED, DISABLED — and only APPROVED may be sent; treating
+ * anything else as sendable produces a broadcast that fails per recipient after
+ * every row has already been written.
+ */
+export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promise<void> {
+  await getPool().query(
+    `insert into message_templates
+       (organization_id, meta_template_id, meta_template_name, language, category,
+        status, is_approved, body_param_count, synced_at)
+     values ($1, $2, $3, $4, $5, $6, $6 = 'APPROVED', $7, now())
+     on conflict (organization_id, meta_template_id) where meta_template_id is not null
+     do update set meta_template_name = excluded.meta_template_name,
+                   language           = excluded.language,
+                   category           = excluded.category,
+                   status             = excluded.status,
+                   is_approved        = excluded.is_approved,
+                   body_param_count   = excluded.body_param_count,
+                   synced_at          = now()`,
+    [
+      input.organizationId,
+      input.metaTemplateId,
+      input.name,
+      input.language,
+      input.category,
+      input.status,
+      input.bodyParamCount,
+    ]
+  );
+}
+
+/**
+ * Marks templates Meta no longer returns as gone.
+ *
+ * A template deleted at Meta would otherwise sit in the picker forever, look
+ * approved, and fail at send. Rows are marked rather than deleted because
+ * broadcasts reference them and past sends must stay readable.
+ */
+export async function retireMissingTemplates(
+  organizationId: string,
+  keepMetaIds: string[]
+): Promise<number> {
+  const { rowCount } = await getPool().query(
+    `update message_templates
+        set status = 'DELETED', is_approved = false, synced_at = now()
+      where organization_id = $1
+        and meta_template_id is not null
+        and not (meta_template_id = any($2::text[]))
+        and status is distinct from 'DELETED'`,
+    [organizationId, keepMetaIds]
+  );
+  return rowCount ?? 0;
 }

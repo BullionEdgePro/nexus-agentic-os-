@@ -233,6 +233,9 @@ export interface BroadcastTemplate {
   language: string;
   category: string | null;
   isApproved: boolean;
+  status: string | null;
+  bodyParamCount: number;
+  syncedAt: string | null;
   createdAt: string;
 }
 
@@ -254,6 +257,16 @@ export function getBroadcasts(orgSlug: BusinessSlug): Promise<{
   canSend: boolean;
 }> {
   return request(`/api/broadcasts/${orgSlug}`);
+}
+
+/** Re-reads templates from Meta for one business. */
+export function syncTemplates(orgSlug: BusinessSlug): Promise<{
+  organizationSlug: string;
+  synced: number;
+  approved: number;
+  retired: number;
+}> {
+  return request(`/api/broadcasts/${orgSlug}/sync`, { method: "POST" });
 }
 
 export function createBroadcast(input: {

@@ -5,10 +5,11 @@ import { sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { logger } from "../lib/logger.js";
 
 export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promise<void> {
-  const { broadcastId, recipientId, contactWaId, phoneNumberId, templateName, templateLanguage } = job.data;
+  const { broadcastId, recipientId, contactWaId, phoneNumberId, templateName, templateLanguage, templateParams } =
+    job.data;
 
   try {
-    await sendWhatsAppTemplate(phoneNumberId, contactWaId, templateName, templateLanguage);
+    await sendWhatsAppTemplate(phoneNumberId, contactWaId, templateName, templateLanguage, templateParams ?? []);
     await updateBroadcastRecipientStatus(recipientId, "sent");
   } catch (err) {
     logger.error({ broadcastId, recipientId, err }, "Broadcast send failed for recipient");

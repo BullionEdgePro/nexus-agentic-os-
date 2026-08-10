@@ -14,6 +14,7 @@ import {
 } from "@nexus/db";
 import type { AudienceFilter } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
+import { syncTemplatesForOrganization } from "../services/template-sync.js";
 import { logger } from "../lib/logger.js";
 
 export const broadcastsRoute = new Hono();
@@ -41,6 +42,25 @@ broadcastsRoute.get("/:slug", async (c) => {
     // send is possible at all rather than letting the user find out at 422.
     canSend: templates.some((template) => template.isApproved) && reachable > 0,
   });
+});
+
+// Re-reads this business's templates from Meta. Exposed as an explicit action
+// because approval happens on Meta's schedule, not ours: an owner who has just
+// been approved should not have to wait for the next scheduled sync to find out.
+broadcastsRoute.post("/:slug/sync", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  if (!organization.whatsappBusinessAccountId) {
+    return c.json({ error: "This business has no WhatsApp account connected" }, 422);
+  }
+
+  try {
+    const result = await syncTemplatesForOrganization(organization);
+    return c.json(result);
+  } catch (err) {
+    logger.error({ slug: organization.slug, err }, "Manual template sync failed");
+    return c.json({ error: "Could not reach Meta. Try again shortly." }, 502);
+  }
 });
 
 // Creates a broadcast in draft/scheduled state. Actually sending happens via
@@ -122,6 +142,7 @@ broadcastsRoute.post("/:id/send", async (c) => {
         phoneNumberId: organization.whatsappPhoneNumberId,
         templateName: template.metaTemplateName,
         templateLanguage: template.language,
+        templateParams: resolveTemplateParams(template.bodyParamCount, contact.displayName),
       });
     })
   );
@@ -129,3 +150,22 @@ broadcastsRoute.post("/:id/send", async (c) => {
   logger.info({ broadcastId, recipientCount: recipients.length }, "Broadcast send enqueued");
   return c.json({ broadcastId, enqueued: recipients.length });
 });
+
+/**
+ * Fills a template's {{n}} placeholders for one recipient.
+ *
+ * Meta rejects a send whose parameter count differs from the approved body, so
+ * the count comes from the template rather than from how much we happen to know
+ * about the contact. The first placeholder is the person's name; any beyond it
+ * are filled with a neutral value rather than left empty, because an empty
+ * string is rejected as a missing parameter and would fail the whole send.
+ *
+ * Unnamed contacts get "there" — "Hello there" reads as written, where the
+ * obvious alternative of substituting the phone number greets a customer with
+ * their own number.
+ */
+function resolveTemplateParams(count: number, displayName: string | null): string[] {
+  if (count <= 0) return [];
+  const name = displayName?.trim() || "there";
+  return Array.from({ length: count }, (_, index) => (index === 0 ? name : "-"));
+}

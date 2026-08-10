@@ -256,4 +256,10 @@ export interface BroadcastSendJob {
   phoneNumberId: string;
   templateName: string;
   templateLanguage: string;
+  /**
+   * Body parameters already resolved per recipient. Resolved when the job is
+   * queued rather than when it runs, so a contact renamed mid-send cannot make
+   * two recipients of the same broadcast receive differently-shaped messages.
+   */
+  templateParams?: string[];
 }
