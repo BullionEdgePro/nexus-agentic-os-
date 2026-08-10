@@ -37,6 +37,7 @@ const TENANT_SCOPED_TABLES = [
   "agent_configs",
   "ai_message_evaluations",
   "conversation_metrics",
+  "contact_memory",
 ];
 // Not on the list, and each for a reason worth stating:
 //

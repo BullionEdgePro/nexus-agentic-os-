@@ -30,6 +30,8 @@ import {
   classifyBusiness,
   buildTriageMessage,
   resolveTriageReply,
+  recallContact,
+  rememberContact,
 } from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
@@ -244,6 +246,17 @@ async function processSingleTextMessage(
   let sentToCustomer = false;
   try {
     const history = await loadRecentHistory(conversationId);
+
+    // Recall is scoped to the SERVING business, not the number owner — the same
+    // person can talk to a shop and a law firm on this one number, and each
+    // must remember them separately. contactId already encodes that (contacts
+    // are unique per organization), so this is belt and braces on a mistake
+    // that would be invisible if made.
+    const recalled = await recallContact(serving.id, contactId).catch(() => null);
+    const withRecall = recalled
+      ? [{ role: "assistant" as const, content: recalled }, ...history]
+      : history;
+
     const result = await agent.respond(
       {
         // The routed tenant, not the number owner: this scopes knowledge
@@ -256,7 +269,7 @@ async function processSingleTextMessage(
         text: text.body,
         timestamp: message.timestamp,
       },
-      history
+      withRecall
     );
 
     if (!result.text) return;
@@ -288,6 +301,15 @@ async function processSingleTextMessage(
 
     await sendWhatsAppText(phoneNumberId, message.from, finalText);
     sentToCustomer = true;
+
+    // After the customer has their reply, never before. Summarising costs a
+    // model call and they are waiting on the other one; a memory written a
+    // second late is fine, a reply delayed to write it is not. Fire-and-forget
+    // and swallowed for the same reason — a failed summary must not turn a
+    // delivered reply into a retried job.
+    void rememberContact({ organizationId: serving.id, contactId, conversationId }).catch(
+      () => undefined
+    );
 
     const outboundDto = await insertOutboundMessage({
       organizationId: organization.id,

@@ -9,3 +9,4 @@ export * from "./tools/examples.js";
 export * from "./tools/knowledge.js";
 export * from "./bi-copilot.js";
 export * from "./handover.js";
+export * from "./contact-recall.js";

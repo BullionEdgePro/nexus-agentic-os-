@@ -49,6 +49,11 @@ mock.module("@nexus/db", {
 
 mock.module("@nexus/agents", {
   exports: {
+    // Memory is an enhancement on the reply path; these tests are about the
+    // reply itself. Returning "no memory" is the honest default — a mock that
+    // supplied one would test a code path the assertions do not check.
+    recallContact: async () => null,
+    rememberContact: async () => ({ written: false }),
     routeToEmployeeTwin: async () => ({
       config: { id: "agent-1" },
       respond: async () => ({ text: "Sure — that item is in stock, want me to hold one for you?", toolCalls: [], usage: { inputTokens: 1, outputTokens: 1 } }),

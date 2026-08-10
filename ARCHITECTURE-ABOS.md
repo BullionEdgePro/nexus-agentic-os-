@@ -226,7 +226,7 @@ phone number and narrows immediately.
 | 7 | Workspace | ⛔ Months of work. Scope hard before starting |
 | 8 | Operators | ⛔ Blocked on §2.3 |
 | 9 | Command Center | 🟡 Deck on live queries, plus team activity and agent quality. One rollup table exists (daily quality); the overview still aggregates live |
-| 10 | Memory | 🟡 Semantic layer exists; episodic/procedural not formalised |
+| 10 | Memory | 🟡 Semantic + episodic (per-business contact memory, expiring, forgettable). Procedural not formalised |
 | 11 | Predictive BI | ⛔ Blocked on data volume |
 | 12 | Security | 🟡 Auth, least-privilege and tenant context (steps 1–3) done. Step 4 written, deliberately unapplied |
 | 13 | Marketplace | ⛔ Needs a data-egress policy first |
