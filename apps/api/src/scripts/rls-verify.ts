@@ -119,8 +119,31 @@ async function main(): Promise<void> {
   if (organizations.length < 2) {
     console.log("\nIsolation: skipped — need two organizations to test one against the other.");
   } else {
-    const [a, b] = organizations;
-    console.log(`\nIsolation (${a.slug} must not see ${b.slug})`);
+    // The tenant being hidden must be the one that HAS rows. The first version
+    // took organizations[0] and [1], which on this platform are two businesses
+    // with no contacts at all — so "invisible" was true because there was
+    // nothing to hide. It passed, proved nothing, and read identically to a
+    // real pass. A test that cannot fail is not evidence.
+    const counts = await withAllTenants("rls-verify: find the tenant with data", async () => {
+      const { rows } = await getPool().query<{ organization_id: string; n: string }>(
+        `select organization_id, count(*)::text as n from contacts group by organization_id`
+      );
+      return new Map(rows.map((row) => [row.organization_id, Number(row.n)]));
+    });
+
+    const b = [...organizations].sort((x, y) => (counts.get(y.id) ?? 0) - (counts.get(x.id) ?? 0))[0];
+    const a = organizations.find((org) => org.id !== b.id)!;
+    const hidden = counts.get(b.id) ?? 0;
+
+    if (hidden === 0) {
+      console.log(
+        "\nIsolation: NOT TESTABLE — no business has any contacts, so nothing could" +
+          "\n  leak and a pass here would mean nothing. Re-run once a second business" +
+          "\n  has traffic."
+      );
+      failures++;
+    }
+    console.log(`\nIsolation (${a.slug} must not see ${b.slug}'s ${hidden} contacts)`);
 
     // The decisive check. Inside A's context, ask for rows that belong to B.
     // Without RLS this returns B's real count; with RLS it must return zero.
@@ -131,7 +154,15 @@ async function main(): Promise<void> {
       );
       return Number(rows[0].n);
     });
-    line(leaked === 0, `contacts of ${b.slug}`, leaked === 0 ? "invisible" : `LEAKED ${leaked} rows`);
+    line(
+      leaked === 0,
+      `contacts of ${b.slug}`,
+      leaked === 0
+        ? hidden > 0
+          ? `${hidden} rows invisible`
+          : "nothing to hide — see above"
+        : `LEAKED ${leaked} rows`
+    );
 
     const leakedConversations = await withTenant(a.id, async () => {
       const { rows } = await getPool().query<{ n: string }>(

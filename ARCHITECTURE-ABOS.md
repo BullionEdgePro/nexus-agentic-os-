@@ -193,7 +193,7 @@ Lead intelligence done. **Campaign engine (F4) not started** — see §2.5.
 Blocked on the §2.3 decision. F7 is a product, not a feature.
 ### ⛔ Phase 5 — Intelligence
 Blocked on data volume, not engineering.
-### 🟡 Continuous — Security
+### ✅ Continuous — Security
 Auth and least-privilege done. Step 3 — tenant-context plumbing — is deployed:
 context flows through AsyncLocalStorage, so the fifty-odd existing queries
 became tenant-scoped without being rewritten, and a new one cannot forget to
@@ -235,7 +235,7 @@ phone number and narrows immediately.
 | 9 | Command Center | 🟡 Deck on live queries, plus team activity and agent quality. One rollup table exists (daily quality); the overview still aggregates live |
 | 10 | Memory | 🟡 Semantic + episodic (per-business contact memory, expiring, forgettable). Procedural not formalised |
 | 11 | Predictive BI | ⛔ Blocked on data volume |
-| 12 | Security | 🟡 Auth, least-privilege and tenant context (steps 1–3) done. Step 4 written, deliberately unapplied |
+| 12 | Security | ✅ **Complete.** Auth, least-privilege, tenant context, and RLS applied and *verified enforcing* — `nexus_app` is not a superuser, holds no bypass, owns no tables, and one business cannot read another's rows while still reading its own |
 | 13 | Marketplace | ⛔ Needs a data-egress policy first |
 | 14 | Self-improving AI | 🟡 Escalation, containment and correction rate from human actions, plus escalation hotspots pointing at the knowledge screen. Automatic action is deliberately not taken — the judgement of whether a rate is wrong belongs to someone who knows the business |
 | 15 | BI Copilot | 🟡 Built on the quality rollups. Six reviewed queries; the model routes, never writes SQL. Adding a capability means adding a query on purpose |
@@ -299,6 +299,7 @@ running the real functions against the real database:
 | `self-check.ts` | Do the shipped features still work end to end? |
 | `rls-preflight.ts` | Does every path carry a tenant context, and is the guard actually live? |
 | `schema-check.ts` | Does the SQL that has never run work — including the bulk-send path, before a customer triggers it? |
+| `rls-verify.ts` | Do the policies *enforce*, or merely exist? Checks the app role is not a superuser, owner, or bypass-holder first, because any of those makes the rest theatre. |
 
 `schema-check.ts` found two defects on its first two runs, both of which would
 have surfaced only when a real user acted: `countReachableContacts` filtering on

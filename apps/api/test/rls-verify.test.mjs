@@ -55,3 +55,16 @@ test("it tells you how to roll back", () => {
   assert.match(VERIFY, /disable row level security/);
   console.log("PASS: rls-verify proves enforcement, not installation");
 });
+
+test("the isolation test hides the tenant that actually has rows", () => {
+  // The first version took organizations[0] and [1], which on this platform are
+  // two businesses with zero contacts. "Invisible" was true because there was
+  // nothing to hide: it passed, proved nothing, and was indistinguishable from
+  // a real pass. A test that cannot fail is not evidence — the same lesson the
+  // preflight's unwrapped half exists for.
+  assert.match(VERIFY, /count\(\*\)::text as n from contacts group by organization_id/);
+  assert.match(VERIFY, /sort\(\s*\n?\s*\(x, y\) => \(counts\.get\(y\.id\)/);
+  assert.match(VERIFY, /NOT TESTABLE/);
+  assert.match(VERIFY, /a pass here would mean nothing/);
+  console.log("PASS: isolation is tested against the tenant with data, or reported untestable");
+});
