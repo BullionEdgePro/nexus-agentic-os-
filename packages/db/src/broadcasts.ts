@@ -231,12 +231,26 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
   }));
 }
 
-/** How many contacts a send would actually reach, before committing to it. */
+/**
+ * How many contacts a send would actually reach, before committing to it.
+ *
+ * The column is `wa_id`. An earlier version of this query filtered on
+ * `whatsapp_number`, which does not exist on `contacts` — so every authenticated
+ * load of the Broadcasts page raised, and the page never rendered. Nothing
+ * caught it: the route returns 401 unauthenticated, so an external check saw a
+ * healthy endpoint, and no test exercised the query against the real schema.
+ * The RLS preflight found it by running the real function against the real
+ * database, which is the only thing that could have.
+ *
+ * `wa_id` is NOT NULL in the schema, so the meaningful exclusion is an empty
+ * string rather than a null — a contact created from a malformed payload can
+ * carry one, and messaging it would fail per recipient at send time.
+ */
 export async function countReachableContacts(organizationId: string): Promise<number> {
   const { rows } = await getPool().query<{ total: string }>(
     `select count(*)::text as total
        from contacts
-      where organization_id = $1 and whatsapp_number is not null`,
+      where organization_id = $1 and coalesce(wa_id, '') <> ''`,
     [organizationId]
   );
   return Number(rows[0]?.total ?? 0);

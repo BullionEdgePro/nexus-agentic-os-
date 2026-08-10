@@ -419,3 +419,19 @@ test("the loop closes: measurement points at the fix", () => {
   assert.match(QUALITY_PAGE_HOTSPOT, /href="\/deck\/knowledge"/);
   console.log("PASS: hotspots rank without accusing, and point at the knowledge screen");
 });
+
+test("audience counting uses the column that exists", () => {
+  // Shipped broken: the query filtered on `whatsapp_number`, which is not a
+  // column on `contacts`. Every signed-in load of the Broadcasts page raised,
+  // and nothing caught it — the route 401s unauthenticated, so an external
+  // health check saw a fine endpoint, and no test ran the query against the
+  // real schema. Pinned here so the name cannot drift back.
+  // Checked against the SQL, not the whole file: the comment above the fix
+  // names the wrong column on purpose, and a file-wide scan would flag the
+  // explanation as the defect. Same false-positive class the SQL-comment
+  // stripper exists for elsewhere in this suite.
+  const fn = BROADCAST_SQL.slice(BROADCAST_SQL.indexOf("export async function countReachableContacts"));
+  const sql = fn.slice(fn.indexOf("`select"), fn.indexOf("`,"));
+  assert.match(sql, /coalesce\(wa_id, ''\) <> ''/);
+  assert.ok(!/whatsapp_number/.test(sql), "contacts has wa_id, not whatsapp_number");
+});
