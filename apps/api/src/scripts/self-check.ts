@@ -38,10 +38,13 @@ import {
   resolvePresence,
 } from "@nexus/employees";
 import { classifyBusiness } from "@nexus/agents";
+import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
 import { searchKnowledge } from "@nexus/knowledge";
 
 // Reserved so a self-check can never collide with a real person.
 const PROBE_CODE = "zz-nexus-self-check";
+// Not a dialable number, so it cannot match a real contact even by accident.
+const PROBE_WA_ID = "999000000000001";
 
 let failures = 0;
 
@@ -55,7 +58,22 @@ function check(label: string, ok: boolean, detail = "") {
 }
 
 async function removeProbe(organizationId: string) {
-  await getPool().query(`delete from employees where organization_id = $1 and employee_code = $2`, [
+  const pool = getPool();
+  // Assessments first: `lead_assessments.contact_id` is ON DELETE CASCADE, but
+  // being explicit means the cleanup does not depend on a constraint staying
+  // that way. The probe contact is NOT cascaded by deleting the employee —
+  // `captured_by_employee_id` is ON DELETE SET NULL — so it has to go by hand
+  // or every run would leave a contact behind.
+  await pool.query(
+    `delete from lead_assessments
+      where contact_id in (select id from contacts where organization_id = $1 and wa_id = $2)`,
+    [organizationId, PROBE_WA_ID]
+  );
+  await pool.query(`delete from contacts where organization_id = $1 and wa_id = $2`, [
+    organizationId,
+    PROBE_WA_ID,
+  ]);
+  await pool.query(`delete from employees where organization_id = $1 and employee_code = $2`, [
     organizationId,
     PROBE_CODE,
   ]);
@@ -193,7 +211,57 @@ async function main() {
     check("direct-contact link builds", contact?.url.startsWith("https://wa.me/971500000002") === true);
     check("employee's own number normalises", contact?.sendingAs === "971500000000", contact?.sendingAs ?? "null");
 
+    // ---------- leads from an employee's own phone ----------
+    console.log("\nEmployee-sourced leads");
+
+    const captured = await captureEmployeeLead({
+      organizationId: zipicka.id,
+      employeeId: employee.id,
+      contactWaId: PROBE_WA_ID,
+      contactName: "Self Check Customer",
+      note: "asking the price for a bulk order, wants delivery",
+    });
+    check("capture a lead", Boolean(captured.contactId), `score ${captured.score} / ${captured.priority}`);
+    check("a first capture creates the contact", captured.isNewContact);
+    check("scores above zero on real buying words", captured.score > 0, String(captured.score));
+    check("carries its evidence", captured.signals.length > 0, `${captured.signals.length} signals`);
+
+    // Re-capturing the same person must not create a second contact, and must
+    // not hand the credit to whoever logged the most recent note.
+    const again = await captureEmployeeLead({
+      organizationId: zipicka.id,
+      employeeId: employee.id,
+      contactWaId: PROBE_WA_ID,
+      contactName: "",
+      note: "following up, still wants the bulk price",
+    });
+    check("re-capture reuses the same contact", again.contactId === captured.contactId);
+    check("re-capture is not a new contact", !again.isNewContact);
+
+    const leadRows = await listEmployeeLeads(zipicka.id, employee.id);
+    check("leads list query runs", Array.isArray(leadRows), `${leadRows.length} rows`);
+    check("both captures are listed", leadRows.length >= 2);
+    check(
+      "the note is stored, not just the score",
+      leadRows.some((row) => (row.note ?? "").includes("bulk")),
+      leadRows[0]?.note?.slice(0, 40) ?? "(none)"
+    );
+    check("attributed to the employee", leadRows[0]?.employeeName === "Self Check Renamed", leadRows[0]?.employeeName ?? "null");
+
+    // The standing cache on `contacts` must reflect the best score reached,
+    // which is what the inbox sorts on.
+    const { rows: standing } = await getPool().query<{ lead_score: number | null; lead_priority: string | null }>(
+      `select lead_score, lead_priority from contacts where organization_id = $1 and wa_id = $2`,
+      [zipicka.id, PROBE_WA_ID]
+    );
+    check(
+      "contact standing updated",
+      (standing[0]?.lead_score ?? 0) >= captured.score,
+      `score ${standing[0]?.lead_score} / ${standing[0]?.lead_priority}`
+    );
+
     // Deactivating must revoke the login in the same action.
+    console.log("\nEmployee layer (continued)");
     check("deactivate", await deactivateEmployee(employee.id));
     check("deactivated employee cannot sign in", (await findEmployeeForLogin(PROBE_CODE)) === null);
   } finally {
