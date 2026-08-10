@@ -277,12 +277,32 @@ normal state, never as an error**:
 | `cursor: none` with no replacement drawn | Page renders perfectly; the mouse pointer is simply gone |
 | A correction applied everywhere a human reads | The agent, reading its own prompt, kept the wrong belief and answered fluently |
 | Upsert assigning every column from excluded | Save reports success; the fields the form omitted are gone |
+| A column name that does not exist (`whatsapp_number`) | Route 401s unauthenticated, so every external check reported the page healthy. It raised only for signed-in users, which nobody was |
+| A source edit whose anchor indentation did not match | The state landed, the markup did not. Build green, tests green, feature renders nothing |
+| A test suite that reads source text | Cannot know whether a column exists, a query parses, or a schema agrees. Passes with total confidence while the query is broken |
 
 Containers were green throughout. **Prefer checks that assert expected data
 EXISTS over checks that confirm nothing errored.** `preflightModels()` at worker
 boot exists for exactly this reason: it calls every configured model and logs a
 loud error naming affected tenants, rather than waiting for a customer to
 receive a fallback.
+
+**The corollary, learned the hard way.** Most tests in this repo assert on
+source text. That is the right tool for intent — "the organization must not come
+from the request body" is a property of the code — and the wrong tool for
+anything the database decides. Source-text tests cannot see a missing column, a
+malformed query, or a policy returning nothing. Three scripts close that gap by
+running the real functions against the real database:
+
+| Script | Answers |
+|---|---|
+| `self-check.ts` | Do the shipped features still work end to end? |
+| `rls-preflight.ts` | Does every path carry a tenant context, and is the guard actually live? |
+| `schema-check.ts` | Does the SQL that has never run work — including the bulk-send path, before a customer triggers it? |
+
+Run all three after any change that touches a query. They found, between them,
+a broken audience count, an unguarded write path, and an upsert that erased
+fields — none of which any source-text test could have seen.
 
 ---
 
@@ -292,21 +312,39 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 
 ### 9.1 Blocked on you, not on engineering
 
-- **Onboard tenants 2–5.** Four tenants hold placeholder `phone_number_id`s and
-  physically cannot receive a message. Needs each business's real number, Meta
-  Business Manager access, and a verification code sent to that handset. *This
-  is the single highest-value item in the document* — every feature here is
-  built for five tenants and exercised by one.
+- **Give a second business live traffic.** The shared-number switchboard removed
+  the old blocker — all five tenants are now reachable on one number, agented,
+  keyworded and templated. What has not changed is that **four of them have zero
+  contacts**. *This remains the single highest-value item in the document.*
+  Every feature here is built for five tenants and exercised by one, and several
+  guards written since — the cross-tenant pattern threshold, per-business
+  memory, the switchboard's tie-breaking — cannot be evaluated at all until a
+  second business has customers.
+- **Meta billing and business verification.** Bulk sending is built, templates
+  are submitted, the engine is tested. It cannot send until WhatsApp has a
+  payment method and verification completes. Neither is an engineering task.
 - **Operators: event-triggered or paid inference?** (§2.3) Blocks Phase 4.
 - **Workspace scope.** Full Monday.com parity is years. Boards + tasks tied to
   conversations is weeks. Someone must choose.
 
 ### 9.2 Deliberately not attempted — would have been unsafe
 
-- **RLS policies (F12 steps 3–4).** A wrong policy returns zero rows with no
-  error: empty inbox, worker unable to route. Needs the fail-loud context
-  assertion and a cross-tenant bypass role first (§2.2).
-- **Campaign engine (F4).** Rushed, it costs the WhatsApp number (§2.5).
+- ~~**RLS policies (F12 steps 3–4).**~~ **Done.** Step 3 (tenant context, fail-loud
+  assertion, named cross-tenant paths) shipped; step 4 gated behind
+  `rls-preflight.ts` rather than a traffic soak, because on one active tenant a
+  soak would take weeks and still miss the paths the four quiet businesses never
+  exercise.
+- ~~**Campaign engine (F4).**~~ **Built Meta-policy-native**, as §2.5 required:
+  templates mirror Meta's own approval state and cannot be asserted locally, an
+  unapproved template is refused at send as well as at draft, and the audience is
+  frozen when the broadcast is queued. Still gated on Meta billing, not on code.
+- **Consuming shared patterns in the agent (F5).** The store exists and the
+  two-tenant threshold correctly serves nothing today. Wiring a consumer to a
+  permanently-empty source is how you get code nobody can tell is broken. Revisit
+  when a second business contributes.
+- **Deck overview on rollups (F9 remainder).** The rollup pattern exists
+  (`agent_quality_daily`). Converting the overview at fourteen conversations buys
+  nothing and adds a staleness failure mode. Revisit when volume justifies it.
 
 ### 9.3 Genuinely large
 
