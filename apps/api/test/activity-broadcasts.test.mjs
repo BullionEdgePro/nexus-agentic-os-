@@ -309,6 +309,7 @@ test("quality is operator-only, and the page says what it cannot see", () => {
 
 const COPILOT = read("packages", "agents", "src", "bi-copilot.ts");
 const QUALITY_PAGE_COPILOT = read("apps", "web", "app", "deck", "quality", "page.tsx");
+const QUALITY_PAGE_HOTSPOT = QUALITY_PAGE_COPILOT;
 const QUALITY_ROUTE = read("apps", "api", "src", "routes", "quality.ts");
 
 test("the model never writes SQL", () => {
@@ -369,4 +370,52 @@ test("the ask endpoint bounds its input and is operator-only", () => {
   assert.match(QUALITY_ROUTE, /question\.length > 500/);
   assert.match(API_INDEX, /app\.use\("\/api\/quality\/\*", operatorOnly\)/);
   console.log("PASS: the copilot routes to reviewed queries and refuses what it cannot answer");
+});
+
+// ============================================================
+// The half of F14 that acts on the measurement
+// ============================================================
+
+test("hotspots are ranked, never labelled a failure", () => {
+  // Some enquiries should reach a person every time — a live dispute at a law
+  // firm ought to, and an agent that stopped escalating them would be worse,
+  // not better. So this ranks and stops; the judgement belongs to someone who
+  // knows the business.
+  assert.match(QUALITY_SQL, /returns the ranking and nothing else/);
+  assert.match(QUALITY_PAGE_HOTSPOT, /A high share is not automatically a fault/);
+  assert.ok(
+    !/failing|broken|bad agent/i.test(
+      QUALITY_PAGE_HOTSPOT.slice(
+        QUALITY_PAGE_HOTSPOT.indexOf("What reaches a person most"),
+        QUALITY_PAGE_HOTSPOT.indexOf("q-ask")
+      )
+    ),
+    "the section must not assert the agent is at fault"
+  );
+});
+
+test("a thin sample cannot become a hotspot", () => {
+  // Three conversations with two escalations reads as 67% and means nothing;
+  // ranked above a well-sampled intent it sends someone to fix a non-problem.
+  assert.match(QUALITY_SQL, /minConversations = 5/);
+  assert.match(QUALITY_SQL, /having count\(\*\) >= \$3/);
+});
+
+test("the rate is per conversation, not per metric row", () => {
+  const hotspots = QUALITY_SQL.slice(QUALITY_SQL.indexOf("export async function getEscalationHotspots"));
+  assert.match(hotspots, /with per_conversation as \(/);
+  assert.match(hotspots, /group by conversation_id/);
+});
+
+test("hotspots are scoped to one business", () => {
+  const hotspots = QUALITY_SQL.slice(QUALITY_SQL.indexOf("export async function getEscalationHotspots"));
+  assert.match(hotspots, /where organization_id = \$1/);
+});
+
+test("the loop closes: measurement points at the fix", () => {
+  // Measuring without a next step is a dashboard. The likeliest cause of a
+  // surprising rate is that the agent has nothing to answer from, so the note
+  // links to the screen where that is changed.
+  assert.match(QUALITY_PAGE_HOTSPOT, /href="\/deck\/knowledge"/);
+  console.log("PASS: hotspots rank without accusing, and point at the knowledge screen");
 });

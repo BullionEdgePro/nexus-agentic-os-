@@ -5,6 +5,7 @@ import {
   summarise,
   getSharedGuidance,
   getBrainStatus,
+  getEscalationHotspots,
 } from "@nexus/db";
 import { askCopilot, copilotCapabilities } from "@nexus/agents";
 import { rollUpRecentQuality } from "../services/quality-rollup.js";
@@ -33,9 +34,12 @@ qualityRoute.get("/:slug", async (c) => {
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
   const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 180);
-  const trend = await getQualityTrend(organization.id, days);
+  const [trend, hotspots] = await Promise.all([
+    getQualityTrend(organization.id, days),
+    getEscalationHotspots(organization.id, days),
+  ]);
 
-  return c.json({ trend, summary: summarise(trend) });
+  return c.json({ trend, summary: summarise(trend), hotspots });
 });
 
 // Forces a recompute. Useful right after the feature ships, when no scheduled

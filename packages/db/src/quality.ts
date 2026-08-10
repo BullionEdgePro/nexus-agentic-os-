@@ -206,3 +206,71 @@ export function summarise(trend: QualityDay[]): QualitySummary {
     containmentRate: total.aiAnswered > 0 ? (total.aiAnswered - total.escalated) / total.aiAnswered : null,
   };
 }
+
+export interface EscalationHotspot {
+  intent: string;
+  conversations: number;
+  escalated: number;
+  escalationRate: number;
+}
+
+/**
+ * Which kinds of enquiry most often end up with a human, for one business.
+ *
+ * This is the half of F14 that acts on the measurement rather than reporting
+ * it. The intended use is to point at a knowledge gap: if attestation questions
+ * escalate four times out of five, the agent probably cannot answer them, and
+ * the fix is a page on the Knowledge screen rather than a prompt change.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT CLAIM. A high rate is not evidence the agent
+ * is failing. Some enquiries *should* reach a person — a live dispute at a law
+ * firm ought to escalate every time, and an agent that stopped doing so would
+ * be worse, not better. So this returns the ranking and nothing else; the
+ * judgement of whether a given rate is wrong belongs to someone who knows the
+ * business. Naming it "hotspots" rather than "failures" is the same decision.
+ *
+ * `minConversations` is not optional in spirit. An intent seen three times with
+ * two escalations reads as 67% and means nothing; ranking it above a
+ * well-sampled intent would send someone to fix a problem that does not exist.
+ */
+export async function getEscalationHotspots(
+  organizationId: string,
+  days = 30,
+  minConversations = 5
+): Promise<EscalationHotspot[]> {
+  const { rows } = await getPool().query<{
+    intent: string;
+    conversations: string;
+    escalated: string;
+  }>(
+    `with per_conversation as (
+       -- Collapsed to one row per conversation first: without this a chatty
+       -- conversation would contribute several times and the rate would track
+       -- verbosity rather than escalation.
+       select conversation_id,
+              min(intent)                             as intent,
+              bool_or(resolved_by = 'human_agent')    as escalated
+         from conversation_metrics
+        where organization_id = $1
+          and intent is not null
+          and recorded_at > now() - ($2::integer * interval '1 day')
+        group by conversation_id
+     )
+     select intent,
+            count(*)::text                              as conversations,
+            count(*) filter (where escalated)::text     as escalated
+       from per_conversation
+      group by intent
+     having count(*) >= $3
+      order by (count(*) filter (where escalated))::numeric / count(*) desc, count(*) desc
+      limit 8`,
+    [organizationId, days, minConversations]
+  );
+
+  return rows.map((row) => ({
+    intent: row.intent,
+    conversations: Number(row.conversations),
+    escalated: Number(row.escalated),
+    escalationRate: Number(row.escalated) / Number(row.conversations),
+  }));
+}

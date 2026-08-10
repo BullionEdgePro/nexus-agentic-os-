@@ -9,6 +9,7 @@ import {
   type QualityDay,
   type QualitySummary,
   type CopilotAnswer,
+  type EscalationHotspot,
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
@@ -35,6 +36,7 @@ export default function QualityPage() {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [reply, setReply] = useState<CopilotAnswer | null>(null);
+  const [hotspots, setHotspots] = useState<EscalationHotspot[]>([]);
 
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
@@ -43,6 +45,7 @@ export default function QualityPage() {
       const data = await getQuality(slug, 30);
       setTrend(data.trend);
       setSummary(data.summary);
+      setHotspots(data.hotspots ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load quality data.");
     } finally {
@@ -187,6 +190,42 @@ export default function QualityPage() {
             </button>
           </>
         )}
+
+        {hotspots.length > 0 ? (
+          <>
+            <h2 className="act-sub-head">What reaches a person most</h2>
+            <div className="act-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Kind of enquiry</th>
+                    <th>Conversations</th>
+                    <th>Reached a person</th>
+                    <th>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hotspots.map((spot) => (
+                    <tr key={spot.intent}>
+                      <td>{spot.intent}</td>
+                      <td>{spot.conversations}</td>
+                      <td className={spot.escalated ? "" : "act-zero"}>{spot.escalated}</td>
+                      <td>{Math.round(spot.escalationRate * 100)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Framed as a ranking, not a verdict. Some enquiries should reach
+                a person every time — a live dispute at a law firm ought to, and
+                an agent that stopped escalating them would be worse. */}
+            <p className="q-hotspot-note">
+              A high share is not automatically a fault — some enquiries should reach a person. But
+              where it looks wrong, the usual cause is that the agent has nothing to answer from.{" "}
+              <a href="/deck/knowledge">Check what it knows</a>.
+            </p>
+          </>
+        ) : null}
 
         <section className="q-ask">
           <h2 className="act-sub-head">Ask about this business</h2>

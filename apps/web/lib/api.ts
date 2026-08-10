@@ -316,10 +316,17 @@ export interface QualitySummary {
   containmentRate: number | null;
 }
 
+export interface EscalationHotspot {
+  intent: string;
+  conversations: number;
+  escalated: number;
+  escalationRate: number;
+}
+
 export function getQuality(
   orgSlug: BusinessSlug,
   days = 30
-): Promise<{ trend: QualityDay[]; summary: QualitySummary }> {
+): Promise<{ trend: QualityDay[]; summary: QualitySummary; hotspots: EscalationHotspot[] }> {
   return request(`/api/quality/${orgSlug}?days=${days}`);
 }
 
