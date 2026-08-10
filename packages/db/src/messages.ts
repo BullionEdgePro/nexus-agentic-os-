@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withTenant } from "./client.js";
 import type { MessageDirection, MessageDto, SenderType } from "@nexus/shared";
 
 export interface RecordInboundMessageInput {
@@ -29,12 +29,15 @@ export interface RecordInboundMessageResult {
 export async function recordInboundMessage(
   input: RecordInboundMessageInput
 ): Promise<RecordInboundMessageResult> {
-  const pool = getPool();
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
+  // The transaction is withTenant's now: it checks out one connection, opens
+  // the transaction, sets app.current_org on it, and commits or rolls back
+  // around this whole block. Every getPool().query below lands on that same
+  // connection, so the atomicity this function always had is unchanged — it is
+  // now also scoped to the business the message belongs to.
+  return withTenant(input.organizationId, async () => {
+    const db = getPool();
 
-    const contactResult = await client.query<{ id: string; ai_paused_until: string | null }>(
+    const contactResult = await db.query<{ id: string; ai_paused_until: string | null }>(
       `insert into contacts (organization_id, wa_id, display_name, last_message_at)
        values ($1, $2, $3, now())
        on conflict (organization_id, wa_id)
@@ -46,7 +49,7 @@ export async function recordInboundMessage(
     const contactId = contactResult.rows[0].id;
     const aiPausedUntil = contactResult.rows[0].ai_paused_until;
 
-    const conversationResult = await client.query<{ id: string; is_human_handoff: boolean }>(
+    const conversationResult = await db.query<{ id: string; is_human_handoff: boolean }>(
       `select id, is_human_handoff from conversations
        where organization_id = $1 and contact_id = $2 and status in ('open', 'pending')
        order by opened_at desc limit 1`,
@@ -59,7 +62,7 @@ export async function recordInboundMessage(
       conversationId = conversationResult.rows[0].id;
       isHumanHandoff = conversationResult.rows[0].is_human_handoff;
     } else {
-      const inserted = await client.query<{ id: string; is_human_handoff: boolean }>(
+      const inserted = await db.query<{ id: string; is_human_handoff: boolean }>(
         `insert into conversations (organization_id, contact_id) values ($1, $2)
          returning id, is_human_handoff`,
         [input.organizationId, contactId]
@@ -68,7 +71,7 @@ export async function recordInboundMessage(
       isHumanHandoff = inserted.rows[0].is_human_handoff;
     }
 
-    const messageResult = await client.query<{ id: string }>(
+    const messageResult = await db.query<{ id: string }>(
       `insert into messages
          (organization_id, conversation_id, contact_id, wa_message_id, direction, sender_type, message_type, body, raw_payload, status)
        values ($1, $2, $3, $4, 'inbound', 'contact', $5, $6, $7, 'delivered')
@@ -85,7 +88,6 @@ export async function recordInboundMessage(
       ]
     );
 
-    await client.query("commit");
     return {
       conversationId,
       contactId,
@@ -93,12 +95,7 @@ export async function recordInboundMessage(
       isHumanHandoff,
       aiPausedUntil,
     };
-  } catch (err) {
-    await client.query("rollback");
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export interface InsertOutboundMessageInput {

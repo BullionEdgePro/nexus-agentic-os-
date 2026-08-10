@@ -9,6 +9,12 @@ const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversation
 
 mock.module("@nexus/db", {
   exports: {
+    // The processor runs inside an explicit cross-tenant context, because a
+    // WhatsApp message identifies its tenant only by phone number id. These
+    // just run the body: what is under test is the reply pipeline, not the
+    // database scoping, and swallowing the callback would silently skip it.
+    withAllTenants: async (_reason, fn) => fn(),
+    withTenant: async (_organizationId, fn) => fn(),
     findOrganizationByPhoneNumberId: async () => ({
       id: "org-1", slug: "zipicka", name: "Zipicka",
       whatsappPhoneNumberId: "000000000000001", whatsappBusinessAccountId: "1", timezone: "Asia/Dubai", createdAt: "now",

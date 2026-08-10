@@ -58,6 +58,12 @@ const org = (id) => ({
 
 mock.module("@nexus/db", {
   exports: {
+    // The processor runs inside an explicit cross-tenant context, because a
+    // WhatsApp message identifies its tenant only by phone number id. These
+    // just run the body: what is under test is the reply pipeline, not the
+    // database scoping, and swallowing the callback would silently skip it.
+    withAllTenants: async (_reason, fn) => fn(),
+    withTenant: async (_organizationId, fn) => fn(),
     // Zipicka owns the number; contacts and conversations stay under it.
     findOrganizationByPhoneNumberId: async () => org("org-zip"),
     findOrganizationById: async (id) => (ORGS[id] ? org(id) : null),

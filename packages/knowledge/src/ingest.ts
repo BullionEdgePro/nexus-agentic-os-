@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { getPool } from "@nexus/db";
+import { getPool, withTenant } from "@nexus/db";
 import { chunkText } from "./chunk.js";
 import { embedTexts, EMBEDDING_MODEL } from "./embed.js";
 import { fetchDocument, type FetchedDocument } from "./fetch-url.js";
@@ -170,13 +170,16 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
     // connection for seconds and roll back on any API hiccup.
     const vectors = await embedTexts(chunks.map((c) => c.content));
 
-    const client = await pool.connect();
-    try {
-      await client.query("begin");
-      await client.query(`delete from knowledge_chunks where source_id = $1`, [sourceId]);
+    // Scoped and transactional in one step. The embedding call above stays
+    // outside it deliberately — holding a connection open across a slow network
+    // call would pin it for seconds and roll back on any API hiccup — so the
+    // context begins here, once there is only database work left to do.
+    await withTenant(input.organizationId, async () => {
+      const db = getPool();
+      await db.query(`delete from knowledge_chunks where source_id = $1`, [sourceId]);
 
       for (const [i, chunk] of chunks.entries()) {
-        await client.query(
+        await db.query(
           `insert into knowledge_chunks
              (source_id, organization_id, employee_id, chunk_index, content,
               token_estimate, embedding, embedding_model)
@@ -194,19 +197,13 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
         );
       }
 
-      await client.query(
+      await db.query(
         `update knowledge_sources
          set status = 'indexed', last_indexed_at = now(), last_checked_at = now(), error = null
          where id = $1`,
         [sourceId]
       );
-      await client.query("commit");
-    } catch (err) {
-      await client.query("rollback");
-      throw err;
-    } finally {
-      client.release();
-    }
+    });
 
     return { sourceId, chunks: chunks.length, skipped: false };
   } catch (err) {

@@ -21,6 +21,7 @@ import {
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
+  withAllTenants,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import {
@@ -89,6 +90,14 @@ async function recordMetricBestEffort(input: ConversationMetricInput): Promise<v
 export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Promise<void> {
   const { payload, phoneNumberId } = job.data;
 
+  // Cross-tenant by necessity, not convenience. A WhatsApp message arrives
+  // identified only by the phone number id it was sent to, and turning that
+  // into an organization is itself a database read — so there is no tenant to
+  // scope to until that read has happened. This is one of the two legitimate
+  // cross-tenant paths named in ARCHITECTURE-ABOS.md §2.2, and it is stated
+  // here rather than assumed so it stays greppable.
+  return withAllTenants(`inbound webhook: phone_number_id ${phoneNumberId}`, async () => {
+
   for (const entry of payload.entry) {
     for (const change of entry.changes) {
       const messages = change.value.messages ?? [];
@@ -101,6 +110,7 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
       }
     }
   }
+  });
 }
 
 async function processSingleTextMessage(

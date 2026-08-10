@@ -20,6 +20,7 @@ import {
   operatorOnly,
 } from "./middleware/require-tenant-scope.js";
 import { logger } from "./lib/logger.js";
+import { tenantContext, webhookContext } from "./middleware/tenant-context.js";
 
 const app = new Hono();
 
@@ -56,7 +57,14 @@ app.use("/api/activity/*", operatorOnly);
 app.use("/api/broadcasts", operatorOnly);
 app.use("/api/broadcasts/*", operatorOnly);
 
+// Every /api/* request runs inside a database tenant context — a named one for
+// a single business, an explicitly-reasoned cross-tenant one otherwise. Placed
+// after the authorisation checks above, because what a caller may reach is
+// settled before which rows the database will return.
+app.use("/api/*", tenantContext);
+
 app.get("/health", (c) => c.json({ status: "ok" }));
+app.use("/webhooks/whatsapp", webhookContext);
 app.route("/webhooks/whatsapp", whatsappWebhook);
 // Outside /api/*, because requireAuth guards everything under there and a
 // login endpoint that needs a session cannot issue one.
