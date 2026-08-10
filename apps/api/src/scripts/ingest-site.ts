@@ -23,6 +23,14 @@ import { ingestUrlSource } from "@nexus/knowledge";
 
 interface TenantSource {
   sitemaps: string[];
+  /**
+   * URLs listed by hand, for sites with no sitemap.
+   *
+   * Not every business runs WordPress. abshlaw.com is a single page with no
+   * sitemap at all, and a crawler pointed at it would have found nothing and
+   * reported a clean run — the failure mode this codebase keeps producing.
+   */
+  pages?: string[];
   /** Pages matching this are NOT indexed. See each tenant's note. */
   exclude: RegExp;
   note: string;
@@ -86,9 +94,21 @@ export const TENANT_SOURCES: Record<string, TenantSource> = {
     note: "agency information, FAQ and terms — deliberately no property listings",
   },
 
-  // atif-ali-production is absent on purpose: its website is unreachable, so
-  // there is nothing to index until it returns. Its agent prompt (migration
-  // 012) already says it has no catalogue and must not invent one.
+  abr: {
+    // abshlaw.com is a single-page site — the practice areas, team, and contact
+    // details all live on `/`, with no sitemap. So the "sitemap" here is the
+    // page itself; `extractLocations` finds nothing in HTML, and the fallback
+    // below supplies the URL directly.
+    sitemaps: [],
+    pages: ["https://www.abshlaw.com/"],
+    exclude: /$^/, // nothing to exclude from a hand-listed page
+    note: "litigation, arbitration and criminal defence practice areas",
+  },
+
+  // atif-ali-production was removed from the platform on 2026-08-08 (migration
+  // 014) and replaced by ABR. Its entry is gone rather than commented out — a
+  // source list for a tenant that no longer exists is a trap for whoever reads
+  // this next.
 };
 
 /** Pull <loc> entries out of a sitemap. Tolerates index files and stray XML. */
@@ -148,7 +168,7 @@ async function main() {
     process.exit(1);
   }
 
-  const found: string[] = [];
+  const found: string[] = [...(source.pages ?? [])];
   for (const sitemap of source.sitemaps) {
     try {
       found.push(...extractLocations(await fetchSitemap(sitemap)));

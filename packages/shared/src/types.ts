@@ -5,7 +5,7 @@ export type BusinessSlug =
   | "juris-prime"
   | "juris-prime-legal"
   | "sfs-international"
-  | "atif-ali-production";
+  | "abr";
 
 export interface Organization {
   id: string;

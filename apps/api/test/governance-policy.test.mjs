@@ -11,7 +11,7 @@ const high = { piiFlagged: false, hallucinationRisk: "high" };
 const pii = { piiFlagged: true, hallucinationRisk: "low" };
 
 test("every tenant escalates on PII or high hallucination risk", () => {
-  for (const slug of ["zipicka", "juris-prime", "juris-prime-legal", "sfs-international", "atif-ali-production"]) {
+  for (const slug of ["zipicka", "juris-prime", "juris-prime-legal", "sfs-international", "abr"]) {
     assert.equal(shouldEscalateReply(pii, slug), true, `${slug} must escalate on PII`);
     assert.equal(shouldEscalateReply(high, slug), true, `${slug} must escalate on high risk`);
     assert.equal(shouldEscalateReply(clean, slug), false, `${slug} must send a clean reply`);
@@ -26,7 +26,12 @@ test("strict tenants (law firm, licensing) also escalate on MEDIUM risk", () => 
 test("non-strict tenants tolerate MEDIUM risk (send the reply)", () => {
   assert.equal(shouldEscalateReply(medium, "zipicka"), false);
   assert.equal(shouldEscalateReply(medium, "sfs-international"), false);
-  assert.equal(shouldEscalateReply(medium, "atif-ali-production"), false);
+  // ABR replaced Atif Ali Production and is a LITIGATION FIRM, so the answer
+  // here flips: it is not on the lenient allowlist, and an unverifiable
+  // statement about a criminal matter must never go out unreviewed. Nobody had
+  // to remember to add it — the allowlist is of the tolerant, so a new tenant
+  // is strict by default. This asserts that inversion actually pays off.
+  assert.equal(shouldEscalateReply(medium, "abr"), true);
   console.log("PASS: per-tenant governance strictness works — law firm is held to a higher bar");
 });
 

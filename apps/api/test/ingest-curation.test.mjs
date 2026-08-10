@@ -133,9 +133,17 @@ test("the law firm's shop plumbing is not mistaken for a legal service", () => {
 });
 
 test("the offline tenant has no source list at all", () => {
-  // atif-ali-production's website is unreachable. Absence here is the design:
-  // there is nothing to index, and its agent prompt already says so.
+  // Atif Ali Production left the platform (migration 014), so its entry is
+  // gone rather than commented out — a source list for a tenant that no longer
+  // exists is a trap for whoever reads it next.
   assert.equal(TENANT_SOURCES["atif-ali-production"], undefined);
+
+  // ABR replaced it. abshlaw.com is a single page with NO sitemap, so the URL
+  // is listed by hand — a crawler pointed at it would have found nothing and
+  // reported a clean run.
+  assert.ok(TENANT_SOURCES["abr"], "ABR must have a source list");
+  assert.deepEqual(TENANT_SOURCES["abr"].sitemaps, []);
+  assert.deepEqual(TENANT_SOURCES["abr"].pages, ["https://www.abshlaw.com/"]);
 });
 
 test("sitemap parsing ignores nested index files", () => {

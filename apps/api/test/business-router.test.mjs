@@ -14,7 +14,12 @@ const BUSINESSES = [
   { id: "o2", slug: "juris-prime", name: "Juris Prime", routingKeywords: ["license", "licence", "company formation", "freezone", "visa", "رخصة", "تأسيس"] },
   { id: "o3", slug: "juris-prime-legal", name: "Juris Prime Legal", routingKeywords: ["lawyer", "legal", "court", "case", "lawsuit", "محامي", "محكمة"] },
   { id: "o4", slug: "sfs-international", name: "SFS International", routingKeywords: ["property", "rent", "villa", "apartment", "عقار", "ايجار"] },
-  { id: "o5", slug: "atif-ali-production", name: "Atif Ali Production", routingKeywords: ["video", "filming", "production", "فيديو", "تصوير"] },
+  // Deliberately does NOT share "lawyer"/"court"/"case" with o3. These tests
+  // exercise the ALGORITHM, which needs distinguishable fixtures; the real
+  // overlap between the two live law firms — and the triage it correctly
+  // triggers — is asserted in routing-against-live-keywords.test.mjs against
+  // the production keyword rows.
+  { id: "o5", slug: "abr", name: "ABR Advocates", routingKeywords: ["litigation", "arbitration", "criminal", "bail", "cassation", "تحكيم", "جنائي"] },
 ];
 
 test("a clear enquiry routes to exactly one business", () => {
@@ -28,7 +33,7 @@ test("each business is reachable by its own vocabulary", () => {
     ["I need a lawyer for a court case", "juris-prime-legal"],
     ["How do I get a trade licence in a freezone?", "juris-prime"],
     ["Do you have a villa for rent?", "sfs-international"],
-    ["I want a video production for my brand", "atif-ali-production"],
+    ["we are starting arbitration and then litigation", "abr"],
   ];
   for (const [text, slug] of cases) {
     const r = classifyBusiness(text, BUSINESSES);

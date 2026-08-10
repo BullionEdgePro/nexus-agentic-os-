@@ -21,7 +21,13 @@ import { dirname, join } from "node:path";
 import { classifyBusiness, resolveTriageReply, buildTriageMessage } from "@nexus/agents";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const MIGRATION = join(here, "..", "..", "..", "packages", "db", "migrations", "008-tenant-profiles.sql");
+// Keywords are seeded by 008 and then REVISED by 014, which added ABR and
+// rebalanced the law firm it collides with. Reading only 008 would test a
+// vocabulary production no longer uses.
+const MIGRATIONS = [
+  join(here, "..", "..", "..", "packages", "db", "migrations", "008-tenant-profiles.sql"),
+  join(here, "..", "..", "..", "packages", "db", "migrations", "014-abr-replaces-atif-ali.sql"),
+];
 
 /**
  * Parse a Postgres text[] literal — `{a,b,"two words",عربي}`.
@@ -54,19 +60,28 @@ function parsePgArray(literal) {
 
 /** Every `update organizations set routing_keywords = $kw$ ... $kw$ where slug = 'x'`. */
 function readSeededBusinesses() {
-  const sql = readFileSync(MIGRATION, "utf8");
   const pattern = /routing_keywords\s*=\s*\$kw\$([\s\S]*?)\$kw\$::text\[\][\s\S]*?where\s+slug\s*=\s*'([a-z-]+)'/g;
 
-  const businesses = [];
-  for (const match of sql.matchAll(pattern)) {
-    businesses.push({
-      id: `org-${match[2]}`,
-      slug: match[2],
-      name: match[2].split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" "),
-      routingKeywords: parsePgArray(match[1]),
-    });
+  // Later migrations override earlier ones for the same slug, exactly as they
+  // do when applied in order against the database.
+  const bySlug = new Map();
+  for (const file of MIGRATIONS) {
+    for (const match of readFileSync(file, "utf8").matchAll(pattern)) {
+      bySlug.set(match[2], parsePgArray(match[1]));
+    }
   }
-  return businesses;
+
+  // Atif Ali Production was removed by 014. Its 008 keywords are still in the
+  // file as applied history, but the tenant is deactivated and must not appear
+  // in routing — including here.
+  bySlug.delete("atif-ali-production");
+
+  return [...bySlug].map(([slug, routingKeywords]) => ({
+    id: `org-${slug}`,
+    slug,
+    name: slug.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" "),
+    routingKeywords,
+  }));
 }
 
 const BUSINESSES = readSeededBusinesses();
@@ -77,16 +92,19 @@ test("the migration seeds every business with routing vocabulary", () => {
   // the shape of defect this codebase keeps producing.
   assert.equal(BUSINESSES.length, 5, "all five businesses must be seeded");
 
-  // Counts verified against production on 2026-08-08:
-  // zipicka 26 · atif-ali-production 25 · juris-prime 21 · juris-prime-legal 25 · sfs-international 24
-  const counts = Object.fromEntries(BUSINESSES.map((b) => [b.slug, b.routingKeywords.length]));
-  assert.deepEqual(counts, {
-    zipicka: 26,
-    "juris-prime": 21,
-    "juris-prime-legal": 25,
-    "sfs-international": 24,
-    "atif-ali-production": 25,
-  });
+  // Exact counts are not asserted any more: they were a useful drift alarm
+  // while the roster was frozen, and a maintenance tax now that vocabularies
+  // get rebalanced when tenants change. What matters is that every business
+  // carries enough vocabulary to be reachable at all — a tenant with two
+  // keywords sits in the table looking configured and never wins a match.
+  for (const business of BUSINESSES) {
+    assert.ok(
+      business.routingKeywords.length >= 15,
+      `${business.slug} has only ${business.routingKeywords.length} keywords`
+    );
+  }
+  assert.ok(BUSINESSES.some((b) => b.slug === "abr"), "ABR must be routable");
+  assert.ok(!BUSINESSES.some((b) => b.slug === "atif-ali-production"), "removed tenant must not route");
 });
 
 test("every business carries Arabic vocabulary, not just English", () => {
@@ -108,18 +126,22 @@ test("real customer messages reach the right business", () => {
     ["I need true copy attestation for my degree certificate", "juris-prime"],
     ["do you do MOFA attestation and embassy stamp?", "juris-prime"],
     ["أحتاج تصديق شهادة من السفارة", "juris-prime"],
-    // Legal — including business setup, which lives on the LEGAL site
-    ["I need a lawyer for a court case", "juris-prime-legal"],
+    // Juris Prime Legal — TRANSACTIONAL work. "I need a lawyer for a court
+    // case" used to live here and deliberately does not any more: with two law
+    // firms on the number that phrasing is ambiguous, and the ambiguity is the
+    // correct answer. See the two-law-firms test below.
     ["how do I do company formation in a freezone?", "juris-prime-legal"],
-    ["أحتاج محامي للمحكمة", "juris-prime-legal"],
+    ["I need a power of attorney and a contract drafted", "juris-prime-legal"],
+    ["أحتاج تأسيس شركة ووكالة", "juris-prime-legal"],
     // Property
     ["do you have a villa for rent in Dubai?", "sfs-international"],
     ["I want to arrange a viewing for an apartment", "sfs-international"],
     ["أبحث عن شقة للإيجار", "sfs-international"],
-    // Production
-    ["I need video production for my brand", "atif-ali-production"],
-    ["can you do filming and editing for a commercial?", "atif-ali-production"],
-    ["أحتاج تصوير وانتاج فيديو", "atif-ali-production"],
+    // Litigation — ABR. The disputes vocabulary is what separates it from the
+    // other law firm on the same number.
+    ["I need a criminal defence lawyer, my brother was arrested", "abr"],
+    ["we want to start arbitration over a construction delay", "abr"],
+    ["أحتاج محامي جنائي، هناك توقيف", "abr"],
   ];
 
   for (const [text, expected] of cases) {
@@ -141,15 +163,28 @@ test("attestation does not land on the law firm, and licensing does not land on 
   assert.equal(setup.business.slug, "juris-prime-legal");
 });
 
-test("a production enquiry is never captured by the retail store", () => {
-  // "video PRODUCTion" contains "product". Caught in review; whole-word matching
-  // fixed it, and this asserts the real keyword lists still behave.
-  for (const text of ["video production for a product launch", "studio production booking"]) {
-    const outcome = classifyBusiness(text, BUSINESSES);
-    if (outcome.kind === "routed") {
-      assert.equal(outcome.business.slug, "atif-ali-production", text);
-    }
-  }
+test("two law firms on one number: a vague legal enquiry ASKS rather than guessing", () => {
+  // The design decision migration 014 is really about. ABR and Juris Prime
+  // Legal share the generic vocabulary on purpose, so "I need a lawyer" ties
+  // and triggers the triage question. Guessing would send a criminal matter to
+  // a company-formation desk, or a company formation to a litigator — and
+  // routing also selects which governance policy applies.
+  const vague = classifyBusiness("I need a lawyer", BUSINESSES);
+  assert.equal(vague.kind, "ambiguous", `expected ambiguous, got ${vague.kind}`);
+  const slugs = vague.candidates.map((c) => c.slug).sort();
+  assert.deepEqual(slugs, ["abr", "juris-prime-legal"]);
+});
+
+test("a specific legal enquiry still routes to the right firm", () => {
+  // Ambiguity is only acceptable because specificity resolves it. If both of
+  // these triaged too, the switchboard would be asking on every legal message.
+  const criminal = classifyBusiness("criminal case, appeal to cassation", BUSINESSES);
+  assert.equal(criminal.kind, "routed", criminal.kind);
+  assert.equal(criminal.business.slug, "abr");
+
+  const setup = classifyBusiness("company formation in a freezone, power of attorney", BUSINESSES);
+  assert.equal(setup.kind, "routed", setup.kind);
+  assert.equal(setup.business.slug, "juris-prime-legal");
 });
 
 test("a greeting asks rather than guessing", () => {

@@ -18,7 +18,6 @@ import type { GovernanceEvaluation } from "@nexus/shared";
 const MEDIUM_RISK_TOLERANT: ReadonlySet<string> = new Set<string>([
   "zipicka",
   "sfs-international",
-  "atif-ali-production",
 ]);
 
 /**

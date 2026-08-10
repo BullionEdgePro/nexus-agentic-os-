@@ -8,8 +8,11 @@
 
 create table organizations (
   id                          uuid primary key default gen_random_uuid(),
-  slug                        text not null unique
-                              check (slug in ('zipicka', 'juris-prime', 'juris-prime-legal', 'sfs-international', 'atif-ali-production')),
+  -- NOT constrained to a fixed list. Migration 002 dropped this CHECK in
+  -- production once the platform could onboard tenants beyond the original
+  -- five; leaving it here meant a fresh install silently reintroduced the cap,
+  -- and adding ABR (migration 014) would have failed on a new environment.
+  slug                        text not null unique,
   name                        text not null,
   -- NOT unique. Several businesses share one WhatsApp number (the switchboard,
   -- migrations 007-010); which of them owns a given conversation is decided by

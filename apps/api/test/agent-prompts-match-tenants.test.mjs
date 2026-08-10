@@ -36,12 +36,27 @@ function stripSqlComments(sql) {
     .join("\n");
 }
 
+/**
+ * Join adjacent SQL string literals so a phrase can be matched.
+ *
+ * Long prompts are written as `'...predict an ' || 'outcome or a sentence...'`,
+ * which means the sentence a reader sees does not exist as a contiguous string
+ * in the file. Asserting on the raw source silently fails on any phrase that
+ * happens to straddle a concatenation — a false negative that looks like a
+ * missing safeguard.
+ */
+function joinSqlConcat(sql) {
+  return sql.replace(/'\s*\|\|\s*'/g, "");
+}
+
 const SEED = stripSqlComments(read(here, "..", "..", "..", "packages", "db", "seed.sql"));
 const PROFILES = stripSqlComments(read(migrations, "008-tenant-profiles.sql"));
 const PROMPTS = stripSqlComments(read(migrations, "012-agent-prompts.sql"));
+// ABR arrived later, in its own migration — its prompt is not in 012.
+const ABR_PROMPTS = joinSqlConcat(stripSqlComments(read(migrations, "014-abr-replaces-atif-ali.sql")));
 
 /** Everything the platform says about a tenant, in one blob per slug. */
-const PROMPT_SOURCES = SEED + "\n" + PROMPTS;
+const PROMPT_SOURCES = SEED + "\n" + PROMPTS + "\n" + ABR_PROMPTS;
 
 test("no agent still describes Juris Prime as business licensing", () => {
   // The specific wrong belief, asserted directly. It was corrected in four
@@ -65,7 +80,7 @@ test("each tenant's agent is told the business it is actually in", () => {
     { slug: "juris-prime-legal", mustMention: /law firm|legal/i },
     { slug: "sfs-international", mustMention: /real estate/i },
     { slug: "zipicka", mustMention: /e-commerce|store/i },
-    { slug: "atif-ali-production", mustMention: /production studio|media production/i },
+    { slug: "abr", mustMention: /litigation|advocates/i },
   ];
 
   for (const { slug, mustMention } of expectations) {
@@ -111,14 +126,19 @@ test("the tenant profile and the agent prompt agree on Juris Prime", () => {
   assert.ok(values.some((v) => /attestation/i.test(v)), "no agent prompt mentions attestation");
 });
 
-test("the tenant with no knowledge base is told not to invent one", () => {
-  // atif-ali-production's website is unreachable, so search_knowledge returns
-  // nothing for it no matter what is asked. A prompt inviting it to explain
-  // "service packages" means describing packages from the model's own priors:
-  // plausible, specific, invented.
-  const block = PROMPTS.split("'atif-ali-production'")[0];
-  assert.match(block, /NO service catalogue|no service catalogue/);
-  assert.match(block, /Do not describe packages/i);
+test("the second law firm is held to the same restraint as the first", () => {
+  // ABR replaced Atif Ali Production and does criminal defence and litigation.
+  // A customer forming an impression about a charge, a deadline or the merits
+  // of their case from a machine is a liability, not a support ticket — so the
+  // prompt has to forbid exactly those, not merely encourage caution.
+  const abr = ABR_PROMPTS;
+  assert.match(abr, /NEVER give specific legal advice/i);
+  assert.match(abr, /predict an outcome|predict a[n]? .{0,20}outcome/i);
+  assert.match(abr, /cite UAE law from memory/i);
+  assert.match(abr, /quote fees/i);
+  // An arrest or an imminent court date is not something to answer at all.
+  assert.match(abr, /arrest|detention/i);
+  assert.match(abr, /escalate/i);
 });
 
 test("every agent knows it shares a number with four others", () => {

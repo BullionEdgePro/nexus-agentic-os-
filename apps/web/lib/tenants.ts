@@ -36,7 +36,10 @@ export const TENANTS: Tenant[] = [
   { slug: "juris-prime", ref: "N-02", name: "Juris Prime", role: "Attestation & Notary", status: "onboarding", angle: -18, note: "onboarding" },
   { slug: "juris-prime-legal", ref: "N-03", name: "Juris Prime Legal", role: "Law Firm", status: "onboarding", angle: 54, note: "strict tier" },
   { slug: "sfs-international", ref: "N-04", name: "SFS International", role: "Real Estate", status: "onboarding", angle: 126, note: "onboarding" },
-  { slug: "atif-ali-production", ref: "N-05", name: "Atif Ali Production", role: "Digital Studio", status: "offline", angle: 198, note: "site offline" },
+  // ABR replaced Atif Ali Production on 2026-08-08 (migration 014). It is the
+  // SECOND law firm on the number — see the routing note in that migration for
+  // why a vague "I need a lawyer" deliberately asks which firm.
+  { slug: "abr", ref: "N-05", name: "ABR Advocates", role: "Litigation & Criminal Defence", status: "onboarding", angle: 198, note: "onboarding" },
 ];
 
 export const LIVE_TENANT_COUNT = TENANTS.filter((t) => t.status === "live").length;

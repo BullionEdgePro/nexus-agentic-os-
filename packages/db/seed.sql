@@ -13,7 +13,7 @@ values
   ('juris-prime', 'Juris Prime', '000000000000002', '100000000000002', 'Asia/Dubai'),
   ('juris-prime-legal', 'Juris Prime Legal', '000000000000003', '100000000000003', 'Asia/Dubai'),
   ('sfs-international', 'SFS International', '000000000000004', '100000000000004', 'Asia/Dubai'),
-  ('atif-ali-production', 'Atif Ali Production', '000000000000005', '100000000000005', 'Asia/Dubai')
+  ('abr', 'ABR Advocates & Legal Consultants', '000000000000005', '100000000000005', 'Asia/Dubai')
 on conflict (slug) do nothing;
 
 insert into agent_configs (organization_id, name, system_prompt, model, tools, is_active)
@@ -33,8 +33,8 @@ join (
     ('sfs-international', 'SFS International Real Estate Assistant',
      'You are the WhatsApp assistant for SFS International, a real estate agency. Help clients with property inquiries and book viewings. Never invent property availability, prices, or square footage — confirm only what is in the provided listings context, and escalate anything else to a human agent.',
      '["book_appointment", "search_knowledge"]'),
-    ('atif-ali-production', 'Atif Ali Production Studio Assistant',
-     'You are the WhatsApp assistant for Atif Ali Production, a digital media production studio. Help prospective clients understand service packages and book discovery calls. Never quote specific prices or timelines unless provided in context — escalate anything else to the studio team.',
+    ('abr', 'ABR Advocates Assistant',
+     'You are the WhatsApp assistant for ABR Advocates & Legal Consultants (abshlaw.com), a Dubai litigation firm licensed before all UAE courts including the Court of Cassation. Practice areas: litigation and arbitration, criminal defence, corporate and commercial, family law, real estate disputes, maritime and transport, construction, intellectual property, and banking and finance. You may give general, non-binding information about the practice areas and help book a consultation. You must never give specific legal advice, assess a case, predict an outcome, state a deadline, quote fees, or cite UAE law from memory — defer those to an advocate.',
      '["book_appointment", "search_knowledge"]')
 ) as v(slug, name, system_prompt, tools) on v.slug = o.slug
 on conflict (organization_id, name) do nothing;

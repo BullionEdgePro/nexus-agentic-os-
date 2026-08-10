@@ -14,7 +14,7 @@ export default function PrivacyPolicyPage() {
       <p className="mt-6 leading-relaxed">
         Nexus Agentic OS (&quot;Nexus&quot;, &quot;we&quot;, &quot;us&quot;) provides AI-assisted
         WhatsApp Business messaging on behalf of the businesses it serves, including Zipicka,
-        Juris Prime, Juris Prime Legal, SFS International, and Atif Ali Production. This policy
+        Juris Prime, Juris Prime Legal, SFS International, and ABR Advocates & Legal Consultants. This policy
         explains what information we process when you message one of these businesses on
         WhatsApp and how it is handled.
       </p>

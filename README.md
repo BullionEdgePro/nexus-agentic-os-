@@ -1,7 +1,7 @@
 # Nexus Agentic OS
 
 Multi-tenant WhatsApp Business agentic platform for 5 tenants: Zipicka,
-Juris Prime, Juris Prime Legal, SFS International, Atif Ali Production.
+Juris Prime, Juris Prime Legal, SFS International, ABR Advocates & Legal Consultants.
 
 ```
 apps/

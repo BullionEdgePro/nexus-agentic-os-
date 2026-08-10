@@ -43,13 +43,13 @@ const INTENTS = [
   { n: "Escalation", v: 5 },
 ];
 
-const FEED = [
-  { ini: "ZP", nm: "Zipicka", t: "now", tag: "ai", tags: "AI", msg: "Yes — Laka Bulky Matte Lipstick is in stock (46 units)." },
-  { ini: "SF", nm: "SFS International", t: "1m", tag: "ai", tags: "AI", msg: "I’ve booked your villa viewing for Thursday 4pm." },
-  { ini: "JL", nm: "Juris Prime Legal", t: "3m", tag: "h", tags: "Human", msg: "Escalated — routing to a licensed attorney." },
-  { ini: "JP", nm: "Juris Prime", t: "6m", tag: "ai", tags: "AI", msg: "Freezone license takes ~5 working days once documents clear." },
-  { ini: "AA", nm: "Atif Ali Production", t: "9m", tag: "ai", tags: "AI", msg: "Our promo package includes 3 reels + 1 hero film." },
-];
+// Empty on purpose. This used to hold five invented conversations shown under
+// a "Live feed" heading whenever the API had not answered — fabricated customer
+// messages that read as real traffic, including Juris Prime quoting freezone
+// licence timelines months after that turned out to be the wrong business
+// entirely. A deck that invents conversations is worse than one that admits it
+// has none.
+const FEED: Array<{ ini: string; nm: string; t: string; tag: string; tags: string; msg: string }> = [];
 
 /* ---------------- helpers ---------------- */
 function sparkPath(vals: number[], w: number, h: number): string {
@@ -547,6 +547,11 @@ export default function DeckConsole() {
                 </span>
               </div>
               <div className="feed">
+                {displayFeed.length === 0 && (
+                  <p className="feed-empty">
+                    No live data yet — this fills in as conversations arrive.
+                  </p>
+                )}
                 {displayFeed.map((f, i) => (
                   <div className="feed-item" key={i}>
                     <div className="feed-av">{f.ini}</div>
