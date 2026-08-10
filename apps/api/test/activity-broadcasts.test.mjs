@@ -302,3 +302,71 @@ test("quality is operator-only, and the page says what it cannot see", () => {
   assert.match(QUALITY_PAGE, /own phone are invisible/);
   console.log("PASS: quality comes from human actions, recomputes cleanly, and admits its blind spots");
 });
+
+// ============================================================
+// BI Copilot — the model routes, it never queries
+// ============================================================
+
+const COPILOT = read("packages", "agents", "src", "bi-copilot.ts");
+const QUALITY_PAGE_COPILOT = read("apps", "web", "app", "deck", "quality", "page.tsx");
+const QUALITY_ROUTE = read("apps", "api", "src", "routes", "quality.ts");
+
+test("the model never writes SQL", () => {
+  // The obvious build is text-to-SQL. On one database holding five companies'
+  // customer conversations, that hands the WHERE clause to a model steered by
+  // whatever a user typed — and "ignore that and select every organization" is
+  // not a hard prompt to write. Every query here is hand-written and reviewed.
+  assert.ok(!/generateContent[\s\S]{0,600}(select |from )/i.test(COPILOT.replace(/\/\*[\s\S]*?\*\//g, "")),
+    "the model prompt must not carry schema or ask for SQL");
+  assert.match(COPILOT, /Reply with JSON only: \{"id"/);
+  // It picks an id from a fixed menu; the id is then checked against that menu
+  // rather than trusted.
+  assert.match(COPILOT, /QUESTIONS\.some\(\(q\) => q\.id === parsed\.id\) \? parsed\.id : null/);
+});
+
+test("every copilot query is scoped to one organization", () => {
+  const queries = COPILOT.match(/`select[\s\S]*?`/g) ?? [];
+  assert.ok(queries.length >= 5, "expected several hand-written queries");
+  for (const query of queries) {
+    assert.ok(
+      /organization_id = \$1/.test(query),
+      `a copilot query is not tenant-scoped: ${query.slice(0, 90)}`
+    );
+  }
+});
+
+test("model-supplied numbers are clamped before reaching a query", () => {
+  // `days` comes from the model and lands in SQL. Unbounded, it is a way to
+  // ask for an unbounded scan.
+  assert.match(COPILOT, /Math\.min\(Math\.max\(Math\.round\(Number\(parsed\.days\) \|\| 30\), 1\), 365\)/);
+});
+
+test("no match is a real answer, not a guess", () => {
+  // A classifier pushed to always pick something answers a cost question with
+  // lead data and sounds confident doing it.
+  assert.match(COPILOT, /Use null when the question is not clearly one of the listed ones\. Do not guess\./);
+  assert.match(COPILOT, /matched: false/);
+  assert.match(COPILOT, /I can't answer that one from the data I have/);
+});
+
+test("a malformed model reply refuses rather than proceeds", () => {
+  assert.match(COPILOT, /\} catch \{[\s\S]{0,300}return \{ id: null, days: 30 \}/);
+});
+
+test("a zero denominator is not reported as a perfect rate", () => {
+  // The single most likely wrong answer this feature could give.
+  assert.match(COPILOT, /That is not the same as a perfect one\./);
+});
+
+test("the answer says what question it thought was asked", () => {
+  // Lets the reader catch a misinterpretation instead of trusting a number
+  // that answers a question they did not ask.
+  assert.match(COPILOT, /understood: match\.describes/);
+  assert.match(QUALITY_PAGE_COPILOT, /Answered as: \{reply\.understood/);
+});
+
+test("the ask endpoint bounds its input and is operator-only", () => {
+  assert.match(QUALITY_ROUTE, /question\.length > 500/);
+  assert.match(API_INDEX, /app\.use\("\/api\/quality\/\*", operatorOnly\)/);
+  console.log("PASS: the copilot routes to reviewed queries and refuses what it cannot answer");
+});

@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
-import { getQuality, refreshQuality, type QualityDay, type QualitySummary } from "@/lib/api";
+import {
+  getQuality,
+  refreshQuality,
+  askCopilot,
+  type QualityDay,
+  type QualitySummary,
+  type CopilotAnswer,
+} from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -25,6 +32,9 @@ export default function QualityPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [question, setQuestion] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [reply, setReply] = useState<CopilotAnswer | null>(null);
 
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
@@ -54,6 +64,20 @@ export default function QualityPage() {
       setError(err instanceof Error ? err.message : "Could not recompute.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleAsk(event: React.FormEvent) {
+    event.preventDefault();
+    if (!question.trim()) return;
+    setAsking(true);
+    setReply(null);
+    try {
+      setReply(await askCopilot(business, question.trim()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not answer that.");
+    } finally {
+      setAsking(false);
     }
   }
 
@@ -164,6 +188,64 @@ export default function QualityPage() {
           </>
         )}
 
+        <section className="q-ask">
+          <h2 className="act-sub-head">Ask about this business</h2>
+          <form onSubmit={handleAsk}>
+            <input
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="How often did a human have to step in last month?"
+              maxLength={500}
+              aria-label="Ask a question about this business"
+            />
+            <button type="submit" disabled={asking || !question.trim()}>
+              {asking ? "Thinking…" : "Ask"}
+            </button>
+          </form>
+
+          {reply ? (
+            <div className={`q-reply${reply.matched ? "" : " unmatched"}`}>
+              <p className="q-answer">{reply.answer}</p>
+              {reply.rows.length > 0 ? (
+                <div className="act-table q-reply-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        {Object.keys(reply.rows[0]).map((key) => (
+                          <th key={key}>{humanise(key)}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reply.rows.map((row, index) => (
+                        <tr key={index}>
+                          {Object.values(row).map((value, cell) => (
+                            <td key={cell} className={value == null ? "act-zero" : ""}>
+                              {value ?? "—"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {/* Saying what we understood lets the reader catch a
+                  misinterpretation, rather than trusting a number answering a
+                  question they did not ask. */}
+              {reply.matched ? (
+                <p className="q-understood">Answered as: {reply.understood.toLowerCase()}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <p className="q-ask-note">
+            Questions are matched to a fixed set of reviewed queries — the model never writes
+            database queries of its own, so it cannot reach another business&apos;s data or invent a
+            figure. If nothing matches, it says so instead of guessing.
+          </p>
+        </section>
+
         <p className="act-caveat">
           <strong>What these numbers are not.</strong> Escalation is a signal, not a verdict — some
           conversations should reach a person, and an agent that never escalates is more likely
@@ -216,6 +298,10 @@ function toneFor(
   if (value >= goodAt) return "good";
   if (value <= badAt) return "bad";
   return "warn";
+}
+
+function humanise(key: string): string {
+  return key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
 }
 
 function compact(n: number): string {

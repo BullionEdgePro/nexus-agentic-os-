@@ -125,3 +125,64 @@
 }
 .q-refresh:hover:not(:disabled) { border-color: var(--blueprint); color: var(--blueprint); }
 .q-refresh:disabled { opacity: .45; cursor: default; }
+
+/* --- ask panel --- */
+
+.q-ask { margin-top: 34px; }
+
+.q-ask form { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.q-ask input {
+  flex: 1 1 320px;
+  font-family: var(--sans);
+  font-size: 14.5px;
+  color: var(--ink);
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--vellum);
+}
+.q-ask input:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.q-ask button {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 11px 20px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.q-ask button:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.q-ask button:disabled { opacity: .4; cursor: default; }
+
+.q-reply {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blueprint);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 16px 18px;
+}
+/* A refusal is a valid answer, but it should not look like a finding. */
+.q-reply.unmatched { border-left-color: var(--line-strong); }
+
+.q-answer { font-size: 15px; line-height: 1.55; color: var(--ink); }
+.q-reply-table { margin-top: 12px; }
+.q-understood {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.q-ask-note { margin-top: 12px; font-size: 12px; color: var(--pencil); line-height: 1.55; max-width: 70ch; }

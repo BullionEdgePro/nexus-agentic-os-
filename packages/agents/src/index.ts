@@ -7,3 +7,4 @@ export * from "./business-router.js";
 export * from "./tools/registry.js";
 export * from "./tools/examples.js";
 export * from "./tools/knowledge.js";
+export * from "./bi-copilot.js";

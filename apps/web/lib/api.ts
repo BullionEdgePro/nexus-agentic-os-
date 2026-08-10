@@ -320,3 +320,17 @@ export function getQuality(
 export function refreshQuality(): Promise<{ dayRows: number }> {
   return request("/api/quality/refresh", { method: "POST" });
 }
+
+export interface CopilotAnswer {
+  understood: string;
+  answer: string;
+  rows: Array<Record<string, string | number | null>>;
+  matched: boolean;
+}
+
+export function askCopilot(orgSlug: BusinessSlug, question: string): Promise<CopilotAnswer> {
+  return request(`/api/quality/${orgSlug}/ask`, {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
+}
