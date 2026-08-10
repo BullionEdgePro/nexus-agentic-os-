@@ -227,7 +227,7 @@ phone number and narrows immediately.
 | 1 | Employee Agent Layer | ✅ Built, incl. roster UI and the handover brief. Open: calendar presence (needs a calendar integration) |
 | 2 | Knowledge Ingestion | ✅ Core, URL connector, scheduled re-index, and a management screen. Remaining connectors phased by real demand |
 | 3 | Lead Intelligence | ✅ Rules-based, EN + AR. Model second once labels exist |
-| 4 | Campaign Engine | 🟡 Built and deployed. Templates mirror Meta; five per-business templates submitted. Blocked on Meta billing, not code |
+| 4 | Campaign Engine | 🟡 Built, deployed, and the **database path verified end to end** by `schema-check.ts` — draft, audience, recipients, status. Two bugs it found first: a non-existent column in the audience count, and a parameter Postgres could not type, which meant a draft could never be created. The Meta path (approved template + billing) is untested and blocked on you |
 | 5 | Neural Brain | 🟡 The gate it was blocked on is built: redaction fails closed, and what may cross a tenant boundary is an allow-list of structured fields — never prose. The shared store itself is not built |
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
 | 7 | Workspace | ⛔ Months of work. Scope hard before starting |
@@ -299,6 +299,14 @@ running the real functions against the real database:
 | `self-check.ts` | Do the shipped features still work end to end? |
 | `rls-preflight.ts` | Does every path carry a tenant context, and is the guard actually live? |
 | `schema-check.ts` | Does the SQL that has never run work — including the bulk-send path, before a customer triggers it? |
+
+`schema-check.ts` found two defects on its first two runs, both of which would
+have surfaced only when a real user acted: `countReachableContacts` filtering on
+a column that does not exist, and `createBroadcast` passing a parameter Postgres
+could not type. The second meant no broadcast could ever be created — Send would
+have failed at its first step for every user, and the campaign engine had been in
+that state since it was written. Neither was visible to any test, because the SQL
+only fails when Postgres plans it and nothing had ever asked it to.
 
 Run all three after any change that touches a query. They found, between them,
 a broken audience count, an unguarded write path, and an upsert that erased
