@@ -6,6 +6,7 @@ interface OrganizationRow {
   slug: Organization["slug"];
   name: string;
   whatsapp_phone_number_id: string;
+  whatsapp_display_number: string | null;
   whatsapp_business_account_id: string;
   timezone: string;
   created_at: string;
@@ -17,6 +18,9 @@ function toOrganization(row: OrganizationRow): Organization {
     slug: row.slug,
     name: row.name,
     whatsappPhoneNumberId: row.whatsapp_phone_number_id,
+    // Meta's id is not dialable. This is, or null when the business has no
+    // number a customer could actually message.
+    whatsappDisplayNumber: row.whatsapp_display_number,
     whatsappBusinessAccountId: row.whatsapp_business_account_id,
     timezone: row.timezone,
     createdAt: row.created_at,
@@ -40,7 +44,8 @@ export async function findOrganizationByPhoneNumberId(
   phoneNumberId: string
 ): Promise<Organization | null> {
   const { rows } = await getPool().query<OrganizationRow>(
-    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone, created_at
+    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id,
+            whatsapp_display_number, timezone, created_at
      from organizations
      where whatsapp_phone_number_id = $1 and is_active = true
      order by is_number_owner desc, created_at asc, id asc
@@ -52,7 +57,8 @@ export async function findOrganizationByPhoneNumberId(
 
 export async function findOrganizationById(id: string): Promise<Organization | null> {
   const { rows } = await getPool().query<OrganizationRow>(
-    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone, created_at
+    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id,
+            whatsapp_display_number, timezone, created_at
      from organizations
      where id = $1 and is_active = true`,
     [id]
@@ -62,7 +68,8 @@ export async function findOrganizationById(id: string): Promise<Organization | n
 
 export async function findOrganizationBySlug(slug: string): Promise<Organization | null> {
   const { rows } = await getPool().query<OrganizationRow>(
-    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone, created_at
+    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id,
+            whatsapp_display_number, timezone, created_at
      from organizations
      where slug = $1 and is_active = true`,
     [slug]
@@ -72,7 +79,8 @@ export async function findOrganizationBySlug(slug: string): Promise<Organization
 
 export async function listOrganizations(): Promise<Organization[]> {
   const { rows } = await getPool().query<OrganizationRow>(
-    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone, created_at
+    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id,
+            whatsapp_display_number, timezone, created_at
      from organizations
      where is_active = true
      order by name asc`

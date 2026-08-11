@@ -44,10 +44,57 @@ function toWordBag(text: string): string {
   return ` ${normalizeForMatch(text).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
 }
 
+/**
+ * The tag a deep link puts in front of the customer's message.
+ *
+ * Every business is reachable on one number, which solved connectivity and
+ * created an adoption problem: a customer who wants the law firm still lands in
+ * a triage menu, because nothing in "hi" says which business they came for. So
+ * each business gets a wa.me link whose prefilled text carries its slug, and a
+ * message opening with that tag routes with no menu and no guessing.
+ *
+ * Checked BEFORE keywords, and deliberately so. Keyword classification is
+ * probabilistic — it can land on ambiguous, which is the right answer for free
+ * text and the wrong one for a link the business itself published. Someone who
+ * followed ABR's link should reach ABR even if their first message happens to
+ * mention a keyword the retail store also claims.
+ *
+ * Matched only at the START of a message. A tag appearing later is far more
+ * likely to be a customer quoting something than an intent to switch business,
+ * and honouring it mid-conversation would let one business's routing be changed
+ * by text a customer pasted from somewhere else.
+ */
+const DEEP_LINK_TAG = /^\s*#([a-z0-9][a-z0-9-]{1,40})/i;
+
+export function findDeepLinkTag(text: string, businesses: RoutableBusiness[]): RoutableBusiness | null {
+  const match = DEEP_LINK_TAG.exec(text ?? "");
+  if (!match) return null;
+  const slug = match[1].toLowerCase();
+  return businesses.find((business) => business.slug.toLowerCase() === slug) ?? null;
+}
+
+/**
+ * The link a business publishes so its customers skip triage.
+ *
+ * `phoneNumber` is the shared number in international form without a plus,
+ * which is what wa.me expects. The tag leads the prefilled text so the router
+ * sees it first; the rest is written for the customer to read and send as-is.
+ */
+export function buildDeepLink(business: RoutableBusiness, phoneNumber: string): string {
+  const digits = phoneNumber.replace(/\D/g, "");
+  const text = `#${business.slug} Hello ${business.name}, I would like to ask about`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
 export function classifyBusiness(
   text: string,
   businesses: RoutableBusiness[]
 ): RoutingOutcome {
+  // A published link is an explicit statement of which business the customer
+  // came for. Nothing downstream should second-guess it.
+  const tagged = findDeepLinkTag(text, businesses);
+  if (tagged) return { kind: "routed", business: tagged, matched: [`#${tagged.slug}`] };
+
   const haystack = toWordBag(text);
   if (!haystack.trim()) return { kind: "unknown" };
 
