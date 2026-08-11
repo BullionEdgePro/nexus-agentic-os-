@@ -124,3 +124,26 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
 - **Webhook 401s from Meta**: `META_APP_SECRET` in `.env` doesn't match the
   App Secret in Meta's dashboard, or the callback URL isn't exactly
   `https://<API_DOMAIN>/webhooks/whatsapp`.
+
+## Migration order — which comes first depends on the change
+
+The habit "deploy the code, then run the migration" is right for *additive*
+migrations, where new SQL runs harmlessly against the old code. It is wrong,
+and produces an outage, whenever the new code **reads something the migration
+creates**.
+
+| The change | Run first | Why |
+|---|---|---|
+| New column the code **reads** or writes | **migration** | Code-first guarantees a window where every query naming that column throws. If the query is on the inbound path, WhatsApp messages are dropped for the length of that window |
+| New table the code reads | **migration** | Same |
+| Backfill, index, constraint, new table nothing reads yet | **code** | The old code neither knows nor cares |
+| Dropping a column | **code** | Ship the version that stopped reading it, then drop |
+
+This bit us on migration 022. `whatsapp_display_number` was added to
+`listOrganizations` and `findOrganizationByPhoneNumberId`, both deployed before
+the column existed — and the second is the first call the inbound webhook makes,
+so every incoming message would have failed until the migration caught up.
+
+The tell is simple: **if the diff adds a column name to a `select`, the
+migration goes first.** When unsure, run the migration first — it is idempotent
+by convention here, and running it early costs nothing.
