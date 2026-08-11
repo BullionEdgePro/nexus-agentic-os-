@@ -12,8 +12,6 @@ export interface Organization {
   slug: BusinessSlug;
   name: string;
   whatsappPhoneNumberId: string;
-  /** The dialable number, not Meta's id. Null when the business has none. */
-  whatsappDisplayNumber: string | null;
   whatsappBusinessAccountId: string;
   timezone: string;
   createdAt: string;

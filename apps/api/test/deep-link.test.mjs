@@ -116,7 +116,7 @@ test("the link never uses whatsapp_phone_number_id", () => {
   // Meta's id is 1283383404852750. A wa.me link built from it looks correct,
   // gets published on five websites, and fails for every customer who taps it.
   // I wrote exactly that before catching it.
-  assert.match(LINKS_ROUTE, /organization\.whatsappDisplayNumber/);
+  assert.match(LINKS_ROUTE, /getDisplayNumbers/);
   assert.ok(
     !/buildDeepLink\([\s\S]{0,200}whatsappPhoneNumberId/.test(LINKS_ROUTE),
     "the id must never reach buildDeepLink"
@@ -124,8 +124,41 @@ test("the link never uses whatsapp_phone_number_id", () => {
 });
 
 test("a business with no dialable number gets null, not a broken link", () => {
-  assert.match(LINKS_ROUTE, /url: organization\.whatsappDisplayNumber\s*\n?\s*\?/);
+  assert.match(LINKS_ROUTE, /url: number\s*\n?\s*\?/);
   assert.match(LINKS_ROUTE, /unavailableReason/);
+});
+
+test("the reply path does not read a column added for links", () => {
+  // The real lesson. whatsapp_display_number sat in the shared organization
+  // read for about an hour, which put it inside findOrganizationByPhoneNumberId
+  // — the FIRST call the inbound webhook makes. A column referenced before its
+  // migration has run makes that query throw, so the blast radius of a
+  // marketing feature became "no customer gets a reply".
+  const ORGS = readFileSync(
+    join(here2, "..", "..", "..", "packages", "db", "src", "organizations.ts"),
+    "utf8"
+  );
+  const hotPath = ORGS.slice(
+    ORGS.indexOf("export async function findOrganizationByPhoneNumberId"),
+    ORGS.indexOf("export async function getDisplayNumbers")
+  );
+  assert.ok(hotPath.length > 100, "the hot path slice must not be empty");
+  assert.ok(
+    !/whatsapp_display_number/.test(hotPath),
+    "the reply path must not depend on a column added for anything else"
+  );
+});
+
+test("a missing column degrades to no links, never to an error", () => {
+  // Deployed in either order, the worst case must be "deep links unavailable
+  // until the migration catches up" — which no customer ever notices.
+  const ORGS = readFileSync(
+    join(here2, "..", "..", "..", "packages", "db", "src", "organizations.ts"),
+    "utf8"
+  );
+  const fn = ORGS.slice(ORGS.indexOf("export async function getDisplayNumbers"));
+  assert.match(fn, /\} catch \{/);
+  assert.match(fn, /return new Map\(\);/);
 });
 
 test("the number is stored per business, not as a platform constant", () => {

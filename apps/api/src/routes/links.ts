@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { listOrganizations } from "@nexus/db";
+import { listOrganizations, getDisplayNumbers } from "@nexus/db";
 import { buildDeepLink } from "@nexus/agents";
 
 /**
@@ -12,27 +12,38 @@ import { buildDeepLink } from "@nexus/agents";
 export const linksRoute = new Hono();
 
 linksRoute.get("/", async (c) => {
-  const organizations = await listOrganizations();
+  const [organizations, numbers] = await Promise.all([listOrganizations(), getDisplayNumbers()]);
 
-  const links = organizations.map((organization) => ({
-    slug: organization.slug,
-    name: organization.name,
-    number: organization.whatsappDisplayNumber,
-    // Built from the DIALABLE number, never from whatsapp_phone_number_id —
-    // that is Meta's internal id (1283383404852750) and a wa.me link made from
-    // it looks correct, gets published on a website, and fails for every
-    // customer who taps it. A business with no number gets null rather than a
-    // link that cannot work.
-    url: organization.whatsappDisplayNumber
-      ? buildDeepLink(
-          { id: organization.id, slug: organization.slug, name: organization.name, routingKeywords: [] },
-          organization.whatsappDisplayNumber
-        )
-      : null,
-    unavailableReason: organization.whatsappDisplayNumber
-      ? null
-      : "This business has no WhatsApp number a customer could message yet.",
-  }));
+  const links = organizations.map((organization) => {
+    // Resolved once. Calling numbers.get() three times invites the version
+    // where two of them agree and the third does not.
+    const number = numbers.get(organization.id);
+
+    return {
+      slug: organization.slug,
+      name: organization.name,
+      number: number ?? null,
+      // Built from the DIALABLE number, never from whatsapp_phone_number_id —
+      // that is Meta's internal id (1283383404852750), and a wa.me link made
+      // from it looks correct, gets published on a website, and fails for every
+      // customer who taps it. A business without a number gets null rather than
+      // a link that cannot work.
+      url: number
+        ? buildDeepLink(
+            {
+              id: organization.id,
+              slug: organization.slug,
+              name: organization.name,
+              routingKeywords: [],
+            },
+            number
+          )
+        : null,
+      unavailableReason: number
+        ? null
+        : "This business has no WhatsApp number a customer could message yet.",
+    };
+  });
 
   return c.json({ links });
 });
