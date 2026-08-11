@@ -226,7 +226,38 @@ test("cross-tenant and unscoped paths are declared, not inferred", () => {
 
 test("it refuses to bless the migration on failure", () => {
   assert.match(PREFLIGHT, /do NOT apply migration 018/);
-  assert.match(PREFLIGHT, /returns zero rows instead of an error/);
+  // The message now names both failure shapes, because they differ: an
+  // unscoped read comes back empty, an unscoped write is rejected outright.
+  assert.match(PREFLIGHT, /Unscoped reads return zero rows; unscoped WRITES are rejected/);
   assert.match(PREFLIGHT, /process\.exit\(allOk \? 0 : 1\)/);
   console.log("PASS: the RLS gate proves both that contexts cover the app and that the guard is live");
+});
+
+test("the preflight checks writers, not only readers", () => {
+  // The gap that cost a regression. Reads degrade to an empty result under RLS;
+  // WRITES are rejected outright — "new row violates row-level security
+  // policy". So enabling policies silently broke every writer that does not
+  // pass through the API middleware: the site crawler and the half-hourly
+  // template sync both stopped writing, and the sync's only symptom would have
+  // been template approvals that never arrived.
+  //
+  // Found by running the crawler by hand. Nothing automated would have.
+  assert.match(PREFLIGHT, /Writers outside the API/);
+  assert.match(PREFLIGHT, /NO CONTEXT — its writes are REJECTED/);
+  for (const writer of ["ingest-site", "template-sync", "quality-rollup"]) {
+    assert.ok(PREFLIGHT.includes(writer), `${writer} must be covered`);
+  }
+});
+
+test("the writers named in the preflight actually establish a context", () => {
+  // The check above proves the preflight looks; this proves what it would find.
+  const read = (p) => readFileSync(join(here, "..", "src", p), "utf8");
+  for (const file of [
+    "scripts/ingest-site.ts",
+    "services/template-sync.ts",
+    "services/quality-rollup.ts",
+  ]) {
+    assert.match(read(file), /withTenant\(|withAllTenants\(/, `${file} writes without a context`);
+  }
+  console.log("PASS: writers outside the API establish their own tenant context");
 });

@@ -18,7 +18,7 @@
  * vague ones and constant escalation, which is what an operator actually feels.
  */
 import { pathToFileURL } from "node:url";
-import { findOrganizationBySlug } from "@nexus/db";
+import { findOrganizationBySlug, withTenant } from "@nexus/db";
 import { ingestUrlSource } from "@nexus/knowledge";
 
 interface TenantSource {
@@ -192,7 +192,19 @@ async function main() {
 
   for (const url of pages) {
     try {
-      const result = await ingestUrlSource({ organizationId: organization.id, employeeId: null, url });
+      // Scoped per page, not around the whole loop. Each page is its own unit
+      // of work — a slow or failing fetch must not hold one transaction open
+      // across a crawl, and one bad page must not roll back the ones already
+      // indexed.
+      //
+      // Wrapping this at all was a regression fix. RLS rejects a write with no
+      // tenant context outright — "new row violates row-level security policy"
+      // — so enabling policies silently broke every writer outside the API,
+      // where the middleware supplies the context. Reads degrade to empty;
+      // writes fail loudly, which is the one mercy in it.
+      const result = await withTenant(organization.id, () =>
+        ingestUrlSource({ organizationId: organization.id, employeeId: null, url })
+      );
       if (result.skipped) {
         unchanged += 1;
         console.log(`  = ${url}  (already current)`);

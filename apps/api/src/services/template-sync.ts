@@ -2,6 +2,7 @@ import {
   listOrganizations,
   upsertTemplateFromMeta,
   retireMissingTemplates,
+  withTenant,
 } from "@nexus/db";
 import { listMetaTemplates } from "../lib/whatsapp-client.js";
 import { logger } from "../lib/logger.js";
@@ -32,34 +33,47 @@ export async function syncTemplatesForOrganization(organization: {
   slug: string;
   whatsappBusinessAccountId: string;
 }): Promise<SyncResult> {
+  // Meta is called OUTSIDE the tenant context on purpose: it is a slow network
+  // round trip and holding a database transaction open across it would pin a
+  // connection for the duration. The context wraps only the writes below.
   const templates = await listMetaTemplates(organization.whatsappBusinessAccountId);
 
   let approved = 0;
   const seen: string[] = [];
 
-  for (const template of templates) {
-    // A template with no id cannot be identified on the next sync, so storing
-    // it would create a duplicate row on every run rather than updating one.
-    if (!template.id) continue;
+  // Every write below runs inside the tenant context.
+  //
+  // This wrapper is a regression fix, not a tidy-up. The scheduled sync reaches
+  // these writes without passing through the API middleware that supplies a
+  // context, and RLS rejects an unscoped write outright — "new row violates
+  // row-level security policy". Enabling policies therefore stopped template
+  // approvals reaching the product, on a half-hourly job whose only visible
+  // symptom would have been templates that never left PENDING.
+  const retired = await withTenant(organization.id, async () => {
+    for (const template of templates) {
+      // A template with no id cannot be identified on the next sync, so storing
+      // it would create a duplicate row on every run rather than updating one.
+      if (!template.id) continue;
 
-    seen.push(template.id);
-    if (template.status === "APPROVED") approved++;
+      seen.push(template.id);
+      if (template.status === "APPROVED") approved++;
 
-    await upsertTemplateFromMeta({
-      organizationId: organization.id,
-      metaTemplateId: template.id,
-      name: template.name,
-      language: template.language,
-      category: template.category,
-      status: template.status,
-      bodyParamCount: template.bodyParamCount,
-    });
-  }
+      await upsertTemplateFromMeta({
+        organizationId: organization.id,
+        metaTemplateId: template.id,
+        name: template.name,
+        language: template.language,
+        category: template.category,
+        status: template.status,
+        bodyParamCount: template.bodyParamCount,
+      });
+    }
 
-  // Only retire when Meta actually answered. An empty list from a failed or
-  // permission-denied call would otherwise mark every template deleted and
-  // quietly disable bulk messaging across the platform.
-  const retired = templates.length > 0 ? await retireMissingTemplates(organization.id, seen) : 0;
+    // Only retire when Meta actually answered. An empty list from a failed or
+    // permission-denied call would otherwise mark every template deleted and
+    // quietly disable bulk messaging across the platform.
+    return templates.length > 0 ? await retireMissingTemplates(organization.id, seen) : 0;
+  });
 
   logger.info(
     { organization: organization.slug, synced: seen.length, approved, retired },

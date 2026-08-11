@@ -22,6 +22,16 @@
  *               clean wrapped run would be meaningless — a test that cannot
  *               fail is not evidence.
  *
+ * IT ALSO CHECKS THE WRITERS, and that addition was paid for.
+ *
+ * The first version tested reads only. Reads degrade to an empty result under
+ * RLS, which is bad; writes are REJECTED outright — "new row violates
+ * row-level security policy". So enabling policies silently broke every writer
+ * that does not pass through the API middleware: the site crawler and the
+ * half-hourly template sync both stopped writing, and the template sync's only
+ * symptom would have been approvals that never arrived. Found by running the
+ * crawler by hand, not by anything here — which is exactly why it is here now.
+ *
  * The second half is the one worth having. It is easy to write a preflight that
  * passes because the assertion is switched off somewhere.
  *
@@ -79,6 +89,19 @@ const PATHS: Path[] = [
 
 const ASSERTION = /no tenant context/i;
 
+/**
+ * Code paths that WRITE tenant rows without going through the API.
+ *
+ * Listed by name rather than executed, because running them means crawling a
+ * customer's website or calling Meta. What is checked is that each one wraps
+ * its writes — the failure was never subtle logic, it was a missing wrapper.
+ */
+const WRITERS = [
+  { name: "ingest-site (crawler)", file: "src/scripts/ingest-site.ts" },
+  { name: "template sync (scheduled)", file: "src/services/template-sync.ts" },
+  { name: "quality rollup (hourly)", file: "src/services/quality-rollup.ts" },
+];
+
 function line(ok: boolean, label: string, detail = ""): boolean {
   console.log(`  ${ok ? "ok  " : "FAIL"}  ${label.padEnd(30)} ${detail}`);
   return ok;
@@ -132,12 +155,34 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---- writers that never touch the API middleware ----
+  //
+  // Checked by reading the source rather than by running them, because running
+  // them means crawling a customer's website or calling Meta. The failure was
+  // never subtle logic — it was a missing wrapper, and that is visible.
+  console.log("\nWriters outside the API (must establish their own context)");
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { dirname, join } = await import("node:path");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+  for (const writer of WRITERS) {
+    try {
+      const source = readFileSync(join(root, writer.file), "utf8");
+      const wrapped = /withTenant\(|withAllTenants\(/.test(source);
+      allOk =
+        line(wrapped, writer.name, wrapped ? "" : "NO CONTEXT — its writes are REJECTED") && allOk;
+    } catch {
+      allOk = line(false, writer.name, "could not be read") && allOk;
+    }
+  }
+
   console.log(
     allOk
-      ? "\nPASS — every application path carries a context, and every unguarded call is refused." +
-          "\nMigration 018 (RLS policies) can be applied.\n"
-      : "\nFAIL — do NOT apply migration 018. Fix the paths above first;" +
-          "\nwith policies on, each of them returns zero rows instead of an error.\n"
+      ? "\nPASS — every application path carries a context, every unguarded call is refused," +
+          "\nand every writer outside the API establishes its own.\n"
+      : "\nFAIL — do NOT apply migration 018, and if it is already applied, fix these now." +
+          "\nUnscoped reads return zero rows; unscoped WRITES are rejected outright.\n"
   );
 
   await getPool().end();
