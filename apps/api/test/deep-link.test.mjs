@@ -186,3 +186,48 @@ test("a link built from Meta's id would not survive the round trip", () => {
   );
   console.log("PASS: deep links are built from a dialable number and refuse when there is none");
 });
+
+// ============================================================
+// The page that gets the links out the door
+// ============================================================
+
+const LINKS_PAGE = readFileSync(
+  join(here2, "..", "..", "web", "app", "deck", "links", "page.tsx"),
+  "utf8"
+);
+const DECK_RAIL = readFileSync(
+  join(here2, "..", "..", "web", "app", "deck-console.tsx"),
+  "utf8"
+);
+
+test("the page is reachable from the nav", () => {
+  // The links existed only behind the API, which means they may as well not
+  // have existed — the person pasting one into a website is not running curl.
+  const rail = DECK_RAIL.slice(DECK_RAIL.indexOf('<nav className="rail">'), DECK_RAIL.indexOf("</nav>"));
+  assert.match(rail, /href="\/deck\/links"/);
+});
+
+test("a business without a number shows the reason, not a dead button", () => {
+  assert.match(LINKS_PAGE, /link\.url \? \(/);
+  assert.match(LINKS_PAGE, /\{link\.unavailableReason\}/);
+});
+
+test("the copied state clears itself", () => {
+  // A permanent "Copied" gives no signal the second time it is pressed.
+  assert.match(LINKS_PAGE, /setTimeout\(\(\) => setCopied/);
+  assert.match(LINKS_PAGE, /current === link\.slug \? null : current/);
+});
+
+test("a clipboard failure tells the user what to do instead", () => {
+  // navigator.clipboard fails on insecure origins and when permission is
+  // refused. "Nothing happened" is the worst possible response.
+  assert.match(LINKS_PAGE, /select the link and copy it manually/);
+});
+
+test("the page says where to publish and why it matters", () => {
+  // A link nobody publishes changes nothing, so the page is weighted toward
+  // getting it out the door rather than toward displaying it.
+  assert.match(LINKS_PAGE, /Where to put it/);
+  assert.match(LINKS_PAGE, /four of the five businesses have never/);
+  console.log("PASS: links are copyable, explained, and reachable from the nav");
+});

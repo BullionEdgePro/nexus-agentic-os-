@@ -378,3 +378,15 @@ export function addKnowledge(
 export function removeKnowledge(orgSlug: BusinessSlug, id: string): Promise<{ ok: true }> {
   return request(`/api/organizations/${orgSlug}/knowledge/${id}`, { method: "DELETE" });
 }
+
+export interface BusinessLink {
+  slug: string;
+  name: string;
+  number: string | null;
+  url: string | null;
+  unavailableReason: string | null;
+}
+
+export function getLinks(): Promise<{ links: BusinessLink[] }> {
+  return request("/api/links");
+}

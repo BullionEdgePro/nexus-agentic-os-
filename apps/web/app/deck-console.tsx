@@ -316,6 +316,13 @@ export default function DeckConsole() {
               hover, and did nothing when clicked, which reads as a broken
               product rather than an unfinished one. They come back when there
               is a page behind them. */}
+          <a title="Customer Links" href="/deck/links">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <path d="M10 13a4 4 0 0 0 5.7.4l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7" />
+              <path d="M14 11a4 4 0 0 0-5.7-.4l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7" />
+            </svg>
+            <span className="tip">Customer Links</span>
+          </a>
           <a title="Knowledge" href="/deck/knowledge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z" />
