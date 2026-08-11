@@ -124,3 +124,61 @@ test("the vocabulary is marked as needing review", () => {
   assert.match(MIGRATION, /NEEDS REVIEW BY SOMEONE WHO KNOWS THESE BUSINESSES/);
   console.log("PASS: Arabic enquiries route directly, and the migration audits its own collisions");
 });
+
+// ============================================================
+// Resolving the collisions (migration 024)
+// ============================================================
+
+const RESOLVE = readFileSync(
+  join(here, "..", "..", "..", "packages", "db", "migrations", "024-resolve-keyword-collisions.sql"),
+  "utf8"
+);
+
+test("litigation terms end up with the litigation firm", () => {
+  // ABR litigates; Juris Prime Legal does company formation and wills. "court"
+  // and "case" claimed by both meant every such enquiry got a menu instead of
+  // an answer — and had done since the switchboard shipped.
+  assert.match(RESOLVE, /where slug = 'juris-prime-legal'/);
+  for (const term of ["'court'", "'case'", "'lawyer'", "'محكمة'", "'محامي'"]) {
+    assert.ok(RESOLVE.includes(term), `${term} must be removed from Juris Prime Legal`);
+  }
+});
+
+test("removal is one-sided, and the survivor is asserted", () => {
+  // Removing a term from one business and discovering the other never had it
+  // leaves the keyword routing nowhere — strictly worse than the collision it
+  // replaced, and silent.
+  assert.match(RESOLVE, /ABR is missing lawyer/);
+  assert.match(RESOLVE, /raise exception/);
+});
+
+test("genuinely ambiguous terms stay shared, on purpose", () => {
+  // Both firms are legal practices, so "legal" is honest evidence for either.
+  // Assigning it would invent a distinction the customer did not make.
+  assert.match(RESOLVE, /DELIBERATELY LEFT SHARED/);
+  assert.ok(
+    !/not in \([^)]*'legal'/.test(RESOLVE),
+    "'legal' must not be stripped from either firm"
+  );
+});
+
+test("the tenancy split keeps the dispute terms with the firm", () => {
+  // A landlord with a property reaches the agency; a landlord with an eviction
+  // still reaches the firm, because the precise terms are untouched.
+  assert.match(RESOLVE, /'landlord', 'ايجار', 'إيجار'/);
+  assert.ok(!/'إخلاء'/.test(RESOLVE.split("do $$")[0]), "eviction terms must not be removed");
+});
+
+test("both alef spellings are handled", () => {
+  // normalizeForMatch folds أ/إ/آ at match time, not in the column — so a
+  // stored 'إيجار' would survive a removal that only named 'ايجار'.
+  assert.match(RESOLVE, /Both alef spellings are removed/);
+});
+
+test("the decision basis is written down, and reversible", () => {
+  // These are judgements from published practice areas, not from watching real
+  // enquiries. Whoever revisits this needs to know that.
+  assert.match(RESOLVE, /THE BASIS FOR EACH DECISION IS EACH FIRM'S OWN STATED PRACTICE/);
+  assert.match(RESOLVE, /REVERSIBLE/);
+  console.log("PASS: collisions resolved by stated practice, ambiguity kept where it is real");
+});
