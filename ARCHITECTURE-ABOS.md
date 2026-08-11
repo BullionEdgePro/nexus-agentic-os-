@@ -8,9 +8,20 @@ This is the engineering plan of record. It is deliberately opinionated about
 sequencing, because the order these features land in matters more than any
 individual design.
 
-**Status: 2026-08-03.** Phases 0, 2 and 3 are shipped and verified in
-production. Feature 12 is half done. Section 9 is the register of what has
-*not* been done and why — read that before planning the next block of work.
+**Status: 2026-08-11.** Phases 0, 2 and 3 shipped and verified. Feature 12 is
+**complete** — RLS is applied and verified *enforcing*: from ABR's tenant
+context, Zipicka's ten contacts are invisible, while Zipicka still reads its
+own ten. Tenant isolation is structural rather than by convention for the
+first time.
+
+Every business now has a published deep link that skips triage, which is the
+first thing that makes tenant #2 acquiring customers plausible without an ad
+budget.
+
+Section 9 is the register of what has *not* been done and why — read that
+before planning the next block of work. Section 8's last three rows are the
+most important thing in this document: source-text tests cannot see what the
+database decides, and three scripts exist because of it.
 
 ---
 
