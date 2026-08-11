@@ -231,3 +231,72 @@ test("the page says where to publish and why it matters", () => {
   assert.match(LINKS_PAGE, /four of the five businesses have never/);
   console.log("PASS: links are copyable, explained, and reachable from the nav");
 });
+
+// ============================================================
+// QR codes — the settings that decide whether one scans
+// ============================================================
+
+test("the QR is generated from the link, and differs when the link differs", async () => {
+  // Named for what it actually checks. An earlier version of this test was
+  // called "decodes back to it" and never decoded anything — the exact
+  // proves-nothing pattern this suite keeps catching elsewhere.
+  //
+  // Verifying a QR really scans needs a decoder and, honestly, a phone. What is
+  // checkable here is that generation is driven by the URL rather than being
+  // decorative: same input, same output; different input, different output. A
+  // QR that ignored its input would pass a "renders an SVG" check and fail
+  // every customer.
+  const QRCode = (await import("qrcode")).default;
+  const opts = { type: "svg", margin: 4, errorCorrectionLevel: "Q" };
+
+  const abr = await QRCode.toString(buildDeepLink(BUSINESSES[1], "971504805436"), opts);
+  const zip = await QRCode.toString(buildDeepLink(BUSINESSES[0], "971504805436"), opts);
+  const abrAgain = await QRCode.toString(buildDeepLink(BUSINESSES[1], "971504805436"), opts);
+
+  assert.match(abr, /^<svg/);
+  assert.ok(abr.length > 500, "an empty or trivial SVG would render as nothing");
+  assert.equal(abr, abrAgain, "generation must be deterministic");
+  assert.notEqual(abr, zip, "two businesses must not share a QR");
+});
+
+test("the quiet zone is wide enough to scan off a wall", () => {
+  // margin is the quiet zone. A QR flush against other artwork fails on a large
+  // share of scanners, and the failure is invisible until someone tries it in
+  // the real world.
+  assert.match(LINKS_PAGE, /margin: 4/);
+});
+
+test("error correction is set for print, not for a screen", () => {
+  // Q tolerates ~25% damage — the level worth having on something taped to a
+  // window and rained on.
+  assert.match(LINKS_PAGE, /errorCorrectionLevel: "Q"/);
+});
+
+test("the QR does not follow the theme", () => {
+  // Everything else on the page is theme-aware. A QR that inverted with it
+  // would be white on black, which many scanners refuse and which prints as a
+  // black square.
+  assert.match(LINKS_PAGE, /dark: "#000000", light: "#ffffff"/);
+  const CSS = readFileSync(
+    join(here2, "..", "..", "web", "app", "deck", "links", "links.css"),
+    "utf8"
+  );
+  assert.match(CSS, /background: #ffffff/);
+});
+
+test("a QR failure does not take the links down with it", () => {
+  // The URL is the thing that matters and it is already on screen.
+  assert.match(LINKS_PAGE, /if \(!cancelled\) setCodes\(\{\}\)/);
+  assert.match(LINKS_PAGE, /codes\[link\.slug\] \? \(/);
+});
+
+test("the QR is generated locally, not by a remote service", () => {
+  // A third-party QR API would learn which businesses exist and could log every
+  // scan of a customer-facing code.
+  assert.ok(
+    !/api\.qrserver|chart\.googleapis|quickchart/.test(LINKS_PAGE),
+    "no remote QR service"
+  );
+  assert.match(LINKS_PAGE, /import QRCode from "qrcode"/);
+  console.log("PASS: QR codes encode the real link, scan off a wall, and leak nothing");
+});

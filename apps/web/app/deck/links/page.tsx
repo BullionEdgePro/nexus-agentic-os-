@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { getLinks, type BusinessLink } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
@@ -29,6 +30,7 @@ export default function LinksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [codes, setCodes] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,6 +48,62 @@ export default function LinksPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Rendered client-side once the links arrive.
+  //
+  // Two settings decide whether these actually scan, and both are easy to get
+  // wrong in a way that looks fine on screen:
+  //
+  //   margin — the quiet zone. A QR printed flush against other artwork fails
+  //   on a large share of scanners. Four modules is the spec's minimum and the
+  //   difference between "works from a shop window" and "works sometimes".
+  //
+  //   colour — fixed dark-on-light, NOT theme-aware. The rest of this page
+  //   follows the operator's theme; a QR that inverted with it would be white
+  //   on black, which many scanners refuse and which prints as a black square.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      links
+        .filter((link) => link.url)
+        .map(async (link) => {
+          const svg = await QRCode.toString(link.url!, {
+            type: "svg",
+            margin: 4,
+            // Q tolerates ~25% damage — the level worth having on something
+            // that will be printed, taped to a window and rained on.
+            errorCorrectionLevel: "Q",
+            color: { dark: "#000000", light: "#ffffff" },
+          });
+          return [link.slug, svg] as const;
+        })
+    )
+      .then((pairs) => {
+        if (!cancelled) setCodes(Object.fromEntries(pairs));
+      })
+      .catch(() => {
+        // A failed QR must not take the links with it — the URL is the thing
+        // that matters and it is already on screen.
+        if (!cancelled) setCodes({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [links]);
+
+  function downloadQr(link: BusinessLink) {
+    const svg = codes[link.slug];
+    if (!svg) return;
+    // SVG rather than PNG: it scales to a shop window or a business card
+    // without the blur that kills a scan at large sizes.
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `${link.slug}-whatsapp-qr.svg`;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  }
 
   async function copy(link: BusinessLink) {
     if (!link.url) return;
@@ -112,6 +170,25 @@ export default function LinksPage() {
                       Opens WhatsApp with a message already written. The customer just presses
                       send, and it arrives already routed to {link.name}.
                     </p>
+
+                    {codes[link.slug] ? (
+                      <div className="lk-qr">
+                        <div
+                          className="lk-qr-img"
+                          /* Generated locally by qrcode from the URL above — no
+                             remote service, so no third party learns which
+                             businesses exist or gets to log the scans. */
+                          dangerouslySetInnerHTML={{ __html: codes[link.slug] }}
+                        />
+                        <div className="lk-qr-side">
+                          <p>
+                            Print this for the shop window, a business card, a property listing
+                            or an invoice. Scanning it opens the same pre-routed message.
+                          </p>
+                          <button onClick={() => downloadQr(link)}>Download SVG</button>
+                        </div>
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <p className="lk-note">{link.unavailableReason}</p>
