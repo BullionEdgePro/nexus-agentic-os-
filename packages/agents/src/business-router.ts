@@ -132,8 +132,33 @@ export function classifyBusiness(
  * governance policy is known. Asking a question is the only substantive thing
  * that is safe to say at this point.
  */
-export function buildTriageMessage(businesses: RoutableBusiness[]): string {
+export function buildTriageMessage(businesses: RoutableBusiness[], customerText = ""): string {
   const options = businesses.map((b, i) => `${i + 1}. ${b.name}`).join("\n");
+
+  // Answered in the script the customer wrote in.
+  //
+  // This is the first message anyone receives whose enquiry could not be routed,
+  // and it was English-only on a platform whose customers are in Dubai. Lead
+  // scoring had already been fixed for Arabic; the one reply every unrouted
+  // Arabic speaker sees had not, which is the wrong way round — someone who
+  // cannot read the menu cannot choose from it, and simply leaves.
+  //
+  // Any Arabic at all selects the Arabic reply, rather than a majority count.
+  // The asymmetry is deliberate: a customer who typed Arabic can certainly read
+  // it, while an Arabic speaker handed an English menu may be unable to answer
+  // at all. Guessing wrong in that direction costs the enquiry.
+  //
+  // Business names are left as written — they are brand names rather than text
+  // to translate, and "ABR Advocates" is what appears on their door.
+  if (/\p{Script=Arabic}/u.test(customerText)) {
+    return (
+      "مرحباً! لقد وصلت إلى مجموعة شركاتنا. " +
+      "لتوجيهك إلى الفريق المناسب، ما هو موضوع استفسارك؟\n\n" +
+      options +
+      "\n\nيرجى الرد برقم الخيار أو باسم الشركة."
+    );
+  }
+
   return (
     "Hello! You've reached our group of businesses. " +
     "So I can put you with the right team, which of these is your enquiry about?\n\n" +

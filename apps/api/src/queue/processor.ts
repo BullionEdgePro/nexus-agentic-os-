@@ -529,10 +529,12 @@ async function askWhichBusiness(
     contactId: string;
     contactWaId: string;
     owner: Organization;
+    /** What the customer actually wrote, so the menu answers in their script. */
+    text: string;
   },
   businesses: SharedNumberBusiness[]
 ): Promise<void> {
-  const body = buildTriageMessage(businesses);
+  const body = buildTriageMessage(businesses, ctx.text);
 
   try {
     await sendWhatsAppText(ctx.phoneNumberId, ctx.contactWaId, body);
