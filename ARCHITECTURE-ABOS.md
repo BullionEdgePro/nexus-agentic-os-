@@ -292,6 +292,7 @@ normal state, never as an error**:
 | A source edit whose anchor indentation did not match | The state landed, the markup did not. Build green, tests green, feature renders nothing |
 | A test suite that reads source text | Cannot know whether a column exists, a query parses, or a schema agrees. Passes with total confidence while the query is broken |
 | A data-modifying CTE re-read in the same statement | The `insert` half throws and is caught immediately. The `update` half matches the row, returns its **pre-update** values, and reports a task still open that the database has just closed. Nothing errors |
+| A retirement condition enforced only by a code comment | The login route said the shared password should go "once a real admin account has been created and used". Two admins had signed in days earlier — the condition was already met. Nothing read it, so `demo1234` stayed a full cross-tenant login. The comment made the code look considered, which is worse than no comment: a reader checks whether the rule was thought about, not whether anything executes it |
 
 Containers were green throughout. **Prefer checks that assert expected data
 EXISTS over checks that confirm nothing errored.** `preflightModels()` at worker
@@ -363,9 +364,11 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   dependencies. **The remaining choice is whether boards are wanted at all** —
   the list has been useful without them, and adding a board is a different
   product decision now that the underlying record exists.
-- **Retire the shared operator password.** Create an admin account and sign in
-  with it once; that closes the bootstrap door automatically (see §9.5). Until
-  then, `demo1234` plus any email is a full cross-tenant login. One command.
+- ~~**Retire the shared operator password.**~~ **Closed 2026-08-12, and it
+  needed nothing from you.** Two admin accounts had already signed in on
+  2026-08-10, so the retirement condition was satisfied before the code that
+  enforces it existed. The door shut the moment that code deployed. Verified
+  against production: `demo1234` now returns 401.
 
 ### 9.2 Deliberately not attempted — would have been unsafe
 
@@ -423,12 +426,24 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 - **Employee layer is dormant.** Zero employees exist, so presence, twins and
   handbacks are live but unexercised. This now also means every follow-up
   raised is unassigned — there is nobody to assign one to.
-- **The shared operator password is still open on this deployment.** It is a
-  bootstrap credential that retires itself the moment a named admin account
-  signs in (2026-08-12), and until then any email plus `NEXUS_OPERATOR_PASSWORD`
-  — defaulting to `demo1234`, because `.env` does not set it — is a full
-  cross-tenant login into all five businesses' customer conversations. Every
-  such sign-in is now logged loudly. Closing it is one command:
+- ~~**The shared operator password is open on this deployment.**~~ **Closed
+  2026-08-12.** It is now a bootstrap credential that retires itself once a
+  named admin account has signed in. Until that shipped, any email plus
+  `NEXUS_OPERATOR_PASSWORD` — defaulting to `demo1234`, because `.env` does not
+  set it — was a full cross-tenant login into all five businesses' customer
+  conversations.
+
+  **The sharpest part of this one is how it ended.** Two admin accounts had
+  already signed in on 2026-08-10. The condition the login route had described
+  in a comment for weeks was *already true*; the only thing missing was code
+  that read it. Deploying the enforcement closed the hole instantly, with no
+  operator action at all — which means the platform had been sitting wide open
+  for days in a state that had already met its own criterion for being shut.
+  Verified against production: `demo1234` returns 401 with a message naming the
+  fix, and `GET /auth/admin/bootstrap` reports `sharedPasswordRetired: true`.
+
+  Should every admin ever be deactivated, the window reopens by design rather
+  than stranding everyone. Re-open it deliberately, or recover, with:
 
   ```
   # With no arguments it reports what exists, including who has never signed in
@@ -441,10 +456,6 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 
   The password is generated on the server and printed once. Then sign in with
   it at `/admin` — the sign-in is what closes the door, not the account.
-  Worth being precise about what the fix
-  did and did not do: it made the door close *on the stated condition*, which
-  had been written in a comment and never enforced. It did not close the door.
-  Only signing in with a real account does that.
 - **No OpenTelemetry.** Phase 0 called for traces and structured alerting; only
   structured logging exists.
 
