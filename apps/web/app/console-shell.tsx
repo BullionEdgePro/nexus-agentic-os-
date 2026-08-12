@@ -38,13 +38,28 @@ import "./console-shell.css";
  * `onSignOut` exists because the front page signs out through a client handler
  * that also clears local state, while a plain page can just follow the link.
  */
-export function RailLinks({ onSignOut }: { onSignOut?: () => void }) {
+export function RailLinks({
+  role,
+  onSignOut,
+}: {
+  role: "operator" | "employee";
+  onSignOut?: () => void;
+}) {
   const pathname = usePathname();
   const current = activeHref(pathname);
 
+  // An employee never sees a door they cannot open.
+  //
+  // `operatorOnly` was declared on three entries and read by nothing, so the
+  // rail offered every employee Broadcasts, Team activity and Agent quality —
+  // each of which the API refuses with a 403. A menu of closed doors is worse
+  // than a shorter menu: it teaches the person that the product is broken
+  // rather than that the screen is not theirs.
+  const visible = role === "operator" ? NAV : NAV.filter((item) => !item.operatorOnly);
+
   return (
     <>
-      {NAV.map((item) => (
+      {visible.map((item) => (
         <a
           key={item.href}
           href={item.href}
@@ -76,11 +91,17 @@ export function RailLinks({ onSignOut }: { onSignOut?: () => void }) {
   );
 }
 
-export function ConsoleShell({ children }: { children: React.ReactNode }) {
+export function ConsoleShell({
+  children,
+  role,
+}: {
+  children: React.ReactNode;
+  role: "operator" | "employee";
+}) {
   return (
     <div className={`deck-root shell ${fontVariables}`}>
       <nav className="rail shell-rail" aria-label="Sections">
-        <RailLinks />
+        <RailLinks role={role} />
       </nav>
       <main className="shell-main">{children}</main>
     </div>

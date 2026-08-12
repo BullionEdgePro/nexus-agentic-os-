@@ -3,6 +3,7 @@ import { verifySession, SESSION_COOKIE } from "@/lib/auth";
 import Landing from "./landing";
 import DeckConsole from "./deck-console";
 import TeamWorkspace from "./deck/team/team-workspace";
+import { ConsoleShell } from "./console-shell";
 import type { BusinessSlug } from "@nexus/shared";
 
 /**
@@ -37,7 +38,12 @@ export default async function Home() {
   // and conclude the platform is broken. They came here to see their customers
   // and log what they won on their own phone, so that is what they get.
   if (session.role === "employee" && session.employeeId && session.organizationSlug) {
+    // Wrapped in the shell like every other signed-in screen. Without it the
+    // employee's own front page was the one place in the product with no
+    // navigation at all — they could reach Follow-ups from the inbox but not
+    // from the screen they land on.
     return (
+      <ConsoleShell role="employee">
       <TeamWorkspace
         lockedTo={{
           slug: session.organizationSlug as BusinessSlug,
@@ -45,6 +51,7 @@ export default async function Home() {
           fullName: session.sub,
         }}
       />
+      </ConsoleShell>
     );
   }
 

@@ -294,7 +294,7 @@ export default function DeckConsole() {
             all — and why adding Follow-ups meant this file was the only place
             that learned about it. */}
         <nav className="rail" aria-label="Sections">
-          <RailLinks onSignOut={signOut} />
+          <RailLinks role="operator" onSignOut={signOut} />
         </nav>
 
         <main className="main">

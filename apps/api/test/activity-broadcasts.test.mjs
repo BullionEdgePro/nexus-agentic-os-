@@ -484,3 +484,37 @@ function sqlOf(source, functionName, opener) {
   if (sql.length < 20) throw new Error(`empty slice for ${functionName}`);
   return sql;
 }
+
+// ============================================================
+// The rail never offers a door that will not open
+// ============================================================
+
+test("operator-only screens are hidden from employees, not just refused", () => {
+  // `operatorOnly` was declared on three nav entries and read by nothing, so
+  // the rail offered every employee Broadcasts, Team activity and Agent
+  // quality — each of which the API answers with a 403. A menu of closed doors
+  // teaches the person that the product is broken rather than that the screen
+  // is not theirs, and it hands them a list of internal URLs besides.
+  const SHELL = read("apps", "web", "app", "console-shell.tsx");
+  assert.match(SHELL, /role === "operator" \? NAV : NAV\.filter\(\(item\) => !item\.operatorOnly\)/);
+
+  // The three that must carry the flag. Named explicitly: these are the routes
+  // mounted behind `operatorOnly` in the API, and the rail has to agree with
+  // the middleware or one of them is wrong.
+  for (const href of ["/deck/broadcasts", "/deck/activity", "/deck/quality"]) {
+    const entry = DECK.slice(DECK.indexOf(`href: "${href}"`));
+    const untilNext = entry.slice(0, entry.indexOf("},"));
+    assert.match(untilNext, /operatorOnly: true/, `${href} must be operator-only in the nav`);
+  }
+});
+
+test("the role is decided on the server, not after hydration", () => {
+  // Deciding client-side would ship the operator's menu to everyone and strip
+  // it after hydration — a visible flicker of screens they will be refused.
+  for (const file of ["deck", "inbox"]) {
+    const layout = read("apps", "web", "app", file, "layout.tsx");
+    assert.match(layout, /verifySession/, `${file} layout must resolve the session server-side`);
+    // Fails closed to the narrower menu if the session is somehow absent.
+    assert.match(layout, /session\?\.role \?\? "employee"/, `${file} layout must default to employee`);
+  }
+});
