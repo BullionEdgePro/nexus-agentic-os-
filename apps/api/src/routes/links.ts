@@ -11,10 +11,33 @@ import { buildDeepLink } from "@nexus/agents";
  */
 export const linksRoute = new Hono();
 
-linksRoute.get("/", async (c) => {
+/**
+ * The same links, unauthenticated.
+ *
+ * WHY A PUBLIC ENDPOINT IS THE RIGHT CALL HERE, stated because "public" and
+ * "customer data" in one sentence deserves an argument rather than a shrug.
+ *
+ * These links exist to be published. Their whole purpose is to end up on
+ * websites, in Instagram bios and on QR codes taped to shop windows. There is
+ * nothing here a customer would not see the moment one is published: five
+ * business names that are already on the landing page, and one WhatsApp number
+ * that is printed for people to message. Gating them behind a login meant the
+ * person who actually manages a business's website needed an operator account
+ * to get the link they were being asked to paste — so the links reached nobody.
+ *
+ * What this deliberately does NOT expose: anything about conversations,
+ * contacts, employees or performance. It is the same shape the deck sees, and
+ * that shape was already only ever public-facing material.
+ *
+ * Mounted OUTSIDE /api/*, which is where `requireAuth` lives — the same reason
+ * the sign-in routes are.
+ */
+export const publicLinksRoute = new Hono();
+
+async function buildLinks() {
   const [organizations, numbers] = await Promise.all([listOrganizations(), getDisplayNumbers()]);
 
-  const links = organizations.map((organization) => {
+  return organizations.map((organization) => {
     // Resolved once. Calling numbers.get() three times invites the version
     // where two of them agree and the third does not.
     const number = numbers.get(organization.id);
@@ -44,6 +67,16 @@ linksRoute.get("/", async (c) => {
         : "This business has no WhatsApp number a customer could message yet.",
     };
   });
+}
 
-  return c.json({ links });
+// Both doors read the same builder, so the page an operator sees and the page
+// they hand to a web designer cannot describe different links.
+linksRoute.get("/", async (c) => c.json({ links: await buildLinks() }));
+
+publicLinksRoute.get("/", async (c) => {
+  // Cached at the edge for five minutes. This is the one page on the platform
+  // that may be opened by people who are not staff — a designer, a printer, a
+  // shop assistant — and it changes only when a business's number does.
+  c.header("Cache-Control", "public, max-age=300");
+  return c.json({ links: await buildLinks() });
 });

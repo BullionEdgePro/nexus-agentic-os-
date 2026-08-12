@@ -137,3 +137,16 @@
   cursor: pointer;
 }
 .lk-qr-side button:hover { border-color: var(--blueprint); color: var(--blueprint); }
+
+/* Pointer to the shareable public version. Sits above "where to put it"
+   because the first question an operator has is "how do I give this to the
+   person who actually updates the website". */
+.lk-share {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--graphite);
+  border-left: 3px solid var(--blueprint);
+  padding: 2px 0 2px 12px;
+  margin-bottom: 20px;
+}
+.lk-share a { color: var(--blueprint); text-decoration: underline; text-underline-offset: 2px; }

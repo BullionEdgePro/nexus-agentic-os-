@@ -1,0 +1,183 @@
+/* The public links page.
+ *
+ * Uses the same tokens as the console (.deck-root supplies them) so the page a
+ * designer opens looks like the product it came from. It is NOT inside the
+ * console shell — there is no rail, because a visitor here has nowhere to
+ * navigate and every link would bounce off the auth middleware.
+ *
+ * Built to be printed. That is not a nicety: these codes end up taped to shop
+ * windows, and the print rules at the foot are what make that work. */
+
+.pl-root {
+  background: var(--vellum);
+  color: var(--ink);
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 44px 22px 80px;
+}
+
+.pl-mast,
+.pl-list,
+.pl-where,
+.pl-error,
+.pl-missing {
+  max-width: 780px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.pl-mast {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pl-brand {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+}
+
+.pl-mast h1 {
+  font-family: var(--display);
+  font-size: clamp(28px, 5vw, 38px);
+  font-weight: 600;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.pl-sub { color: var(--graphite); font-size: 15px; max-width: 60ch; line-height: 1.55; }
+
+.pl-error,
+.pl-missing {
+  margin-top: 20px;
+  font-size: 13.5px;
+  color: var(--crit);
+  border: 1px solid rgba(162, 59, 46, 0.35);
+  background: rgba(162, 59, 46, 0.06);
+  border-radius: var(--r);
+  padding: 12px 15px;
+}
+
+.pl-missing { color: var(--graphite); border-color: var(--line); background: var(--vellum-card); }
+.pl-missing strong { color: var(--ink); }
+
+.pl-list { display: flex; flex-direction: column; gap: 14px; margin-top: 26px; }
+
+.pl-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  overflow: hidden;
+}
+
+.pl-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pl-card-head h2 { font-family: var(--display); font-size: 19px; font-weight: 600; }
+
+.pl-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--graphite);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.pl-card-body { display: flex; gap: 20px; padding: 18px; flex-wrap: wrap; align-items: flex-start; }
+
+/* Always white behind the code, in both themes. A QR that inverts is one many
+   scanners refuse outright. */
+.pl-qr {
+  flex: 0 0 170px;
+  width: 170px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 6px;
+  line-height: 0;
+}
+
+.pl-qr svg { width: 100%; height: auto; display: block; }
+
+.pl-detail { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.pl-lede { font-size: 14px; color: var(--graphite); line-height: 1.5; max-width: 52ch; }
+
+.pl-url {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--vellum);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 9px 11px;
+  display: block;
+  /* These URLs are long and have no spaces. Without this the card grows wider
+     than the page and the whole document scrolls sideways. */
+  overflow-wrap: anywhere;
+}
+
+.pl-copy {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 9px 18px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+
+.pl-copy.done { background: var(--good); border-color: var(--good); color: #fff; }
+.pl-copy:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 2px; }
+
+.pl-where {
+  margin-top: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 22px 24px;
+}
+
+.pl-where h2 {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+  margin-bottom: 14px;
+}
+
+.pl-where ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px; }
+.pl-where li { font-size: 14.5px; color: var(--graphite); line-height: 1.5; }
+.pl-where li strong { color: var(--ink); font-weight: 600; }
+
+.pl-print { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); font-size: 13px; color: var(--pencil); }
+
+/* --- print ---
+   These codes get taped to windows. Each business on its own page, at a size a
+   phone can read from a metre away, and none of the screen furniture. */
+@media print {
+  .pl-root { background: #fff; color: #000; padding: 0; }
+  .pl-copy, .pl-where, .pl-brand { display: none; }
+  .pl-card { break-inside: avoid; page-break-inside: avoid; border-color: #bbb; background: #fff; }
+  .pl-card + .pl-card { break-before: page; page-break-before: always; }
+  .pl-card-head h2, .pl-mast h1 { color: #000; }
+  .pl-url { background: #fff; color: #000; border-color: #bbb; }
+  .pl-qr { flex-basis: 260px; width: 260px; border-color: #ddd; }
+}

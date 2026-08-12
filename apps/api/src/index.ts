@@ -13,7 +13,7 @@ import { employeeAuthRoute } from "./routes/employee-auth.js";
 import { adminAuthRoute } from "./routes/admin-auth.js";
 import { activityRoute } from "./routes/activity.js";
 import { qualityRoute } from "./routes/quality.js";
-import { linksRoute } from "./routes/links.js";
+import { linksRoute, publicLinksRoute } from "./routes/links.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { operatorsRoute } from "./routes/operators.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
@@ -34,6 +34,10 @@ const app = new Hono();
 // SameSite=Lax cookie still travels.
 app.use("/api/*", cors({ origin: env.webOrigins, credentials: true }));
 app.use("/auth/*", cors({ origin: env.webOrigins, credentials: true }));
+// The public links endpoint carries no cookie and needs none, so it is open to
+// any origin: a business's own website may well want to read it directly rather
+// than have someone paste a link by hand.
+app.use("/links/*", cors({ origin: "*" }));
 
 // Every /api/* route serves tenant data — conversations, contacts, metrics —
 // so authentication is applied at the router, not per-route. A new endpoint is
@@ -77,6 +81,12 @@ app.route("/webhooks/whatsapp", whatsappWebhook);
 // login endpoint that needs a session cannot issue one.
 app.route("/auth", employeeAuthRoute);
 app.route("/auth", adminAuthRoute);
+// The five customer links, unauthenticated. Outside /api/* because requireAuth
+// guards everything under there, and the people who publish these links — a web
+// designer, a printer, whoever runs an Instagram account — are not staff and
+// will never have an operator account. See routes/links.ts for why this is
+// public-facing material by definition rather than by concession.
+app.route("/links", publicLinksRoute);
 app.route("/api/organizations", organizationsRoute);
 // Same mount point: knowledge is addressed per organization
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.

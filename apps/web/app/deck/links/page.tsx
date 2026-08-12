@@ -201,6 +201,15 @@ export default function LinksPage() {
         )}
 
         <section className="lk-where">
+          {/* The share-anywhere version. The people who actually publish these
+              — a web designer, whoever runs an Instagram account, a printer —
+              have no operator account and never will, so a page only reachable
+              from in here reaches nobody. */}
+          <p className="lk-share">
+            To hand these to someone outside the team, send them{" "}
+            <a href="/links">nexusagenticos.com/links</a> — the same links and codes, no sign-in,
+            and it prints one business per page.
+          </p>
           <h2 className="act-sub-head">Where to put it</h2>
           <ul>
             <li>
