@@ -174,7 +174,7 @@ and adding structure rather than replacing it.
 |---|---|
 | **0 — Survivability** | Verified backups (dump → test-restore → rotate, nightly); 5-tenant cap removed; governance fails safe for unknown tenants |
 | **1 — Employee Agent Layer** | `employees`, presence engine (pure, DST-aware, overnight shifts, UTC fallback), attributed AI twin with signature backstop, employee-aware routing |
-| **2 — Knowledge** | Schema + chunker + Gemini embeddings + citation-bearing retrieval; URL connector with SSRF guard; cross-page boilerplate stripping; 6-hourly re-indexing; **80 live chunks of real Zipicka content**, retrieval verified against real customer questions |
+| **2 — Knowledge** | Schema + chunker + Gemini embeddings + citation-bearing retrieval; URL connector with SSRF guard; cross-page boilerplate stripping; 6-hourly re-indexing; **328 live chunks across all five businesses**, retrieval verified against real customer questions |
 | **3 — Lead Intelligence** | Rules-based scoring with signal audit trail; direction-aware spam detection; complaints always urgent |
 | **12 — Security** | API authentication (was fully open, leaking customer PII); WebSocket auth; inbox login gate; app de-privileged from Postgres superuser |
 | **7 — Follow-ups** | The buildable half of the workspace: a promise made in a conversation, owned by a named person, with a date, raisable from the inbox and travelling back to the customer — it reaches the agent's context and the handover brief when that person messages again. No boards |
@@ -306,6 +306,8 @@ normal state, never as an error**:
 | A data-modifying CTE re-read in the same statement | The `insert` half throws and is caught immediately. The `update` half matches the row, returns its **pre-update** values, and reports a task still open that the database has just closed. Nothing errors |
 | `order by <non-unique> limit 1` | An agent's reply can land on the same microsecond as the message it answers. `order by created_at desc limit 1` then picks between them by coin flip — and the customer-waiting operator's first production run reported a customer as ignored while the reply sat in the database beside their message. The second instance of this pattern in the table, written by someone who had already read the first |
 | Cleanup keyed on a variable a failure prevents from setting | `schema-check` deleted its probe `where id = $1` using an id assigned from a return value. The one run where `createTask` threw *after its INSERT committed* left the id unset — so the cleanup did nothing, on the single run where there was something to clean. It works perfectly on every run where nothing went wrong, which is every run where it does not matter. Found days later by an operator reporting the orphan as a real overdue promise |
+| A flag that only ever turns off | `is_human_handoff` pauses the agent and is cleared when a human works the conversation. With nobody on the rota that clearing never happens, so a single escalation mutes a customer permanently. Four production conversations sat in it, and the state is indistinguishable from a conversation a colleague is actively handling — which is exactly what the inbox showed |
+| A count in a test standing in for a property | An assertion that `hasActiveEmployees(...).catch(() => true)` appears **exactly three times** failed the moment a fourth, correctly guarded, call site was added. It reported a regression that had not happened, and its obvious repair — bump 3 to 4 — is a habit that eventually waves through the unguarded call it exists to catch. The property is "every call site is guarded"; the number was never the point |
 | A cookie jar asked to hold two scopes for one name | `res.cookies.set()` is keyed by NAME. Sign-out cleared the session twice on purpose — once scoped to `.nexusagenticos.com`, once host-only for older sessions — and the second call **replaced** the first rather than adding a header. Production sent one `Set-Cookie` with no `Domain` while the live cookie carries one, so sign-out returned 200 and cleared nothing. The belt-and-braces line added to make it *more* thorough is what broke it, and the response looked correct in every respect a status code can express |
 | A redirect built from the origin the process thinks it serves | `new URL("/", req.url)` inside a route handler behind the proxy produced `303 -> https://61307059e8b2:3000/` — the container's own hostname. The status code is right, the header is present, and the browser lands nowhere. Middleware's `nextUrl` carries the public host and was fine, so the two paths disagreed while looking identical in source. A relative `Location` cannot be wrong, because the browser resolves it against what it actually asked for |
 | A retirement condition enforced only by a code comment | The login route said the shared password should go "once a real admin account has been created and used". Two admins had signed in days earlier — the condition was already met. Nothing read it, so `demo1234` stayed a full cross-tenant login. The comment made the code look considered, which is worse than no comment: a reader checks whether the rule was thought about, not whether anything executes it |
@@ -369,6 +371,25 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   guards written since — the cross-tenant pattern threshold, per-business
   memory, the switchboard's tie-breaking — cannot be evaluated at all until a
   second business has customers.
+
+  **Nothing on the engineering side is holding this up, and the census says so.**
+  Counted in production 2026-08-12:
+
+  | Business | Sources | Chunks | Contacts | Active staff |
+  |---|---|---|---|---|
+  | juris-prime-legal | 25 | 123 | 0 | 0 |
+  | juris-prime | 17 | 91 | 0 | 0 |
+  | zipicka | 6 | 80 | 11 | 0 |
+  | sfs-international | 6 | 29 | 0 | 0 |
+  | abr | 1 | 5 | 0 | 0 |
+
+  Four businesses have an agent that knows their work and has never been asked a
+  question. The one with customers has the *third* largest knowledge base. Two
+  numbers in that table are worth acting on independently of traffic: **abr has
+  five chunks**, because abshlaw.com is a single page and there is nothing more
+  to index — a litigation practice whose agent knows five passages will be vague
+  and escalate constantly, and the fix is content, not code. And **active staff
+  is zero everywhere**, which is the escalation gap in §9.5 stated as a number.
 - **Meta billing and business verification.** Bulk sending is built, templates
   are submitted, the engine is tested. It cannot send until WhatsApp has a
   payment method and verification completes. Neither is an engineering task.
@@ -474,12 +495,31 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   better than silently changing what every customer is told on the strength of a
   failed query.
 
-  **What is NOT fixed is the underlying fact.** There is still nobody to escalate
+  **The conversations already muted were four, not one.** Counted in production
+  rather than taken from this document, which had said one since 2026-08-12. All
+  Zipicka, all still silenced: two cold pitches (a data seller, a pet-food
+  manufacturer) and two people who said "Hi", were told a specialist would
+  follow up, and had heard nothing for eleven days.
+
+  The mechanism is a different bug from the promise, and worth separating.
+  `ai_paused_until` is a person taking a conversation for a while and expires by
+  itself. `is_human_handoff` is set on escalation and cleared only when a human
+  works the conversation — so on an empty rota it is **a switch that only turns
+  off**. One escalation mutes a customer for the life of the account, and
+  `if (isHumanHandoff) return` is the entire mechanism.
+
+  Fixed by reading the flag as the claim it makes — *a person is handling this* —
+  and checking it against whether a person could be. No active staff means the
+  flag is stale: the agent answers and the flag is cleared. The four release
+  themselves on their next inbound message, which is the only moment a release
+  matters. Clearing them with an `UPDATE` instead would have fixed four rows and
+  left the rule intact, ready to bite the first time a business's only employee
+  is deactivated.
+
+  **What is still NOT fixed is the underlying fact.** There is nobody to escalate
   *to*. The agent now handles what it would have handed over, which is better
-  than a dead promise and worse than a person. Every follow-up raised is also
-  still unassigned. One conversation from 2026-08-01 remains paused under the old
-  behaviour and needs releasing by hand — the fix changed what happens next, not
-  what already happened.
+  than a dead promise and worse than a person, and every follow-up raised is
+  still unassigned.
 - ~~**The shared operator password is open on this deployment.**~~ **Closed
   2026-08-12.** It is now a bootstrap credential that retires itself once a
   named admin account has signed in. Until that shipped, any email plus
