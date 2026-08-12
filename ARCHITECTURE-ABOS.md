@@ -438,6 +438,18 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 - **Employee layer is dormant.** Zero employees exist, so presence, twins and
   handbacks are live but unexercised. This now also means every follow-up
   raised is unassigned — there is nobody to assign one to.
+- **Escalation promises a person who does not exist.** Found 2026-08-12 by the
+  `customer-waiting` operator on its first live sweep, and this is the most
+  consequential thing in this section. Both escalation paths — governance
+  deciding to escalate, and the agent failing outright — send the customer *"I'm
+  looping in a specialist from our team. They'll follow up shortly"*, set
+  `is_human_handoff`, and thereby **pause the AI**. With no employees, nobody
+  ever arrives. The conversation does not error, does not appear in any failure
+  count, and looks identical to a healthy one; the customer is simply told help
+  is coming and then never hears from anyone again. One such conversation has
+  been open since 2026-08-01. Not a code defect — the code does exactly what it
+  says — but the highest-cost gap on the platform, and it will recur for every
+  single escalation until someone is on the rota.
 - ~~**The shared operator password is open on this deployment.**~~ **Closed
   2026-08-12.** It is now a bootstrap credential that retires itself once a
   named admin account has signed in. Until that shipped, any email plus
