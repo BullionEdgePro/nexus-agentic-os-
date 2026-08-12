@@ -5,6 +5,9 @@ import {
   withTenant,
   type FindingInput,
 } from "@nexus/db";
+// Pure and rules-based — no model call, so using it here keeps operators within
+// the property that makes them cheap enough to run every ten minutes.
+import { scoreLead } from "@nexus/leads";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -86,16 +89,22 @@ const customerWaiting: Operator = {
       wa_id: string;
       waited_hours: string;
       is_human_handoff: boolean;
+      last_body: string | null;
+      has_assessment: boolean;
     }>(
       `select c.id as conversation_id,
               ct.display_name as contact_name,
               ct.wa_id,
               round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as waited_hours,
-              c.is_human_handoff
+              c.is_human_handoff,
+              last.body as last_body,
+              exists (
+                select 1 from lead_assessments la where la.conversation_id = c.id
+              ) as has_assessment
          from conversations c
          join contacts ct on ct.id = c.contact_id
          join lateral (
-           select sender_type, created_at
+           select sender_type, created_at, body
              from messages m
             where m.conversation_id = c.id
             -- THE TIEBREAK IS NOT COSMETIC.
@@ -133,6 +142,9 @@ const customerWaiting: Operator = {
           -- language the scorer does not speak also scores zero and floors at
           -- low (ARCHITECTURE §9.5), and suppressing them would hide exactly
           -- the customer least able to chase us.
+          --
+          -- A conversation with NO assessment at all is not filtered here. It
+          -- is scored below instead — see the note on the .filter().
           and not exists (
             select 1 from lead_assessments la
              where la.conversation_id = c.id
@@ -141,7 +153,33 @@ const customerWaiting: Operator = {
       [organizationId, String(WAITING_WARN_HOURS)]
     );
 
-    return rows.map((row) => {
+    return rows
+      .filter((row) => {
+        // SUPPRESSION KEYED ON A SIGNAL THAT MAY NEVER HAVE BEEN RECORDED.
+        //
+        // The clause above asks whether an `inbound_pitch` assessment exists.
+        // For every conversation that predates lead scoring being wired into the
+        // pipeline, none does — and "no assessment" then reads as "not a pitch".
+        //
+        // That is how this operator's only open urgent finding on production
+        // came to be a data broker: *"Latest Owner, buyer and investor data
+        // available… Do you need a database?"*, reported as a customer ignored
+        // for 260.8 hours. The suppression was correct and simply had nothing
+        // to act on, which is the same shape as every other defect in §8 — the
+        // absence of a record reading as a negative answer.
+        //
+        // So when there is no assessment, ask the scorer directly. It is pure
+        // and rules-based, costs no model call, and gives the same verdict it
+        // would have given at the time. Scored on the LAST inbound message
+        // because that is the one that has gone unanswered — a pitch that
+        // opened with "hello" is still a pitch by the message it ends on.
+        //
+        // Conversations that DO have an assessment are left to the SQL: a
+        // stored classification beats one recomputed from a single message.
+        if (row.has_assessment || !row.last_body) return true;
+        return scoreLead({ text: row.last_body }).category !== "inbound_pitch";
+      })
+      .map((row) => {
       const hours = Number(row.waited_hours);
       const who = row.contact_name ?? `+${row.wa_id}`;
       return {
