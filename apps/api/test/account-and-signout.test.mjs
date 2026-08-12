@@ -69,16 +69,17 @@ test("the operator branch reads the real admin row", () => {
   assert.ok(!/editable: false/.test(code), "operators are no longer refused outright");
 });
 
-test("an operator can save, and is not offered a field they cannot use", () => {
-  // WhatsApp is employee-only: an operator takes no handoffs, so the box would
-  // change nothing. Omitted from the request rather than sent as null, which
-  // would read as "clear it".
-  assert.match(ME, /if \(scope\.role === "operator"\)[\s\S]{0,600}updateAdminProfile\(adminId/);
-  assert.match(MENUS, /me\?\.role === "employee" \? \{ whatsappNumber:/);
+test("an operator can save their own profile", () => {
+  assert.match(ME, /if \(scope\.role === "operator"\)[\s\S]{0,700}updateAdminProfile\(adminId/);
   assert.ok(
     !/Operator accounts have no profile to edit/.test(MENUS),
     "the refusal message must not return"
   );
+  // An operator DOES get a contact number now — it was asked for. It is stored
+  // and shown, and the form says plainly that nothing routes to it, which is
+  // the honest version of a field with no consumer. See signout-and-profile
+  // for that assertion.
+  assert.match(ME, /whatsappNumber !== undefined \? \{ whatsappNumber \}/);
 });
 
 test("a session with no admin behind it is told what to do", () => {

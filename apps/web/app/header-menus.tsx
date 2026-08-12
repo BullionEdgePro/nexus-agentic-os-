@@ -405,7 +405,7 @@ function ago(iso: string): string {
 /* 4. Account                                                          */
 /* ------------------------------------------------------------------ */
 
-export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onSignOut: () => void }) {
+export function AccountMenu({ signedInAs }: { signedInAs: string }) {
   const [open, setOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [editing, setEditing] = useState(false);
@@ -439,6 +439,65 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
     return (letters.replace(/[^a-zA-Z0-9]/g, "") || "OP").toUpperCase();
   }, [me, signedInAs]);
 
+  /**
+   * Resize in the browser, then send the picture inline.
+   *
+   * There is no object storage on this deployment. Rather than pretend a file
+   * can be uploaded, the file IS read here, drawn to a 256px canvas and
+   * exported as a JPEG data URI — small enough to sit in the profile row and
+   * be sent with every read. A phone camera photo is several megabytes; sent
+   * raw it would trip the size cap and the person would be told their
+   * perfectly ordinary photo was too big.
+   */
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Cleared immediately so choosing the same file twice fires again — the
+    // input does not change value when the pick is identical.
+    e.target.value = "";
+    if (!file) return;
+
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      setError("Choose a PNG, JPEG or WebP. SVG is not accepted — it can carry scripts.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => setError("That file could not be read.");
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onerror = () => setError("That file is not an image this browser can open.");
+      img.onload = () => {
+        const size = 256;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setError("This browser cannot process the image.");
+          return;
+        }
+        // Square crop from the centre. Squashing a portrait into a circle is
+        // worse than trimming it.
+        const side = Math.min(img.width, img.height);
+        ctx.drawImage(
+          img,
+          (img.width - side) / 2,
+          (img.height - side) / 2,
+          side,
+          side,
+          0,
+          0,
+          size,
+          size
+        );
+        setAvatar(canvas.toDataURL("image/jpeg", 0.82));
+        setError("");
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -446,9 +505,7 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
     try {
       await updateMe({
         fullName: name.trim() || undefined,
-        // Omitted entirely for an operator rather than sent as null, which
-        // would read as "clear it" for a field they do not have.
-        ...(me?.role === "employee" ? { whatsappNumber: wa.trim() ? wa.trim() : null } : {}),
+        whatsappNumber: wa.trim() ? wa.trim() : null,
         avatarUrl: avatar.trim() ? avatar.trim() : null,
       });
       const fresh = await getMe();
@@ -506,20 +563,24 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
 
           {me?.editable && !editing ? (
             <dl className="acct-rows">
-              {me.role === "employee" ? (
               <div>
-                <dt>WhatsApp</dt>
+                <dt>Email</dt>
+                <dd>{me.email}</dd>
+              </div>
+              <div>
+                <dt>{me.role === "employee" ? "WhatsApp" : "Contact number"}</dt>
                 <dd>
                   {me.whatsappNumber ? (
                     `+${me.whatsappNumber}`
-                  ) : (
-                    // Not blank. This number is what a customer handed to you
-                    // gets messaged from, so its absence is a gap worth naming.
+                  ) : me.role === "employee" ? (
+                    // Not blank. This number is what a customer handed to this
+                    // person gets messaged from, so its absence is a real gap.
                     <em>not set — customers cannot be handed to you directly</em>
+                  ) : (
+                    <em>not set</em>
                   )}
                 </dd>
               </div>
-              ) : null}
               {me.role === "employee" ? (
               <div>
                 <dt>Staff code</dt>
@@ -540,32 +601,78 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
                 <span>Name</span>
                 <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
               </label>
-              {/* Employees only. An operator takes no handoffs, so a number
-                  here would be a box that changes nothing. */}
-              {me.role === "employee" ? (
-                <label>
-                  <span>Your WhatsApp number</span>
-                  <input
-                    value={wa}
-                    onChange={(e) => setWa(e.target.value)}
-                    placeholder="971500000000"
-                    inputMode="tel"
-                  />
-                </label>
-              ) : null}
+              {/* Read-only, and the reason is given. A greyed-out box people
+                  try to click and cannot is worse than a plain statement. */}
+              <div className="acct-fixed">
+                <span>Email</span>
+                <p>
+                  {me.email}
+                  <em>how you sign in — an operator changes it, not this form</em>
+                </p>
+              </div>
+
               <label>
-                <span>Photo address (https)</span>
+                <span>{me.role === "employee" ? "Your WhatsApp number" : "Your contact number"}</span>
                 <input
-                  value={avatar}
+                  value={wa}
+                  onChange={(e) => setWa(e.target.value)}
+                  placeholder="971500000000"
+                  inputMode="tel"
+                />
+                {/* An operator's number is a record, not a route. Said here so
+                    nobody sets it expecting customers to start arriving. */}
+                {me.role === "operator" ? (
+                  <em className="acct-sub">
+                    On record only — operators do not take customer handoffs.
+                  </em>
+                ) : null}
+              </label>
+              <label>
+                <span>Photo</span>
+                <div className="acct-photo">
+                  {avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatar} alt="" className="acct-preview" />
+                  ) : (
+                    <span className="acct-preview empty">{initials}</span>
+                  )}
+                  <div className="acct-photo-acts">
+                    <label className="acct-file">
+                      Choose a file
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={onPickFile}
+                      />
+                    </label>
+                    {avatar ? (
+                      <button type="button" className="quiet" onClick={() => setAvatar("")}>
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </label>
+
+              <label>
+                <span>…or paste a link</span>
+                <input
+                  // A chosen file lives in the same state as a pasted link, so
+                  // the box would otherwise fill with 30KB of base64.
+                  value={avatar.startsWith("data:") ? "" : avatar}
                   onChange={(e) => setAvatar(e.target.value)}
                   placeholder="https://…/me.jpg"
                   spellCheck={false}
                 />
               </label>
-              {/* Said plainly rather than discovered. There is no file storage
-                  on this deployment, so a link is the only honest option. */}
+
+              {/* Stated rather than discovered. There is no object storage on
+                  this deployment, so a chosen file is resized in the browser
+                  and stored inline — which is why it has a size limit, and why
+                  the link option stays for anything larger. */}
               <p className="acct-hint">
-                Paste a link to an image. There is nowhere to upload a file on this deployment yet.
+                A chosen file is shrunk to 256px and saved with your profile. For a larger image,
+                host it somewhere and paste the https link instead.
               </p>
               {error ? <p className="acct-err">{error}</p> : null}
               <div className="acct-actions">
@@ -588,9 +695,11 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
               <span className="acct-note" />
             )}
             {saved ? <span className="acct-saved">Saved</span> : null}
-            <button className="acct-out" onClick={onSignOut}>
+            {/* A link, like the rail. One route, one behaviour, and it works
+                if the click handler never runs. */}
+            <a className="acct-out" href="/api/auth/logout">
               Sign out
-            </button>
+            </a>
           </div>
         </div>
       ) : null}

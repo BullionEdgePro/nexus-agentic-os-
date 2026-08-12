@@ -264,6 +264,99 @@
   width: 100%;
 }
 
+/* A field shown but not editable. Rendered as text rather than a disabled
+   input, because a greyed box invites a click that does nothing — and then the
+   reason has to be guessed. The reason is written underneath instead. */
+.deck-root .acct-fixed { display: grid; gap: 4px; }
+
+.deck-root .acct-fixed > span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.deck-root .acct-fixed p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.deck-root .acct-fixed em,
+.deck-root .acct-sub {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--pencil);
+  line-height: 1.4;
+}
+
+/* --- the photo picker --- */
+
+.deck-root .acct-photo { display: flex; align-items: center; gap: 12px; }
+
+.deck-root .acct-preview {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: var(--vellum);
+  border: 1px solid var(--line-strong);
+}
+
+.deck-root .acct-preview.empty {
+  background: var(--ink);
+  color: var(--vellum);
+  font-family: var(--mono);
+  font-size: 15px;
+  border-color: var(--ink);
+}
+
+.deck-root .acct-photo-acts { display: flex; flex-wrap: wrap; gap: 7px; }
+
+/* The label IS the button. A bare file input renders as an unstyleable
+   "Choose File / no file selected" that cannot be made to match anything. */
+.deck-root .acct-file {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.deck-root .acct-file:hover { background: var(--vellum); }
+.deck-root .acct-file input { display: none; }
+
+/* Focus has to be visible on the hidden input's label, or keyboard users get
+   no indication the control is selected at all. */
+.deck-root .acct-file:focus-within { outline: 2px solid var(--blueprint); outline-offset: 2px; }
+
+.deck-root .acct-photo-acts button {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--graphite);
+  cursor: pointer;
+}
+
+.deck-root .acct-locked { display: block; font-size: 10.5px; color: var(--pencil); margin-top: 2px; }
+
 .deck-root .acct-hint { font-size: 11.5px; line-height: 1.45; color: var(--pencil); margin: 0; }
 .deck-root .acct-err { font-size: 12px; color: var(--crit); margin: 0; }
 

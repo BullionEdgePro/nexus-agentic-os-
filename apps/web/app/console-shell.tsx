@@ -34,17 +34,8 @@ import "./console-shell.css";
  * shell does not. Rather than force one layout on both, they share the CONTENTS
  * of the rail and each positions it. That is the part that was drifting: the
  * items, not the geometry.
- *
- * `onSignOut` exists because the front page signs out through a client handler
- * that also clears local state, while a plain page can just follow the link.
  */
-export function RailLinks({
-  role,
-  onSignOut,
-}: {
-  role: "operator" | "employee";
-  onSignOut?: () => void;
-}) {
+export function RailLinks({ role }: { role: "operator" | "employee" }) {
   const pathname = usePathname();
   const current = activeHref(pathname);
 
@@ -77,11 +68,12 @@ export function RailLinks({
 
       <span className="sep" />
 
-      <a
-        href={onSignOut ? undefined : "/api/auth/logout"}
-        onClick={onSignOut}
-        title="Sign out"
-      >
+      {/* Always a real link to a real route. It used to branch: a plain <a>
+          doing a GET on the nine screens where onSignOut was not passed —
+          against a route that only accepted POST, so those answered 405 — and
+          an <a> with NO href on the front page, which a keyboard cannot
+          reach. One path now, working without JavaScript, everywhere. */}
+      <a href="/api/auth/logout" title="Sign out">
         <span className="rail-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />

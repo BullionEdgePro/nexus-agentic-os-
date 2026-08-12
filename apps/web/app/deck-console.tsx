@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { OverviewMetrics } from "@nexus/shared";
 import { initDeckFx } from "@/lib/deck-fx";
 import { getOverview } from "@/lib/api";
@@ -156,7 +155,6 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
   const who = signedInAs ?? "operator";
   const rootRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
   const [tenants, setTenants] = useState<TenantMeta[]>(TENANT_META);
   const [overview, setOverview] = useState<OverviewMetrics | null>(null);
@@ -233,15 +231,6 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
     };
   }, []);
 
-  async function signOut() {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {
-      /* ignore */
-    }
-    router.push("/");
-    router.refresh();
-  }
 
   // area chart path (static sample)
   const area = useMemo(() => {
@@ -281,7 +270,7 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
           <div className="top-right">
             <WorkMenu />
             <NotificationsMenu />
-            <AccountMenu signedInAs={who} onSignOut={signOut} />
+            <AccountMenu signedInAs={who} />
           </div>
         </header>
 
@@ -291,7 +280,7 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
             all — and why adding Follow-ups meant this file was the only place
             that learned about it. */}
         <nav className="rail" aria-label="Sections">
-          <RailLinks role="operator" onSignOut={signOut} />
+          <RailLinks role="operator" />
         </nav>
 
         <main className="main">

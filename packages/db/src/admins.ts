@@ -15,6 +15,7 @@ export interface AdminAccount {
   isActive: boolean;
   lastLoginAt: string | null;
   avatarUrl: string | null;
+  whatsappNumber: string | null;
 }
 
 interface AdminRow {
@@ -25,6 +26,7 @@ interface AdminRow {
   is_active: boolean;
   last_login_at: string | null;
   avatar_url: string | null;
+  whatsapp_number: string | null;
 }
 
 const toAdmin = (row: AdminRow): AdminAccount => ({
@@ -35,6 +37,7 @@ const toAdmin = (row: AdminRow): AdminAccount => ({
   isActive: row.is_active,
   lastLoginAt: row.last_login_at,
   avatarUrl: row.avatar_url,
+  whatsappNumber: row.whatsapp_number,
 });
 
 /**
@@ -53,7 +56,7 @@ export async function findAdminByEmail(email: string): Promise<AdminAccount | nu
   if (!needle) return null;
 
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url
+    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url, whatsapp_number
        from admins
       where lower(email) = $1 and is_active = true
       limit 1`,
@@ -83,7 +86,7 @@ export async function upsertAdmin(input: {
        password_hash = excluded.password_hash,
        is_active     = true,
        updated_at    = now()
-     returning id, email, full_name, password_hash, is_active, last_login_at, avatar_url`,
+     returning id, email, full_name, password_hash, is_active, last_login_at, avatar_url, whatsapp_number`,
     [input.email.trim(), input.fullName.trim(), input.passwordHash]
   );
   return toAdmin(rows[0]);
@@ -92,7 +95,7 @@ export async function upsertAdmin(input: {
 /** Look up an admin by the id carried in their session. */
 export async function findAdminById(id: string): Promise<AdminAccount | null> {
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url
+    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url, whatsapp_number
        from admins
       where id = $1 and is_active = true
       limit 1`,
@@ -110,15 +113,23 @@ export async function findAdminById(id: string): Promise<AdminAccount | null> {
  */
 export async function updateAdminProfile(
   id: string,
-  input: { fullName?: string; avatarUrl?: string | null }
+  input: { fullName?: string; avatarUrl?: string | null; whatsappNumber?: string | null }
 ): Promise<boolean> {
   const { rowCount } = await getPool().query(
     `update admins
-        set full_name  = coalesce($2, full_name),
-            avatar_url = case when $3::boolean then $4 else avatar_url end,
-            updated_at = now()
+        set full_name       = coalesce($2, full_name),
+            avatar_url      = case when $3::boolean then $4 else avatar_url end,
+            whatsapp_number = case when $5::boolean then $6 else whatsapp_number end,
+            updated_at      = now()
       where id = $1 and is_active = true`,
-    [id, input.fullName ?? null, input.avatarUrl !== undefined, input.avatarUrl ?? null]
+    [
+      id,
+      input.fullName ?? null,
+      input.avatarUrl !== undefined,
+      input.avatarUrl ?? null,
+      input.whatsappNumber !== undefined,
+      input.whatsappNumber ?? null,
+    ]
   );
   return (rowCount ?? 0) > 0;
 }
@@ -162,7 +173,7 @@ export async function hasWorkingAdminAccount(): Promise<boolean> {
 
 export async function listAdmins(): Promise<Array<Omit<AdminAccount, "passwordHash">>> {
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, '' as password_hash, is_active, last_login_at, avatar_url
+    `select id, email, full_name, '' as password_hash, is_active, last_login_at, avatar_url, whatsapp_number
        from admins order by created_at asc`
   );
   return rows.map(({ password_hash: _ignored, ...row }) => {

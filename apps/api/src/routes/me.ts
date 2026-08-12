@@ -51,10 +51,11 @@ meRoute.get("/", async (c) => {
       fullName: admin?.fullName ?? null,
       businessName: null,
       businessSlug: null,
-      // Not a field an operator has. They administer the platform rather than
-      // working in one of its businesses, so no customer is ever handed to
-      // them directly and the box would do nothing.
-      whatsappNumber: null,
+      // A contact number ON RECORD. Nothing routes to it — an operator takes
+      // no handoffs, so unlike employees.whatsapp_number this is not read by
+      // the direct-contact link. Stored because it was asked for, and labelled
+      // in the UI for what it is rather than implying a behaviour.
+      whatsappNumber: admin?.whatsappNumber ?? null,
       avatarUrl: admin?.avatarUrl ?? null,
       jobTitle: null,
       editable: Boolean(admin),
@@ -138,10 +139,37 @@ meRoute.patch("/", async (c) => {
     const raw = typeof body.avatarUrl === "string" ? body.avatarUrl.trim() : "";
     if (!raw) {
       avatarUrl = null;
+    } else if (raw.startsWith("data:")) {
+      // AN UPLOADED FILE ARRIVES AS A DATA URI.
+      //
+      // There is no object storage on this deployment, so the browser resizes
+      // the picture to 256px and sends it inline. That is the honest way to
+      // support "choose a file" without inventing a storage layer — and it is
+      // why the format is pinned rather than trusted.
+      //
+      // The allow-list is three raster formats. SVG is REFUSED even though it
+      // is an image: an SVG can carry <script>, and this lands in an <img src>
+      // on a page other staff load. A picture that can execute is not a
+      // picture.
+      const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+      if (!match) {
+        return c.json(
+          { error: "That image format is not supported. Use a PNG, JPEG or WebP." },
+          400
+        );
+      }
+      // ~200KB of base64 is roughly 150KB of image, which is generous for a
+      // 256px avatar and small enough to sit in a text column and be sent with
+      // every profile read. A cap stated here beats one discovered when a row
+      // stops fitting.
+      if (raw.length > 200_000) {
+        return c.json({ error: "That image is too large. Choose one under 150KB." }, 400);
+      }
+      avatarUrl = raw;
     } else {
-      // https only, and parsed rather than pattern-matched. This URL is put in
-      // an <img src> on a page other staff load, so "javascript:" and "data:"
-      // are refused outright rather than filtered.
+      // A link. https only, and parsed rather than pattern-matched, so
+      // "javascript:" is refused by the protocol check rather than by a regex
+      // somebody has to get exactly right.
       let parsed: URL;
       try {
         parsed = new URL(raw);
@@ -176,6 +204,7 @@ meRoute.patch("/", async (c) => {
     const ok = await updateAdminProfile(adminId, {
       fullName: fullName || undefined,
       ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+      ...(whatsappNumber !== undefined ? { whatsappNumber } : {}),
     });
     if (!ok) return c.json({ error: "This account is no longer active." }, 404);
     return c.json({ ok: true });
