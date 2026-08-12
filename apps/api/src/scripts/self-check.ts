@@ -129,7 +129,30 @@ async function main() {
   // Two law firms share this number. A vague legal enquiry must ASK which one —
   // guessing sends a criminal matter to a company-formation desk, and routing
   // also selects which governance policy approves the reply.
-  const vagueLegal = classifyBusiness("I need a lawyer", businesses);
+  // "I need a lawyer" is NO LONGER the ambiguous case, and that is deliberate.
+  //
+  // Migration 024 assigned lawyer/lawyers/advocate/محامي to ABR alone, reasoning
+  // that someone asking for a lawyer wants representation and the firm is
+  // literally named Advocates, while Juris Prime Legal's clients ask about
+  // company setup. It kept "legal" and "قانوني" shared on purpose, because both
+  // are legal practices and the word is honest evidence for either.
+  //
+  // This check asserted the pre-024 behaviour and had been failing ever since —
+  // invisibly, because self-check itself was dead under RLS. Reviving the gate
+  // surfaced it within a minute. Both halves of 024's decision are now pinned,
+  // so a future collision pass cannot quietly undo either one.
+  const named = classifyBusiness("I need a lawyer", businesses);
+  check(
+    "asking for a lawyer reaches the litigators",
+    named.kind === "routed" && named.business.slug === "abr",
+    named.kind === "routed" ? named.business.slug : named.kind
+  );
+
+  // The genuinely ambiguous phrasing: only the shared word matches, and both
+  // firms are equally good answers. Guessing here would send a criminal matter
+  // to a company-formation desk — and routing also picks which governance
+  // policy approves the reply.
+  const vagueLegal = classifyBusiness("I need legal help", businesses);
   const firms =
     vagueLegal.kind === "ambiguous" ? vagueLegal.candidates.map((b) => b.slug).sort() : [];
   check(
