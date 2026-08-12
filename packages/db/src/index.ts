@@ -16,3 +16,4 @@ export * from "./contact-memory.js";
 export * from "./onboarding.js";
 export * from "./tasks.js";
 export * from "./operators.js";
+export * from "./search.js";

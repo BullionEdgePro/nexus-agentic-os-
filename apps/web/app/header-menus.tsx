@@ -1,0 +1,586 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  searchAll,
+  getMe,
+  updateMe,
+  getTasks,
+  getFindings,
+  type SearchHit,
+  type Me,
+  type TaskRecord,
+  type OperatorFinding,
+} from "@/lib/api";
+import "./header-menus.css";
+
+/**
+ * The four header controls, each with something real behind it.
+ *
+ * THE SPLIT BETWEEN THE FIRST TWO IS THE DESIGN, and it is worth stating
+ * because "alerts" and "notifications" are usually the same list twice:
+ *
+ *   To do    — what YOU must act on. A customer waiting, a promise past its
+ *              date, work nobody has been given. It persists until somebody
+ *              does something. Closing the panel changes nothing.
+ *
+ *   Activity — what HAPPENED that you may not have seen. New since you last
+ *              looked, and opening it marks it seen. It is a diff, not a queue.
+ *
+ * The same finding can appear in both, and that is correct: a customer who
+ * started waiting an hour ago is both news and work. What would be wrong is
+ * two lists that claim to be different and are not.
+ */
+
+/* ------------------------------------------------------------------ */
+/* shared: a panel that closes on Escape and on a click outside        */
+/* ------------------------------------------------------------------ */
+
+function useDismissable(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) close();
+    }
+    document.addEventListener("keydown", onKey);
+    // `mousedown`, not `click`: a click that starts inside the panel and ends
+    // outside it — a text selection dragged past the edge — would otherwise
+    // close the panel mid-drag.
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [open, close]);
+
+  return ref;
+}
+
+/* ------------------------------------------------------------------ */
+/* 1. Search                                                           */
+/* ------------------------------------------------------------------ */
+
+export function HeaderSearch() {
+  const [term, setTerm] = useState("");
+  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrap = useDismissable(open, () => setOpen(false));
+
+  // ⌘K / Ctrl-K focuses the box. The shortcut was printed on the old search
+  // box as a <kbd> hint while nothing listened for it — a label describing a
+  // feature that did not exist.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Debounced. Every keystroke firing a query would put five requests in
+  // flight for a five-letter name and render whichever returned last, which is
+  // not necessarily the one matching what is now in the box.
+  useEffect(() => {
+    if (term.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    let cancelled = false;
+    setBusy(true);
+    const timer = setTimeout(() => {
+      searchAll(term)
+        .then((data) => {
+          if (!cancelled) setHits(data.hits);
+        })
+        .catch(() => {
+          if (!cancelled) setHits([]);
+        })
+        .finally(() => {
+          if (!cancelled) setBusy(false);
+        });
+    }, 220);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [term]);
+
+  const showPanel = open && term.trim().length >= 2;
+
+  return (
+    <div className="hs" ref={wrap}>
+      <div className="hs-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+        <input
+          ref={inputRef}
+          value={term}
+          onChange={(e) => {
+            setTerm(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search people and follow-ups…"
+          aria-label="Search people and follow-ups"
+          spellCheck={false}
+        />
+        <kbd>⌘K</kbd>
+      </div>
+
+      {showPanel ? (
+        <div className="hs-panel" role="listbox">
+          {busy && hits.length === 0 ? (
+            <p className="hs-note">Searching…</p>
+          ) : hits.length === 0 ? (
+            // Names the scope. "No results" leaves someone wondering whether
+            // the thing is missing or simply not searchable here.
+            <p className="hs-note">
+              Nothing matches &ldquo;{term.trim()}&rdquo;. This searches customer names, phone
+              numbers and follow-up titles — not message text.
+            </p>
+          ) : (
+            <ul>
+              {hits.map((hit) => (
+                <li key={`${hit.kind}-${hit.id}`}>
+                  <a href={hit.href}>
+                    <span className={`hs-kind ${hit.kind}`}>
+                      {hit.kind === "contact" ? "Person" : "Follow-up"}
+                    </span>
+                    <span className="hs-title">{hit.title}</span>
+                    <span className="hs-meta">
+                      {hit.detail ? `${hit.detail} · ` : ""}
+                      {hit.businessName}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. To do — what needs acting on                                     */
+/* ------------------------------------------------------------------ */
+
+export function WorkMenu() {
+  const [open, setOpen] = useState(false);
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [waiting, setWaiting] = useState<OperatorFinding[]>([]);
+  const [counts, setCounts] = useState({ overdue: 0, unassigned: 0, open: 0 });
+  const wrap = useDismissable(open, () => setOpen(false));
+
+  const load = useCallback(() => {
+    getTasks({ status: "open" })
+      .then((d) => {
+        setTasks(d.tasks);
+        setCounts(d.counts);
+      })
+      .catch(() => undefined);
+    getFindings()
+      .then((d) => setWaiting(d.findings.filter((f) => f.operator === "customer-waiting")))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    load();
+    // Re-read every two minutes. The operator sweep runs every ten, so polling
+    // faster would spend requests to show the same numbers back.
+    const timer = setInterval(load, 120_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  // What actually demands action, not everything outstanding. A follow-up due
+  // next week is real work and does not belong in a badge today.
+  const due = counts.overdue + counts.unassigned + waiting.length;
+
+  const overdue = useMemo(() => tasks.filter((t) => t.isOverdue), [tasks]);
+  const unowned = useMemo(() => tasks.filter((t) => !t.employeeId && !t.isOverdue), [tasks]);
+
+  return (
+    <div className="hm" ref={wrap}>
+      <button
+        className="icon-btn"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={due ? `${due} things need doing` : "Nothing needs doing"}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <path d="M9 5h11M9 12h11M9 19h11" />
+          <path d="M3.5 5.2l1.3 1.3L7.4 3.9M3.5 12.2l1.3 1.3 2.6-2.6M3.5 19.2l1.3 1.3 2.6-2.6" />
+        </svg>
+        {due ? <span className="badge">{due > 99 ? "99+" : due}</span> : null}
+      </button>
+
+      {open ? (
+        <div className="hm-panel">
+          <div className="hm-head">
+            <strong>To do</strong>
+            <span>{due ? `${due} needing action` : "nothing right now"}</span>
+          </div>
+
+          {due === 0 ? (
+            <p className="hm-empty">
+              No customer is waiting, nothing promised is overdue, and every follow-up has an
+              owner.
+            </p>
+          ) : (
+            <ul className="hm-list">
+              {waiting.slice(0, 4).map((f) => (
+                <li key={f.id}>
+                  <a href="/deck/operators">
+                    <span className="hm-tag urgent">Waiting</span>
+                    <span className="hm-t">{f.title}</span>
+                    <span className="hm-m">{f.businessName}</span>
+                  </a>
+                </li>
+              ))}
+              {overdue.slice(0, 4).map((t) => (
+                <li key={t.id}>
+                  <a href="/deck/tasks">
+                    <span className="hm-tag late">Overdue</span>
+                    <span className="hm-t">{t.title}</span>
+                    <span className="hm-m">
+                      {t.businessName}
+                      {t.employeeName ? ` · ${t.employeeName}` : " · nobody's job"}
+                    </span>
+                  </a>
+                </li>
+              ))}
+              {unowned.slice(0, 3).map((t) => (
+                <li key={t.id}>
+                  <a href="/deck/tasks">
+                    <span className="hm-tag warn">Unassigned</span>
+                    <span className="hm-t">{t.title}</span>
+                    <span className="hm-m">{t.businessName}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="hm-foot">
+            <a href="/deck/tasks">All follow-ups</a>
+            <a href="/deck/operators">Needs attention</a>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. Activity — what happened since you last looked                   */
+/* ------------------------------------------------------------------ */
+
+const SEEN_KEY = "nexus.activity.seenAt";
+
+export function NotificationsMenu() {
+  const [open, setOpen] = useState(false);
+  const [findings, setFindings] = useState<OperatorFinding[]>([]);
+  const [seenAt, setSeenAt] = useState<number>(0);
+  const wrap = useDismissable(open, () => setOpen(false));
+
+  useEffect(() => {
+    // Read once on mount. localStorage is per-browser, so "seen" means seen on
+    // this machine — which is the honest meaning for a per-person marker with
+    // no per-person storage behind it. Recording it server-side would need a
+    // table whose only reader is this badge.
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(SEEN_KEY) : null;
+    setSeenAt(raw ? Number(raw) || 0 : 0);
+  }, []);
+
+  const load = useCallback(() => {
+    getFindings()
+      .then((d) => setFindings(d.findings))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 120_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  const fresh = useMemo(
+    () => findings.filter((f) => new Date(f.firstSeenAt).getTime() > seenAt),
+    [findings, seenAt]
+  );
+
+  function openAndMarkSeen() {
+    const next = !open;
+    setOpen(next);
+    if (next) {
+      // Marked on OPEN, not on close. Someone who opens the panel and reads it
+      // has seen it, whether or not they remember to close it deliberately.
+      const now = Date.now();
+      window.localStorage.setItem(SEEN_KEY, String(now));
+      setSeenAt(now);
+    }
+  }
+
+  return (
+    <div className="hm" ref={wrap}>
+      <button
+        className="icon-btn"
+        onClick={openAndMarkSeen}
+        aria-expanded={open}
+        title={fresh.length ? `${fresh.length} new since you last looked` : "Activity"}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7Z" />
+          <path d="M10 20a2 2 0 0 0 4 0" />
+        </svg>
+        {fresh.length ? <span className="badge dot-only" aria-hidden="true" /> : null}
+      </button>
+
+      {open ? (
+        <div className="hm-panel">
+          <div className="hm-head">
+            <strong>Activity</strong>
+            <span>{fresh.length ? `${fresh.length} new` : "nothing new"}</span>
+          </div>
+
+          {findings.length === 0 ? (
+            <p className="hm-empty">
+              Nothing has been raised. The checks run every ten minutes across every business.
+            </p>
+          ) : (
+            <ul className="hm-list">
+              {findings.slice(0, 8).map((f) => {
+                const isNew = new Date(f.firstSeenAt).getTime() > seenAt;
+                return (
+                  <li key={f.id} className={isNew ? "new" : undefined}>
+                    <a href="/deck/operators">
+                      <span className={`hm-tag ${f.severity === "urgent" ? "urgent" : "warn"}`}>
+                        {f.operator.replace(/-/g, " ")}
+                      </span>
+                      <span className="hm-t">{f.title}</span>
+                      <span className="hm-m">
+                        {f.businessName} · {ago(f.firstSeenAt)}
+                      </span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div className="hm-foot">
+            <a href="/deck/operators">Everything being watched</a>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ago(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.max(1, Math.round((Date.now() - then) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+/* ------------------------------------------------------------------ */
+/* 4. Account                                                          */
+/* ------------------------------------------------------------------ */
+
+export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onSignOut: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const wrap = useDismissable(open, () => setOpen(false));
+
+  const [name, setName] = useState("");
+  const [wa, setWa] = useState("");
+  const [avatar, setAvatar] = useState("");
+
+  useEffect(() => {
+    getMe()
+      .then((data) => {
+        setMe(data);
+        setName(data.fullName ?? "");
+        setWa(data.whatsappNumber ?? "");
+        setAvatar(data.avatarUrl ?? "");
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const initials = useMemo(() => {
+    const source = me?.fullName || me?.email || signedInAs;
+    const words = source.split("@")[0].split(/[\s._-]+/).filter(Boolean);
+    const letters =
+      words.length > 1
+        ? (words[0][0] ?? "") + (words[1][0] ?? "")
+        : (words[0] ?? "").slice(0, 2);
+    return (letters.replace(/[^a-zA-Z0-9]/g, "") || "OP").toUpperCase();
+  }, [me, signedInAs]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await updateMe({
+        fullName: name.trim() || undefined,
+        whatsappNumber: wa.trim() ? wa.trim() : null,
+        avatarUrl: avatar.trim() ? avatar.trim() : null,
+      });
+      const fresh = await getMe();
+      setMe(fresh);
+      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2200);
+    } catch (err) {
+      // The API's messages are written for a person — an unusable number, a
+      // non-https image address — so they are shown rather than replaced.
+      const raw = err instanceof Error ? err.message : "Could not save.";
+      setError(raw.replace(/^API \d+ on [^:]+: /, "").replace(/^\{"error":"|"\}$/g, ""));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="hm hm-right" ref={wrap}>
+      <button
+        className="avatar"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={me?.email ?? signedInAs}
+      >
+        {me?.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={me.avatarUrl} alt="" onError={(e) => (e.currentTarget.style.display = "none")} />
+        ) : (
+          initials
+        )}
+      </button>
+
+      {open ? (
+        <div className="hm-panel acct">
+          <div className="acct-id">
+            <div className="acct-face">
+              {me?.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={me.avatarUrl} alt="" />
+              ) : (
+                initials
+              )}
+            </div>
+            <div className="acct-who">
+              <strong>{me?.fullName ?? me?.email ?? signedInAs}</strong>
+              <span>{me?.email ?? signedInAs}</span>
+              <span className="acct-role">
+                {me?.role === "operator"
+                  ? "Operator · every business"
+                  : `${me?.jobTitle ? `${me.jobTitle} · ` : ""}${me?.businessName ?? ""}`}
+              </span>
+            </div>
+          </div>
+
+          {me?.editable && !editing ? (
+            <dl className="acct-rows">
+              <div>
+                <dt>WhatsApp</dt>
+                <dd>
+                  {me.whatsappNumber ? (
+                    `+${me.whatsappNumber}`
+                  ) : (
+                    // Not blank. This number is what a customer handed to you
+                    // gets messaged from, so its absence is a gap worth naming.
+                    <em>not set — customers cannot be handed to you directly</em>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Staff code</dt>
+                <dd>{me.employeeCode}</dd>
+              </div>
+            </dl>
+          ) : null}
+
+          {me?.editable && editing ? (
+            <form className="acct-form" onSubmit={save}>
+              <label>
+                <span>Name</span>
+                <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+              </label>
+              <label>
+                <span>Your WhatsApp number</span>
+                <input
+                  value={wa}
+                  onChange={(e) => setWa(e.target.value)}
+                  placeholder="971500000000"
+                  inputMode="tel"
+                />
+              </label>
+              <label>
+                <span>Photo address (https)</span>
+                <input
+                  value={avatar}
+                  onChange={(e) => setAvatar(e.target.value)}
+                  placeholder="https://…/me.jpg"
+                  spellCheck={false}
+                />
+              </label>
+              {/* Said plainly rather than discovered. There is no file storage
+                  on this deployment, so a link is the only honest option. */}
+              <p className="acct-hint">
+                Paste a link to an image. There is nowhere to upload a file on this deployment yet.
+              </p>
+              {error ? <p className="acct-err">{error}</p> : null}
+              <div className="acct-actions">
+                <button type="submit" disabled={saving}>
+                  {saving ? "Saving…" : "Save"}
+                </button>
+                <button type="button" className="quiet" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          <div className="acct-foot">
+            {me?.editable && !editing ? (
+              <button className="quiet" onClick={() => setEditing(true)}>
+                Edit profile
+              </button>
+            ) : (
+              <span className="acct-note">
+                {me?.role === "operator" ? "Operator accounts have no profile to edit." : ""}
+              </span>
+            )}
+            {saved ? <span className="acct-saved">Saved</span> : null}
+            <button className="acct-out" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

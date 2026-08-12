@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OverviewMetrics } from "@nexus/shared";
 import { initDeckFx } from "@/lib/deck-fx";
-import { getOverview, getFindings, getTasks } from "@/lib/api";
+import { getOverview } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { RailLinks } from "./console-shell";
+import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import "./deck/deck.css";
 
 /* ---------------- static presentation data ---------------- */
@@ -164,35 +165,9 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
   const [grown, setGrown] = useState(false);
   const [clock, setClock] = useState("");
 
-  // The two header badges, and who is signed in.
-  //
-  // null means "not answered yet" and is deliberately NOT 0 — a badge that
-  // renders zero before the request lands, then jumps to seven, reads as the
-  // number changing rather than as the page loading. Nothing shows until the
-  // server has actually said something.
-  const [findings, setFindings] = useState<number | null>(null);
-  const [overdue, setOverdue] = useState<number | null>(null);
-
-  useEffect(() => {
-    // Both fail silently. A header count is an enhancement on a console whose
-    // job is the panels below it; an error banner because a badge could not
-    // load would be worse than no badge.
-    getFindings()
-      .then((data) => setFindings(data.counts.urgent + data.counts.warn + data.counts.info))
-      .catch(() => undefined);
-    getTasks({ status: "open" })
-      .then((data) => setOverdue(data.counts.overdue))
-      .catch(() => undefined);
-  }, []);
-
-  // Two letters from the account, not the hardcoded "AA" that was here. An
-  // email has no surname to take a second initial from, so this uses the first
-  // two alphanumerics of the local part rather than inventing a name.
-  const initials = useMemo(() => {
-    const local = who.split("@")[0] ?? who;
-    const letters = local.replace(/[^a-zA-Z0-9]/g, "");
-    return (letters.slice(0, 2) || "OP").toUpperCase();
-  }, [who]);
+  // The header's counts and account now live in header-menus.tsx, beside the
+  // panels that explain them. A badge whose number is fetched here and whose
+  // meaning is rendered there is two files that have to agree about one fact.
 
   // live overview from the API (falls back to sample data on any error)
   useEffect(() => {
@@ -291,65 +266,22 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
 
       <div className="app">
         <header className="topbar">
-          {/* EVERY CONTROL HERE IS REAL OR GONE.
-              This bar had six: a brand that was not a link, a tenant switcher
-              with no menu, a search box with no handler, two icon buttons with
-              no onClick, and an avatar reading a hardcoded "AA". The shield
-              carried a hardcoded badge of "6" — an invented governance-alert
-              count on a live console, which is the same offence as the fake
-              conversation feed this file already had removed.
-
-              The tenant switcher and the search box are not here any more.
-              Neither could be made real cheaply, and a control that does
-              nothing teaches an operator the product is broken. They come back
-              when there is something behind them — which is exactly how the
-              four dead nav icons were handled. */}
+          {/* Every control here is real. This bar previously held six that were
+              not: a brand that was not a link, a tenant switcher with no menu,
+              a search box with no handler beside a ⌘K hint nothing listened
+              for, two icon buttons with no onClick, and an avatar reading a
+              hardcoded "AA" next to a hardcoded badge of "6" — an invented
+              governance-alert count on a live console. */}
           <a className="brand" href="/" title="Nexus Agentic OS">
             <BrandMark />
           </a>
 
+          <HeaderSearch />
+
           <div className="top-right">
-            {/* Both counts are live, and both are LINKS to the screen that
-                explains them. A number with nowhere to go is a number nobody
-                can act on. */}
-            <a
-              className="icon-btn"
-              href="/deck/operators"
-              title={
-                findings === null
-                  ? "Needs attention"
-                  : findings === 0
-                    ? "Nothing needs attention"
-                    : `${findings} needing attention`
-              }
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" />
-              </svg>
-              {/* Rendered only when there is something to report. A badge
-                  showing 0 is decoration, and one showing a number the server
-                  never sent is a lie — so an unanswered API shows nothing. */}
-              {findings ? <span className="badge">{findings > 99 ? "99+" : findings}</span> : null}
-            </a>
-
-            <a
-              className="icon-btn"
-              href="/deck/tasks"
-              title={overdue ? `${overdue} overdue follow-ups` : "Follow-ups"}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7Z" />
-                <path d="M10 20a2 2 0 0 0 4 0" />
-              </svg>
-              {overdue ? <span className="badge">{overdue > 99 ? "99+" : overdue}</span> : null}
-            </a>
-
-            {/* The initials were literally the letters A and A. They are the
-                signed-in account now, and the control signs you out — which is
-                what everyone tries to click an avatar for. */}
-            <button className="avatar" onClick={signOut} title={`Signed in as ${who} — sign out`}>
-              {initials}
-            </button>
+            <WorkMenu />
+            <NotificationsMenu />
+            <AccountMenu signedInAs={who} onSignOut={signOut} />
           </div>
         </header>
 

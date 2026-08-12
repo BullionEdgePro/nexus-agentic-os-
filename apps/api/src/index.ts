@@ -16,6 +16,8 @@ import { qualityRoute } from "./routes/quality.js";
 import { linksRoute, publicLinksRoute } from "./routes/links.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { operatorsRoute } from "./routes/operators.js";
+import { searchRoute } from "./routes/search.js";
+import { meRoute } from "./routes/me.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
@@ -113,6 +115,10 @@ app.route("/api/conversations", conversationTasksRoute);
 // Operator findings. Same shape as tasks: narrowed by role inside the handler,
 // because this path has no :slug either.
 app.route("/api/operators", operatorsRoute);
+// Header search and the signed-in account. Both narrowed by role inside their
+// handlers, because neither path carries a :slug for requireTenantScope.
+app.route("/api/search", searchRoute);
+app.route("/api/me", meRoute);
 
 const server = serve({ fetch: app.fetch, port: env.apiPort }, (info) => {
   logger.info(`Nexus API listening on http://localhost:${info.port}`);

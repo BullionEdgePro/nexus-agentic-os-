@@ -524,3 +524,47 @@ export function createConversationTask(
     body: JSON.stringify(input),
   });
 }
+
+// ============================================================
+// Header: search, and the signed-in account
+// ============================================================
+
+export interface SearchHit {
+  kind: "contact" | "task";
+  id: string;
+  title: string;
+  detail: string | null;
+  businessName: string;
+  businessSlug: string;
+  href: string;
+}
+
+export function searchAll(term: string): Promise<{ hits: SearchHit[]; term: string }> {
+  return request(`/api/search?q=${encodeURIComponent(term)}`);
+}
+
+export interface Me {
+  email: string;
+  role: "operator" | "employee";
+  fullName: string | null;
+  employeeCode?: string;
+  businessName: string | null;
+  businessSlug: string | null;
+  whatsappNumber: string | null;
+  avatarUrl: string | null;
+  jobTitle: string | null;
+  /** False for operators — there is no operator profile to change. */
+  editable: boolean;
+}
+
+export function getMe(): Promise<Me> {
+  return request("/api/me");
+}
+
+export function updateMe(input: {
+  fullName?: string;
+  whatsappNumber?: string | null;
+  avatarUrl?: string | null;
+}): Promise<{ ok: true }> {
+  return request("/api/me", { method: "PATCH", body: JSON.stringify(input) });
+}

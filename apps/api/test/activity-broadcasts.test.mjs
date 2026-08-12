@@ -523,38 +523,40 @@ test("the role is decided on the server, not after hydration", () => {
 // The header carries no controls that do nothing
 // ============================================================
 
-test("no topbar badge shows a number the server did not send", () => {
+test("no header badge shows a number the server did not send", () => {
   // The shield badge was a hardcoded "6" — an invented governance-alert count
   // on a live console, the same offence as the fabricated conversation feed
-  // this file already had removed. Both badges now come from real endpoints.
-  const CONSOLE = read("apps", "web", "app", "deck-console.tsx");
-  const topbar = CONSOLE.slice(CONSOLE.indexOf('<header className="topbar">'), CONSOLE.indexOf("</header>"));
-  assert.ok(topbar.length > 400, "the topbar slice must not be empty");
-
-  assert.ok(!/<span className="badge">\d/.test(topbar), "no literal number in a badge");
-  assert.match(topbar, /\{findings \? <span className="badge">/);
-  assert.match(topbar, /\{overdue \? <span className="badge">/);
-  // Null until answered, never 0 — a badge that renders zero and then jumps
-  // reads as the number changing rather than the page loading.
-  assert.match(CONSOLE, /useState<number \| null>\(null\)/);
+  // this file already had removed. The counts now live beside the panels that
+  // explain them, in header-menus.tsx, and all come from real endpoints.
+  const MENUS = read("apps", "web", "app", "header-menus.tsx");
+  assert.ok(!/<span className="badge">\d/.test(MENUS), "no literal number in a badge");
+  // To-do shows a count; Activity shows a dot. Both render only when there is
+  // something to report — a badge showing 0 is decoration.
+  assert.match(MENUS, /\{due \? <span className="badge">/);
+  assert.match(MENUS, /\{fresh\.length \? <span className="badge dot-only"/);
 });
 
-test("every topbar control has a destination or an action", () => {
+test("every header control has a destination or an action", () => {
   const CONSOLE = read("apps", "web", "app", "deck-console.tsx");
   const topbar = CONSOLE.slice(CONSOLE.indexOf('<header className="topbar">'), CONSOLE.indexOf("</header>"));
+  assert.ok(topbar.length > 200, "the topbar slice must not be empty");
 
-  // The two that could not be made real are gone rather than faked — the same
-  // treatment the four dead nav icons got. They return when something is
-  // behind them.
-  assert.ok(!/tenant-switch/.test(topbar), "the dead tenant switcher must not return");
-  assert.ok(!/placeholder="Search/.test(topbar), "a search box that searches nothing must not return");
-
-  // Everything remaining is a link or a handler.
-  for (const [el, needs] of [["brand", /href="\/"/], ["avatar", /onClick=\{signOut\}/]]) {
-    const at = topbar.indexOf(`className="${el}"`);
-    assert.ok(at !== -1, `${el} missing`);
-    assert.match(topbar.slice(Math.max(0, at - 200), at + 200), needs, `${el} does nothing`);
+  // The brand is a link, and the three controls are real components rather
+  // than decorative markup.
+  assert.match(topbar, /<a className="brand" href="\/"/);
+  for (const control of ["<HeaderSearch />", "<WorkMenu />", "<NotificationsMenu />", "<AccountMenu"]) {
+    assert.ok(topbar.includes(control), `${control} missing from the header`);
   }
+
+  // The dead controls must not come back as decoration. Search DID come back —
+  // with an endpoint behind it — which is the standard: a control returns when
+  // something answers it.
+  assert.ok(!/tenant-switch/.test(topbar), "the dead tenant switcher must not return");
+  const MENUS = read("apps", "web", "app", "header-menus.tsx");
+  assert.match(MENUS, /searchAll\(term\)/, "the search box must call a real endpoint");
+  // And the shortcut it advertises is actually listened for. The old box
+  // printed a ⌘K hint while nothing handled the key.
+  assert.match(MENUS, /e\.metaKey \|\| e\.ctrlKey/);
 });
 
 test("the avatar shows who is signed in, from the server", () => {

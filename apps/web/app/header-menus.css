@@ -1,0 +1,350 @@
+/* Header controls: search, to-do, activity, account.
+ *
+ * All four panels share one shape on purpose — a titled head, a list of real
+ * rows, a foot that goes somewhere. A reader who learns one has learned all
+ * four, which is most of what makes a dense header usable.
+ *
+ * Scoped under .deck-root so every value comes from the console's token set;
+ * nothing here declares a colour of its own. */
+
+/* --- search --- */
+
+.deck-root .hs { position: relative; flex: 1; max-width: 520px; }
+
+.deck-root .hs-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: var(--vellum-card);
+}
+
+.deck-root .hs-field:focus-within { border-color: var(--line-strong); }
+.deck-root .hs-field > svg { width: 15px; height: 15px; color: var(--pencil); flex: 0 0 auto; }
+
+.deck-root .hs-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.deck-root .hs-field input::placeholder { color: var(--pencil); }
+
+.deck-root .hs-field kbd {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--pencil);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 5px;
+  flex: 0 0 auto;
+}
+
+/* --- panels, shared --- */
+
+.deck-root .hs-panel,
+.deck-root .hm-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 40;
+  background: var(--vellum-card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  box-shadow: 0 14px 40px rgba(22, 22, 15, 0.14);
+  overflow: hidden;
+}
+
+.deck-root .hs-panel { left: 0; right: 0; }
+.deck-root .hm-panel { right: 0; width: 340px; max-width: calc(100vw - 32px); }
+
+.deck-root .hs-panel ul,
+.deck-root .hm-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.deck-root .hs-panel a,
+.deck-root .hm-list a {
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+}
+
+.deck-root .hs-panel a:hover,
+.deck-root .hm-list a:hover { background: var(--vellum); }
+
+.deck-root .hs-kind,
+.deck-root .hm-tag {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  justify-self: start;
+}
+
+.deck-root .hs-kind.contact { color: var(--blueprint); }
+.deck-root .hm-tag.urgent,
+.deck-root .hm-tag.late { color: var(--crit); }
+.deck-root .hm-tag.warn { color: var(--warn); }
+
+.deck-root .hs-title,
+.deck-root .hm-t {
+  font-size: 13.5px;
+  color: var(--ink);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-root .hs-meta,
+.deck-root .hm-m {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--pencil);
+}
+
+.deck-root .hs-note,
+.deck-root .hm-empty {
+  padding: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--graphite);
+  margin: 0;
+}
+
+.deck-root .hm { position: relative; }
+
+.deck-root .hm-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.deck-root .hm-head strong { font-family: var(--display); font-size: 14px; font-weight: 600; }
+
+.deck-root .hm-head span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--pencil);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+/* An unread row carries a rule as well as its position. A background wash
+   alone is invisible to anyone who cannot separate two close tones. */
+.deck-root .hm-list li.new > a { box-shadow: inset 2px 0 0 var(--blueprint); }
+
+.deck-root .hm-foot {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--vellum);
+}
+
+.deck-root .hm-foot a,
+.deck-root .hm-foot button {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Activity shows a dot, not a count. "Something new" is the whole message, and
+   a number there invites arithmetic nobody performs. The to-do badge DOES
+   carry a number, because how much is waiting changes what you do next. */
+.deck-root .badge.dot-only {
+  width: 7px;
+  height: 7px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+}
+
+/* --- account --- */
+
+.deck-root .hm-panel.acct { width: 320px; }
+
+.deck-root .acct-id {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.deck-root .acct-face {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--vellum);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.deck-root .acct-face img,
+.deck-root .topbar .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.deck-root .acct-who { display: grid; gap: 2px; min-width: 0; }
+.deck-root .acct-who strong { font-size: 14px; color: var(--ink); }
+.deck-root .acct-who span { font-size: 11.5px; color: var(--graphite); overflow-wrap: anywhere; }
+
+.deck-root .acct-role {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--pencil);
+}
+
+.deck-root .acct-rows { margin: 0; padding: 12px 14px; display: grid; gap: 10px; }
+.deck-root .acct-rows div { display: grid; gap: 2px; }
+
+.deck-root .acct-rows dt {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.deck-root .acct-rows dd { margin: 0; font-size: 13px; color: var(--ink); }
+/* A missing WhatsApp number is a gap, not a blank: without it no customer can
+   be handed to this person directly. Amber says so without shouting. */
+.deck-root .acct-rows em { font-style: normal; color: var(--warn); font-size: 12px; }
+
+.deck-root .acct-form { padding: 12px 14px; display: grid; gap: 10px; }
+.deck-root .acct-form label { display: grid; gap: 4px; }
+
+.deck-root .acct-form span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.deck-root .acct-form input {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--vellum);
+  color: var(--ink);
+  width: 100%;
+}
+
+.deck-root .acct-hint { font-size: 11.5px; line-height: 1.45; color: var(--pencil); margin: 0; }
+.deck-root .acct-err { font-size: 12px; color: var(--crit); margin: 0; }
+
+.deck-root .acct-actions { display: flex; gap: 8px; }
+
+.deck-root .acct-actions button {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+
+.deck-root .acct-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.deck-root .acct-actions button.quiet,
+.deck-root .acct-foot button.quiet {
+  background: transparent;
+  color: var(--graphite);
+  border-color: var(--line-strong);
+}
+
+.deck-root .acct-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--vellum);
+}
+
+.deck-root .acct-foot button {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 100px;
+  padding: 6px 10px;
+  color: var(--graphite);
+  cursor: pointer;
+}
+
+/* Sign out sits apart, in the one destructive colour, because it is the only
+   control here that ends the session. */
+.deck-root .acct-out {
+  margin-left: auto;
+  color: var(--crit);
+  border-color: rgba(162, 59, 46, 0.3);
+}
+
+.deck-root .acct-saved {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  color: var(--good);
+}
+
+.deck-root .acct-note { font-size: 11px; color: var(--pencil); }
+
+.deck-root .hs-field input:focus-visible,
+.deck-root .hm .icon-btn:focus-visible,
+.deck-root .hm .avatar:focus-visible,
+.deck-root .acct-form input:focus-visible,
+.deck-root .acct-foot button:focus-visible,
+.deck-root .acct-actions button:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 2px;
+}
+
+/* On a phone the search field would leave no room for the three controls
+   beside it, so it collapses to its icon and expands when focused. */
+@media (max-width: 700px) {
+  .deck-root .hs { max-width: 44px; }
+  .deck-root .hs:focus-within { max-width: 100%; }
+  .deck-root .hs-field kbd { display: none; }
+  .deck-root .hs-panel { left: auto; right: 0; width: min(92vw, 340px); }
+}
