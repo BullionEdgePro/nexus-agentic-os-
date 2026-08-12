@@ -291,6 +291,7 @@ normal state, never as an error**:
 | A column name that does not exist (`whatsapp_number`) | Route 401s unauthenticated, so every external check reported the page healthy. It raised only for signed-in users, which nobody was |
 | A source edit whose anchor indentation did not match | The state landed, the markup did not. Build green, tests green, feature renders nothing |
 | A test suite that reads source text | Cannot know whether a column exists, a query parses, or a schema agrees. Passes with total confidence while the query is broken |
+| A data-modifying CTE re-read in the same statement | The `insert` half throws and is caught immediately. The `update` half matches the row, returns its **pre-update** values, and reports a task still open that the database has just closed. Nothing errors |
 
 Containers were green throughout. **Prefer checks that assert expected data
 EXISTS over checks that confirm nothing errored.** `preflightModels()` at worker
@@ -323,6 +324,17 @@ only fails when Postgres plans it and nothing had ever asked it to.
 Run all three after any change that touches a query. They found, between them,
 a broken audience count, an unguarded write path, and an upsert that erased
 fields — none of which any source-text test could have seen.
+
+The follow-ups feature added the clearest case yet. Its four write functions
+all used `with x as (insert/update ... returning id) select ... from tasks
+where id = (select id from x)`, which cannot work: a data-modifying CTE's
+effects are invisible to the rest of its own statement. Nineteen unit tests,
+the typecheck and the production web build all passed. `schema-check.ts` failed
+on the first run — but only on the `insert`, because that one has no prior row
+to match and throws. The three `update` variants matched their pre-write row
+and returned stale values with no error at all, and would have shipped a Done
+button that closed the task and reported it still open. **The loud half of a
+bug is what gets you to look at the quiet half.**
 
 ---
 

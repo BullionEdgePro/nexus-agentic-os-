@@ -212,13 +212,50 @@ test("an employee cannot change a task belonging to another business", () => {
   // because a caller-side check is the one someone forgets on the next endpoint.
   for (const fn of ["completeTask", "setTaskStatus", "assignTask"]) {
     const body = TASKS_DB.slice(TASKS_DB.indexOf(`export async function ${fn}`));
-    const query = body.slice(0, body.indexOf("${TASK_SELECT}"));
+    const query = body.slice(0, body.indexOf("${returning("));
     assert.match(query, /::uuid is null or organization_id = \$/, `${fn} must carry the guard`);
   }
   // And the route supplies it for an employee, null only for an operator.
   assert.match(TASKS_ROUTE, /if \(scope\.role !== "operator"\) \{\s*\n\s*within = scope\.organizationId \?\? null;/);
   assert.match(TASKS_ROUTE, /setTaskStatus\(taskId, body\.status as TaskStatus, within\)/);
   assert.match(TASKS_ROUTE, /assignTask\(\s*\n?\s*taskId,[\s\S]{0,140}within\s*\n?\s*\)/);
+});
+
+test("a writer returns the CTE's own rows, never a re-read of the table", () => {
+  // Found by schema-check.ts on the first real run, after this file's unit
+  // tests, the typecheck and the production build had all passed.
+  //
+  // A data-modifying CTE's effects are invisible to the rest of the statement
+  // it lives in — every part of the query sees the snapshot taken when the
+  // statement began. So `with x as (insert ... returning id) select ... from
+  // tasks t where t.id = (select id from x)` reads the table as it was BEFORE
+  // the write.
+  //
+  // The two halves failed very differently, which is the reason this test
+  // exists rather than just the fix:
+  //
+  //   insert — nothing matches, rows[0] is undefined, it throws. Loud.
+  //   update — the row already exists, so it matches and returns its
+  //            PRE-UPDATE values. The write commits, the caller is told the
+  //            task is still open, and nothing errors anywhere.
+  //
+  // The second would have shipped. So the shape is asserted, not the symptom.
+  for (const fn of ["createTask", "completeTask", "setTaskStatus", "assignTask"]) {
+    const body = TASKS_DB.slice(TASKS_DB.indexOf(`export async function ${fn}`));
+    // Both ends anchored on the CTE. Searching for the closing backtick from
+    // position 0 finds the end of an EARLIER query in the same function —
+    // createTask does two lookups before it writes — and the slice comes back
+    // empty, which asserts nothing.
+    const start = body.indexOf("`with ");
+    const statement = body.slice(start, body.indexOf("`,", start));
+    assert.ok(statement.length > 60, `${fn}: could not isolate the statement`);
+    assert.match(statement, /returning \*/, `${fn} must return the written row`);
+    assert.match(statement, /\$\{returning\("/, `${fn} must select from the CTE`);
+    assert.ok(
+      !/from tasks t/.test(statement),
+      `${fn} must not re-read tasks in the same statement it writes it`
+    );
+  }
 });
 
 // ============================================================

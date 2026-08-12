@@ -70,26 +70,57 @@ interface TaskRow {
  * actually late. `due_at` is timestamptz, so `< now()` is unambiguous
  * regardless of where either end is sitting.
  */
-const TASK_SELECT = `
-  select t.id, t.organization_id,
-         o.name  as business_name,
-         o.slug  as business_slug,
-         t.conversation_id, t.contact_id,
-         ct.display_name as contact_name,
-         ct.wa_id        as contact_wa_id,
-         t.employee_id,
-         e.full_name     as employee_name,
-         t.title, t.notes, t.due_at, t.status,
-         (t.status = 'open' and t.due_at is not null and t.due_at < now()) as is_overdue,
-         t.completed_at,
-         cb.full_name    as completed_by_name,
-         t.created_at
-    from tasks t
-    join organizations o on o.id = t.organization_id
-    left join contacts  ct on ct.id = t.contact_id
-    left join employees e  on e.id = t.employee_id
-    left join employees cb on cb.id = t.completed_by
+const TASK_FIELDS = `
+  t.id, t.organization_id,
+  o.name  as business_name,
+  o.slug  as business_slug,
+  t.conversation_id, t.contact_id,
+  ct.display_name as contact_name,
+  ct.wa_id        as contact_wa_id,
+  t.employee_id,
+  e.full_name     as employee_name,
+  t.title, t.notes, t.due_at, t.status,
+  (t.status = 'open' and t.due_at is not null and t.due_at < now()) as is_overdue,
+  t.completed_at,
+  cb.full_name    as completed_by_name,
+  t.created_at
 `;
+
+const TASK_JOINS = `
+  join organizations o on o.id = t.organization_id
+  left join contacts  ct on ct.id = t.contact_id
+  left join employees e  on e.id = t.employee_id
+  left join employees cb on cb.id = t.completed_by
+`;
+
+/** Plain reads: the table is the source. */
+const TASK_SELECT = `select ${TASK_FIELDS} from tasks t ${TASK_JOINS}`;
+
+/**
+ * Reads that follow a write in the SAME statement — and why they cannot just
+ * re-read the table.
+ *
+ * A data-modifying CTE's effects are invisible to the rest of the statement it
+ * lives in: every part of the query runs against the snapshot taken when the
+ * statement began. So
+ *
+ *     with inserted as (insert into tasks ... returning id)
+ *     select ... from tasks t where t.id = (select id from inserted)
+ *
+ * reads `tasks` as it was BEFORE the insert and matches nothing. The first
+ * version of this file did exactly that, in all four writers, and the failures
+ * were not equally loud:
+ *
+ *   insert — no prior row, zero rows returned, `rows[0].id` throws. Caught the
+ *            first time it ran.
+ *   update — the row already exists, so it matches, and comes back with its
+ *            PRE-UPDATE values. The write commits and the caller is told the
+ *            task is still open. Nothing errors. That one would have shipped.
+ *
+ * Selecting FROM the CTE takes the returned rows directly. The joined tables
+ * are untouched by the write, so their snapshot is fine.
+ */
+const returning = (cte: string) => `select ${TASK_FIELDS} from ${cte} t ${TASK_JOINS}`;
 
 function toTask(row: TaskRow): TaskRecord {
   return {
@@ -278,9 +309,9 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRecord> {
     `with inserted as (
        insert into tasks (organization_id, conversation_id, contact_id, employee_id, title, notes, due_at)
        values ($1, $2, $3, $4, $5, $6, $7::timestamptz)
-       returning id
+       returning *
      )
-     ${TASK_SELECT} where t.id = (select id from inserted)`,
+     ${returning("inserted")}`,
     [
       organizationId,
       input.conversationId ?? null,
@@ -334,9 +365,9 @@ export async function completeTask(
           set status = 'done', completed_at = now(), completed_by = $2, updated_at = now()
         where id = $1 and status = 'open'
           and ($3::uuid is null or organization_id = $3)
-        returning id
+        returning *
      )
-     ${TASK_SELECT} where t.id = (select id from updated)`,
+     ${returning("updated")}`,
     [taskId, completedBy ?? null, withinOrganization ?? null]
   );
   return rows[0] ? toTask(rows[0]) : null;
@@ -366,9 +397,9 @@ export async function setTaskStatus(
               updated_at = now()
         where id = $1 and status <> $2
           and ($3::uuid is null or organization_id = $3)
-        returning id
+        returning *
      )
-     ${TASK_SELECT} where t.id = (select id from updated)`,
+     ${returning("updated")}`,
     [taskId, status, withinOrganization ?? null]
   );
   return rows[0] ? toTask(rows[0]) : null;
@@ -401,9 +432,9 @@ export async function assignTask(
     `with updated as (
        update tasks set employee_id = $2, updated_at = now()
         where id = $1 and ($3::uuid is null or organization_id = $3)
-        returning id
+        returning *
      )
-     ${TASK_SELECT} where t.id = (select id from updated)`,
+     ${returning("updated")}`,
     [taskId, employeeId, withinOrganization ?? null]
   );
   return rows[0] ? toTask(rows[0]) : null;
