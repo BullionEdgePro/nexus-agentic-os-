@@ -25,6 +25,8 @@ const MIGRATION = read("packages", "db", "migrations", "025-conversation-tasks.s
 const CLIENT = read("packages", "db", "src", "client.ts");
 const API_INDEX = read("apps", "api", "src", "index.ts");
 const PAGE = read("apps", "web", "app", "deck", "tasks", "page.tsx");
+const INBOX = read("apps", "web", "app", "inbox", "page.tsx");
+const TASKS_PANE = read("apps", "web", "app", "inbox", "conversation-tasks.tsx");
 
 // ============================================================
 // 1. Validation, actually executed
@@ -287,7 +289,61 @@ test("undated tasks sort last, not first", () => {
 });
 
 // ============================================================
-// 7. Nothing deletes
+// 7. Raising one from inside a conversation
+// ============================================================
+
+test("the conversation endpoint is reachable from the inbox, not just defined", () => {
+  // Shipped first with no caller. An endpoint nothing calls is the same as a
+  // missing feature, except it also passes every test and looks done — the
+  // operator would have had to leave the inbox, open another page, re-choose
+  // the business and retype the customer's name, and the task would not have
+  // been linked to anything.
+  assert.match(INBOX, /<ConversationTasks\s+key=\{activeConversation\.id\}/);
+  assert.match(TASKS_PANE, /createConversationTask\(conversationId, \{/);
+  assert.match(TASKS_PANE, /getConversationTasks\(conversationId\)/);
+});
+
+test("the inbox pane never tells the server which business it is", () => {
+  // It cannot know. The inbox knows which business it is FILTERED to, which on
+  // a shared number is not the conversation's serving business — every
+  // conversation is owned by the number's owner while the enquiry may have
+  // routed elsewhere. Sending the filtered slug would file the follow-up under
+  // the wrong company; the server derives it from the conversation instead.
+  assert.ok(!/business/i.test(TASKS_PANE.replace(/\/\*[\s\S]*?\*\//g, "")),
+    "the pane must not name a business anywhere in its code");
+  assert.ok(!/organizationId/.test(TASKS_PANE), "nor an organization id");
+});
+
+test("the pane does not decide lateness from the browser clock either", () => {
+  // Same rule as the Follow-ups page. new Date(task.dueAt) is formatting, which
+  // is fine; Date.now() would be a comparison, which is not.
+  assert.match(TASKS_PANE, /task\.isOverdue/);
+  assert.ok(!/Date\.now\(\)/.test(TASKS_PANE));
+});
+
+test("switching customers cannot carry a half-typed follow-up across", () => {
+  // Without the key, React reuses the component instance and the draft written
+  // about one customer stays in the box while a different customer is on
+  // screen — one keystroke away from being filed against the wrong person.
+  assert.match(INBOX, /key=\{activeConversation\.id\}/);
+});
+
+test("a failed fetch does not put a banner over a live conversation", () => {
+  // This pane sits above the messages. An error strip there covers the thing
+  // the screen exists for, to report that a secondary list did not load.
+  // End searched from the start, not from 0 — the first "useEffect" in the
+  // file is the import line, which sits ABOVE this and makes the slice empty.
+  const from = TASKS_PANE.indexOf("const load =");
+  const loader = TASKS_PANE.slice(from, TASKS_PANE.indexOf("useEffect(", from));
+  assert.ok(loader.length > 100, "the loader slice must not be empty");
+  assert.ok(!/setError/.test(loader), "the list fetch must fail quietly");
+  // Actions the operator took DO report — a silent failed save is worse.
+  assert.match(TASKS_PANE, /Could not save that follow-up/);
+  assert.match(TASKS_PANE, /Could not close that follow-up/);
+});
+
+// ============================================================
+// 8. Nothing deletes
 // ============================================================
 
 test("a task is cancelled, never deleted", () => {

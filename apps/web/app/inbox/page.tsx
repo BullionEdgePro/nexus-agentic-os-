@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useInboxStore, BUSINESS_OPTIONS } from "@/lib/store";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
+import { ConversationTasks } from "./conversation-tasks";
 
 export default function InboxPage() {
   useInboxSocket();
@@ -125,6 +126,10 @@ export default function InboxPage() {
                 />
               </label>
             </header>
+            {/* Keyed on the conversation so switching customers resets the
+                draft — without it, a half-typed follow-up for one person
+                would still be sitting in the box for the next. */}
+            <ConversationTasks key={activeConversation.id} conversationId={activeConversation.id} />
             <div className="flex-1 space-y-2 overflow-y-auto">
               {messages.map((message) => (
                 <div

@@ -453,3 +453,25 @@ export function updateTask(
 ): Promise<{ task: TaskRecord }> {
   return request(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(change) });
 }
+
+/**
+ * Follow-ups raised from inside a conversation.
+ *
+ * Separate from createTask on purpose: these carry no business, because the
+ * server takes it from the conversation's routed organization. On a shared
+ * number the client cannot know that — the inbox knows which business it is
+ * FILTERED to, which is not the same thing — so it must not be asked to say.
+ */
+export function getConversationTasks(conversationId: string): Promise<{ tasks: TaskRecord[] }> {
+  return request(`/api/conversations/${conversationId}/tasks`);
+}
+
+export function createConversationTask(
+  conversationId: string,
+  input: { title: string; dueAt?: string | null }
+): Promise<{ task: TaskRecord }> {
+  return request(`/api/conversations/${conversationId}/tasks`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
