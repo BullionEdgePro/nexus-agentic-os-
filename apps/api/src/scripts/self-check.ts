@@ -31,6 +31,7 @@ import {
   recordEmployeeLogin,
   listConversationsForEmployee,
   findSharedNumberBusinesses,
+  getDisplayNumbers,
 } from "@nexus/db";
 import {
   generateAccessCode,
@@ -39,7 +40,7 @@ import {
   buildDirectContact,
   resolvePresence,
 } from "@nexus/employees";
-import { classifyBusiness } from "@nexus/agents";
+import { classifyBusiness, buildDeepLink } from "@nexus/agents";
 import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
 import { searchKnowledge } from "@nexus/knowledge";
 
@@ -126,9 +127,6 @@ async function main() {
   }
   check("a bare greeting asks rather than guessing", classifyBusiness("hi", businesses).kind === "unknown");
 
-  // Two law firms share this number. A vague legal enquiry must ASK which one —
-  // guessing sends a criminal matter to a company-formation desk, and routing
-  // also selects which governance policy approves the reply.
   // "I need a lawyer" is NO LONGER the ambiguous case, and that is deliberate.
   //
   // Migration 024 assigned lawyer/lawyers/advocate/محامي to ABR alone, reasoning
@@ -160,6 +158,58 @@ async function main() {
     vagueLegal.kind === "ambiguous" && firms.join(",") === "abr,juris-prime-legal",
     vagueLegal.kind === "ambiguous" ? firms.join(" + ") : vagueLegal.kind
   );
+
+  // ---------- customer links ----------
+  //
+  // The five links are what this platform is asking its owner to publish on
+  // websites, Instagram bios and printed QR codes — places a correction is
+  // expensive and slow. Nothing verified them until now.
+  //
+  // The failure they invite is the shape this document keeps describing: a
+  // link that is well-formed, opens WhatsApp, prefills a message and looks
+  // perfect, but whose tag does not parse back to the business it was built
+  // for. Every customer who taps it lands in the triage menu instead, which
+  // reads as "the routing is a bit clumsy" rather than as a broken link — and
+  // the only people who could notice are the ones who never complain.
+  console.log("\nCustomer links");
+  const displayNumbers = await withAllTenants("self-check: display numbers", () =>
+    getDisplayNumbers()
+  );
+
+  for (const business of businesses) {
+    const number = displayNumbers.get(business.id);
+    if (!number) {
+      // Not a failure of the link builder. A business with no dialable number
+      // legitimately has no link, and the page says so — but it is worth
+      // naming here, because it means that business cannot be advertised.
+      console.log(`  —     ${business.slug.padEnd(20)} no dialable number, so no link to publish`);
+      continue;
+    }
+
+    const url = buildDeepLink(business, number);
+
+    // 1. It must be a wa.me link to the DIALABLE number. Built from
+    //    whatsapp_phone_number_id it would look right, publish fine, and fail
+    //    for every customer who tapped it.
+    const digits = number.replace(/\D/g, "");
+    check(
+      `${business.slug}: link points at the dialable number`,
+      url.startsWith(`https://wa.me/${digits}?text=`),
+      url.slice(0, 34)
+    );
+
+    // 2. THE ROUND TRIP. Decode the prefilled text the customer will actually
+    //    send, and route it exactly as the webhook would. This is the assertion
+    //    that matters: the builder and the parser agreeing is the whole
+    //    contract, and they live in different functions that could drift.
+    const prefilled = decodeURIComponent(url.split("?text=")[1] ?? "");
+    const outcome = classifyBusiness(prefilled, businesses);
+    check(
+      `${business.slug}: tapping it reaches ${business.slug}`,
+      outcome.kind === "routed" && outcome.business.slug === business.slug,
+      outcome.kind === "routed" ? outcome.business.slug : outcome.kind
+    );
+  }
 
   // ---------- knowledge ----------
   console.log("\nKnowledge retrieval");
