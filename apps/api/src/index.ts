@@ -14,6 +14,7 @@ import { adminAuthRoute } from "./routes/admin-auth.js";
 import { activityRoute } from "./routes/activity.js";
 import { qualityRoute } from "./routes/quality.js";
 import { linksRoute } from "./routes/links.js";
+import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
@@ -89,6 +90,15 @@ app.route("/api/metrics", metricsRoute);
 app.route("/api/activity", activityRoute);
 app.route("/api/quality", qualityRoute);
 app.route("/api/links", linksRoute);
+// Not operator-only, unlike the four above it. A follow-up list is the working
+// surface of the person doing the work, not management information about them,
+// so employees reach it too — narrowed to their own business inside the route,
+// which is where the check has to live because /api/tasks carries no :slug for
+// requireTenantScope to read.
+app.route("/api/tasks", tasksRoute);
+// Tasks raised from inside a conversation. Composed onto the conversations
+// router so requireConversationScope has already settled access.
+app.route("/api/conversations", conversationTasksRoute);
 
 const server = serve({ fetch: app.fetch, port: env.apiPort }, (info) => {
   logger.info(`Nexus API listening on http://localhost:${info.port}`);

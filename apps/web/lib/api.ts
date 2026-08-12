@@ -390,3 +390,66 @@ export interface BusinessLink {
 export function getLinks(): Promise<{ links: BusinessLink[] }> {
   return request("/api/links");
 }
+
+// ============================================================
+// Follow-ups
+// ============================================================
+
+export type TaskStatus = "open" | "done" | "cancelled";
+
+export interface TaskRecord {
+  id: string;
+  organizationId: string;
+  businessName: string;
+  businessSlug: string;
+  conversationId: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  contactWaId: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  title: string;
+  notes: string | null;
+  dueAt: string | null;
+  status: TaskStatus;
+  /** Decided by the database clock — do not recompute from dueAt in the browser. */
+  isOverdue: boolean;
+  completedAt: string | null;
+  completedByName: string | null;
+  createdAt: string;
+}
+
+export interface TaskCounts {
+  open: number;
+  overdue: number;
+  unassigned: number;
+}
+
+export function getTasks(options: {
+  business?: BusinessSlug | "";
+  status?: TaskStatus | "all";
+} = {}): Promise<{ tasks: TaskRecord[]; counts: TaskCounts }> {
+  const query = new URLSearchParams();
+  if (options.business) query.set("business", options.business);
+  if (options.status) query.set("status", options.status);
+  const suffix = query.toString();
+  return request(`/api/tasks${suffix ? `?${suffix}` : ""}`);
+}
+
+export function createTask(input: {
+  business?: BusinessSlug | "";
+  conversationId?: string | null;
+  employeeId?: string | null;
+  title: string;
+  notes?: string | null;
+  dueAt?: string | null;
+}): Promise<{ task: TaskRecord }> {
+  return request("/api/tasks", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateTask(
+  taskId: string,
+  change: { status?: TaskStatus; employeeId?: string | null }
+): Promise<{ task: TaskRecord }> {
+  return request(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(change) });
+}

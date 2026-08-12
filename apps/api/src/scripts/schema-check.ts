@@ -45,6 +45,10 @@ import {
   getContactMemory,
   forgetContact,
   purgeExpiredContactMemory,
+  createTask,
+  listTasks,
+  countTasks,
+  completeTask,
 } from "@nexus/db";
 
 /** Deliberately implausible, and the same shape self-check.ts already uses. */
@@ -93,6 +97,7 @@ async function main(): Promise<void> {
   console.log("\nWrites (probe row, cleaned up)");
   let contactId: string | undefined;
   let broadcastId: string | undefined;
+  let taskId: string | undefined;
 
   try {
     await withTenant(org.id, async () => {
@@ -172,12 +177,65 @@ async function main(): Promise<void> {
       } else {
         console.log("  skip  broadcast path                (no templates registered)");
       }
+
+      // ---- follow-ups (migration 025) ----
+      //
+      // Every query in packages/db/tasks.ts is new, which by this script's own
+      // premise means every one of them is unverified. The three below are the
+      // ones with something to get wrong: a CTE returning through a join, an
+      // aggregate with three `filter` clauses, and a guarded update.
+      await withTenant(org.id, async () => {
+        const created = await step("create task", () =>
+          createTask({
+            organizationId: org.id,
+            contactId: id,
+            title: "Schema check probe — not real work",
+            dueAt: new Date(Date.now() + 3_600_000).toISOString(),
+          })
+        );
+        if (created) {
+          taskId = created.id;
+
+          // The insert returns through TASK_SELECT's joins. If the business
+          // join were wrong the row would come back with a null name rather
+          // than an error, and the page would show a task belonging to nobody.
+          if (!created.businessName) {
+            console.log("  FAIL  task returns its business    (null business_name)");
+            failures++;
+          } else {
+            console.log("  ok    task returns its business");
+          }
+
+          await step("list tasks", () => listTasks({ organizationId: org.id }));
+          await step("count tasks", () => countTasks(org.id));
+
+          const done = await step("complete task", () => completeTask(created.id));
+          // completeTask is guarded on `status = 'open'`, so a second call must
+          // return null rather than overwriting the completion record.
+          const again = await completeTask(created.id).catch(() => null);
+          if (done && again === null) {
+            console.log("  ok    completing twice is refused");
+          } else {
+            console.log("  FAIL  completing twice is refused  (second call changed the row)");
+            failures++;
+          }
+        }
+      });
     }
   } finally {
     // Cleanup in a finally, so a failure above still leaves production as it
     // was found. Recipients cascade from the broadcast; memory cascades from
     // the contact.
     await withTenant(org.id, async () => {
+      // Deleted explicitly. A task's contact_id is `on delete set null`, by
+      // design — a follow-up must survive the deletion of what it points at —
+      // so removing the probe contact would leave the probe task behind as a
+      // permanent fake entry on the operator's list.
+      if (taskId) {
+        await getPool()
+          .query(`delete from tasks where id = $1`, [taskId])
+          .catch(() => undefined);
+      }
       if (broadcastId) {
         await getPool()
           .query(`delete from broadcasts where id = $1`, [broadcastId])

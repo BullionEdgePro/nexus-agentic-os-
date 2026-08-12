@@ -45,6 +45,9 @@ const TABLES = [
   "ai_message_evaluations",
   "conversation_metrics",
   "contact_memory",
+  // Added with migration 025. A task names a customer and what was agreed with
+  // them, so it is exactly the material tenant isolation exists to protect.
+  "tasks",
 ];
 
 let failures = 0;
