@@ -21,6 +21,17 @@
 
 /* --- findings --- */
 
+/* Named truncation. A capped list that says nothing reads as "this is
+   everything", which on this page is the failure it exists to prevent. */
+.op-truncated {
+  margin: 4px 0 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
 .op-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 
 .op-item {

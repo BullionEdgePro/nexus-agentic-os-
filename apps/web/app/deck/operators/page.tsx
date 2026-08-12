@@ -96,6 +96,18 @@ export default function OperatorsPage() {
             </p>
           </div>
         ) : (
+          <>
+          {/* The list is capped server-side; the counts are not. At 250 open
+              findings the page would show 200 and say nothing — a truncation
+              that reads as "this is everything". Named rather than hidden,
+              because a silent cap on a page whose whole job is "what needs
+              attention" is the same failure the page exists to prevent. */}
+          {total > findings.length ? (
+            <p className="op-truncated">
+              Showing the {findings.length} most serious of {total}. The rest are the same
+              kinds of thing — clear these and the next ones appear.
+            </p>
+          ) : null}
           <ul className="op-list">
             {findings.map((finding) => (
               <li className={`op-item ${finding.severity}`} key={finding.id}>
@@ -114,6 +126,7 @@ export default function OperatorsPage() {
               </li>
             ))}
           </ul>
+          </>
         )}
 
         <section className="op-roster">

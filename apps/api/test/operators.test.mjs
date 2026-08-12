@@ -240,6 +240,31 @@ test("the roster comes from code, so 'found nothing' differs from 'never ran'", 
   assert.match(PAGE, /operators\.map\(\(operator\) =>/);
 });
 
+test("a duplicate fingerprint cannot kill the sweep", () => {
+  // `on conflict do update` cannot touch the same row twice in one statement.
+  // Two findings sharing a fingerprint raise "ON CONFLICT DO UPDATE command
+  // cannot affect row a second time" — killing that operator for that business
+  // on every sweep until somebody reads a log. No operator does this today;
+  // the guard is for the next one, where a join that fans out makes it easy and
+  // the failure is total rather than partial.
+  assert.match(OPERATORS_DB, /const unique = new Map<string, FindingInput>\(\);/);
+  assert.match(OPERATORS_DB, /for \(const finding of found\) unique\.set\(finding\.fingerprint, finding\);/);
+  // And the deduped list is what is actually bound — a dedupe computed and then
+  // not used would be worse than none, because it reads as handled.
+  assert.equal((OPERATORS_DB.match(/deduped\.map\(/g) ?? []).length, 6);
+  assert.ok(!/found\.map\(/.test(OPERATORS_DB), "the raw list must not be bound");
+});
+
+test("a truncated findings list says so", () => {
+  // listOpenFindings caps at 200; countOpenFindings does not. At 250 open
+  // findings the page would show 200 and say nothing, which reads as "this is
+  // everything" — the exact failure a page called "needs attention" must not
+  // have.
+  assert.match(OPERATORS_DB, /limit = 200/);
+  assert.match(PAGE, /total > findings\.length/);
+  assert.match(PAGE, /Showing the \{findings\.length\} most serious of \{total\}/);
+});
+
 test("an empty result is written as a result", () => {
   // A blank panel after a successful check reads as "not loaded", which is the
   // opposite of what happened.

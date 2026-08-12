@@ -106,6 +106,22 @@ export async function reconcileFindings(
   operator: string,
   found: FindingInput[]
 ): Promise<ReconcileResult> {
+  // Deduplicated before it reaches Postgres.
+  //
+  // `on conflict do update` cannot touch the same row twice within one
+  // statement — two findings sharing a fingerprint raise "ON CONFLICT DO UPDATE
+  // command cannot affect row a second time", which would kill that operator
+  // for that business on every single sweep until somebody read the log.
+  //
+  // No operator produces duplicates today; each keys on a row id from a query
+  // that returns it once. This is here for the one somebody writes next, where
+  // the mistake is easy (a join fanning out) and the failure is total rather
+  // than partial. Last occurrence wins, which matches the upsert's own
+  // semantics had they arrived as separate statements.
+  const unique = new Map<string, FindingInput>();
+  for (const finding of found) unique.set(finding.fingerprint, finding);
+  const deduped = [...unique.values()];
+
   const { rows } = await getPool().query<{ standing: string; retracted: string }>(
     `with incoming as (
        select * from unnest(
@@ -152,12 +168,12 @@ export async function reconcileFindings(
     [
       organizationId,
       operator,
-      found.map((f) => f.fingerprint),
-      found.map((f) => f.severity),
-      found.map((f) => f.title),
-      found.map((f) => f.detail ?? null),
-      found.map((f) => f.subjectKind ?? null),
-      found.map((f) => f.subjectId ?? null),
+      deduped.map((f) => f.fingerprint),
+      deduped.map((f) => f.severity),
+      deduped.map((f) => f.title),
+      deduped.map((f) => f.detail ?? null),
+      deduped.map((f) => f.subjectKind ?? null),
+      deduped.map((f) => f.subjectId ?? null),
     ]
   );
 
