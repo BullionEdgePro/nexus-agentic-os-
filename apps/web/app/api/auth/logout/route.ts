@@ -101,12 +101,19 @@ function clear(res: NextResponse): NextResponse {
  * A relative Location is legal (RFC 7231 §7.1.2) and the browser resolves it
  * against the address it actually asked for — which is the public one, whatever
  * the proxy is or is not forwarding.
+ *
+ * It lands on `#signin` rather than the top of the page. Somebody who has just
+ * signed out is one of two people: finished, or switching accounts. The first
+ * loses nothing by arriving at the sign-in panel; the second would otherwise
+ * have to hunt for it down a marketing page. It is also where the middleware
+ * sends anybody who reaches a gated screen without a session, so both ways of
+ * ending up signed out arrive in the same place.
  */
 export async function GET(_req: NextRequest) {
   const res = new NextResponse(null, {
     status: 303,
     headers: {
-      Location: "/",
+      Location: "/#signin",
       // No-store, or a cached redirect could send somebody to a page the
       // server renders from a session this response just destroyed.
       "Cache-Control": "no-store",

@@ -41,7 +41,7 @@ test("the redirect goes somewhere the browser can reach", () => {
   // A relative Location is resolved by the browser against the address it
   // actually requested, so it cannot be wrong regardless of what the proxy
   // forwards.
-  assert.match(LOGOUT, /Location: "\/"/);
+  assert.match(LOGOUT, /Location: "\/#signin"/);
   const code = LOGOUT.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   assert.ok(
     !/NextResponse\.redirect/.test(code),
