@@ -518,3 +518,71 @@ test("the role is decided on the server, not after hydration", () => {
     assert.match(layout, /session\?\.role \?\? "employee"/, `${file} layout must default to employee`);
   }
 });
+
+// ============================================================
+// The header carries no controls that do nothing
+// ============================================================
+
+test("no topbar badge shows a number the server did not send", () => {
+  // The shield badge was a hardcoded "6" — an invented governance-alert count
+  // on a live console, the same offence as the fabricated conversation feed
+  // this file already had removed. Both badges now come from real endpoints.
+  const CONSOLE = read("apps", "web", "app", "deck-console.tsx");
+  const topbar = CONSOLE.slice(CONSOLE.indexOf('<header className="topbar">'), CONSOLE.indexOf("</header>"));
+  assert.ok(topbar.length > 400, "the topbar slice must not be empty");
+
+  assert.ok(!/<span className="badge">\d/.test(topbar), "no literal number in a badge");
+  assert.match(topbar, /\{findings \? <span className="badge">/);
+  assert.match(topbar, /\{overdue \? <span className="badge">/);
+  // Null until answered, never 0 — a badge that renders zero and then jumps
+  // reads as the number changing rather than the page loading.
+  assert.match(CONSOLE, /useState<number \| null>\(null\)/);
+});
+
+test("every topbar control has a destination or an action", () => {
+  const CONSOLE = read("apps", "web", "app", "deck-console.tsx");
+  const topbar = CONSOLE.slice(CONSOLE.indexOf('<header className="topbar">'), CONSOLE.indexOf("</header>"));
+
+  // The two that could not be made real are gone rather than faked — the same
+  // treatment the four dead nav icons got. They return when something is
+  // behind them.
+  assert.ok(!/tenant-switch/.test(topbar), "the dead tenant switcher must not return");
+  assert.ok(!/placeholder="Search/.test(topbar), "a search box that searches nothing must not return");
+
+  // Everything remaining is a link or a handler.
+  for (const [el, needs] of [["brand", /href="\/"/], ["avatar", /onClick=\{signOut\}/]]) {
+    const at = topbar.indexOf(`className="${el}"`);
+    assert.ok(at !== -1, `${el} missing`);
+    assert.match(topbar.slice(Math.max(0, at - 200), at + 200), needs, `${el} does nothing`);
+  }
+});
+
+test("the avatar shows who is signed in, from the server", () => {
+  // It read a hardcoded "AA". The first fix fetched /api/auth/me — an endpoint
+  // that does not exist, which would have failed silently forever and shown a
+  // plausible wrong value. The page already verified the session to decide
+  // whether to render the console at all.
+  const CONSOLE = read("apps", "web", "app", "deck-console.tsx");
+  const PAGE = read("apps", "web", "app", "page.tsx");
+  assert.match(PAGE, /<DeckConsole signedInAs=\{session\.sub\} \/>/);
+  assert.match(CONSOLE, /signedInAs\?: string/);
+  // Checked against CODE, not the file: three comments explain the fix by
+  // naming the value it replaced, and a file-wide scan flags the explanation.
+  const code = CONSOLE.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  assert.ok(!/"AA"/.test(code), "the hardcoded initials must not return");
+  // And no call to the endpoint that never existed.
+  assert.ok(!/fetch\("\/api\/auth\/me"/.test(CONSOLE));
+});
+
+test("every rail item is named, not just drawn", () => {
+  // The rail was eleven unlabelled glyphs whose names appeared only on hover —
+  // which on a touch screen means never. "Needs attention" and "Follow-ups"
+  // are not recognisable from a triangle and a checklist.
+  const SHELL = read("apps", "web", "app", "console-shell.tsx");
+  assert.match(SHELL, /<span className="rail-label">\{item\.label\}<\/span>/);
+  assert.match(SHELL, /className="rail-brand"/);
+  // Labels are dropped on narrow screens rather than truncated to nothing, so
+  // every destination stays reachable on a phone.
+  const CSS = read("apps", "web", "app", "console-shell.css");
+  assert.match(CSS, /@media \(max-width: 860px\)[\s\S]*?\.rail-label \{\s*display: none/);
+});

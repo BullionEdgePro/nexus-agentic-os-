@@ -70,8 +70,8 @@ export function RailLinks({
           // navigating by keyboard or screen reader.
           aria-current={item.href === current ? "page" : undefined}
         >
-          {item.icon}
-          <span className="tip">{item.label}</span>
+          <span className="rail-icon">{item.icon}</span>
+          <span className="rail-label">{item.label}</span>
         </a>
       ))}
 
@@ -82,10 +82,12 @@ export function RailLinks({
         onClick={onSignOut}
         title="Sign out"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />
-        </svg>
-        <span className="tip">Sign out</span>
+        <span className="rail-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />
+          </svg>
+        </span>
+        <span className="rail-label">Sign out</span>
       </a>
     </>
   );
@@ -101,6 +103,18 @@ export function ConsoleShell({
   return (
     <div className={`deck-root shell ${fontVariables}`}>
       <nav className="rail shell-rail" aria-label="Sections">
+        {/* The mark, then the destinations. An icon-only strip made everyone
+            hover each square to find out what it was — the label IS the
+            navigation, the glyph is only there to make a familiar one findable
+            at a glance. */}
+        <a className="rail-brand" href="/" title="Nexus Agentic OS">
+          <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" stroke="var(--blueprint)" strokeWidth="1.2" />
+            <circle cx="16" cy="16" r="2" fill="var(--blueprint)" />
+          </svg>
+          <span className="rail-wordmark">Nexus</span>
+        </a>
         <RailLinks role={role} />
       </nav>
       <main className="shell-main">{children}</main>

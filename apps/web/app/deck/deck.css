@@ -271,7 +271,7 @@
 }
 
 /* ============ APP SHELL (dashboard) ============ */
-.deck-root .app { position: relative; z-index: 2; min-height: 100dvh; display: grid; grid-template-columns: 68px 1fr; grid-template-rows: 58px 1fr; }
+.deck-root .app { position: relative; z-index: 2; min-height: 100dvh; display: grid; grid-template-columns: 212px 1fr; grid-template-rows: 58px 1fr; }
 .deck-root .topbar { grid-column: 1 / 3; display: flex; align-items: center; gap: 16px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--vellum); }
 .deck-root .topbar .brand { margin-right: 4px; }
 .deck-root .tenant-switch { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--vellum-card); font-size: 12.5px; }
@@ -397,4 +397,62 @@
   color: var(--blueprint);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+
+/* ============================================================
+   TOPBAR — after the decorative controls were removed
+   ============================================================
+   The bar held six controls and none of them did anything: a brand that was
+   not a link, a tenant switcher with no menu, a search box with no handler,
+   two icon buttons with no onClick, and an avatar reading a hardcoded "AA"
+   beside a hardcoded badge of "6".
+
+   What is left is three things that work. The rules below only cover the
+   elements whose TAG changed — a div that became a link, buttons that became
+   links, a div that became a button — because those lose or gain browser
+   defaults and would otherwise drift out of alignment with the rest of the
+   bar. */
+
+.deck-root .topbar .brand { display: flex; align-items: center; }
+
+/* The two badges are anchors now, so they carry a destination. Without this
+   they would sit on the text baseline instead of centred in their square. */
+.deck-root .topbar a.icon-btn { display: grid; place-items: center; }
+
+/* And the avatar is a real button, so it needs the reset a div never did. */
+.deck-root .topbar button.avatar {
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.deck-root .topbar a.icon-btn:focus-visible,
+.deck-root .topbar button.avatar:focus-visible,
+.deck-root .topbar .brand:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 2px;
+}
+
+/* --- the console's own rail, now labelled like the shared shell --- */
+.deck-root .app .rail { align-items: stretch; padding: 14px 10px; gap: 2px; }
+.deck-root .app .rail a {
+  width: auto; height: auto;
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 10px;
+}
+.deck-root .app .rail .rail-icon { display: grid; place-items: center; flex: 0 0 18px; }
+.deck-root .app .rail .rail-icon svg { width: 17px; height: 17px; display: block; }
+.deck-root .app .rail .rail-label {
+  font-family: var(--sans); font-size: 13.5px; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* The brand already sits in the topbar above this rail, so the rail's own mark
+   would be the same logo twice in one corner. */
+.deck-root .app .rail .rail-brand { display: none; }
+
+@media (max-width: 900px) {
+  .deck-root .app { grid-template-columns: 1fr; }
 }

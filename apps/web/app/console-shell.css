@@ -11,7 +11,7 @@
 
 .shell {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 212px minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--vellum);
@@ -93,4 +93,82 @@
     flex: 0 0 auto;
     width: 10px;
   }
+}
+
+
+/* ============================================================
+   A NAMED RAIL, NOT A ROW OF GUESSES
+   ============================================================
+   The rail was eleven unlabelled glyphs. Every one of them required a hover to
+   find out what it was, which on a touch screen means there was no way to find
+   out at all — and "Needs attention" and "Follow-ups" are not things anyone
+   recognises from a triangle and a checklist.
+
+   The label is now the navigation and the glyph is the landmark: it is what
+   lets someone who has used the product once find the row they want without
+   reading all nine. */
+
+.deck-root.shell .shell-rail {
+  align-items: stretch;
+  padding: 14px 10px;
+  gap: 2px;
+}
+
+.deck-root.shell .rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: auto;
+  width: auto;
+  padding: 6px 8px 14px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--ink);
+}
+
+.deck-root.shell .rail-brand:hover { background: transparent; }
+.deck-root.shell .rail-brand svg { width: 22px; height: 22px; flex: 0 0 auto; }
+
+.deck-root.shell .rail-wordmark {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.deck-root.shell .shell-rail a {
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+}
+
+.deck-root.shell .rail-icon { display: grid; place-items: center; flex: 0 0 18px; }
+.deck-root.shell .rail-icon svg { width: 17px; height: 17px; display: block; }
+
+.deck-root.shell .rail-label {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  /* The rail is a fixed width and two labels are long. Truncating beats
+     wrapping to two lines, which would make those rows taller than the rest
+     and break the rhythm the eye scans down. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- narrow: back to a compact bar, labels dropped rather than truncated ---
+   Nine names do not fit across a phone. Below this width the bar scrolls
+   horizontally as icons, which is the one arrangement that keeps every
+   destination reachable. */
+@media (max-width: 860px) {
+  .deck-root.shell .rail-brand { display: none; }
+  .deck-root.shell .rail-label { display: none; }
+  .deck-root.shell .shell-rail { align-items: center; padding: 8px 10px; }
+  .deck-root.shell .shell-rail a { padding: 9px 11px; }
 }

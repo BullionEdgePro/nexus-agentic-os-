@@ -55,5 +55,5 @@ export default async function Home() {
     );
   }
 
-  return <DeckConsole />;
+  return <DeckConsole signedInAs={session.sub} />;
 }

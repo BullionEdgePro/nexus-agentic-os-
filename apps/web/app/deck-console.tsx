@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OverviewMetrics } from "@nexus/shared";
 import { initDeckFx } from "@/lib/deck-fx";
-import { getOverview } from "@/lib/api";
+import { getOverview, getFindings, getTasks } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { RailLinks } from "./console-shell";
@@ -142,7 +142,17 @@ const BrandMark = () => (
   </span>
 );
 
-export default function DeckConsole() {
+/**
+ * `signedInAs` comes from the server.
+ *
+ * The first attempt fetched it from /api/auth/me — an endpoint that does not
+ * exist. It would have failed silently forever and left the avatar reading
+ * "OP", which is the same class of thing as the hardcoded "AA" it replaced:
+ * plausible, wrong, and invisible. app/page.tsx already verified the session
+ * to decide whether to render this at all, so the answer was one prop away.
+ */
+export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
+  const who = signedInAs ?? "operator";
   const rootRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -153,6 +163,36 @@ export default function DeckConsole() {
   const [links, setLinks] = useState<{ x1: number; y1: number; x2: number; y2: number; dur: number }[]>([]);
   const [grown, setGrown] = useState(false);
   const [clock, setClock] = useState("");
+
+  // The two header badges, and who is signed in.
+  //
+  // null means "not answered yet" and is deliberately NOT 0 — a badge that
+  // renders zero before the request lands, then jumps to seven, reads as the
+  // number changing rather than as the page loading. Nothing shows until the
+  // server has actually said something.
+  const [findings, setFindings] = useState<number | null>(null);
+  const [overdue, setOverdue] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Both fail silently. A header count is an enhancement on a console whose
+    // job is the panels below it; an error banner because a badge could not
+    // load would be worse than no badge.
+    getFindings()
+      .then((data) => setFindings(data.counts.urgent + data.counts.warn + data.counts.info))
+      .catch(() => undefined);
+    getTasks({ status: "open" })
+      .then((data) => setOverdue(data.counts.overdue))
+      .catch(() => undefined);
+  }, []);
+
+  // Two letters from the account, not the hardcoded "AA" that was here. An
+  // email has no surname to take a second initial from, so this uses the first
+  // two alphanumerics of the local part rather than inventing a name.
+  const initials = useMemo(() => {
+    const local = who.split("@")[0] ?? who;
+    const letters = local.replace(/[^a-zA-Z0-9]/g, "");
+    return (letters.slice(0, 2) || "OP").toUpperCase();
+  }, [who]);
 
   // live overview from the API (falls back to sample data on any error)
   useEffect(() => {
@@ -251,40 +291,65 @@ export default function DeckConsole() {
 
       <div className="app">
         <header className="topbar">
-          <div className="brand">
+          {/* EVERY CONTROL HERE IS REAL OR GONE.
+              This bar had six: a brand that was not a link, a tenant switcher
+              with no menu, a search box with no handler, two icon buttons with
+              no onClick, and an avatar reading a hardcoded "AA". The shield
+              carried a hardcoded badge of "6" — an invented governance-alert
+              count on a live console, which is the same offence as the fake
+              conversation feed this file already had removed.
+
+              The tenant switcher and the search box are not here any more.
+              Neither could be made real cheaply, and a control that does
+              nothing teaches an operator the product is broken. They come back
+              when there is something behind them — which is exactly how the
+              four dead nav icons were handled. */}
+          <a className="brand" href="/" title="Nexus Agentic OS">
             <BrandMark />
-          </div>
-          <button className="tenant-switch">
-            <span className="dot live" />
-            <b>All tenants</b>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-          <div className="search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </svg>
-            <input placeholder="Search conversations, contacts, agents…" />
-            <kbd>⌘K</kbd>
-          </div>
+          </a>
+
           <div className="top-right">
-            <button className="icon-btn" title="Governance alerts">
+            {/* Both counts are live, and both are LINKS to the screen that
+                explains them. A number with nowhere to go is a number nobody
+                can act on. */}
+            <a
+              className="icon-btn"
+              href="/deck/operators"
+              title={
+                findings === null
+                  ? "Needs attention"
+                  : findings === 0
+                    ? "Nothing needs attention"
+                    : `${findings} needing attention`
+              }
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" />
               </svg>
-              <span className="badge">6</span>
-            </button>
-            <button className="icon-btn" title="Notifications">
+              {/* Rendered only when there is something to report. A badge
+                  showing 0 is decoration, and one showing a number the server
+                  never sent is a lie — so an unanswered API shows nothing. */}
+              {findings ? <span className="badge">{findings > 99 ? "99+" : findings}</span> : null}
+            </a>
+
+            <a
+              className="icon-btn"
+              href="/deck/tasks"
+              title={overdue ? `${overdue} overdue follow-ups` : "Follow-ups"}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7Z" />
                 <path d="M10 20a2 2 0 0 0 4 0" />
               </svg>
+              {overdue ? <span className="badge">{overdue > 99 ? "99+" : overdue}</span> : null}
+            </a>
+
+            {/* The initials were literally the letters A and A. They are the
+                signed-in account now, and the control signs you out — which is
+                what everyone tries to click an avatar for. */}
+            <button className="avatar" onClick={signOut} title={`Signed in as ${who} — sign out`}>
+              {initials}
             </button>
-            <div className="avatar" title="Operator">
-              AA
-            </div>
           </div>
         </header>
 
