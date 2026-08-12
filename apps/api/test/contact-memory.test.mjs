@@ -37,7 +37,9 @@ test("recall is scoped to the serving business, not the number owner", () => {
   // The shared number's owner is Zipicka; a legal enquiry routed to ABR must
   // recall ABR's memory of that person, not Zipicka's.
   assert.match(PROCESSOR, /recallContact\(serving\.id, contactId\)/);
-  assert.match(PROCESSOR, /rememberContact\(\{ organizationId: serving\.id/);
+  // The write is now DEFERRED out of the tenant transaction rather than fired
+  // inside it — see review-fixes.test.mjs for why that mattered.
+  assert.match(PROCESSOR, /deferred\.memory = \{ organizationId: serving\.id/);
 });
 
 test("the memory table is tenant-scoped and RLS-guarded", () => {
@@ -95,10 +97,11 @@ test("recall cannot crowd out the knowledge that answers the question", () => {
 
 test("the memory is written after the customer has their reply", () => {
   assert.ok(
-    PROCESSOR.indexOf("sentToCustomer = true") < PROCESSOR.indexOf("rememberContact({"),
-    "summarising must not delay the reply"
+    PROCESSOR.indexOf("sentToCustomer = true") < PROCESSOR.indexOf("deferred.memory = {"),
+    "the memory must be recorded only after the reply has gone"
   );
-  assert.match(PROCESSOR, /void rememberContact\([\s\S]{0,160}\.catch\(/);
+  // Still un-awaited by the caller, but now in its own scoped transaction.
+  assert.match(PROCESSOR, /void withTenant\(pending\.organizationId, \(\) => rememberContact\(pending\)\)/);
 });
 
 test("a recall failure degrades to no memory rather than no reply", () => {

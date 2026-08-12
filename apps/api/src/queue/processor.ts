@@ -125,12 +125,22 @@ async function processSingleTextMessage(
     return;
   }
 
+  // Filled in inside the tenant block, acted on after it closes.
+  //
+  // A holder rather than a bare `let`: TypeScript's control-flow analysis
+  // assumes a callback may never run, so a plain variable stays narrowed to
+  // `null` and the check at the end becomes unreachable. The object keeps the
+  // union intact without a cast that would hide a real mistake later.
+  const deferred: {
+    memory: { organizationId: string; contactId: string; conversationId: string } | null;
+  } = { memory: null };
+
   // From here the tenant is known, so everything below runs scoped to it rather
   // than platform-wide. Wrapping the whole job cross-tenant would have been
   // simpler and would have defeated the point: the message pipeline is the
   // largest body of tenant-scoped code in the system, and it is exactly where a
   // forgotten WHERE clause would leak one business's customer into another's.
-  return withTenant(organization.id, async () => {
+  await withTenant(organization.id, async () => {
 
   // Deliberately NOT inside the try/catch below: a failure here means an
   // infrastructure problem (DB down), not an AI/agent problem. Let it
@@ -253,8 +263,25 @@ async function processSingleTextMessage(
     // are unique per organization), so this is belt and braces on a mistake
     // that would be invisible if made.
     const recalled = await recallContact(serving.id, contactId).catch(() => null);
+    // Fenced as an internal note, not as prose the agent produced.
+    //
+    // A conversation turn can only be "user" or "assistant", and this went in as
+    // "assistant" — telling the model it had said this to the customer. The
+    // predictable result is "as I mentioned, your attestation…" about a
+    // conversation the customer never had. Role is stronger evidence to a model
+    // than any instruction inside the text, so the text now announces what it is
+    // before the model reads a word of the content.
     const withRecall = recalled
-      ? [{ role: "assistant" as const, content: recalled }, ...history]
+      ? [
+          {
+            role: "assistant" as const,
+            content:
+              "[INTERNAL NOTE — staff context only. This was NOT said to the customer. " +
+              "Do not quote it, refer to it, or imply you have spoken before.]\n" +
+              recalled,
+          },
+          ...history,
+        ]
       : history;
 
     const result = await agent.respond(
@@ -302,14 +329,9 @@ async function processSingleTextMessage(
     await sendWhatsAppText(phoneNumberId, message.from, finalText);
     sentToCustomer = true;
 
-    // After the customer has their reply, never before. Summarising costs a
-    // model call and they are waiting on the other one; a memory written a
-    // second late is fine, a reply delayed to write it is not. Fire-and-forget
-    // and swallowed for the same reason — a failed summary must not turn a
-    // delivered reply into a retried job.
-    void rememberContact({ organizationId: serving.id, contactId, conversationId }).catch(
-      () => undefined
-    );
+    // Recorded here, run after the transaction closes. See the note below the
+    // withTenant block for why it cannot be fired from inside it.
+    deferred.memory = { organizationId: serving.id, contactId, conversationId };
 
     const outboundDto = await insertOutboundMessage({
       organizationId: organization.id,
@@ -371,6 +393,27 @@ async function processSingleTextMessage(
     }
   }
   });
+
+  // The contact memory is written AFTER the transaction above has committed and
+  // its connection has gone back to the pool.
+  //
+  // It used to be fired inside that block with `void`, which was a real defect
+  // rather than a style choice. The tenant context lives in AsyncLocalStorage
+  // and propagates into an un-awaited continuation, so when the summariser's
+  // Gemini call resolved — seconds later — its write routed to a client that had
+  // already been released. Best case node-postgres refuses to use it. Worst
+  // case the pool had handed that connection to another business's request, and
+  // the write landed inside THAT transaction under THAT tenant's
+  // app.current_org: one company's customer memory stored against another's,
+  // which is the exact cross-tenant write the whole RLS effort exists to stop.
+  //
+  // Still not awaited by the caller — a slow summary must not delay the job —
+  // but it now opens its own scoped transaction, so nothing it touches belongs
+  // to anyone else.
+  const pending = deferred.memory;
+  if (pending) {
+    void withTenant(pending.organizationId, () => rememberContact(pending)).catch(() => undefined);
+  }
 }
 
 /**

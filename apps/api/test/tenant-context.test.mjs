@@ -131,7 +131,9 @@ test("the webhook narrows to its tenant as soon as the lookup answers", () => {
   // another's. The registry lookup needs no scope at all (organizations is not
   // tenant data), and the pipeline below it runs scoped to the org it resolved.
   assert.match(PROCESSOR, /const organization = await findOrganizationByPhoneNumberId\(phoneNumberId\)/);
-  assert.match(PROCESSOR, /return withTenant\(organization\.id, async \(\) => \{/);
+  // `await` rather than `return`: the memory write is deferred until after the
+  // transaction closes, so the function must resume once the block is done.
+  assert.match(PROCESSOR, /await withTenant\(organization\.id, async \(\) => \{/);
   assert.ok(
     !/withAllTenants/.test(PROCESSOR),
     "the message pipeline must not run platform-wide once its tenant is known"

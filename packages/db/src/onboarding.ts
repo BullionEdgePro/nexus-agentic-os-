@@ -1,5 +1,5 @@
-import { getPool } from "./client.js";
-import { withAllTenants } from "./client.js";
+import { normalizeForMatch } from "@nexus/shared";
+import { getPool, withAllTenants } from "./client.js";
 
 /**
  * Adding a business to the platform.
@@ -39,7 +39,13 @@ export async function analyseKeywordCollisions(keywords: string[]): Promise<Keyw
       `select slug, routing_keywords from organizations where is_active = true`
     );
 
-    const normalise = (word: string) => word.trim().toLowerCase();
+    // The SAME folding the switchboard uses. An earlier version did
+    // trim().toLowerCase() here, which is weaker: two Arabic keywords differing
+    // only by hamza — إيجار and ايجار — compared as different, so no collision
+    // was reported, while the matcher folded them together and routed the word
+    // to neither business. An audit that reports a clean run is acted on, which
+    // makes a weak audit worse than none.
+    const normalise = (word: string) => normalizeForMatch(word);
     const claimed = new Map<string, string[]>();
     for (const row of rows) {
       for (const keyword of row.routing_keywords ?? []) {

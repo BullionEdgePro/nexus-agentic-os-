@@ -203,40 +203,12 @@ function looksLikeBroadcast(original: string): boolean {
   return upper / letters.length > 0.4;
 }
 
-/**
- * Normalise text so Arabic matches survive real-world spelling variation.
- *
- * Arabic is written with optional diacritics and several interchangeable
- * letterforms, so the same word arrives spelled differently every time:
- * أريد / اريد, متوفرة / متوفره, كَم / كم. Matching raw strings would catch one
- * spelling and miss the rest — which reads as "Arabic support" while failing on
- * most real messages.
- *
- * Applied to both the input and the phrase lists so the two are compared in the
- * same normal form. Harmless for English.
- */
-export function normalizeForMatch(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      // Tashkeel (harakat) and the superscript alef — decorative, not semantic.
-      .replace(/[ً-ْٰ]/g, "")
-      // Tatweel: a kashida stretching character with no meaning.
-      .replace(/ـ/g, "")
-      // Alef with any hamza/madda → bare alef.
-      .replace(/[آأإٱ]/g, "ا")
-      // Alef maqsura → yaa; these are freely interchanged in practice.
-      .replace(/ى/g, "ي")
-      // Taa marbuta → haa; likewise (متوفرة vs متوفره).
-      .replace(/ة/g, "ه")
-      // Hamza carriers → their base letters.
-      .replace(/ؤ/g, "و")
-      .replace(/ئ/g, "ي")
-      // Arabic-Indic digits → ASCII, so numbers compare consistently.
-      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
-      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
-  );
-}
+// normalizeForMatch moved to @nexus/shared so the switchboard, lead scoring
+// and the onboarding collision audit all fold text identically. Re-exported
+// here because callers already import it from this module.
+import { normalizeForMatch } from "@nexus/shared";
+export { normalizeForMatch };
+
 
 /**
  * Phrase lists normalised once and cached per rule.

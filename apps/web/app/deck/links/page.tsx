@@ -102,7 +102,12 @@ export default function LinksPage() {
     anchor.href = href;
     anchor.download = `${link.slug}-whatsapp-qr.svg`;
     anchor.click();
-    URL.revokeObjectURL(href);
+    // Revoked on the next tick, not on the next line. click() only queues the
+    // download; revoking synchronously can invalidate the blob before the
+    // browser has started fetching it, and in Firefox and Safari the download
+    // then fails silently — no error, no file, and an operator who concludes
+    // the feature is broken.
+    setTimeout(() => URL.revokeObjectURL(href), 0);
   }
 
   async function copy(link: BusinessLink) {
