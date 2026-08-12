@@ -56,6 +56,14 @@ import {
 /** Deliberately implausible, and the same shape self-check.ts already uses. */
 const PROBE_WA_ID = "999000000000002";
 
+/**
+ * Constants, so cleanup can find the debris without depending on a variable
+ * that a failure may have prevented from being assigned. See the `finally`
+ * block for the run where that distinction mattered.
+ */
+const PROBE_TASK_TITLE = "Schema check probe — not real work";
+const PROBE_OPERATOR = "schema-check-probe";
+
 let failures = 0;
 
 async function step<T>(label: string, run: () => Promise<T>): Promise<T | undefined> {
@@ -99,7 +107,6 @@ async function main(): Promise<void> {
   console.log("\nWrites (probe row, cleaned up)");
   let contactId: string | undefined;
   let broadcastId: string | undefined;
-  let taskId: string | undefined;
 
   try {
     await withTenant(org.id, async () => {
@@ -191,12 +198,11 @@ async function main(): Promise<void> {
           createTask({
             organizationId: org.id,
             contactId: id,
-            title: "Schema check probe — not real work",
+            title: PROBE_TASK_TITLE,
             dueAt: new Date(Date.now() + 3_600_000).toISOString(),
           })
         );
         if (created) {
-          taskId = created.id;
 
           // The insert returns through TASK_SELECT's joins. If the business
           // join were wrong the row would come back with a null name rather
@@ -231,9 +237,8 @@ async function main(): Promise<void> {
           // report an empty set and confirm it is RETRACTED. A reconcile that
           // could only open would build a list that grows forever, and nobody
           // would notice until they had stopped reading it.
-          const probeOperator = "schema-check-probe";
           const raised = await step("operator raises a finding", () =>
-            reconcileFindings(org.id, probeOperator, [
+            reconcileFindings(org.id, PROBE_OPERATOR, [
               {
                 fingerprint: `probe-${created.id}`,
                 severity: "info",
@@ -251,7 +256,7 @@ async function main(): Promise<void> {
           }
 
           const cleared = await step("operator retracts on an empty set", () =>
-            reconcileFindings(org.id, probeOperator, [])
+            reconcileFindings(org.id, PROBE_OPERATOR, [])
           );
           if (cleared && cleared.retracted !== 1) {
             console.log(
@@ -280,15 +285,33 @@ async function main(): Promise<void> {
     // was found. Recipients cascade from the broadcast; memory cascades from
     // the contact.
     await withTenant(org.id, async () => {
-      // Deleted explicitly. A task's contact_id is `on delete set null`, by
-      // design — a follow-up must survive the deletion of what it points at —
-      // so removing the probe contact would leave the probe task behind as a
-      // permanent fake entry on the operator's list.
-      if (taskId) {
-        await getPool()
-          .query(`delete from tasks where id = $1`, [taskId])
-          .catch(() => undefined);
-      }
+      // Deleted BY TITLE, not by the id this run happens to hold.
+      //
+      // The earlier version cleaned up `where id = $1` using taskId — which is
+      // only assigned once createTask RETURNS. On 2026-08-12 createTask threw
+      // after its INSERT had already committed (a data-modifying CTE cannot see
+      // its own write, so the row existed while the function raised), taskId
+      // stayed undefined, and the probe was never cleaned up. It sat in
+      // production for hours and was eventually found by an operator reporting
+      // it as a real overdue commitment.
+      //
+      // The lesson is general: cleanup keyed on a variable that a failure
+      // prevents from being set is cleanup that skips exactly when it is
+      // needed. The title is a constant, so it survives any failure above.
+      //
+      // Still explicit rather than relying on the contact cascade, because a
+      // task's contact_id is `on delete set null` by design — a follow-up must
+      // outlive what it points at.
+      await getPool()
+        .query(`delete from tasks where organization_id = $1 and title = $2`, [org.id, PROBE_TASK_TITLE])
+        .catch(() => undefined);
+      // Any findings raised about it go too, by the same argument.
+      await getPool()
+        .query(`delete from operator_findings where organization_id = $1 and operator = $2`, [
+          org.id,
+          PROBE_OPERATOR,
+        ])
+        .catch(() => undefined);
       if (broadcastId) {
         await getPool()
           .query(`delete from broadcasts where id = $1`, [broadcastId])
