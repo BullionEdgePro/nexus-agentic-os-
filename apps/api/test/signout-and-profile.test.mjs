@@ -26,17 +26,37 @@ test("the route answers the verb the link actually sends", () => {
   assert.match(LOGOUT, /export async function GET/);
   assert.match(LOGOUT, /export async function POST/);
   // GET lands the browser back on `/` with a GET of its own.
-  assert.match(LOGOUT, /NextResponse\.redirect\(new URL\("\/", req\.url\), 303\)/);
+  assert.match(LOGOUT, /status: 303/);
   // And is not cacheable, or a cached redirect could serve a page rendered
   // from the session this response destroyed.
-  assert.match(LOGOUT, /Cache-Control", "no-store"/);
+  assert.match(LOGOUT, /"Cache-Control": "no-store"/);
+});
+
+test("the redirect goes somewhere the browser can reach", () => {
+  // Production answered `303 -> https://61307059e8b2:3000/`. `new URL("/",
+  // req.url)` builds an absolute address from the origin the PROCESS believes
+  // it serves, which behind the proxy is the container's hostname. The status
+  // code was right and the destination did not exist.
+  //
+  // A relative Location is resolved by the browser against the address it
+  // actually requested, so it cannot be wrong regardless of what the proxy
+  // forwards.
+  assert.match(LOGOUT, /Location: "\/"/);
+  const code = LOGOUT.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  assert.ok(
+    !/NextResponse\.redirect/.test(code),
+    "redirect() forces an absolute URL built from the container's own origin"
+  );
+  assert.ok(!/new URL\(/.test(code), "no origin is reconstructed at all");
 });
 
 test("both verbs clear the cookie the same way", () => {
   // One helper, so a fix to one path cannot miss the other.
   assert.match(LOGOUT, /function clear\(res: NextResponse\): NextResponse/);
   assert.equal((LOGOUT.match(/return clear\(/g) ?? []).length, 2);
-  assert.match(LOGOUT, /domain,/);
+  // And the expiry string itself is built in one place, so the two scopes
+  // cannot drift apart in their attributes.
+  assert.match(LOGOUT, /function expire\(domain\?: string\): string/);
 });
 
 test("there is exactly one way to sign out, and it needs no JavaScript", () => {

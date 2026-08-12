@@ -36,41 +36,82 @@ export const runtime = "nodejs";
  * more than defending against being logged out.
  */
 
+/**
+ * One expiry header per scope the session could have been written under.
+ *
+ * WRITTEN BY HAND, and that is the point. `res.cookies.set()` is a Map keyed by
+ * NAME — calling it twice for `nexus_session` does not emit two headers, it
+ * replaces the first. The previous version set the domain-scoped clear and then
+ * the host-only one, so the only header that went out was the host-only one,
+ * and production answered:
+ *
+ *   set-cookie: nexus_session=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=lax
+ *
+ * with no Domain at all, while the live session cookie is scoped to
+ * `.nexusagenticos.com`. The fallback added to make sign-out more thorough was
+ * deleting the clear that mattered. Sign out returned 200, cleared nothing, and
+ * the next page render showed the console again.
+ *
+ * `headers.append` is the only way to send two Set-Cookie lines, so the
+ * attributes are serialised here rather than delegated.
+ */
+function expire(domain?: string): string {
+  const parts = [
+    `${SESSION_COOKIE}=`,
+    "Path=/",
+    "Max-Age=0",
+    // A date in the past as well as Max-Age: the two are equivalent for every
+    // browser in use, but a proxy that rewrites one rarely rewrites both.
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+    "HttpOnly",
+    "SameSite=Lax",
+  ];
+  if (domain) parts.push(`Domain=${domain}`);
+  if (process.env.NODE_ENV === "production") parts.push("Secure");
+  return parts.join("; ");
+}
+
 function clear(res: NextResponse): NextResponse {
   const domain = sessionCookieDomain();
 
-  res.cookies.set(SESSION_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    domain,
-    maxAge: 0,
-  });
+  // The scope the cookie is actually written under today.
+  res.headers.append("Set-Cookie", expire(domain));
 
-  // Belt and braces for sessions issued before SESSION_COOKIE_DOMAIN was set.
-  // Those are genuinely host-only, and the delete above — now carrying a
-  // Domain — would not match them. Two headers, and nobody is left signed in
-  // by a cookie written under the old configuration.
-  if (domain) {
-    res.cookies.set(SESSION_COOKIE, "", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 0,
-    });
-  }
+  // And the host-only scope, for sessions issued before SESSION_COOKIE_DOMAIN
+  // was configured. Those are genuinely host-only and a Domain-carrying delete
+  // does not match them. Skipped when there is no domain, or this would be the
+  // same header twice.
+  if (domain) res.headers.append("Set-Cookie", expire());
 
   return res;
 }
 
-/** Following the link. 303 so the browser lands on `/` with a GET. */
-export async function GET(req: NextRequest) {
-  const res = NextResponse.redirect(new URL("/", req.url), 303);
-  // No-store, or a cached redirect could send somebody to a page the server
-  // renders from a session this response just destroyed.
-  res.headers.set("Cache-Control", "no-store");
+/**
+ * Following the link. 303 so the browser lands on `/` with a GET.
+ *
+ * The Location is RELATIVE, and deliberately so. `NextResponse.redirect`
+ * demands an absolute URL, and the obvious `new URL("/", req.url)` builds one
+ * from the origin THIS PROCESS thinks it is serving. Behind the reverse proxy
+ * that is the container's own hostname, so production answered
+ *   303 -> https://61307059e8b2:3000/
+ * which resolves nowhere from a customer's browser. A 303 to a dead host looks
+ * exactly like a working sign-out in every log and every test that only checks
+ * the status code.
+ *
+ * A relative Location is legal (RFC 7231 §7.1.2) and the browser resolves it
+ * against the address it actually asked for — which is the public one, whatever
+ * the proxy is or is not forwarding.
+ */
+export async function GET(_req: NextRequest) {
+  const res = new NextResponse(null, {
+    status: 303,
+    headers: {
+      Location: "/",
+      // No-store, or a cached redirect could send somebody to a page the
+      // server renders from a session this response just destroyed.
+      "Cache-Control": "no-store",
+    },
+  });
   return clear(res);
 }
 

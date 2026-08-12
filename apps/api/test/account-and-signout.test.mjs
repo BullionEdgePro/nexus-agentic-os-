@@ -27,19 +27,27 @@ test("logout clears the cookie on the same domain it was set on", () => {
   // different, host-only cookie and expires that. The real session survived,
   // the refresh rendered the console again, and Sign out looked inert.
   assert.match(LOGIN, /domain: sessionCookieDomain\(\)/);
-  assert.match(LOGOUT, /domain,/);
   assert.match(LOGOUT, /const domain = sessionCookieDomain\(\)/);
+  assert.match(LOGOUT, /Domain=\$\{domain\}/);
   // Every other attribute mirrors the write too.
-  for (const attr of [/httpOnly: true/, /sameSite: "lax"/, /path: "\/"/, /maxAge: 0/]) {
+  for (const attr of [/Path=\//, /Max-Age=0/, /HttpOnly/, /SameSite=Lax/]) {
     assert.match(LOGOUT, attr);
   }
 });
 
-test("sessions written before the domain was configured are cleared too", () => {
-  // Those are genuinely host-only, and the delete above — now carrying a Domain
-  // — would not match them. Two headers, and nobody is left signed in by a
-  // cookie written under the old configuration.
-  assert.match(LOGOUT, /if \(domain\) \{[\s\S]*?maxAge: 0,[\s\S]*?\}/);
+test("two scopes means two headers, not one that replaced the other", () => {
+  // res.cookies.set() is keyed by NAME: calling it twice for nexus_session
+  // REPLACES rather than appends. The host-only fallback added to make sign-out
+  // thorough was silently deleting the domain-scoped clear, and production
+  // answered a single Domain-less Set-Cookie while the live cookie is scoped to
+  // .nexusagenticos.com. Only headers.append emits two lines.
+  assert.match(LOGOUT, /res\.headers\.append\("Set-Cookie", expire\(domain\)\)/);
+  assert.match(LOGOUT, /if \(domain\) res\.headers\.append\("Set-Cookie", expire\(\)\)/);
+  const code = LOGOUT.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  assert.ok(
+    !/res\.cookies\.set/.test(code),
+    "the cookie jar cannot express two scopes for one name"
+  );
 });
 
 // ============================================================
