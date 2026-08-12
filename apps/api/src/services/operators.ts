@@ -98,7 +98,21 @@ const customerWaiting: Operator = {
            select sender_type, created_at
              from messages m
             where m.conversation_id = c.id
-            order by m.created_at desc
+            -- THE TIEBREAK IS NOT COSMETIC.
+            --
+            -- created_at is not unique. An agent reply generated in response to
+            -- an inbound message can land on the identical microsecond, and
+            -- "order by created_at desc limit 1" then picks between them
+            -- arbitrarily. This operator's very first run on production
+            -- reported a customer as ignored when the triage reply had in fact
+            -- gone out at the same instant — a false positive produced by a
+            -- coin flip, on exactly the kind of alert that has to be trusted.
+            --
+            -- Ordering outbound first on a tie is the correct reading, not just
+            -- a deterministic one: an outbound message sharing a timestamp with
+            -- an inbound one was written in reply to it, so it came after.
+            order by m.created_at desc,
+                     case when m.direction = 'outbound' then 0 else 1 end
             limit 1
          ) last on true
         where c.organization_id = $1
@@ -106,7 +120,24 @@ const customerWaiting: Operator = {
           -- The last thing said was said BY THE CUSTOMER. That is what makes
           -- this "waiting" rather than "quiet".
           and last.sender_type = 'contact'
-          and last.created_at < now() - ($2 || ' hours')::interval`,
+          and last.created_at < now() - ($2 || ' hours')::interval
+          -- Cold pitches are not customers kept waiting.
+          --
+          -- The lead scorer already classifies "somebody selling TO us" as
+          -- inbound_pitch, and this platform receives a steady trickle of them.
+          -- Reporting an unanswered sales pitch as an ignored customer is the
+          -- noise that teaches an operator to stop reading the list.
+          --
+          -- Keyed on that AFFIRMATIVE classification, deliberately — not on a
+          -- score of zero or a low priority. A genuine customer writing in a
+          -- language the scorer does not speak also scores zero and floors at
+          -- low (ARCHITECTURE §9.5), and suppressing them would hide exactly
+          -- the customer least able to chase us.
+          and not exists (
+            select 1 from lead_assessments la
+             where la.conversation_id = c.id
+               and la.category = 'inbound_pitch'
+          )`,
       [organizationId, String(WAITING_WARN_HOURS)]
     );
 

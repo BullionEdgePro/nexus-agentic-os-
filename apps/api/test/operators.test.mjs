@@ -151,6 +151,45 @@ test("a waiting customer is one finding, not one per message they sent", () => {
   assert.match(fn, /last\.sender_type = 'contact'/);
 });
 
+test("the last message is chosen deterministically, not by a coin flip", () => {
+  // created_at is not unique. A reply generated in response to an inbound
+  // message can land on the identical microsecond, and `order by created_at
+  // desc limit 1` then picks arbitrarily between them. This operator's FIRST
+  // run on production reported a real customer as ignored when the triage reply
+  // had gone out at the same instant — a false positive from a coin flip, on
+  // the one kind of alert that has to be trusted.
+  //
+  // Outbound-first on a tie is the correct reading, not merely a stable one: an
+  // outbound message sharing a timestamp with an inbound one was written in
+  // reply to it, so it came after.
+  const fn = OPERATORS.slice(
+    OPERATORS.indexOf("const customerWaiting"),
+    OPERATORS.indexOf("const overdueFollowUp")
+  );
+  assert.match(
+    fn,
+    /order by m\.created_at desc,\s*\n\s*case when m\.direction = 'outbound' then 0 else 1 end/
+  );
+});
+
+test("a cold sales pitch is not a customer kept waiting", () => {
+  // The platform receives a steady trickle of people selling TO it. Reporting
+  // an unanswered pitch as an ignored customer is the noise that teaches an
+  // operator to stop reading the list — and both findings on the first real
+  // sweep were of this kind.
+  const fn = OPERATORS.slice(
+    OPERATORS.indexOf("const customerWaiting"),
+    OPERATORS.indexOf("const overdueFollowUp")
+  );
+  assert.match(fn, /la\.category = 'inbound_pitch'/);
+  // Keyed on that affirmative classification, NOT on a zero score or a low
+  // priority. A real customer writing in a language the scorer does not speak
+  // also scores zero and floors at low (§9.5); suppressing them would hide the
+  // customer least able to chase us.
+  assert.ok(!/la\.score = 0/.test(fn), "must not suppress on score");
+  assert.ok(!/la\.priority = 'low'/.test(fn), "must not suppress on priority");
+});
+
 // ============================================================
 // 5. Tenant isolation and scoping
 // ============================================================
