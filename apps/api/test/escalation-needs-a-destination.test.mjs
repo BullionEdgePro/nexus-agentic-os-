@@ -93,8 +93,15 @@ test("a failed staff lookup assumes there IS somebody", () => {
   // skip a warranted handoff; wrongly assuming staffed behaves exactly as the
   // system did before this change existed. On a transient database error the
   // safer regression is the one that changes nothing.
-  const occurrences = PROCESSOR.match(/hasActiveEmployees\([^)]*\)\.catch\(\(\) => true\)/g) ?? [];
-  assert.equal(occurrences.length, 3, "every call site must default to true on failure");
+  //
+  // Counted as "every call site is guarded", not "there are exactly three".
+  // The literal 3 failed the moment a fourth call site was added — correctly
+  // guarded — which is a test reporting a regression that did not happen, and
+  // an invitation to fix it by bumping a number without reading the new code.
+  const all = PROCESSOR.match(/hasActiveEmployees\([^)]*\)/g) ?? [];
+  const guarded = PROCESSOR.match(/hasActiveEmployees\([^)]*\)\.catch\(\(\) => true\)/g) ?? [];
+  assert.ok(all.length >= 3, "the staff lookup must still be consulted");
+  assert.equal(guarded.length, all.length, "every call site must default to true on failure");
 });
 
 test("the empty-rota case is logged, because nothing else would show it", () => {

@@ -177,9 +177,17 @@ and adding structure rather than replacing it.
 | **2 — Knowledge** | Schema + chunker + Gemini embeddings + citation-bearing retrieval; URL connector with SSRF guard; cross-page boilerplate stripping; 6-hourly re-indexing; **80 live chunks of real Zipicka content**, retrieval verified against real customer questions |
 | **3 — Lead Intelligence** | Rules-based scoring with signal audit trail; direction-aware spam detection; complaints always urgent |
 | **12 — Security** | API authentication (was fully open, leaking customer PII); WebSocket auth; inbox login gate; app de-privileged from Postgres superuser |
+| **7 — Follow-ups** | The buildable half of the workspace: a promise made in a conversation, owned by a named person, with a date, raisable from the inbox and travelling back to the customer — it reaches the agent's context and the handover brief when that person messages again. No boards |
+| **8 — Operators** | Four checks sweeping every business every 10 minutes, calling no model: customer waiting, overdue follow-up, unowned follow-up, failing knowledge source. Findings can be **retracted** — each pass computes the whole truth and reconciles, so the list shrinks as well as grows |
+| **One console** | Everything above reachable from `nexusagenticos.com` behind one session: shared rail, role-filtered navigation, search across contacts and follow-ups, a to-do panel and an activity panel that are deliberately different lists, and per-account profiles. Two sites became one |
 | **Switchboard** | One WhatsApp number serving all five businesses. Whole-word bilingual classifier that returns routed / ambiguous / unknown and **refuses to guess**; bounded triage menu; the routed tenant selects the agent, the knowledge scope and the governance policy. Ships inert — engages only when two or more tenants share a number |
 
-**147 tests, typecheck clean across 10 workspaces. A live self-check (`apps/api/src/scripts/self-check.ts`) runs the real queries against the real schema — it found a data-loss bug that every unit test missed, because a mocked pool cannot see an ON CONFLICT clause.**
+**472 tests, typecheck clean across 10 workspaces. A live self-check (`apps/api/src/scripts/self-check.ts`) runs the real queries against the real schema — it found a data-loss bug that every unit test missed, because a mocked pool cannot see an ON CONFLICT clause.**
+
+That count is the least interesting number here. Most of those tests read source
+text, and §8 is a list of defects that shipped with them all green. The four
+scripts in the second table of §8 are what the confidence actually rests on, and
+they are the only checks that have ever found something in production.
 
 The switchboard is where the multi-tenant claim is actually tested. Routing is
 not a label on a conversation — it selects which policy approves the reply.
@@ -210,8 +218,12 @@ context flows through AsyncLocalStorage, so the fifty-odd existing queries
 became tenant-scoped without being rewritten, and a new one cannot forget to
 opt in. The assertion runs in `warn` mode.
 
-Step 4 (migration 018) is written and **not applied**. The gate is evidence,
-not engineering — and that evidence is now a command rather than a wait.
+Step 4 (migration 018) is **applied and verified enforcing**. `rls-verify.ts`
+checks the app role is not a superuser, owner or bypass-holder *before* testing
+any policy — any of those three makes the rest theatre — then proves one
+business cannot read another's rows while still reading its own. It runs green
+against production. The gate was evidence, not engineering, and that evidence
+came from a command rather than a wait.
 
 `apps/api/src/scripts/rls-preflight.ts` runs every read path twice under strict
 mode: wrapped as the application calls them (nothing may fire) and deliberately
@@ -381,11 +393,12 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 
 ### 9.2 Deliberately not attempted — would have been unsafe
 
-- ~~**RLS policies (F12 steps 3–4).**~~ **Done.** Step 3 (tenant context, fail-loud
-  assertion, named cross-tenant paths) shipped; step 4 gated behind
-  `rls-preflight.ts` rather than a traffic soak, because on one active tenant a
-  soak would take weeks and still miss the paths the four quiet businesses never
-  exercise.
+- ~~**RLS policies (F12 steps 3–4).**~~ **Done and enforcing.** Step 3 (tenant
+  context, fail-loud assertion, named cross-tenant paths) shipped; step 4 was
+  gated behind `rls-preflight.ts` rather than a traffic soak, because on one
+  active tenant a soak would take weeks and still miss the paths the four quiet
+  businesses never exercise. The preflight passed, 018 was applied, and
+  `rls-verify.ts` confirms the policies *enforce* rather than merely exist.
 - ~~**Campaign engine (F4).**~~ **Built Meta-policy-native**, as §2.5 required:
   templates mirror Meta's own approval state and cannot be asserted locally, an
   unapproved template is refused at send as well as at draft, and the audience is
@@ -432,26 +445,41 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 - **Rules are whack-a-mole against adversarial senders.** One spam message still
   reads 30/normal after two rounds of hardening. This is the argument for
   *rules first, model second*, not for more rules.
-- ~~**Knowledge is operable only by script.**~~ **API added 2026-08-03** —
-  `GET/POST/DELETE /api/organizations/:slug/knowledge`, authenticated and
-  tenant-scoped, returning source health rather than bare titles. **Still no
-  UI**, so it remains a curl-level tool rather than something a non-technical
-  owner can use.
+- ~~**Knowledge is operable only by script.**~~ **Closed.** The API landed
+  2026-08-03 — `GET/POST/DELETE /api/organizations/:slug/knowledge`,
+  authenticated and tenant-scoped, returning source health rather than bare
+  titles — and the screen followed at `/deck/knowledge`: pick a business, add a
+  page by URL or paste text, see which sources failed and why, remove one behind
+  a confirmation that names what the agent will stop knowing. This line said
+  "still no UI" for a while after the screen existed, which is the same
+  two-places-describing-one-fact problem flagged in §9.4.
 - **Employee layer is dormant.** Zero employees exist, so presence, twins and
   handbacks are live but unexercised. This now also means every follow-up
   raised is unassigned — there is nobody to assign one to.
-- **Escalation promises a person who does not exist.** Found 2026-08-12 by the
-  `customer-waiting` operator on its first live sweep, and this is the most
-  consequential thing in this section. Both escalation paths — governance
-  deciding to escalate, and the agent failing outright — send the customer *"I'm
-  looping in a specialist from our team. They'll follow up shortly"*, set
-  `is_human_handoff`, and thereby **pause the AI**. With no employees, nobody
-  ever arrives. The conversation does not error, does not appear in any failure
-  count, and looks identical to a healthy one; the customer is simply told help
-  is coming and then never hears from anyone again. One such conversation has
-  been open since 2026-08-01. Not a code defect — the code does exactly what it
-  says — but the highest-cost gap on the platform, and it will recur for every
-  single escalation until someone is on the rota.
+- **Escalation promises a person who does not exist.** ~~Found 2026-08-12 by the
+  `customer-waiting` operator on its first live sweep~~ — **the promise is fixed;
+  the rota is not.** Both escalation paths — governance deciding to escalate, and
+  the agent failing outright — used to send the customer *"I'm looping in a
+  specialist from our team. They'll follow up shortly"*, set `is_human_handoff`,
+  and thereby **pause the AI**. With no employees, nobody ever arrived. The
+  conversation did not error, did not appear in any failure count, and looked
+  identical to a healthy one; the customer was simply told help was coming and
+  then never heard from anyone again.
+
+  Both paths now ask `hasActiveEmployees()` first and send
+  `FALLBACK_REPLY_NO_STAFF` instead, which promises nothing it cannot deliver,
+  and the handoff flag is not set — so the AI keeps answering rather than going
+  quiet behind a promise. `.catch(() => true)` on that lookup is deliberate: if
+  the database cannot answer, assume staff exist, because over-promising once is
+  better than silently changing what every customer is told on the strength of a
+  failed query.
+
+  **What is NOT fixed is the underlying fact.** There is still nobody to escalate
+  *to*. The agent now handles what it would have handed over, which is better
+  than a dead promise and worse than a person. Every follow-up raised is also
+  still unassigned. One conversation from 2026-08-01 remains paused under the old
+  behaviour and needs releasing by hand — the fix changed what happens next, not
+  what already happened.
 - ~~**The shared operator password is open on this deployment.**~~ **Closed
   2026-08-12.** It is now a bootstrap credential that retires itself once a
   named admin account has signed in. Until that shipped, any email plus

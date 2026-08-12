@@ -202,7 +202,9 @@ async function processSingleTextMessage(
     body: text.body,
     rawPayload: message,
   });
-  const { conversationId, contactId, messageId, isHumanHandoff, aiPausedUntil } = inboundResult;
+  // `isHumanHandoff` is reassigned below when the flag turns out to be stale.
+  const { conversationId, contactId, messageId, aiPausedUntil } = inboundResult;
+  let { isHumanHandoff } = inboundResult;
 
   if (!messageId) {
     // Meta redelivered a message we already processed — skip the agent call.
@@ -240,6 +242,46 @@ async function processSingleTextMessage(
   });
 
   const aiPaused = Boolean(aiPausedUntil && new Date(aiPausedUntil).getTime() > Date.now());
+
+  // A HANDOFF FLAG IS A PERMANENT MUTE, AND NOTHING EVER CLEARS IT.
+  //
+  // `aiPaused` expires on its own — a person deliberately taking a conversation
+  // for a while. `is_human_handoff` does not: it is set when the agent escalates
+  // and cleared only when a human works the conversation. With an empty rota
+  // nobody ever does, so the flag is a switch that only turns off.
+  //
+  // Four Zipicka conversations were found in exactly that state, muted since
+  // 2026-08-01. Two were cold pitches and no loss. Two were people who said
+  // "Hi", were told a specialist would follow up, and would have been met with
+  // silence for the rest of the account's life.
+  //
+  // Not setting the flag any more (see FALLBACK_REPLY_NO_STAFF) stops new ones
+  // and does nothing for those. Clearing them by hand would fix four rows and
+  // not the rule, and the rule bites again the moment a business's only
+  // employee is deactivated.
+  //
+  // So the flag is read as what it means — "a person is handling this" — and
+  // checked against whether a person could be. If not, it is stale: the agent
+  // answers, and the flag is cleared so the state stops claiming a human is
+  // involved. A conversation genuinely being handled is untouched, because that
+  // business has staff.
+  if (isHumanHandoff && !aiPaused) {
+    const someoneCanHandle = await hasActiveEmployees(organization.id).catch(() => true);
+    if (!someoneCanHandle) {
+      logger.warn(
+        { conversationId, organizationId: organization.id },
+        "Releasing a handoff nobody can take — the business has no active staff"
+      );
+      // Best-effort: failing to clear the flag must not stop the reply. The
+      // worst case is that this runs again on the next message, which is
+      // exactly what it is for.
+      await setConversationHandoff(conversationId, false).catch((err) => {
+        logger.error({ err, conversationId }, "Could not clear a stale handoff flag");
+      });
+      isHumanHandoff = false;
+    }
+  }
+
   if (isHumanHandoff || aiPaused) {
     logger.debug(
       { conversationId, isHumanHandoff, aiPaused },
