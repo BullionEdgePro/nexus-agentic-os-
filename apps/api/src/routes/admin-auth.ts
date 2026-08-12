@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { findAdminByEmail, recordAdminLogin } from "@nexus/db";
+import { findAdminByEmail, recordAdminLogin, hasWorkingAdminAccount } from "@nexus/db";
 import { verifySecret } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
 
@@ -18,6 +18,39 @@ import { logger } from "../lib/logger.js";
  * in one cannot widen the other.
  */
 export const adminAuthRoute = new Hono();
+
+/**
+ * Is the shared operator password still allowed?
+ *
+ * The shared password is a BOOTSTRAP credential — the way in before any named
+ * admin account exists. The login route has said since admin accounts landed
+ * that it "should be removed once a real admin account has been created and
+ * used", and nothing enforced that, so `demo1234` plus any email has been a
+ * full cross-tenant login this whole time.
+ *
+ * This endpoint is the enforcement. Once a named admin has actually signed in,
+ * the bootstrap door closes on its own.
+ *
+ * UNAUTHENTICATED, DELIBERATELY. The sign-in page has to ask this before anyone
+ * has a session — that is the entire situation it describes. What it discloses
+ * is one boolean about how this deployment is configured, which is worth far
+ * less than the hole it closes, and nothing about who the admins are or how
+ * many there are.
+ *
+ * FAILS CLOSED. If the database cannot be reached, the answer is "retired" and
+ * the shared password is refused. A lookup that failed is not evidence that the
+ * bootstrap window is open, and treating it as such would mean any database
+ * blip re-enables a known password.
+ */
+adminAuthRoute.get("/admin/bootstrap", async (c) => {
+  try {
+    const retired = await hasWorkingAdminAccount();
+    return c.json({ sharedPasswordRetired: retired });
+  } catch (err) {
+    logger.error({ err }, "Could not determine bootstrap state — refusing the shared password");
+    return c.json({ sharedPasswordRetired: true });
+  }
+});
 
 adminAuthRoute.post("/admin", async (c) => {
   let body: { email?: unknown; password?: unknown };

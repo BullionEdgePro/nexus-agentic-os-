@@ -88,6 +88,35 @@ Inbox shell with the 5 businesses listed (empty conversation lists, since
 the seed data's `whatsapp_phone_number_id`s are placeholders — see the main
 README's step 3 for swapping in real ones).
 
+## 5a. Close the bootstrap door — do this on the first day
+
+Until a named admin account has **signed in**, any syntactically valid email
+plus `NEXUS_OPERATOR_PASSWORD` is a full cross-tenant login: every business's
+customer conversations, contacts, leads and broadcasts. If `.env` does not set
+that variable it defaults to **`demo1234`**.
+
+That is intended only as the way in before any account exists. It closes itself
+the moment a real one is used:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T worker \
+  npx tsx apps/api/src/scripts/create-admin.ts you@example.com "Your Name"
+```
+
+The password is generated on the server and printed **once** — it is never
+accepted as an argument, because a password on a command line lands in shell
+history. Sign in with it at `https://<WEB_DOMAIN>/admin`.
+
+**The sign-in is what closes the door, not the account.** Retirement is keyed on
+`last_login_at`, deliberately: an account created with a password nobody kept
+would otherwise lock you out of your own console. Run the script with no
+arguments at any time to see which accounts exist and which have never signed
+in.
+
+Every use of the shared password logs a warning naming the email that used it —
+`docker compose -f docker-compose.prod.yml logs web | grep "SHARED OPERATOR"`
+tells you whether the door is still being walked through.
+
 ## 6. Updating after a code change
 
 ```bash

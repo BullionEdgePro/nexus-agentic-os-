@@ -63,11 +63,39 @@ export async function POST(req: Request) {
       return issue(admin.email, { role: "operator", adminId: admin.adminId });
     }
 
-    // The shared password still works, deliberately. Retiring it in the same
-    // change that introduces admin accounts would leave a window where a failed
-    // account creation locks everyone out of their own platform. It should be
-    // removed once a real admin account has been created and used.
+    // The shared password is a BOOTSTRAP credential and now behaves like one.
+    //
+    // It exists so the platform's owner can get in before any named admin
+    // account exists. The comment that used to sit here said it "should be
+    // removed once a real admin account has been created and used" — a
+    // condition stated and never enforced, which meant `demo1234` plus any
+    // syntactically valid email was a full cross-tenant login into five
+    // businesses' customer conversations for as long as admin accounts existed.
+    //
+    // Now the condition enforces itself: once a named admin has actually signed
+    // in, this door closes. Checked against "has signed in" rather than "exists"
+    // on purpose — see hasWorkingAdminAccount. A create script that ran with a
+    // password nobody kept would otherwise lock the owner out of their own
+    // console, turning a security fix into an outage.
     if (secret === operatorPassword() && /.+@.+\..+/.test(identifier)) {
+      if (await sharedPasswordRetired()) {
+        console.warn(
+          "[auth] Shared operator password refused — a named admin account is in use. Sign in with that account."
+        );
+        return NextResponse.json(
+          {
+            error:
+              "The shared password has been retired. Sign in with your admin account.",
+          },
+          { status: 401 }
+        );
+      }
+      // Loud, every single time, for as long as this window is open. A warning
+      // that only fires once is invisible in a log nobody tails.
+      console.warn(
+        `[auth] SHARED OPERATOR PASSWORD USED by "${identifier}". This grants access to every business. ` +
+          "Create an admin account and sign in with it — that retires this password automatically."
+      );
       return issue(identifier, { role: "operator" });
     }
 
@@ -88,6 +116,26 @@ export async function POST(req: Request) {
   // recognised but the code was wrong confirms who works here, which is exactly
   // what a targeted attempt is missing.
   return NextResponse.json({ error: "That sign-in doesn't match." }, { status: 401 });
+}
+
+/**
+ * Whether the bootstrap window has closed.
+ *
+ * Fails CLOSED — an unreachable API means the shared password is refused. The
+ * opposite reading is the dangerous one: a failed lookup is not evidence that
+ * no admin account exists, and treating it as such would let any transient
+ * outage re-enable a known password. Being unable to sign in for a minute is
+ * recoverable; the alternative is not.
+ */
+async function sharedPasswordRetired(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_URL}/auth/admin/bootstrap`, { cache: "no-store" });
+    if (!response.ok) return true;
+    const data = (await response.json()) as { sharedPasswordRetired?: boolean };
+    return data.sharedPasswordRetired !== false;
+  } catch {
+    return true;
+  }
 }
 
 async function verifyAdmin(

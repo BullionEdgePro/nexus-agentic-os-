@@ -90,6 +90,39 @@ export async function recordAdminLogin(adminId: string): Promise<void> {
   await getPool().query(`update admins set last_login_at = now() where id = $1`, [adminId]);
 }
 
+/**
+ * Has anyone actually signed in with a named admin account?
+ *
+ * This is the retirement condition for the shared operator password, and it is
+ * deliberately the same sentence the login route has carried as a comment since
+ * admin accounts were added: the shared password "should be removed once a real
+ * admin account has been created and used."
+ *
+ * It was stated and never enforced, so any email plus the default `demo1234`
+ * has been granting full cross-tenant access to five businesses' customer
+ * conversations for as long as admin accounts have existed.
+ *
+ * WHY "USED" AND NOT MERELY "EXISTS". Creating an account proves someone ran a
+ * script. Signing in with it proves the credential actually works and somebody
+ * holds it. Retiring the shared password on existence alone would lock the
+ * platform's owner out of their own console the moment a create script ran with
+ * a password they then mistyped or lost — turning a security fix into an
+ * outage. `last_login_at` is the only evidence that another door is genuinely
+ * open before this one is shut.
+ *
+ * Counted across ALL admins, and only active ones: deactivating the single
+ * admin who had signed in correctly re-opens the bootstrap path, because at
+ * that point there is again no working named account.
+ */
+export async function hasWorkingAdminAccount(): Promise<boolean> {
+  const { rows } = await getPool().query<{ n: string }>(
+    `select count(*)::text as n
+       from admins
+      where is_active = true and last_login_at is not null`
+  );
+  return Number(rows[0]?.n ?? 0) > 0;
+}
+
 export async function listAdmins(): Promise<Array<Omit<AdminAccount, "passwordHash">>> {
   const { rows } = await getPool().query<AdminRow>(
     `select id, email, full_name, '' as password_hash, is_active, last_login_at

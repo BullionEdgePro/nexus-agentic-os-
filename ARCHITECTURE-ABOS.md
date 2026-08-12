@@ -356,8 +356,16 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   are submitted, the engine is tested. It cannot send until WhatsApp has a
   payment method and verification completes. Neither is an engineering task.
 - **Operators: event-triggered or paid inference?** (§2.3) Blocks Phase 4.
-- **Workspace scope.** Full Monday.com parity is years. Boards + tasks tied to
-  conversations is weeks. Someone must choose.
+- ~~**Workspace scope.**~~ **The small half is built.** "Boards + tasks tied to
+  conversations is weeks" — the tasks half shipped 2026-08-12 (migration 025):
+  follow-ups attached to the conversation they came from, owned by a named
+  person, with a date, raisable from the inbox. No boards, no swimlanes, no
+  dependencies. **The remaining choice is whether boards are wanted at all** —
+  the list has been useful without them, and adding a board is a different
+  product decision now that the underlying record exists.
+- **Retire the shared operator password.** Create an admin account and sign in
+  with it once; that closes the bootstrap door automatically (see §9.5). Until
+  then, `demo1234` plus any email is a full cross-tenant login. One command.
 
 ### 9.2 Deliberately not attempted — would have been unsafe
 
@@ -380,7 +388,10 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 
 ### 9.3 Genuinely large
 
-- **Workspace (F7)** — months.
+- **Workspace (F7)** — months for parity. The buildable slice this document
+  named (tasks tied to conversations) is done; what is left is boards, views,
+  automations and everything else Monday sells, and none of it has been asked
+  for yet.
 - **Remaining knowledge connectors** — Shopify, Drive, PDFs, OCR, audio. Each is
   an isolated fetch-and-parse problem now that the pipeline exists; add on real
   demand rather than building thirty at once.
@@ -410,7 +421,30 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   UI**, so it remains a curl-level tool rather than something a non-technical
   owner can use.
 - **Employee layer is dormant.** Zero employees exist, so presence, twins and
-  handbacks are live but unexercised.
+  handbacks are live but unexercised. This now also means every follow-up
+  raised is unassigned — there is nobody to assign one to.
+- **The shared operator password is still open on this deployment.** It is a
+  bootstrap credential that retires itself the moment a named admin account
+  signs in (2026-08-12), and until then any email plus `NEXUS_OPERATOR_PASSWORD`
+  — defaulting to `demo1234`, because `.env` does not set it — is a full
+  cross-tenant login into all five businesses' customer conversations. Every
+  such sign-in is now logged loudly. Closing it is one command:
+
+  ```
+  # With no arguments it reports what exists, including who has never signed in
+  docker compose -f docker-compose.prod.yml exec -T worker \
+    npx tsx apps/api/src/scripts/create-admin.ts
+
+  docker compose -f docker-compose.prod.yml exec -T worker \
+    npx tsx apps/api/src/scripts/create-admin.ts you@example.com "Your Name"
+  ```
+
+  The password is generated on the server and printed once. Then sign in with
+  it at `/admin` — the sign-in is what closes the door, not the account.
+  Worth being precise about what the fix
+  did and did not do: it made the door close *on the stated condition*, which
+  had been written in a comment and never enforced. It did not close the door.
+  Only signing in with a real account does that.
 - **No OpenTelemetry.** Phase 0 called for traces and structured alerting; only
   structured logging exists.
 
