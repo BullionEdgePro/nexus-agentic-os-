@@ -8,6 +8,13 @@ const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversation
 
 mock.module("@nexus/db", {
   exports: {
+    // Returns TRUE, preserving what these fixtures were written to test.
+    // Escalation now only pauses the agent when somebody can take over, and
+    // these cases all assert the staffed behaviour. Flipping this to false
+    // would silently change what they cover rather than extending it — the
+    // empty-rota branch is covered by escalation-needs-a-destination.test.mjs.
+    hasActiveEmployees: async () => true,
+
     // Added when follow-ups joined the reply path. These fixtures have no
     // outstanding promises, so the honest stub is an empty list — a mock that
     // invented one would exercise a branch these assertions never check, and

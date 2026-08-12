@@ -85,6 +85,30 @@ export async function listEmployees(organizationId: string): Promise<Employee[]>
   return rows.map(toEmployee);
 }
 
+/**
+ * Is there anybody who could actually take a conversation over?
+ *
+ * Asked on the escalation path, and it is the question that path never asked.
+ * Escalating tells the customer a specialist is coming AND pauses the AI — two
+ * commitments that only make sense if someone exists to honour them. With no
+ * active employee, that combination is the worst outcome available: the
+ * customer is promised help and then silenced, and nothing anywhere records a
+ * failure. One such conversation sat open for eleven days before an operator
+ * noticed the absence.
+ *
+ * Counted rather than listed: the caller only needs to know whether the rota is
+ * empty, and fetching every employee's full profile to answer a yes/no on the
+ * reply path is work nobody uses.
+ */
+export async function hasActiveEmployees(organizationId: string): Promise<boolean> {
+  const { rows } = await getPool().query<{ n: string }>(
+    `select count(*)::text as n from employees
+      where organization_id = $1 and is_active = true`,
+    [organizationId]
+  );
+  return Number(rows[0]?.n ?? 0) > 0;
+}
+
 export async function findEmployeeById(id: string): Promise<Employee | null> {
   const { rows } = await getPool().query<EmployeeRow>(
     `select ${EMPLOYEE_COLUMNS} from employees where id = $1`,

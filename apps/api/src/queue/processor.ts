@@ -21,6 +21,7 @@ import {
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
+  hasActiveEmployees,
   listOpenTasksForContact,
   withTenant,
 } from "@nexus/db";
@@ -44,6 +45,28 @@ import { logger } from "../lib/logger.js";
 
 const FALLBACK_REPLY =
   "Thanks for your message — I want to make sure you get an accurate answer, so I'm looping in a specialist from our team. They'll follow up shortly.";
+
+/**
+ * The same moment, when there is nobody to loop in.
+ *
+ * ESCALATION USED TO PROMISE A PERSON WHO MIGHT NOT EXIST. The reply above says
+ * a specialist will follow up, and the code then sets `is_human_handoff`, which
+ * PAUSES the agent. Both are correct when somebody is on the rota. With an
+ * empty rota they combine into the worst outcome the platform can produce: the
+ * customer is told help is coming and simultaneously cut off from the only
+ * thing that was answering them. Nothing errors, no counter moves, and the
+ * conversation looks exactly like a healthy one.
+ *
+ * A conversation sat in that state from 2026-08-01 until an operator noticed
+ * eleven days later — noticed, necessarily, by watching for the ABSENCE of an
+ * event, because there was no event to catch.
+ *
+ * So this text promises nobody, and the caller leaves the agent running. A
+ * further imperfect answer is worse than a good one and enormously better than
+ * silence, which is the real alternative.
+ */
+const FALLBACK_REPLY_NO_STAFF =
+  "Thanks for your message — I want to make sure I get this right. Could you tell me a little more about what you need, so I can point you to the right answer?";
 
 // How many times a customer may be handed the triage menu before a human takes
 // over. Bounded because the failure mode is a loop: if someone's messages never
@@ -363,7 +386,33 @@ async function processSingleTextMessage(
     // escalates at medium hallucination risk and `zipicka` does not; using the
     // owner's slug here would silently apply retail thresholds to legal answers.
     const shouldEscalate = shouldEscalateReply(evaluation, serving.slug) || signatureLeak;
-    const finalText = shouldEscalate ? FALLBACK_REPLY : result.text;
+
+    // Escalating to nobody is worse than not escalating.
+    //
+    // Asked of the SERVING business, not the number owner: on a shared number
+    // the law firm may have staff while the retailer does not, and the question
+    // is whether anyone can pick up THIS conversation.
+    //
+    // Failure is treated as "there is somebody" — the conservative reading. A
+    // failed lookup wrongly assumed empty would send a customer a weaker reply
+    // and skip a handoff that was warranted; wrongly assumed staffed, it
+    // behaves exactly as the system did before this change.
+    const canHandOver = shouldEscalate
+      ? await hasActiveEmployees(serving.id).catch(() => true)
+      : false;
+
+    const finalText = shouldEscalate
+      ? canHandOver
+        ? FALLBACK_REPLY
+        : FALLBACK_REPLY_NO_STAFF
+      : result.text;
+
+    if (shouldEscalate && !canHandOver) {
+      logger.warn(
+        { conversationId, business: serving.slug },
+        "Escalation wanted but no active staff — keeping the agent live rather than promising a specialist who does not exist"
+      );
+    }
 
     await sendWhatsAppText(phoneNumberId, message.from, finalText);
     sentToCustomer = true;
@@ -392,7 +441,9 @@ async function processSingleTextMessage(
       message: outboundDto,
     });
 
-    if (shouldEscalate) {
+    // Only pause the agent when somebody can take its place. Pausing with an
+    // empty rota does not hand the conversation over — it ends it.
+    if (shouldEscalate && canHandOver) {
       await setConversationHandoff(conversationId, true);
       await publishInboxEvent({
         type: "handoff_changed",
@@ -724,13 +775,21 @@ async function sendFallbackBestEffort(
   contactId: string
 ): Promise<void> {
   try {
-    await sendWhatsAppText(phoneNumberId, contactWaId, FALLBACK_REPLY);
+    // Same question as the governance path, for the same reason: this promises
+    // a specialist and then pauses the agent, and with an empty rota that
+    // combination abandons the customer while looking healthy. Failure reads as
+    // "there is somebody", preserving the previous behaviour rather than
+    // silently weakening the reply on a transient error.
+    const canHandOver = await hasActiveEmployees(organization.id).catch(() => true);
+    const text = canHandOver ? FALLBACK_REPLY : FALLBACK_REPLY_NO_STAFF;
+
+    await sendWhatsAppText(phoneNumberId, contactWaId, text);
     const outboundDto = await insertOutboundMessage({
       organizationId: organization.id,
       conversationId,
       contactId,
       senderType: "system",
-      body: FALLBACK_REPLY,
+      body: text,
     });
     await publishInboxEvent({
       type: "message",
@@ -751,8 +810,31 @@ async function sendFallbackBestEffort(
   }
 }
 
+/**
+ * Pause the agent so a person can take over — but only if a person exists.
+ *
+ * The guard lives HERE rather than at each of the three call sites, because a
+ * check every caller has to remember is a check the fourth caller will not.
+ * Setting `is_human_handoff` is not a flag for someone's attention; it stops
+ * the agent replying. With an empty rota that does not hand the conversation
+ * over, it ends it — silently, in a state that reads as healthy.
+ *
+ * Left unpaused, the customer keeps getting agent replies. Imperfect, and
+ * enormously better than the alternative, which is nothing ever again.
+ */
 async function flagHandoffBestEffort(organization: Organization, conversationId: string): Promise<void> {
   try {
+    // Conservative on failure: assume somebody is there, which preserves the
+    // behaviour this function had before the guard existed.
+    const canHandOver = await hasActiveEmployees(organization.id).catch(() => true);
+    if (!canHandOver) {
+      logger.warn(
+        { conversationId, business: organization.slug },
+        "Not pausing the agent — no active staff, so a handoff would abandon this conversation rather than transfer it"
+      );
+      return;
+    }
+
     await setConversationHandoff(conversationId, true);
     await publishInboxEvent({
       type: "handoff_changed",
