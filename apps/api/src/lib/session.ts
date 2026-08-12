@@ -57,6 +57,18 @@ export interface SessionScope {
   employeeId?: string;
   organizationId?: string;
   organizationSlug?: string;
+  /**
+   * Which named admin account this operator session belongs to.
+   *
+   * The web app has signed this into the token since admin accounts landed;
+   * this decoder simply dropped it, so every operator looked anonymous to the
+   * API. /api/me could not tell whose profile to read, which is part of why it
+   * reported that operators have none.
+   *
+   * Absent on sessions minted by the retired shared password — those had no
+   * account behind them at all.
+   */
+  adminId?: string;
 }
 
 export async function verifySessionToken(
@@ -80,6 +92,7 @@ export async function verifySessionToken(
       employeeId?: string;
       organizationId?: string;
       organizationSlug?: string;
+      adminId?: string;
     };
     if (!payload.sub || !payload.exp || Date.now() > payload.exp) return null;
 
@@ -101,7 +114,7 @@ export async function verifySessionToken(
     // Tokens issued before this change carry no role. They were only ever
     // issued to the operator password, so treating them as operator preserves
     // existing sessions without widening anyone's access.
-    return { sub: payload.sub, role: "operator" };
+    return { sub: payload.sub, role: "operator", adminId: payload.adminId };
   } catch {
     return null;
   }

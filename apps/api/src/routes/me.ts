@@ -1,5 +1,12 @@
 import { Hono } from "hono";
-import { findEmployeeById, findOrganizationById, getPool } from "@nexus/db";
+import {
+  findEmployeeById,
+  findOrganizationById,
+  findAdminById,
+  findAdminByEmail,
+  updateAdminProfile,
+  getPool,
+} from "@nexus/db";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 
@@ -24,16 +31,33 @@ meRoute.get("/", async (c) => {
   const scope = scopeOf(c);
 
   if (scope.role === "operator") {
+    // An operator DOES have a profile. This branch used to return fullName:
+    // null and editable: false, which is why the panel showed the same email
+    // twice — as the name and as the address — above the sentence "Operator
+    // accounts have no profile to edit." The `admins` table has carried
+    // full_name since accounts existed; the code simply never read it.
+    //
+    // Located by id from the session where there is one. The email fallback
+    // covers a session minted by the old shared password, which carried no
+    // adminId — those are retired now, but an unexpired one may still be in
+    // somebody's browser.
+    const admin = scope.adminId
+      ? await findAdminById(scope.adminId)
+      : await findAdminByEmail(scope.sub);
+
     return c.json({
-      email: scope.sub,
+      email: admin?.email ?? scope.sub,
       role: "operator" as const,
-      fullName: null,
+      fullName: admin?.fullName ?? null,
       businessName: null,
       businessSlug: null,
+      // Not a field an operator has. They administer the platform rather than
+      // working in one of its businesses, so no customer is ever handed to
+      // them directly and the box would do nothing.
       whatsappNumber: null,
-      avatarUrl: null,
+      avatarUrl: admin?.avatarUrl ?? null,
       jobTitle: null,
-      editable: false,
+      editable: Boolean(admin),
     });
   }
 
@@ -84,10 +108,6 @@ meRoute.get("/", async (c) => {
  */
 meRoute.patch("/", async (c) => {
   const scope = scopeOf(c);
-  if (scope.role !== "employee" || !scope.employeeId) {
-    return c.json({ error: "There is no profile to edit on an operator account." }, 403);
-  }
-
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: "Nothing to change." }, 400);
 
@@ -133,6 +153,36 @@ meRoute.patch("/", async (c) => {
       }
       avatarUrl = parsed.toString();
     }
+  }
+
+  // An operator edits the same two things an employee does, minus the WhatsApp
+  // number they have no use for. Handled before the employee path rather than
+  // refused, which is what this endpoint did — the refusal was the bug.
+  if (scope.role === "operator") {
+    const adminId = scope.adminId
+      ? scope.adminId
+      : (await findAdminByEmail(scope.sub))?.id ?? null;
+
+    if (!adminId) {
+      // A session with no admin behind it — one issued by the retired shared
+      // password. There is no row to edit, and saying so beats writing to
+      // whichever admin happens to share the address.
+      return c.json(
+        { error: "This session predates named admin accounts. Sign out and back in." },
+        403
+      );
+    }
+
+    const ok = await updateAdminProfile(adminId, {
+      fullName: fullName || undefined,
+      ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    });
+    if (!ok) return c.json({ error: "This account is no longer active." }, 404);
+    return c.json({ ok: true });
+  }
+
+  if (!scope.employeeId) {
+    return c.json({ error: "Your account is not attached to a business." }, 403);
   }
 
   const { rows } = await getPool().query<{ id: string }>(

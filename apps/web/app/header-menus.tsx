@@ -446,7 +446,9 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
     try {
       await updateMe({
         fullName: name.trim() || undefined,
-        whatsappNumber: wa.trim() ? wa.trim() : null,
+        // Omitted entirely for an operator rather than sent as null, which
+        // would read as "clear it" for a field they do not have.
+        ...(me?.role === "employee" ? { whatsappNumber: wa.trim() ? wa.trim() : null } : {}),
         avatarUrl: avatar.trim() ? avatar.trim() : null,
       });
       const fresh = await getMe();
@@ -504,6 +506,7 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
 
           {me?.editable && !editing ? (
             <dl className="acct-rows">
+              {me.role === "employee" ? (
               <div>
                 <dt>WhatsApp</dt>
                 <dd>
@@ -516,10 +519,18 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
                   )}
                 </dd>
               </div>
+              ) : null}
+              {me.role === "employee" ? (
               <div>
                 <dt>Staff code</dt>
                 <dd>{me.employeeCode}</dd>
               </div>
+              ) : (
+              <div>
+                <dt>Access</dt>
+                <dd>Every business on the platform</dd>
+              </div>
+              )}
             </dl>
           ) : null}
 
@@ -529,15 +540,19 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
                 <span>Name</span>
                 <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
               </label>
-              <label>
-                <span>Your WhatsApp number</span>
-                <input
-                  value={wa}
-                  onChange={(e) => setWa(e.target.value)}
-                  placeholder="971500000000"
-                  inputMode="tel"
-                />
-              </label>
+              {/* Employees only. An operator takes no handoffs, so a number
+                  here would be a box that changes nothing. */}
+              {me.role === "employee" ? (
+                <label>
+                  <span>Your WhatsApp number</span>
+                  <input
+                    value={wa}
+                    onChange={(e) => setWa(e.target.value)}
+                    placeholder="971500000000"
+                    inputMode="tel"
+                  />
+                </label>
+              ) : null}
               <label>
                 <span>Photo address (https)</span>
                 <input
@@ -570,9 +585,7 @@ export function AccountMenu({ signedInAs, onSignOut }: { signedInAs: string; onS
                 Edit profile
               </button>
             ) : (
-              <span className="acct-note">
-                {me?.role === "operator" ? "Operator accounts have no profile to edit." : ""}
-              </span>
+              <span className="acct-note" />
             )}
             {saved ? <span className="acct-saved">Saved</span> : null}
             <button className="acct-out" onClick={onSignOut}>

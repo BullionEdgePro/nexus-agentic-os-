@@ -14,6 +14,7 @@ export interface AdminAccount {
   passwordHash: string;
   isActive: boolean;
   lastLoginAt: string | null;
+  avatarUrl: string | null;
 }
 
 interface AdminRow {
@@ -23,6 +24,7 @@ interface AdminRow {
   password_hash: string;
   is_active: boolean;
   last_login_at: string | null;
+  avatar_url: string | null;
 }
 
 const toAdmin = (row: AdminRow): AdminAccount => ({
@@ -32,6 +34,7 @@ const toAdmin = (row: AdminRow): AdminAccount => ({
   passwordHash: row.password_hash,
   isActive: row.is_active,
   lastLoginAt: row.last_login_at,
+  avatarUrl: row.avatar_url,
 });
 
 /**
@@ -50,7 +53,7 @@ export async function findAdminByEmail(email: string): Promise<AdminAccount | nu
   if (!needle) return null;
 
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, password_hash, is_active, last_login_at
+    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url
        from admins
       where lower(email) = $1 and is_active = true
       limit 1`,
@@ -80,10 +83,44 @@ export async function upsertAdmin(input: {
        password_hash = excluded.password_hash,
        is_active     = true,
        updated_at    = now()
-     returning id, email, full_name, password_hash, is_active, last_login_at`,
+     returning id, email, full_name, password_hash, is_active, last_login_at, avatar_url`,
     [input.email.trim(), input.fullName.trim(), input.passwordHash]
   );
   return toAdmin(rows[0]);
+}
+
+/** Look up an admin by the id carried in their session. */
+export async function findAdminById(id: string): Promise<AdminAccount | null> {
+  const { rows } = await getPool().query<AdminRow>(
+    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url
+       from admins
+      where id = $1 and is_active = true
+      limit 1`,
+    [id]
+  );
+  return rows[0] ? toAdmin(rows[0]) : null;
+}
+
+/**
+ * An operator editing their own name and picture.
+ *
+ * Email is not here on purpose: it is how they sign in, and this platform has
+ * no password reset, so one mistyped character locks somebody out of the
+ * console with no way back. Another admin reissues it with create-admin.
+ */
+export async function updateAdminProfile(
+  id: string,
+  input: { fullName?: string; avatarUrl?: string | null }
+): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update admins
+        set full_name  = coalesce($2, full_name),
+            avatar_url = case when $3::boolean then $4 else avatar_url end,
+            updated_at = now()
+      where id = $1 and is_active = true`,
+    [id, input.fullName ?? null, input.avatarUrl !== undefined, input.avatarUrl ?? null]
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 export async function recordAdminLogin(adminId: string): Promise<void> {
@@ -125,7 +162,7 @@ export async function hasWorkingAdminAccount(): Promise<boolean> {
 
 export async function listAdmins(): Promise<Array<Omit<AdminAccount, "passwordHash">>> {
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, '' as password_hash, is_active, last_login_at
+    `select id, email, full_name, '' as password_hash, is_active, last_login_at, avatar_url
        from admins order by created_at asc`
   );
   return rows.map(({ password_hash: _ignored, ...row }) => {
