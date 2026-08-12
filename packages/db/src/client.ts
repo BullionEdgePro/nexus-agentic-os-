@@ -39,6 +39,7 @@ const TENANT_SCOPED_TABLES = [
   "conversation_metrics",
   "contact_memory",
   "tasks",
+  "operator_findings",
 ];
 // Not on the list, and each for a reason worth stating:
 //

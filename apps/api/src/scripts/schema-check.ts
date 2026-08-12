@@ -50,6 +50,7 @@ import {
   countTasks,
   completeTask,
   listOpenTasksForContact,
+  reconcileFindings,
 } from "@nexus/db";
 
 /** Deliberately implausible, and the same shape self-check.ts already uses. */
@@ -221,6 +222,44 @@ async function main(): Promise<void> {
             failures++;
           } else if (owed) {
             console.log("  ok    the probe follow-up is findable");
+          }
+
+          // ---- operator reconciliation (migration 027) ----
+          //
+          // The property the whole feature rests on, exercised end to end
+          // against the real schema: raise a finding, confirm it stands, then
+          // report an empty set and confirm it is RETRACTED. A reconcile that
+          // could only open would build a list that grows forever, and nobody
+          // would notice until they had stopped reading it.
+          const probeOperator = "schema-check-probe";
+          const raised = await step("operator raises a finding", () =>
+            reconcileFindings(org.id, probeOperator, [
+              {
+                fingerprint: `probe-${created.id}`,
+                severity: "info",
+                title: "Schema check probe — not a real finding",
+                subjectKind: "task",
+                subjectId: created.id,
+              },
+            ])
+          );
+          if (raised && raised.standing !== 1) {
+            console.log(`  FAIL  the finding stands              (standing=${raised.standing})`);
+            failures++;
+          } else if (raised) {
+            console.log("  ok    the finding stands");
+          }
+
+          const cleared = await step("operator retracts on an empty set", () =>
+            reconcileFindings(org.id, probeOperator, [])
+          );
+          if (cleared && cleared.retracted !== 1) {
+            console.log(
+              `  FAIL  an empty set retracts it        (retracted=${cleared.retracted}) — findings would accumulate forever`
+            );
+            failures++;
+          } else if (cleared) {
+            console.log("  ok    an empty set retracts it");
           }
 
           const done = await step("complete task", () => completeTask(created.id));

@@ -48,6 +48,9 @@ const TABLES = [
   // Added with migration 025. A task names a customer and what was agreed with
   // them, so it is exactly the material tenant isolation exists to protect.
   "tasks",
+  // Added with migration 027. A finding names the customer who is waiting or
+  // the commitment that is late, so it carries the same isolation.
+  "operator_findings",
 ];
 
 let failures = 0;

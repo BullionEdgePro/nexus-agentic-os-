@@ -15,3 +15,4 @@ export * from "./shared-brain.js";
 export * from "./contact-memory.js";
 export * from "./onboarding.js";
 export * from "./tasks.js";
+export * from "./operators.js";

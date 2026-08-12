@@ -1,0 +1,114 @@
+/* Operators — what needs attention.
+ *
+ * Shares the deck chrome (.act-*) with the other sub-pages. Only what is
+ * specific to a findings list lives here, and every colour comes through the
+ * tokens in deck.css so both themes follow. */
+
+/* --- the good outcome --- */
+
+/* Written as a result, not as an absence. A blank panel after a successful
+   check reads as "not loaded", which is the opposite of what actually
+   happened. */
+.op-clear {
+  border: 1px solid rgba(63, 107, 74, 0.35);
+  background: rgba(63, 107, 74, 0.07);
+  border-radius: var(--r);
+  padding: 20px 22px;
+  margin-top: 4px;
+}
+.op-clear strong { font-family: var(--display); font-size: 18px; font-weight: 500; color: var(--good); }
+.op-clear p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--graphite); }
+
+/* --- findings --- */
+
+.op-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.op-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 13px 15px;
+}
+
+/* Severity carried by the left rule, so the shape of the list reads before any
+   of it is read. Also spelled out in the pill, so it survives a reader who
+   cannot separate the hues. */
+.op-item.urgent { border-left-color: var(--crit); }
+.op-item.warn { border-left-color: var(--warn); }
+.op-item.info { border-left-color: var(--blueprint); }
+
+.op-main { flex: 1 1 320px; min-width: 0; }
+
+.op-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.op-detail {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+.op-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.op-biz { color: var(--blueprint); }
+
+.op-sev {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: var(--graphite);
+  white-space: nowrap;
+}
+.op-sev.urgent { border-color: rgba(162, 59, 46, 0.45); color: var(--crit); background: rgba(162, 59, 46, 0.07); }
+.op-sev.warn { border-color: rgba(169, 118, 47, 0.45); color: var(--warn); background: rgba(169, 118, 47, 0.07); }
+.op-sev.info { border-color: rgba(29, 63, 191, 0.35); color: var(--blueprint); background: var(--blueprint-soft); }
+
+/* --- the roster --- */
+
+.op-roster ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.op-roster li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-left: 2px solid var(--line);
+  padding-left: 12px;
+}
+
+.op-roster strong { font-size: 13.5px; color: var(--ink); font-weight: 500; }
+.op-roster span { font-size: 12.5px; line-height: 1.5; color: var(--graphite); }
+
+.op-note {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--pencil);
+}

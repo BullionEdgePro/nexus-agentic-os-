@@ -15,6 +15,7 @@ import { activityRoute } from "./routes/activity.js";
 import { qualityRoute } from "./routes/quality.js";
 import { linksRoute } from "./routes/links.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
+import { operatorsRoute } from "./routes/operators.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
@@ -99,6 +100,9 @@ app.route("/api/tasks", tasksRoute);
 // Tasks raised from inside a conversation. Composed onto the conversations
 // router so requireConversationScope has already settled access.
 app.route("/api/conversations", conversationTasksRoute);
+// Operator findings. Same shape as tasks: narrowed by role inside the handler,
+// because this path has no :slug either.
+app.route("/api/operators", operatorsRoute);
 
 const server = serve({ fetch: app.fetch, port: env.apiPort }, (info) => {
   logger.info(`Nexus API listening on http://localhost:${info.port}`);

@@ -242,7 +242,7 @@ phone number and narrows immediately.
 | 5 | Neural Brain | 🟡 The gate it was blocked on is built: redaction fails closed, and what may cross a tenant boundary is an allow-list of structured fields — never prose. The shared store itself is not built |
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
 | 7 | Workspace | 🟡 The scoped slice is built: follow-ups tied to a conversation, owned, dated, raisable from the inbox — and they now travel back to the customer, reaching both the agent's context and the handover brief when that person messages again. Boards, views and automations are the months, and none is asked for yet |
-| 8 | Operators | ⛔ Blocked on §2.3 |
+| 8 | Operators | 🟡 **Built, and §2.3 answered by construction rather than by decision.** Four operators sweep every business every 10 minutes and call no model at all — customer waiting for a reply, overdue follow-up, unowned follow-up, failing knowledge source. The design property that matters is that a finding can be **retracted**: each pass computes the complete truth and reconciles, so the list shrinks as well as grows. Paid inference remains an open choice, now additive rather than blocking |
 | 9 | Command Center | 🟡 Deck on live queries, plus team activity and agent quality. One rollup table exists (daily quality); the overview still aggregates live |
 | 10 | Memory | 🟡 Semantic + episodic (per-business contact memory, expiring, forgettable). Procedural not formalised |
 | 11 | Predictive BI | ⛔ Blocked on data volume |
@@ -356,7 +356,12 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 - **Meta billing and business verification.** Bulk sending is built, templates
   are submitted, the engine is tested. It cannot send until WhatsApp has a
   payment method and verification completes. Neither is an engineering task.
-- **Operators: event-triggered or paid inference?** (§2.3) Blocks Phase 4.
+- ~~**Operators: event-triggered or paid inference?**~~ **No longer blocking.**
+  Shipped 2026-08-12 as scheduled checks that call no model, so the question is
+  now "should we ADD an inference-driven operator", which can be answered any
+  time without holding up the feature. The interval (10 min) is the first thing
+  to revisit if one ever is: five businesses × six passes an hour × a model call
+  is exactly the scaling §2.3 warned about.
 - ~~**Workspace scope.**~~ **The small half is built.** "Boards + tasks tied to
   conversations is weeks" — the tasks half shipped 2026-08-12 (migration 025):
   follow-ups attached to the conversation they came from, owned by a named

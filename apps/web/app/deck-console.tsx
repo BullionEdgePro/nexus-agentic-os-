@@ -323,6 +323,13 @@ export default function DeckConsole() {
             </svg>
             <span className="tip">Customer Links</span>
           </a>
+          <a title="Needs attention" href="/deck/operators">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <path d="M12 3.8 21 20H3l9-16.2Z" />
+              <path d="M12 10v4.2M12 17.1v.1" />
+            </svg>
+            <span className="tip">Needs attention</span>
+          </a>
           <a title="Follow-ups" href="/deck/tasks">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M9 5h10M9 12h10M9 19h10" />

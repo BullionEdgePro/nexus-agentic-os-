@@ -10,6 +10,8 @@ import { TEMPLATE_SYNC_QUEUE, scheduleTemplateSync } from "./queue/template-sync
 import { processTemplateSyncJob } from "./queue/template-sync-processor.js";
 import { QUALITY_ROLLUP_QUEUE, scheduleQualityRollup } from "./queue/quality-queue.js";
 import { processQualityRollupJob } from "./queue/quality-processor.js";
+import { OPERATORS_QUEUE, scheduleOperators } from "./queue/operators-queue.js";
+import { processOperatorsJob } from "./queue/operators-processor.js";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -50,6 +52,18 @@ qualityWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Quality rollup job failed")
 );
 
+// Concurrency 1. Two overlapping sweeps would each compute the full picture and
+// reconcile against it, and the slower one would finish second — retracting
+// findings the faster one had just opened, or the reverse. The list would
+// flicker for reasons no reader could account for.
+const operatorsWorker = new Worker(OPERATORS_QUEUE, processOperatorsJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+operatorsWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Operator sweep failed")
+);
+
 reindexWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Knowledge re-index job failed")
 );
@@ -86,6 +100,13 @@ scheduleTemplateSync()
 scheduleQualityRollup()
   .then(() => logger.info("Quality rollup scheduled (hourly)"))
   .catch((err) => logger.warn({ err }, "Could not schedule quality rollup"));
+
+// The first thing this platform does without being asked. Ten minutes is set by
+// the operator with the shortest useful reaction time — a customer waiting two
+// hours for a reply — and is affordable because no operator calls a model.
+scheduleOperators()
+  .then(() => logger.info("Operators scheduled (every 10m)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule operators"));
 
 // Verify every configured model is actually callable. A model that 404s does
 // not crash anything — it just makes every customer receive the generic

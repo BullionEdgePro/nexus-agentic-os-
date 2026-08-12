@@ -404,6 +404,43 @@ export function getLinks(): Promise<{ links: BusinessLink[] }> {
 }
 
 // ============================================================
+// Operators
+// ============================================================
+
+export type FindingSeverity = "info" | "warn" | "urgent";
+
+export interface OperatorFinding {
+  id: string;
+  organizationId: string;
+  businessName: string;
+  businessSlug: string;
+  operator: string;
+  severity: FindingSeverity;
+  title: string;
+  detail: string | null;
+  subjectKind: string | null;
+  subjectId: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface OperatorInfo {
+  slug: string;
+  title: string;
+  description: string;
+  /** Null means this operator has never found anything — not that it is broken. */
+  lastSeenAt: string | null;
+}
+
+export function getFindings(business?: BusinessSlug | ""): Promise<{
+  findings: OperatorFinding[];
+  counts: { urgent: number; warn: number; info: number };
+  operators: OperatorInfo[];
+}> {
+  return request(`/api/operators${business ? `?business=${business}` : ""}`);
+}
+
+// ============================================================
 // Follow-ups
 // ============================================================
 
