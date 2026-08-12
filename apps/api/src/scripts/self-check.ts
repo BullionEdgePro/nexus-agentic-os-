@@ -18,6 +18,8 @@
 import { pathToFileURL } from "node:url";
 import {
   getPool,
+  withTenant,
+  withAllTenants,
   findOrganizationBySlug,
   listOrganizations,
   createEmployee,
@@ -84,15 +86,21 @@ async function main() {
 
   // ---------- tenants ----------
   console.log("Tenants");
-  const organizations = await listOrganizations();
+  // Registry reads. `organizations` is the tenant registry, not tenant data —
+  // scoping the lookup that decides which tenant we are would be circular.
+  const organizations = await withAllTenants("self-check: tenant registry", () => listOrganizations());
   check("all five businesses active", organizations.length === 5, `${organizations.length} found`);
 
-  const zipicka = await findOrganizationBySlug("zipicka");
+  const zipicka = await withAllTenants("self-check: tenant registry", () =>
+    findOrganizationBySlug("zipicka")
+  );
   if (!zipicka) throw new Error("zipicka not found — cannot continue");
 
   // ---------- switchboard ----------
   console.log("\nSwitchboard");
-  const businesses = await findSharedNumberBusinesses(zipicka.whatsappPhoneNumberId);
+  const businesses = await withAllTenants("self-check: shared-number lookup", () =>
+    findSharedNumberBusinesses(zipicka.whatsappPhoneNumberId)
+  );
   check("shared number reaches five businesses", businesses.length === 5, `${businesses.length} reachable`);
 
   // The routing decisions that matter, made from the live keyword rows rather
@@ -140,12 +148,20 @@ async function main() {
     ["abr", "do you handle criminal defence and appeals?"],
   ];
   for (const [slug, question] of queries) {
-    const organization = await findOrganizationBySlug(slug);
+    const organization = await withAllTenants("self-check: tenant registry", () =>
+      findOrganizationBySlug(slug)
+    );
     if (!organization) {
       check(`${slug}: organization exists`, false);
       continue;
     }
-    const hits = await searchKnowledge({ organizationId: organization.id, query: question, limit: 3 });
+    // Scoped to the business being asked about. Retrieval reads
+    // knowledge_chunks, which is tenant-scoped — unscoped it returns nothing
+    // under RLS, and "NOTHING MATCHED" would be reported as a knowledge gap
+    // rather than as a missing context.
+    const hits = await withTenant(organization.id, () =>
+      searchKnowledge({ organizationId: organization.id, query: question, limit: 3 })
+    );
     // Asserts that expected data EXISTS, rather than that nothing threw —
     // the operating rule this codebase arrived at the hard way.
     check(
@@ -157,22 +173,40 @@ async function main() {
 
   // Cross-tenant isolation: the retail question must find nothing in the law
   // firm's knowledge base. A leak here is silent and reads as a good answer.
-  const legal = await findOrganizationBySlug("juris-prime-legal");
+  const legal = await withAllTenants("self-check: tenant registry", () =>
+    findOrganizationBySlug("juris-prime-legal")
+  );
   if (legal) {
-    const leak = await searchKnowledge({
+    const leak = await withTenant(legal.id, () =>
+      searchKnowledge({
       organizationId: legal.id,
       query: "free delivery on orders over Dhs 50 pet food",
       limit: 3,
-    });
+      })
+    );
     const leaked = leak.some((hit) => /delivery|pet food|dhs/i.test(hit.content));
     check("retail content does not surface in the law firm's base", !leaked);
   }
 
   // ---------- employees ----------
   console.log("\nEmployee layer");
-  await removeProbe(zipicka.id);
 
-  try {
+  // EVERYTHING BELOW RUNS IN ZIPICKA'S TENANT CONTEXT.
+  //
+  // This script had no context anywhere, and had therefore been DEAD since RLS
+  // was enabled: its reads returned zero rows, and `createEmployee` aborted the
+  // whole run with "new row violates row-level security policy". One of the
+  // four verification gates, verifying nothing, for as long as the policies
+  // have been on.
+  //
+  // It was missed because `rls-preflight` enumerates the WRITERS it knows about
+  // — the crawler, the scheduled template sync, the quality rollup — and
+  // self-check is filed mentally as a checker rather than a writer. It writes
+  // an employee, a contact and a lead on every single run.
+  await withTenant(zipicka.id, async () => {
+    await removeProbe(zipicka.id);
+
+    try {
     const employee = await createEmployee({
       organizationId: zipicka.id,
       employeeCode: PROBE_CODE,
@@ -281,10 +315,11 @@ async function main() {
     console.log("\nEmployee layer (continued)");
     check("deactivate", await deactivateEmployee(employee.id));
     check("deactivated employee cannot sign in", (await findEmployeeForLogin(PROBE_CODE)) === null);
-  } finally {
-    await removeProbe(zipicka.id);
-    console.log("  ok    probe employee removed");
-  }
+    } finally {
+      await removeProbe(zipicka.id);
+      console.log("  ok    probe employee removed");
+    }
+  });
 
   console.log(
     failures === 0

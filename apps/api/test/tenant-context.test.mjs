@@ -7,7 +7,7 @@
 // and it has to be loud.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -245,21 +245,77 @@ test("the preflight checks writers, not only readers", () => {
   //
   // Found by running the crawler by hand. Nothing automated would have.
   assert.match(PREFLIGHT, /Writers outside the API/);
-  assert.match(PREFLIGHT, /NO CONTEXT — its writes are REJECTED/);
-  for (const writer of ["ingest-site", "template-sync", "quality-rollup"]) {
-    assert.ok(PREFLIGHT.includes(writer), `${writer} must be covered`);
-  }
+  assert.match(PREFLIGHT, /NO CONTEXT — writes \$\{directTable\} directly, REJECTED/);
+  // And the case it cannot prove is reported rather than failed — see the
+  // comment on writesTenantSqlDirectly for why that distinction matters.
+  assert.match(PREFLIGHT, /delegates its writes — confirm the callee scopes them/);
+
+  // The writers are now DISCOVERED rather than listed, so this no longer
+  // asserts that three names appear in the file. The hand-maintained list was
+  // itself the next bug: `self-check.ts` writes an employee, a contact and a
+  // lead on every run, was never on it, and had been aborting under RLS for as
+  // long as the policies had been enabled. A list only contains what somebody
+  // remembered.
+  assert.match(PREFLIGHT, /const WRITER_DIRECTORIES = \["src\/scripts", "src\/services"\]/);
+  assert.match(PREFLIGHT, /readdirSync\(join\(root, directory\)\)/);
+  // Detected by what a file DOES, both in raw SQL and through the db helpers —
+  // self-check writes mostly through createEmployee and captureEmployeeLead.
+  assert.match(PREFLIGHT, /WRITES_SQL/);
+  assert.match(PREFLIGHT, /WRITES_VIA_HELPER/);
+  // Comments stripped before matching: this repo discusses writes at length in
+  // prose, and matching that would flag every well-commented file and bury the
+  // real ones.
+  assert.match(PREFLIGHT, /const code = source\s*\n\s*\.replace/);
+  // Imports stripped too: `@nexus/employees` is a package whose name is also a
+  // tenant table, and matching it made create-admin.ts — which touches only the
+  // admin registry — look like it wrote customer data.
+  assert.match(PREFLIGHT, /\.replace\(\/\^\\s\*import/);
 });
 
-test("the writers named in the preflight actually establish a context", () => {
-  // The check above proves the preflight looks; this proves what it would find.
-  const read = (p) => readFileSync(join(here, "..", "src", p), "utf8");
-  for (const file of [
-    "scripts/ingest-site.ts",
-    "services/template-sync.ts",
-    "services/quality-rollup.ts",
-  ]) {
-    assert.match(read(file), /withTenant\(|withAllTenants\(/, `${file} writes without a context`);
+test("every writer outside the API actually establishes a context", () => {
+  // Runs the same discovery the preflight runs, over the real tree, so a new
+  // unscoped writer fails the suite the day it lands — without anyone adding it
+  // to a list here either.
+  //
+  // Only PROVABLE cases fail: raw SQL against a tenant-scoped table with no
+  // context in the same file, where nothing else could be establishing one.
+  // A file writing solely through helpers may have its context in the callee
+  // (provision-templates does, via syncTemplatesForOrganization), and reading
+  // one file cannot see that. Failing those would fail correct code and make
+  // the gate untrustworthy — worse than the list it replaced.
+  const roots = ["scripts", "services"];
+  const skip = new Set(["rls-preflight.ts", "rls-verify.ts"]);
+  const TENANT_TABLES = [
+    "contacts", "conversations", "messages", "employees", "lead_assessments",
+    "knowledge_sources", "knowledge_chunks", "message_templates", "broadcasts",
+    "agent_configs", "ai_message_evaluations", "conversation_metrics",
+    "contact_memory", "tasks", "operator_findings",
+  ];
+
+  let proven = 0;
+  for (const dir of roots) {
+    for (const entry of readdirSync(join(here, "..", "src", dir)).filter((f) => f.endsWith(".ts"))) {
+      if (skip.has(entry)) continue;
+      const code = readFileSync(join(here, "..", "src", dir, entry), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/\/\/[^\n]*/g, " ")
+        .replace(/^\s*import[\s\S]*?from\s+["'][^"']+["'];?/gm, " ");
+
+      const table = TENANT_TABLES.find((t) =>
+        new RegExp(`(insert\\s+into|delete\\s+from|update)\\s+${t}\\b`, "i").test(code)
+      );
+      if (!table) continue;
+      proven++;
+      assert.match(
+        code,
+        /withTenant\(|withAllTenants\(/,
+        `${dir}/${entry} writes ${table} directly with no tenant context — REJECTED under RLS`
+      );
+    }
   }
-  console.log("PASS: writers outside the API establish their own tenant context");
+  // A discovery pass that finds nothing looks identical to one that found
+  // everything in order. self-check.ts is in here because its cleanup runs
+  // `delete from contacts` directly — which is how this caught it.
+  assert.ok(proven >= 2, `expected direct tenant writers, found ${proven}`);
+  console.log(`PASS: ${proven} direct tenant writer(s) outside the API establish their own context`);
 });

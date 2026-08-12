@@ -96,11 +96,74 @@ const ASSERTION = /no tenant context/i;
  * customer's website or calling Meta. What is checked is that each one wraps
  * its writes — the failure was never subtle logic, it was a missing wrapper.
  */
-const WRITERS = [
-  { name: "ingest-site (crawler)", file: "src/scripts/ingest-site.ts" },
-  { name: "template sync (scheduled)", file: "src/services/template-sync.ts" },
-  { name: "quality rollup (hourly)", file: "src/services/quality-rollup.ts" },
+/**
+ * Writers outside the API are DISCOVERED, not listed.
+ *
+ * This was a hand-maintained array of three files, and on 2026-08-12 that cost
+ * a whole verification gate: `self-check.ts` writes an employee, a contact and
+ * a lead on every run, had no tenant context, and had been aborting on "new row
+ * violates row-level security policy" since the policies went on. It was not on
+ * the list, because self-check is filed mentally as a checker rather than as a
+ * writer — and a list only contains what somebody remembered.
+ *
+ * So the list is gone. Every script and service is scanned, and anything that
+ * writes has to prove it establishes a context. The next writer somebody adds
+ * is covered on the day it lands, without anyone remembering anything.
+ */
+const WRITER_DIRECTORIES = ["src/scripts", "src/services"];
+
+/** Files whose job is to check the guard, not to run under it. */
+const NOT_WRITERS = new Set(["rls-preflight.ts", "rls-verify.ts"]);
+
+/** Raw SQL that modifies. */
+const WRITES_SQL = /\b(insert\s+into|delete\s+from|update\s+\w+\s+set)\b/i;
+
+/**
+ * Writing through the db package rather than through SQL. Named prefixes rather
+ * than an exhaustive list of functions, so a new `createFoo` is noticed without
+ * this file being edited.
+ */
+const WRITES_VIA_HELPER =
+  /\b(create|upsert|insert|record|reconcile|deactivate|remove|forget|purge|set)[A-Z]\w*\s*\(/;
+
+/**
+ * The tables a missing context actually breaks. Mirrors TENANT_SCOPED_TABLES in
+ * packages/db/src/client.ts — the two are checked against each other by
+ * schema-check, so drift shows up rather than silently narrowing this scan.
+ */
+const TENANT_TABLES = [
+  "contacts", "conversations", "messages", "employees", "lead_assessments",
+  "knowledge_sources", "knowledge_chunks", "message_templates", "broadcasts",
+  "agent_configs", "ai_message_evaluations", "conversation_metrics",
+  "contact_memory", "tasks", "operator_findings",
 ];
+
+/**
+ * WHAT THIS CAN AND CANNOT PROVE, stated because the distinction decides
+ * whether a finding is a failure or a note.
+ *
+ * A file can write to a tenant table through a helper that establishes the
+ * context itself — `provision-templates.ts` does exactly that via
+ * `syncTemplatesForOrganization`. Reading one file cannot see a context living
+ * one call away, so treating "writes, no context here" as a failure would fail
+ * correct code and make the whole gate untrustworthy — worse than the
+ * hand-maintained list it replaced.
+ *
+ * So: raw SQL against a tenant-scoped table with no context in the same file is
+ * a FAILURE, because nothing else can be establishing it. Everything else that
+ * writes is reported as delegating, for a human to confirm once.
+ *
+ * That distinction still catches the bug this replaced a list to catch:
+ * self-check's cleanup ran `delete from contacts` directly.
+ */
+function writesTenantSqlDirectly(code: string): string | null {
+  if (!WRITES_SQL.test(code)) return null;
+  return (
+    TENANT_TABLES.find((table) =>
+      new RegExp(`(insert\\s+into|delete\\s+from|update)\\s+${table}\\b`, "i").test(code)
+    ) ?? null
+  );
+}
 
 function line(ok: boolean, label: string, detail = ""): boolean {
   console.log(`  ${ok ? "ok  " : "FAIL"}  ${label.padEnd(30)} ${detail}`);
@@ -161,21 +224,68 @@ async function main(): Promise<void> {
   // them means crawling a customer's website or calling Meta. The failure was
   // never subtle logic — it was a missing wrapper, and that is visible.
   console.log("\nWriters outside the API (must establish their own context)");
-  const { readFileSync } = await import("node:fs");
+  const { readFileSync, readdirSync } = await import("node:fs");
   const { fileURLToPath } = await import("node:url");
   const { dirname, join } = await import("node:path");
   const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-  for (const writer of WRITERS) {
+  let scanned = 0;
+  let writers = 0;
+
+  for (const directory of WRITER_DIRECTORIES) {
+    let entries: string[];
     try {
-      const source = readFileSync(join(root, writer.file), "utf8");
-      const wrapped = /withTenant\(|withAllTenants\(/.test(source);
-      allOk =
-        line(wrapped, writer.name, wrapped ? "" : "NO CONTEXT — its writes are REJECTED") && allOk;
+      entries = readdirSync(join(root, directory)).filter((f) => f.endsWith(".ts"));
     } catch {
-      allOk = line(false, writer.name, "could not be read") && allOk;
+      allOk = line(false, directory, "could not be listed") && allOk;
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (NOT_WRITERS.has(entry)) continue;
+      scanned++;
+
+      let source: string;
+      try {
+        source = readFileSync(join(root, directory, entry), "utf8");
+      } catch {
+        allOk = line(false, entry, "could not be read") && allOk;
+        continue;
+      }
+
+      // Comments AND imports stripped first. Comments because this repo
+      // discusses writes at length in prose; imports because `@nexus/employees`
+      // is a package whose name is also a tenant table, and matching it made
+      // create-admin.ts — which touches only the admin registry — look like it
+      // wrote customer data.
+      const code = source
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/\/\/[^\n]*/g, " ")
+        .replace(/^\s*import[\s\S]*?from\s+["'][^"']+["'];?/gm, " ");
+
+      if (!WRITES_SQL.test(code) && !WRITES_VIA_HELPER.test(code)) continue;
+
+      writers++;
+      const wrapped = /withTenant\(|withAllTenants\(/.test(code);
+      const directTable = writesTenantSqlDirectly(code);
+
+      if (wrapped) {
+        line(true, entry, "");
+      } else if (directTable) {
+        // Provable: raw SQL against a tenant table, no context in this file,
+        // nothing else that could be establishing one.
+        allOk = line(false, entry, `NO CONTEXT — writes ${directTable} directly, REJECTED`) && allOk;
+      } else {
+        // Writes only through helpers. The context may legitimately live in the
+        // callee, which reading one file cannot see. Reported, not failed.
+        line(true, entry, "delegates its writes — confirm the callee scopes them");
+      }
     }
   }
+
+  // Printed because a discovery pass that silently finds nothing looks exactly
+  // like a discovery pass that found everything in order.
+  console.log(`  —     ${writers} writer(s) found among ${scanned} scanned file(s)`);
 
   console.log(
     allOk
