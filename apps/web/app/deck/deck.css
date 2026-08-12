@@ -389,3 +389,12 @@
 @media (prefers-reduced-motion: reduce) {
   .deck-root * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .05ms !important; }
 }
+
+/* The public links page, reachable from the front page footer. Underlined
+   rather than merely coloured: on a line of monospace labels in the same
+   muted tone, colour alone does not read as "this one is a link". */
+.deck-root .foot-link {
+  color: var(--blueprint);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

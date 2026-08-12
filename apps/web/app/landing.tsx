@@ -352,6 +352,12 @@ export default function Landing() {
 
       <footer className="site-foot">
         <span>NEXUS AGENTIC OS · nexusagenticos.com</span>
+        {/* /links was an unlisted URL — findable only by whoever still had it in
+            a message. The people it is for are outside the team, so the address
+            has to exist somewhere they can reach without asking. */}
+        <a className="foot-link" href="/links">
+          CUSTOMER LINKS &amp; QR CODES
+        </a>
         <span>PLATE NEXUS-01 · REV A</span>
       </footer>
     </div>
