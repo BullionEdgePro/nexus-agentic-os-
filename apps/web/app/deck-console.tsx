@@ -7,6 +7,7 @@ import { initDeckFx } from "@/lib/deck-fx";
 import { getOverview } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
+import { RailLinks } from "./console-shell";
 import "./deck/deck.css";
 
 /* ---------------- static presentation data ---------------- */
@@ -287,89 +288,13 @@ export default function DeckConsole() {
           </div>
         </header>
 
-        <nav className="rail">
-          <a className="on" title="Overview">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <rect x="3" y="3" width="8" height="8" rx="1.5" />
-              <rect x="13" y="3" width="8" height="5" rx="1.5" />
-              <rect x="13" y="10" width="8" height="11" rx="1.5" />
-              <rect x="3" y="13" width="8" height="8" rx="1.5" />
-            </svg>
-            <span className="tip">Overview</span>
-          </a>
-          <a title="Unified Inbox" href="/inbox">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" />
-            </svg>
-            <span className="tip">Unified Inbox</span>
-          </a>
-          <a title="Team" href="/deck/team">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <circle cx="9" cy="8" r="3.1" />
-              <path d="M2.5 20c0-3.3 2.9-5.6 6.5-5.6s6.5 2.3 6.5 5.6" />
-              <path d="M16.5 5.6a3.1 3.1 0 0 1 0 5.9M18 14.8c2.1.7 3.5 2.5 3.5 5.2" />
-            </svg>
-            <span className="tip">Team</span>
-          </a>
-          {/* Team activity, broadcasts. Domain Agents, Governance and Analytics
-              used to sit here with no href — they rendered, highlighted on
-              hover, and did nothing when clicked, which reads as a broken
-              product rather than an unfinished one. They come back when there
-              is a page behind them. */}
-          <a title="Customer Links" href="/deck/links">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M10 13a4 4 0 0 0 5.7.4l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7" />
-              <path d="M14 11a4 4 0 0 0-5.7-.4l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7" />
-            </svg>
-            <span className="tip">Customer Links</span>
-          </a>
-          <a title="Needs attention" href="/deck/operators">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M12 3.8 21 20H3l9-16.2Z" />
-              <path d="M12 10v4.2M12 17.1v.1" />
-            </svg>
-            <span className="tip">Needs attention</span>
-          </a>
-          <a title="Follow-ups" href="/deck/tasks">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M9 5h10M9 12h10M9 19h10" />
-              <path d="M3.5 5.2l1.4 1.4L7.6 3.8M3.5 12.2l1.4 1.4 2.7-2.8" />
-              <path d="M3.2 18.2h3.6" />
-            </svg>
-            <span className="tip">Follow-ups</span>
-          </a>
-          <a title="Knowledge" href="/deck/knowledge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z" />
-              <path d="M8 7.5h7M8 11h5" />
-            </svg>
-            <span className="tip">Knowledge</span>
-          </a>
-          <a title="Team Activity" href="/deck/activity">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M3 12h3.5l2.5-6 3.5 13 2.5-7h6" />
-            </svg>
-            <span className="tip">Team Activity</span>
-          </a>
-          <a title="Agent Quality" href="/deck/quality">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M4 20V10m6 10V4m6 16v-7m4 7H2" />
-            </svg>
-            <span className="tip">Agent Quality</span>
-          </a>
-          <a title="Broadcasts" href="/deck/broadcasts">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M3 11l18-8-8 18-2-8-8-2Z" />
-            </svg>
-            <span className="tip">Broadcasts</span>
-          </a>
-          <span className="sep" />
-          <a onClick={signOut} title="Sign out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />
-            </svg>
-            <span className="tip">Sign out</span>
-          </a>
+        {/* The rail contents come from lib/nav.tsx, the single list the shared
+            console shell also renders. They used to be written out here and
+            nowhere else, which is why every other screen had no navigation at
+            all — and why adding Follow-ups meant this file was the only place
+            that learned about it. */}
+        <nav className="rail" aria-label="Sections">
+          <RailLinks onSignOut={signOut} />
         </nav>
 
         <main className="main">

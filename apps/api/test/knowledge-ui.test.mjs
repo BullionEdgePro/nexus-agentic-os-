@@ -10,7 +10,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (...parts) => readFileSync(join(here, "..", "..", "..", ...parts), "utf8");
 
 const PAGE = read("apps", "web", "app", "deck", "knowledge", "page.tsx");
-const DECK = read("apps", "web", "app", "deck-console.tsx");
+// The navigation moved to lib/nav.tsx — ONE list the shared console shell and
+// the front page both render. It used to be written inline here and nowhere
+// else, which is why every screen it linked to had no navigation of its own.
+// These checks still ask the same question, of the place that now answers it.
+const DECK = read("apps", "web", "lib", "nav.tsx");
 const ROUTE = read("apps", "api", "src", "routes", "knowledge.ts");
 
 test("removing a source asks first and names what goes", () => {
@@ -56,8 +60,8 @@ test("an empty knowledge base explains the consequence", () => {
 });
 
 test("the page is reachable and the nav has no dead ends", () => {
-  const rail = DECK.slice(DECK.indexOf('<nav className="rail">'), DECK.indexOf("</nav>"));
-  assert.match(rail, /href="\/deck\/knowledge"/);
+  const rail = DECK;
+  assert.match(rail, /href: "\/deck\/knowledge"/);
   for (const anchor of rail.match(/<a\b[^>]*>/g) ?? []) {
     assert.ok(
       /href=|onClick=|className="on"/.test(anchor),

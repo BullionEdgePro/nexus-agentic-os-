@@ -17,7 +17,11 @@ const ACTIVITY_SQL = read("packages", "db", "src", "activity.ts");
 const BROADCAST_SQL = read("packages", "db", "src", "broadcasts.ts");
 const BROADCAST_ROUTE = read("apps", "api", "src", "routes", "broadcasts.ts");
 const API_INDEX = read("apps", "api", "src", "index.ts");
-const DECK = read("apps", "web", "app", "deck-console.tsx");
+// The navigation moved to lib/nav.tsx — ONE list the shared console shell and
+// the front page both render. It used to be written inline here and nowhere
+// else, which is why every screen it linked to had no navigation of its own.
+// These checks still ask the same question, of the place that now answers it.
+const DECK = read("apps", "web", "lib", "nav.tsx");
 const BROADCAST_PAGE = read("apps", "web", "app", "deck", "broadcasts", "page.tsx");
 const WEB_API = read("apps", "web", "lib", "api.ts");
 
@@ -29,19 +33,25 @@ test("no nav item renders without a destination", () => {
   // Four icons used to render with no href at all: they highlighted on hover
   // and did nothing when clicked. That reads as a broken product, and it is
   // the specific thing the owner reported by screenshot.
-  const rail = DECK.slice(DECK.indexOf('<nav className="rail">'), DECK.indexOf("</nav>"));
-  const anchors = rail.match(/<a\b[^>]*>/g) ?? [];
-  assert.ok(anchors.length >= 4, "the rail should still have items");
-
-  for (const anchor of anchors) {
-    const hasDestination = /href=/.test(anchor) || /onClick=/.test(anchor) || /className="on"/.test(anchor);
-    assert.ok(hasDestination, `nav item goes nowhere: ${anchor}`);
+  //
+  // The nav is a typed list now rather than hand-written anchors, so an entry
+  // WITHOUT an href fails to compile — a stronger guarantee than this test
+  // could give. What is still worth checking is that the list is populated and
+  // that every destination is a real path.
+  const routes = [...DECK.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(routes.length >= 8, `the rail should still have items, found ${routes.length}`);
+  for (const route of routes) {
+    assert.ok(route.startsWith("/"), `nav item goes nowhere useful: ${route}`);
   }
+  // Every entry carries a label, or the tooltip and the screen-reader name are
+  // both empty and the icon is the only clue to what it does.
+  const labels = [...DECK.matchAll(/label: "([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(labels.length, routes.length, "every nav entry needs a label");
 });
 
 test("the nav points only at pages that exist", () => {
-  const rail = DECK.slice(DECK.indexOf('<nav className="rail">'), DECK.indexOf("</nav>"));
-  const routes = [...rail.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
+  const rail = DECK;
+  const routes = [...rail.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
   assert.ok(routes.length > 0);
 
   for (const route of routes) {

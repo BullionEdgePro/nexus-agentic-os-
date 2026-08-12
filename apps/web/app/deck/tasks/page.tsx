@@ -148,9 +148,6 @@ export default function TasksPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
-        <a className="act-back" href="/">
-          ← Command deck
-        </a>
 
         <header className="act-head">
           <h1>Follow-ups</h1>

@@ -1,0 +1,96 @@
+/* The shared console frame.
+ *
+ * deck.css already defines .deck-root (the token set) and .rail (the strip of
+ * icons). This file only does the part that was missing: making that rail a
+ * PERSISTENT column beside the page, on every screen, instead of one row of a
+ * grid that only the front page ever built.
+ *
+ * Nothing here redefines a colour. Everything comes from the tokens on
+ * .deck-root, so the shell inherits whatever theme the deck is wearing rather
+ * than starting a third palette. */
+
+.shell {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--vellum);
+  color: var(--ink);
+}
+
+/* deck.css puts the rail on `grid-row: 2 / 3` for the front page's own layout,
+   which has a header row above it. This shell has no header row, so the rail
+   would sit in a track that does not exist and collapse. Reset it here rather
+   than editing deck.css, so the front page's grid keeps working unchanged. */
+.deck-root.shell .shell-rail {
+  grid-row: auto;
+  grid-column: 1;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  /* Above the deck's fixed backdrop layers (.bg, .grid-overlay), which sit at
+     z-index 0 and would otherwise swallow clicks on the icons. */
+  z-index: 3;
+}
+
+.deck-root.shell .shell-main {
+  grid-column: 2;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* On a phone the rail becomes a bottom bar. A 56px column on a 375px screen
+   costs 15% of the width for navigation nobody is using while they read a
+   conversation — and deck.css already hides `.rail` at this width, which left
+   those screens with no navigation at all rather than with less. */
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .deck-root.shell .shell-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .deck-root.shell .shell-rail {
+    display: flex;
+    grid-column: 1;
+    grid-row: 2;
+    position: sticky;
+    top: auto;
+    bottom: 0;
+    height: auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    /* Scrolls horizontally rather than squeezing eleven icons into 375px and
+       making each one an unhittable sliver. */
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    border-right: none;
+    border-top: 1px solid var(--line);
+    padding: 8px 10px;
+    /* Clears the home indicator on iOS, where a bottom bar otherwise sits
+       underneath it and the last icon cannot be tapped. */
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 4px;
+  }
+
+  .deck-root.shell .shell-rail a {
+    flex: 0 0 auto;
+  }
+
+  /* The hover tooltip is pointless on touch and would be clipped by the bar's
+     own overflow anyway. */
+  .deck-root.shell .shell-rail .tip {
+    display: none;
+  }
+
+  .deck-root.shell .shell-rail .sep {
+    flex: 0 0 auto;
+    width: 10px;
+  }
+}

@@ -1,0 +1,252 @@
+/* The inbox, in the same language as the rest of Nexus.
+ *
+ * This screen was built in Tailwind against a near-black ground while every
+ * other screen used the vellum-and-ink token set. Same product, two visual
+ * worlds, and the seam was visible the moment anyone clicked between them.
+ *
+ * Every value below comes from the tokens on .deck-root, which the console
+ * shell wraps this page in. Nothing here declares a colour of its own, so the
+ * inbox follows the theme instead of pinning one. */
+
+.ibx {
+  display: grid;
+  grid-template-columns: 210px 320px minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+.ibx-col {
+  border-right: 1px solid var(--line);
+  padding: 16px 14px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.ibx-head {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+  margin: 0 0 12px;
+}
+
+.ibx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* --- businesses --- */
+
+.ibx-biz-btn {
+  width: 100%;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--graphite);
+  cursor: pointer;
+}
+
+.ibx-biz-btn:hover { background: var(--vellum-card); color: var(--ink); }
+.ibx-biz-btn.on { background: var(--ink); color: var(--vellum); }
+
+/* --- conversation list --- */
+
+.ibx-convo {
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ibx-convo:hover { background: var(--vellum-card); }
+.ibx-convo.on { background: var(--vellum-card); border-color: var(--line-strong); }
+
+.ibx-convo-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.ibx-convo-name {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Amber, matching the warn token, because a handed-over conversation is a
+   state someone must act on rather than a neutral label. */
+.ibx-flag {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 100px;
+  color: var(--warn);
+  border: 1px solid rgba(169, 118, 47, 0.4);
+  background: rgba(169, 118, 47, 0.08);
+}
+
+.ibx-preview {
+  font-size: 12px;
+  color: var(--pencil);
+  margin: 0;
+  /* One line. A preview that wraps to three turns the list into a wall and
+     costs the scannability the list exists for. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- the thread --- */
+
+.ibx-thread {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ibx-thread-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ibx-who { font-family: var(--display); font-size: 17px; font-weight: 600; color: var(--ink); margin: 0; }
+
+.ibx-wa {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--pencil);
+  margin: 2px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ibx-handoff {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ibx-msgs {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-right: 4px;
+}
+
+.ibx-bubble {
+  max-width: 32rem;
+  padding: 9px 12px;
+  border-radius: var(--r);
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* Inbound sits left on the card ground; ours sits right in ink. Direction is
+   carried by BOTH side and colour, so it survives being read in either theme
+   and by anyone who cannot separate the two tones. */
+.ibx-bubble.in { background: var(--vellum-card); border: 1px solid var(--line); color: var(--ink); }
+.ibx-bubble.out { margin-left: auto; background: var(--ink); color: var(--vellum); }
+
+/* --- composer --- */
+
+.ibx-compose {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ibx-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--vellum-card);
+  color: var(--ink);
+}
+
+.ibx-input::placeholder { color: var(--pencil); }
+
+.ibx-send {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+
+.ibx-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.ibx-input:focus-visible,
+.ibx-send:focus-visible,
+.ibx-convo:focus-visible,
+.ibx-biz-btn:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 2px;
+}
+
+.ibx-empty { font-size: 13px; color: var(--pencil); margin: 0; }
+
+/* --- narrow --- */
+
+/* Three columns do not fit a phone. The businesses strip goes horizontal and
+   the conversation list sits above the thread, so the screen still works
+   rather than compressing into three unusable slivers. */
+@media (max-width: 900px) {
+  .ibx {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(120px, 26vh) minmax(0, 1fr);
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .ibx-col { border-right: none; border-bottom: 1px solid var(--line); }
+
+  .ibx-biz { overflow-x: auto; }
+  .ibx-biz .ibx-list { flex-direction: row; gap: 6px; }
+  .ibx-biz-btn { white-space: nowrap; width: auto; }
+
+  .ibx-thread { height: auto; min-height: 60vh; }
+}

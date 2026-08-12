@@ -196,15 +196,15 @@ const LINKS_PAGE = readFileSync(
   "utf8"
 );
 const DECK_RAIL = readFileSync(
-  join(here2, "..", "..", "web", "app", "deck-console.tsx"),
+  join(here2, "..", "..", "web", "lib", "nav.tsx"),
   "utf8"
 );
 
 test("the page is reachable from the nav", () => {
   // The links existed only behind the API, which means they may as well not
   // have existed — the person pasting one into a website is not running curl.
-  const rail = DECK_RAIL.slice(DECK_RAIL.indexOf('<nav className="rail">'), DECK_RAIL.indexOf("</nav>"));
-  assert.match(rail, /href="\/deck\/links"/);
+  const rail = DECK_RAIL;
+  assert.match(rail, /href: "\/deck\/links"/);
 });
 
 test("a business without a number shows the reason, not a dead button", () => {

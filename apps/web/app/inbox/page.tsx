@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useInboxStore, BUSINESS_OPTIONS } from "@/lib/store";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
+import "./inbox.css";
 
 export default function InboxPage() {
   useInboxSocket();
@@ -42,21 +43,16 @@ export default function InboxPage() {
   }
 
   return (
-    <div className="grid h-full grid-cols-[220px_320px_1fr]">
-      <aside className="border-r border-neutral-800 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-          Businesses
-        </h2>
-        <ul className="space-y-1">
+    <div className="ibx">
+      <aside className="ibx-col ibx-biz">
+        <h2 className="ibx-head">Businesses</h2>
+        <ul className="ibx-list">
           {BUSINESS_OPTIONS.map((option) => (
             <li key={option.slug}>
               <button
                 onClick={() => setSelectedOrg(option.slug)}
-                className={`w-full rounded px-2 py-1.5 text-left text-sm ${
-                  selectedOrg === option.slug
-                    ? "bg-neutral-800 text-white"
-                    : "text-neutral-400 hover:bg-neutral-900"
-                }`}
+                className={`ibx-biz-btn${selectedOrg === option.slug ? " on" : ""}`}
+                aria-current={selectedOrg === option.slug ? "true" : undefined}
               >
                 {option.label}
               </button>
@@ -65,37 +61,30 @@ export default function InboxPage() {
         </ul>
       </aside>
 
-      <section className="border-r border-neutral-800 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-          Conversations
-        </h2>
+      <section className="ibx-col ibx-convos">
+        <h2 className="ibx-head">Conversations</h2>
         {isLoadingConversations ? (
-          <p className="text-sm text-neutral-500">Loading…</p>
+          <p className="ibx-empty">Loading…</p>
         ) : conversations.length === 0 ? (
-          <p className="text-sm text-neutral-500">No conversations yet for this business.</p>
+          <p className="ibx-empty">No conversations yet for this business.</p>
         ) : (
-          <ul className="space-y-1">
+          <ul className="ibx-list">
             {conversations.map((conversation) => (
               <li key={conversation.id}>
                 <button
                   onClick={() => selectConversation(conversation.id)}
-                  className={`w-full rounded px-2 py-2 text-left ${
-                    selectedConversationId === conversation.id
-                      ? "bg-neutral-800"
-                      : "hover:bg-neutral-900"
-                  }`}
+                  className={`ibx-convo${selectedConversationId === conversation.id ? " on" : ""}`}
+                  aria-current={selectedConversationId === conversation.id ? "true" : undefined}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
+                  <div className="ibx-convo-top">
+                    <span className="ibx-convo-name">
                       {conversation.contactName ?? conversation.contactWaId}
                     </span>
                     {conversation.isHumanHandoff && (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">
-                        human
-                      </span>
+                      <span className="ibx-flag">human</span>
                     )}
                   </div>
-                  <p className="truncate text-xs text-neutral-500">
+                  <p className="ibx-preview">
                     {conversation.lastMessagePreview ?? "No messages yet"}
                   </p>
                 </button>
@@ -105,19 +94,19 @@ export default function InboxPage() {
         )}
       </section>
 
-      <section className="flex flex-col p-4">
+      <section className="ibx-thread">
         {!activeConversation ? (
-          <p className="text-sm text-neutral-500">Select a conversation to view messages.</p>
+          <p className="ibx-empty">Select a conversation to view messages.</p>
         ) : (
           <>
-            <header className="mb-3 flex items-center justify-between border-b border-neutral-800 pb-3">
+            <header className="ibx-thread-head">
               <div>
-                <h1 className="text-base font-semibold">
+                <h1 className="ibx-who">
                   {activeConversation.contactName ?? activeConversation.contactWaId}
                 </h1>
-                <p className="text-xs text-neutral-500">{activeConversation.contactWaId}</p>
+                <p className="ibx-wa">+{activeConversation.contactWaId}</p>
               </div>
-              <label className="flex items-center gap-2 text-xs text-neutral-400">
+              <label className="ibx-handoff">
                 Human handoff
                 <input
                   type="checkbox"
@@ -130,15 +119,11 @@ export default function InboxPage() {
                 draft — without it, a half-typed follow-up for one person
                 would still be sitting in the box for the next. */}
             <ConversationTasks key={activeConversation.id} conversationId={activeConversation.id} />
-            <div className="flex-1 space-y-2 overflow-y-auto">
+            <div className="ibx-msgs">
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`max-w-md rounded px-3 py-2 text-sm ${
-                    message.direction === "inbound"
-                      ? "bg-neutral-800"
-                      : "ml-auto bg-blue-600 text-white"
-                  }`}
+                  className={`ibx-bubble ${message.direction === "inbound" ? "in" : "out"}`}
                 >
                   {message.body}
                 </div>
@@ -149,18 +134,18 @@ export default function InboxPage() {
                 e.preventDefault();
                 handleSend();
               }}
-              className="mt-3 flex gap-2 border-t border-neutral-800 pt-3"
+              className="ibx-compose"
             >
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="Reply as a human agent…"
-                className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm outline-none placeholder:text-neutral-600"
+                className="ibx-input"
               />
               <button
                 type="submit"
                 disabled={isSending || !draft.trim()}
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium disabled:opacity-50"
+                className="ibx-send"
               >
                 Send
               </button>
