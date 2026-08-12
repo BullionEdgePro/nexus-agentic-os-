@@ -58,6 +58,12 @@ const org = (id) => ({
 
 mock.module("@nexus/db", {
   exports: {
+    // Added when follow-ups joined the reply path. These fixtures have no
+    // outstanding promises, so the honest stub is an empty list — a mock that
+    // invented one would exercise a branch these assertions never check, and
+    // quietly change what the agent was asked.
+    listOpenTasksForContact: async () => [],
+
     // The processor runs inside an explicit cross-tenant context, because a
     // WhatsApp message identifies its tenant only by phone number id. These
     // just run the body: what is under test is the reply pipeline, not the
@@ -100,6 +106,7 @@ mock.module("@nexus/agents", {
     // reply itself. Returning "no memory" is the honest default — a mock that
     // supplied one would test a code path the assertions do not check.
     recallContact: async () => null,
+    describeOpenFollowUps: () => null,
     rememberContact: async () => ({ written: false }),
     classifyBusiness,
     buildTriageMessage,

@@ -49,6 +49,7 @@ import {
   listTasks,
   countTasks,
   completeTask,
+  listOpenTasksForContact,
 } from "@nexus/db";
 
 /** Deliberately implausible, and the same shape self-check.ts already uses. */
@@ -208,6 +209,19 @@ async function main(): Promise<void> {
 
           await step("list tasks", () => listTasks({ organizationId: org.id }));
           await step("count tasks", () => countTasks(org.id));
+
+          // The reply-path lookup. This one runs on every inbound customer
+          // message, so a broken query here would not be a page that fails to
+          // load — it would be the agent path throwing on live traffic.
+          const owed = await step("open follow-ups for a contact", () =>
+            listOpenTasksForContact(org.id, id)
+          );
+          if (owed && !owed.some((task) => task.id === created.id)) {
+            console.log("  FAIL  the probe follow-up is findable  (created but not returned)");
+            failures++;
+          } else if (owed) {
+            console.log("  ok    the probe follow-up is findable");
+          }
 
           const done = await step("complete task", () => completeTask(created.id));
           // completeTask is guarded on `status = 'open'`, so a second call must

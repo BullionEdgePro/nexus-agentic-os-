@@ -193,6 +193,65 @@ export async function listTasksForConversation(conversationId: string): Promise<
   return rows.map(toTask);
 }
 
+/**
+ * What we still owe this customer — asked on the inbound reply path.
+ *
+ * THE PROBLEM THIS SOLVES. A follow-up is recorded at the moment a promise is
+ * made and then read on a page somebody opens later. The moment it actually
+ * matters is neither of those: it is when that customer messages again. Until
+ * now, a customer writing "did you call me back?" reached an agent with no idea
+ * a callback had ever been owed, and an employee taking over saw a summary of
+ * the transcript that could not mention a commitment made outside it.
+ *
+ * Scoped by organization AND contact. Contact ids are already unique per
+ * organization, so the organization filter is redundant — and it is here
+ * anyway, because on a shared number the same person talks to a shop and a law
+ * firm, and a mistake in which business's obligations surface would be
+ * invisible in the output. Belt and braces on the failure that would not look
+ * like one.
+ *
+ * Deliberately NOT limited to one conversation: the promise may have been made
+ * last month in a thread that has since gone quiet. Owing someone a callback
+ * does not expire because they started a new conversation.
+ */
+export async function listOpenTasksForContact(
+  organizationId: string,
+  contactId: string
+): Promise<TaskRecord[]> {
+  const { rows } = await getPool().query<TaskRow>(
+    `${TASK_SELECT}
+      where t.organization_id = $1
+        and t.contact_id = $2
+        and t.status = 'open'
+      order by t.due_at asc nulls last
+      limit 10`,
+    [organizationId, contactId]
+  );
+  return rows.map(toTask);
+}
+
+/**
+ * The same list, reached from a conversation.
+ *
+ * Resolves through the conversation's SERVING business — `routed_organization_id`
+ * where the switchboard set one — for the reason that recurs everywhere on this
+ * platform: every conversation is owned by the shared number's owner, so using
+ * the owner here would show one business's outstanding promises to another's
+ * staff, and show them nothing of their own.
+ */
+export async function listOpenTasksForConversation(
+  conversationId: string
+): Promise<TaskRecord[]> {
+  const { rows } = await getPool().query<{ organization_id: string; contact_id: string | null }>(
+    `select coalesce(routed_organization_id, organization_id) as organization_id, contact_id
+       from conversations where id = $1`,
+    [conversationId]
+  );
+  const row = rows[0];
+  if (!row?.contact_id) return [];
+  return listOpenTasksForContact(row.organization_id, row.contact_id);
+}
+
 export interface TaskCounts {
   open: number;
   overdue: number;

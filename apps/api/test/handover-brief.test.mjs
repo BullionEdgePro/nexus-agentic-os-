@@ -33,8 +33,13 @@ test("every failure path returns a reason instead of throwing", () => {
   // A throw here would fail a request whose side effects have already happened
   // — the AI is paused, the conversation is flagged — leaving the employee with
   // an error and a customer who is now theirs.
+  // Matched on the reason, not on EMPTY's exact argument list. The earlier
+  // version pinned the closing bracket, so adding a third argument — the
+  // structured follow-ups, which must survive every one of these paths — broke
+  // a test whose subject had not changed. What this test is about is that a
+  // failure returns a reason instead of throwing.
   for (const guard of [
-    /catch \{\s*\n\s*return EMPTY\("Could not read the conversation history\."\)/,
+    /catch \{\s*\n\s*return EMPTY\("Could not read the conversation history\."/,
     /catch \{[\s\S]{0,400}return EMPTY\("The summary could not be generated just now\."/,
   ]) {
     assert.match(HANDOVER, guard);

@@ -241,7 +241,7 @@ phone number and narrows immediately.
 | 4 | Campaign Engine | 🟡 Built, deployed, and the **database path verified end to end** by `schema-check.ts` — draft, audience, recipients, status. Two bugs it found first: a non-existent column in the audience count, and a parameter Postgres could not type, which meant a draft could never be created. The Meta path (approved template + billing) is untested and blocked on you |
 | 5 | Neural Brain | 🟡 The gate it was blocked on is built: redaction fails closed, and what may cross a tenant boundary is an allow-list of structured fields — never prose. The shared store itself is not built |
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
-| 7 | Workspace | ⛔ Months of work. Scope hard before starting |
+| 7 | Workspace | 🟡 The scoped slice is built: follow-ups tied to a conversation, owned, dated, raisable from the inbox — and they now travel back to the customer, reaching both the agent's context and the handover brief when that person messages again. Boards, views and automations are the months, and none is asked for yet |
 | 8 | Operators | ⛔ Blocked on §2.3 |
 | 9 | Command Center | 🟡 Deck on live queries, plus team activity and agent quality. One rollup table exists (daily quality); the overview still aggregates live |
 | 10 | Memory | 🟡 Semantic + episodic (per-business contact memory, expiring, forgettable). Procedural not formalised |
@@ -405,8 +405,13 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 - **Predictive BI (F11)** — one live tenant makes this numerology.
 - **Model-based lead scoring** — needs labelled won/lost outcomes. The current
   rules are generating exactly that history.
-- **Self-improving AI (F14)** — needs a ground-truth set. The cheap version
-  (track correction rate + escalation rate) is buildable now and is not.
+- **Self-improving AI (F14)** — needs a ground-truth set before it can act.
+  ~~The cheap version (track correction rate + escalation rate) is buildable now
+  and is not.~~ **Stale — that version is built** and has been since the quality
+  rollups: `rollUpQualityDay` derives corrections from `lag()` adjacency (a human
+  message whose immediate predecessor was the agent) and escalation from
+  conversations with both. This line contradicted §6's own row 14 for a while,
+  which is its own small lesson about two places describing one fact.
 
 ### 9.5 Known limitations in shipped features
 

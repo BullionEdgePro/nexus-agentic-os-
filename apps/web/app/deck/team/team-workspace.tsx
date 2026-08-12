@@ -262,6 +262,41 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
               ×
             </button>
           </div>
+          {/* Outstanding promises come FIRST, above the summary.
+
+              The summary is prose a model wrote from the transcript. These are
+              records staff entered, carried verbatim — and they are the part
+              this person is about to contradict if they don't see them. They
+              also render when the summary failed entirely, which is exactly
+              when someone is most likely to message cold. */}
+          {brief.brief.openFollowUps.length > 0 && (
+            <div className="handover-owed">
+              <p className="handover-owed-label">
+                Already promised to {brief.who} — not done yet
+              </p>
+              <ul>
+                {brief.brief.openFollowUps.map((followUp, index) => (
+                  <li key={index} className={followUp.isOverdue ? "late" : undefined}>
+                    <span>{followUp.title}</span>
+                    <span className="handover-owed-meta">
+                      {followUp.dueAt
+                        ? `${followUp.isOverdue ? "was due " : "due "}${new Date(
+                            followUp.dueAt
+                          ).toLocaleString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}`
+                        : "no date agreed"}
+                      {followUp.owner ? ` · ${followUp.owner}` : " · nobody's job"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {brief.brief.summary ? (
             <>
               <p className="handover-body">{brief.brief.summary}</p>

@@ -21,6 +21,7 @@ import {
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
+  listOpenTasksForContact,
   withTenant,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
@@ -32,6 +33,7 @@ import {
   resolveTriageReply,
   recallContact,
   rememberContact,
+  describeOpenFollowUps,
 } from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
@@ -68,6 +70,28 @@ function deriveIntent(toolCalls: Array<{ name: string }>): string | null {
 // Time from the customer's message to our reply, in ms. Guards against clock
 // skew / malformed timestamps and caps at 24h so a stray value can't overflow
 // the metrics int column or pollute the analytics.
+/**
+ * Recalled memory, fenced as an internal note rather than as prose the agent
+ * produced.
+ *
+ * A conversation turn can only be "user" or "assistant", and this goes in as
+ * "assistant" — which tells the model it said this to the customer. The
+ * predictable result is "as I mentioned, your attestation…" about a
+ * conversation that never happened. Role is stronger evidence to a model than
+ * any instruction buried further down, so the text announces what it is before
+ * the model reads a word of the content.
+ *
+ * `describeOpenFollowUps` fences its own text the same way and for the same
+ * reason; the two are kept separate because they carry different cautions.
+ */
+function recallNote(recalled: string): string {
+  return (
+    "[INTERNAL NOTE — staff context only. This was NOT said to the customer. " +
+    "Do not quote it, refer to it, or imply you have spoken before.]\n" +
+    recalled
+  );
+}
+
 function firstResponseMsFrom(inboundTimestamp: string): number | null {
   const inboundMs = Number(inboundTimestamp) * 1000;
   if (!Number.isFinite(inboundMs) || inboundMs <= 0) return null;
@@ -263,25 +287,40 @@ async function processSingleTextMessage(
     // are unique per organization), so this is belt and braces on a mistake
     // that would be invisible if made.
     const recalled = await recallContact(serving.id, contactId).catch(() => null);
-    // Fenced as an internal note, not as prose the agent produced.
+
+    // What this business still owes this customer.
     //
-    // A conversation turn can only be "user" or "assistant", and this went in as
-    // "assistant" — telling the model it had said this to the customer. The
-    // predictable result is "as I mentioned, your attestation…" about a
-    // conversation the customer never had. Role is stronger evidence to a model
-    // than any instruction inside the text, so the text now announces what it is
-    // before the model reads a word of the content.
-    const withRecall = recalled
-      ? [
-          {
-            role: "assistant" as const,
-            content:
-              "[INTERNAL NOTE — staff context only. This was NOT said to the customer. " +
-              "Do not quote it, refer to it, or imply you have spoken before.]\n" +
-              recalled,
-          },
-          ...history,
-        ]
+    // Recorded when the promise was made, read on a page someone opens later —
+    // and neither of those is the moment it matters. That moment is this one:
+    // the customer writing back. Without this, "did you call me?" reaches an
+    // agent with no idea a callback was ever owed, and the fluent answer is a
+    // wrong one.
+    //
+    // Failure is soft and silent for the same reason every other enrichment
+    // here is: a customer waiting on a reply must not wait on a follow-up
+    // lookup. An empty list is indistinguishable from a failed one to
+    // everything downstream, which is correct — both mean "nothing to add".
+    const owed = await listOpenTasksForContact(serving.id, contactId).catch(() => []);
+    const owedNote = describeOpenFollowUps(
+      owed.map((task) => ({
+        title: task.title,
+        dueAt: task.dueAt,
+        isOverdue: task.isOverdue,
+        owner: task.employeeName,
+      })),
+      serving.timezone ?? "Asia/Dubai"
+    );
+    // Both notes are prepended, each fenced separately rather than merged.
+    // They are different kinds of fact carrying different instructions —
+    // memory is what we know about this person, follow-ups are what we owe
+    // them and must not claim to have done — and running them together would
+    // blur which caution applies to which.
+    const notes = [recalled ? recallNote(recalled) : null, owedNote].filter(
+      (note): note is string => note !== null
+    );
+
+    const withRecall = notes.length
+      ? [...notes.map((content) => ({ role: "assistant" as const, content })), ...history]
       : history;
 
     const result = await agent.respond(

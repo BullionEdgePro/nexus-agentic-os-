@@ -178,6 +178,18 @@ export interface HandoverBrief {
   summary: string | null;
   unavailableReason: string | null;
   turnsConsidered: number;
+  /**
+   * What was promised and is still outstanding — structured, never passed
+   * through the summariser. A model asked to summarise turns "call back
+   * Tuesday 4pm, owed by Ivan" into "we said we'd get back to them", losing
+   * the two parts anyone can act on. Present even when the summary failed.
+   */
+  openFollowUps: Array<{
+    title: string;
+    dueAt: string | null;
+    isOverdue: boolean;
+    owner: string | null;
+  }>;
 }
 
 export function takeToOwnWhatsApp(

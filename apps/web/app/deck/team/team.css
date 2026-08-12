@@ -197,6 +197,52 @@
 }
 .handover-close:hover { color: var(--ink); }
 
+/* Outstanding promises, above the generated summary.
+
+   Styled to read as a RECORD rather than as more prose — mono label, list,
+   left rule — because that is what it is. The summary below it is a model's
+   paraphrase of a transcript and carries a caveat; these are what staff
+   actually entered, and the employee is about to contradict them if they skim
+   past. Hence the visual weight and the position. */
+.handover-owed {
+  margin-top: 10px;
+  border-left: 3px solid var(--warn);
+  padding: 2px 0 2px 11px;
+}
+
+.handover-owed-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warn);
+  margin: 0 0 6px;
+}
+
+.handover-owed ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.handover-owed li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Late is carried by colour AND by the words "was due" in the markup, so it
+   survives being read by someone who cannot distinguish the two hues. */
+.handover-owed li.late { color: var(--crit); }
+
+.handover-owed-meta {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
 .handover-body { margin-top: 8px; font-size: 14.5px; line-height: 1.6; color: var(--ink); }
 
 /* The caveat is not decoration: the brief is generated, and an employee is
