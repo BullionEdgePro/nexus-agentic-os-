@@ -83,6 +83,66 @@ async function removeProbe(organizationId: string) {
   ]);
 }
 
+/**
+ * Employee sign-in, exercised the way the route actually runs.
+ *
+ * Separate from the main employee block for two reasons, and both are the
+ * difference between a check and a decoration:
+ *
+ *  1. NO TENANT CONTEXT. /auth/employee is unauthenticated by necessity —
+ *     resolving the identifier is what discovers the tenant. Asserting this
+ *     from inside withTenant(...) is what let sign-in stay broken in production
+ *     for every employee while this file reported "ok" on every run.
+ *
+ *  2. COMMITTED. withTenant opens a transaction, so a probe created inside one
+ *     is invisible to any other connection — which is exactly what an
+ *     unauthenticated caller is. The probe therefore has to be committed before
+ *     it can be looked up the way a real employee is. Discovered by this check
+ *     failing honestly the first time it ran for real.
+ *
+ * Each step gets its own committed transaction, so the lookup sees the same
+ * state a browser would.
+ */
+async function checkUnauthenticatedSignIn(organizationId: string) {
+  console.log("\nEmployee sign-in (as an unauthenticated caller)");
+
+  await withTenant(organizationId, () => removeProbe(organizationId));
+
+  const code = generateAccessCode();
+  const employee = await withTenant(organizationId, async () => {
+    const created = await createEmployee({
+      organizationId,
+      employeeCode: PROBE_CODE,
+      fullName: "Self Check Sign-in",
+      email: "self-check@nexus.invalid",
+      jobTitle: "Diagnostic",
+    });
+    await setEmployeeAccessCodeHash(created.id, hashAccessCode(code));
+    return created;
+  });
+
+  try {
+    const byEmail = await withoutTenant(() => findEmployeeForLogin("self-check@nexus.invalid"));
+    check("lookup by email with no tenant context", byEmail?.id === employee.id);
+
+    const byCode = await withoutTenant(() => findEmployeeForLogin(PROBE_CODE.toUpperCase()));
+    check("lookup is case-insensitive", byCode?.id === employee.id);
+
+    check("the issued code verifies", verifyAccessCode(code, byEmail?.accessCodeHash ?? null));
+    check("a wrong code does not", !verifyAccessCode("AAAAA-BBBBB", byEmail?.accessCodeHash ?? null));
+    check("scope names the right business", byEmail?.organizationSlug === "zipicka", byEmail?.organizationSlug);
+
+    // Revocation has to hold on the same unauthenticated path, or a
+    // deactivated employee keeps a working login.
+    await withTenant(organizationId, () => deactivateEmployee(employee.id).then(() => undefined));
+    const revoked = await withoutTenant(() => findEmployeeForLogin("self-check@nexus.invalid"));
+    check("deactivating revokes the login", revoked === null);
+  } finally {
+    await withTenant(organizationId, () => removeProbe(organizationId));
+    console.log("  ok    sign-in probe removed");
+  }
+}
+
 async function main() {
   console.log("Nexus self-check — live database\n");
 
@@ -311,21 +371,11 @@ async function main() {
     const code = generateAccessCode();
     check("issue access code", await setEmployeeAccessCodeHash(employee.id, hashAccessCode(code)));
 
-    // Run the lookups with NO tenant context, because that is the only place
-    // the real caller ever stands: /auth/employee is unauthenticated by
-    // necessity — resolving the identifier is what discovers the tenant.
-    //
-    // These same four checks passed on every run while employee sign-in was
-    // broken in production for every employee, because they inherited the
-    // withTenant(zipicka.id) scope above. The probe held a context the route
-    // could not have, so it exercised a code path the route never reached.
-    const byEmail = await withoutTenant(() => findEmployeeForLogin("self-check@nexus.invalid"));
-    check("sign-in lookup by email, unauthenticated", byEmail?.id === employee.id);
-    const byCode = await withoutTenant(() => findEmployeeForLogin(PROBE_CODE.toUpperCase()));
-    check("sign-in lookup is case-insensitive", byCode?.id === employee.id);
-    check("correct code verifies", verifyAccessCode(code, byEmail?.accessCodeHash ?? null));
-    check("wrong code does not verify", !verifyAccessCode("AAAAA-BBBBB", byEmail?.accessCodeHash ?? null));
-    check("scope names the right business", byEmail?.organizationSlug === "zipicka", byEmail?.organizationSlug);
+    // The sign-in lookups are NOT checked here — see checkUnauthenticatedSignIn
+    // below. They need a caller with no tenant context, and this block is one
+    // open transaction, so an uncommitted probe employee is invisible from the
+    // outside. Asserting them here is what made them meaningless before.
+    check("wrong code does not verify", !verifyAccessCode("AAAAA-BBBBB", hashAccessCode(code)));
 
     await recordEmployeeLogin(employee.id, zipicka.id);
     check("record login", true);
@@ -396,12 +446,17 @@ async function main() {
     // Deactivating must revoke the login in the same action.
     console.log("\nEmployee layer (continued)");
     check("deactivate", await deactivateEmployee(employee.id));
-    check("deactivated employee cannot sign in", (await findEmployeeForLogin(PROBE_CODE)) === null);
+    // Revocation is asserted in checkUnauthenticatedSignIn instead, where the
+    // lookup runs without a tenant context — the same conditions the sign-in
+    // route runs under. Checking it here only proved it inside a scope the
+    // route never has.
     } finally {
       await removeProbe(zipicka.id);
       console.log("  ok    probe employee removed");
     }
   });
+
+  await checkUnauthenticatedSignIn(zipicka.id);
 
   console.log(
     failures === 0
