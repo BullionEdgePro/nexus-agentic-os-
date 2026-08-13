@@ -52,6 +52,7 @@ import {
   listOpenTasksForContact,
   reconcileFindings,
 } from "@nexus/db";
+import { OPERATORS } from "../services/operators.js";
 
 /** Deliberately implausible, and the same shape self-check.ts already uses. */
 const PROBE_WA_ID = "999000000000002";
@@ -101,6 +102,24 @@ async function main(): Promise<void> {
     );
   } else {
     console.log("  skip  broadcast template lookup    (no templates registered)");
+  }
+
+  // ---- operators ----
+  //
+  // EVERY OPERATOR IS HAND-WRITTEN SQL AND NOTHING PLANNED IT UNTIL A SWEEP RAN.
+  //
+  // `judge-offline` shipped with `created_at` on a table whose column is
+  // `evaluated_at`. It threw on all five businesses on its first sweep — caught,
+  // but ten minutes after deploying, in a background queue whose failures live
+  // in the log. This is precisely the class this script exists for: SQL that
+  // only fails when Postgres plans it.
+  //
+  // Read-only, so they can be run against the real tenant with no probe and no
+  // cleanup. Running them here does not replace the sweep; it moves the
+  // discovery to the moment somebody is watching.
+  console.log("\nOperators (read-only, run against a real tenant)");
+  for (const operator of OPERATORS) {
+    await withTenant(org.id, () => step(`operator ${operator.slug}`, () => operator.run(org.id)));
   }
 
   // ---- writes, against a probe that is always removed ----

@@ -464,7 +464,9 @@ const judgeOffline: Operator = {
               count(*)::text                                     as total
          from ai_message_evaluations
         where organization_id = $1
-          and created_at > now() - ($3 || ' hours')::interval`,
+          -- evaluated_at, not created_at. This table has no created_at, and the
+          -- guess cost a failed operator sweep across all five businesses.
+          and evaluated_at > now() - ($3 || ' hours')::interval`,
       [organizationId, JUDGE_UNAVAILABLE, String(JUDGE_LOOKBACK_HOURS)]
     );
 
