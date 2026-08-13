@@ -295,6 +295,82 @@ async function main(): Promise<void> {
           "\nUnscoped reads return zero rows; unscoped WRITES are rejected outright.\n"
   );
 
+  // ============================================================
+  // Unauthenticated routes must carry their own context
+  // ============================================================
+  //
+  // The gap this closes, stated plainly: everything above walks a
+  // hand-maintained list of thirteen application paths, so it can only ever
+  // confirm what somebody remembered to add. `findEmployeeForLogin` was never
+  // on it. This gate reported PASS on every run while employee sign-in was
+  // broken for every employee in production, because the one query that
+  // mattered was not a path it knew about.
+  //
+  // Most functions in packages/db are RIGHT to be unwrapped — they inherit the
+  // caller's withTenant, and that is the normal pattern. The exception is the
+  // handful reachable from /auth/*, which runs before any session exists. There
+  // no caller can establish a context, so the function has to establish its
+  // own or silently read zero rows forever.
+  //
+  // Derived from the imports of the auth routes rather than listed here, so a
+  // new helper added to a sign-in path is covered the day it is written.
+  console.log("\nUnauthenticated routes (must establish their own context)");
+  {
+    const AUTH_ROUTES = ["employee-auth.ts", "admin-auth.ts"];
+    const dbSource = readdirSync(join(root, "..", "..", "packages", "db", "src"))
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => readFileSync(join(root, "..", "..", "packages", "db", "src", f), "utf8"))
+      .join("\n");
+
+    let checked = 0;
+    for (const routeFile of AUTH_ROUTES) {
+      let route: string;
+      try {
+        route = readFileSync(join(root, "src", "routes", routeFile), "utf8");
+      } catch {
+        allOk = line(false, routeFile, "MISSING — an auth route vanished, or was renamed") && allOk;
+        continue;
+      }
+
+      // import { findEmployeeForLogin, recordEmployeeLogin } from "@nexus/db";
+      const imported = [...route.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']@nexus\/db["']/g)]
+        .flatMap((m) => m[1].split(","))
+        .map((name) => name.trim().split(/\s+as\s+/)[0].trim())
+        .filter(Boolean);
+
+      for (const fn of imported) {
+        // Slice the function's own body out of the package source.
+        const start = dbSource.search(new RegExp(`export\\s+(?:async\\s+)?function\\s+${fn}\\b`));
+        if (start === -1) {
+          allOk = line(false, `${routeFile} → ${fn}`, "NOT FOUND in packages/db") && allOk;
+          continue;
+        }
+        const rest = dbSource.slice(start);
+        const next = rest.slice(1).search(/\nexport\s+(?:async\s+)?function\s/);
+        const body = next === -1 ? rest : rest.slice(0, next + 1);
+
+        const touchesTenantTable = TENANT_TABLES.some((table) =>
+          new RegExp(`(^|[^a-z0-9_])${table}([^a-z0-9_]|$)`, "i").test(body)
+        );
+        if (!touchesTenantTable) continue;
+
+        checked++;
+        const establishes = /withTenant\(|withAllTenants\(/.test(body);
+        allOk =
+          line(
+            establishes,
+            `${routeFile} → ${fn}`,
+            establishes
+              ? "establishes its own context"
+              : "NO CONTEXT — runs before any session exists, so RLS returns zero rows and sign-in fails as 'wrong code'"
+          ) && allOk;
+      }
+    }
+    if (checked === 0) {
+      allOk = line(false, "auth-route coverage", "checked nothing — the import scan matched no db calls") && allOk;
+    }
+  }
+
   await getPool().end();
   process.exit(allOk ? 0 : 1);
 }
