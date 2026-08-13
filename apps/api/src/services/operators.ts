@@ -351,7 +351,51 @@ const brokenKnowledge: Operator = {
  * asserted. The thresholds are deliberately far below anything arguable, so a
  * finding is never a matter of taste.
  */
-const THIN_KNOWLEDGE_CHUNKS = 15;
+export const THIN_KNOWLEDGE_CHUNKS = 15;
+
+/**
+ * The decision, separated from the query that feeds it.
+ *
+ * Not a tidiness refactor. Every business on this deployment is above the
+ * threshold, so the branch that actually PRODUCES a finding has never run and
+ * cannot be exercised without writing to production. Left inside `run` its only
+ * evidence would be a test asserting that the source text contains the word
+ * "urgent" — which is precisely the kind of test §8 exists to warn about: it
+ * cannot tell whether the code works, only that somebody typed the right words
+ * near it.
+ *
+ * Pure and exported, it can be called with the numbers that matter — including
+ * the ones no tenant has today, and the ones either side of the boundary.
+ */
+export function assessKnowledgeVolume(
+  organizationId: string,
+  sources: number,
+  chunks: number
+): FindingInput[] {
+  if (chunks >= THIN_KNOWLEDGE_CHUNKS) return [];
+
+  return [
+    {
+      // One finding per business, not per missing page — there is one thing to
+      // do about it, and a constant fingerprint means re-running reconciles
+      // onto the same row rather than accumulating.
+      fingerprint: "knowledge-volume",
+      // Nothing at all is a different problem from not enough: the first is
+      // almost always a skipped onboarding step, the second a thin website.
+      severity: chunks === 0 ? "urgent" : "warn",
+      title:
+        chunks === 0
+          ? "This agent has no knowledge at all"
+          : `This agent knows only ${plural(chunks, "passage")}`,
+      detail:
+        chunks === 0
+          ? "Every reply is generated with nothing to draw on. If this business is reachable by customers, it is answering them from nothing."
+          : `${plural(sources, "source")} indexed. Below roughly ${THIN_KNOWLEDGE_CHUNKS} passages an agent cannot cover its own services, so it answers vaguely and escalates often — which reads as the agent being poor rather than under-supplied.`,
+      subjectKind: "organization",
+      subjectId: organizationId,
+    },
+  ];
+}
 
 const thinKnowledge: Operator = {
   slug: "thin-knowledge",
@@ -372,31 +416,11 @@ const thinKnowledge: Operator = {
       [organizationId]
     );
 
-    const sources = Number(rows[0]?.sources ?? 0);
-    const chunks = Number(rows[0]?.chunks ?? 0);
-    if (chunks >= THIN_KNOWLEDGE_CHUNKS) return [];
-
-    // One finding per business, not per missing page — there is one thing to do
-    // about it, and the fingerprint is constant so re-running reconciles onto
-    // the same row rather than accumulating.
-    return [
-      {
-        fingerprint: "knowledge-volume",
-        // Nothing at all is a different problem from not enough: the first is
-        // almost always a skipped onboarding step, the second a thin website.
-        severity: chunks === 0 ? ("urgent" as const) : ("warn" as const),
-        title:
-          chunks === 0
-            ? "This agent has no knowledge at all"
-            : `This agent knows only ${plural(chunks, "passage")}`,
-        detail:
-          chunks === 0
-            ? "Every reply is generated with nothing to draw on. If this business is reachable by customers, it is answering them from nothing."
-            : `${plural(sources, "source")} indexed. Below roughly ${THIN_KNOWLEDGE_CHUNKS} passages an agent cannot cover its own services, so it answers vaguely and escalates often — which reads as the agent being poor rather than under-supplied.`,
-        subjectKind: "organization",
-        subjectId: organizationId,
-      },
-    ];
+    return assessKnowledgeVolume(
+      organizationId,
+      Number(rows[0]?.sources ?? 0),
+      Number(rows[0]?.chunks ?? 0)
+    );
   },
 };
 

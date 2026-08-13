@@ -7,6 +7,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import {
+  assessKnowledgeVolume,
+  THIN_KNOWLEDGE_CHUNKS,
+} from "../src/services/operators.ts";
+
+const ORG = "00000000-0000-0000-0000-000000000001";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
@@ -21,12 +27,61 @@ test("the operator is registered, or it is dead code with tests", () => {
   assert.match(list, /thinKnowledge,/);
 });
 
+// ============================================================
+// The decision itself, called rather than read
+//
+// Every business on this deployment is above the threshold, so the branch that
+// produces a finding never runs in production and cannot be exercised without
+// writing to it. These call the real function with the numbers that matter.
+// ============================================================
+
 test("nothing at all is reported differently from not enough", () => {
   // A business with zero indexed passages almost always means the onboarding
-  // step was skipped. A business with nine means a thin website. Same reading
-  // for both would make the urgent case unfindable among the warnings.
-  assert.match(OPERATORS, /chunks === 0 \? \("urgent" as const\) : \("warn" as const\)/);
-  assert.match(OPERATORS, /This agent has no knowledge at all/);
+  // step was skipped. A business with nine means a thin website. One reading
+  // for both would bury the urgent case among the warnings.
+  const [empty] = assessKnowledgeVolume(ORG, 0, 0);
+  assert.equal(empty.severity, "urgent");
+  assert.match(empty.title, /no knowledge at all/);
+  assert.match(empty.detail, /answering them from nothing/);
+
+  // ABR as it actually stood: one source, five passages.
+  const [thin] = assessKnowledgeVolume(ORG, 1, 5);
+  assert.equal(thin.severity, "warn");
+  assert.equal(thin.title, "This agent knows only 5 passages");
+  assert.match(thin.detail, /^1 source indexed\./, "singular, not '1 sources'");
+});
+
+test("the boundary is where the constant says it is", () => {
+  // Off-by-one here is silent: the operator simply never mentions the business
+  // sitting exactly on the line, and nobody notices an alert that was not sent.
+  assert.equal(assessKnowledgeVolume(ORG, 3, THIN_KNOWLEDGE_CHUNKS).length, 0);
+  assert.equal(assessKnowledgeVolume(ORG, 3, THIN_KNOWLEDGE_CHUNKS - 1).length, 1);
+});
+
+test("the businesses on this deployment produce no findings", () => {
+  // Counted in production after ABR was re-indexed. If a threshold change ever
+  // makes these fire, that is a decision to take deliberately, not to discover
+  // from a suddenly noisy board.
+  for (const [sources, chunks] of [
+    [25, 123],
+    [17, 91],
+    [6, 80],
+    [11, 72],
+    [6, 29],
+  ]) {
+    assert.deepEqual(assessKnowledgeVolume(ORG, sources, chunks), []);
+  }
+});
+
+test("the finding points at the business, on a stable identity", () => {
+  const [finding] = assessKnowledgeVolume(ORG, 0, 0);
+  assert.equal(finding.subjectKind, "organization");
+  assert.equal(finding.subjectId, ORG);
+  // Reconciliation keys on this. A fingerprint that varied with the count would
+  // open a NEW finding every time a page was added, so the list would grow
+  // while the problem shrank.
+  assert.equal(finding.fingerprint, "knowledge-volume");
+  assert.equal(assessKnowledgeVolume(ORG, 1, 5)[0].fingerprint, "knowledge-volume");
 });
 
 test("failed sources are excluded from the count", () => {
@@ -47,7 +102,7 @@ test("the threshold is stated as a floor, not a quality score", () => {
   // A hundred passages of marketing copy answer less than twenty of real FAQ.
   // The comment says so, because a number in code invites being read as a
   // measurement of something it does not measure.
-  assert.match(OPERATORS, /const THIN_KNOWLEDGE_CHUNKS = 15;/);
+  assert.equal(THIN_KNOWLEDGE_CHUNKS, 15);
   assert.match(OPERATORS, /not answer quality/i);
 });
 
