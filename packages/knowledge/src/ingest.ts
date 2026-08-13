@@ -147,6 +147,20 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
         [input.organizationId, input.title, input.employeeId ?? null]
       );
 
+  // A KNOWN LIMIT OF EVERY CONTENT FILTER BELOW THIS LINE.
+  //
+  // The hash check short-circuits before chunking, so a page whose content has
+  // not changed keeps whatever chunks it already has — including ones a filter
+  // added later would now remove. SFS's /terms-and-conditions/ was exactly
+  // this: it reported "already current" on the run that introduced
+  // `dropPlaceholderChunks`, and its two Lorem ipsum passages survived until
+  // its `content_hash` was cleared by hand to force a re-chunk.
+  //
+  // Deliberately not solved by re-chunking on every check — that would spend an
+  // embedding call per source per sweep to catch a case that arises only when a
+  // filter changes. The remedy is a one-line update when one does:
+  //
+  //   update knowledge_sources set content_hash = null where <affected>;
   if (existing[0] && existing[0].content_hash === contentHash) {
     await pool.query(`update knowledge_sources set last_checked_at = now() where id = $1`, [
       existing[0].id,
