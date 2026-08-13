@@ -329,11 +329,83 @@ const brokenKnowledge: Operator = {
   },
 };
 
+/**
+ * An agent with almost nothing to answer from.
+ *
+ * ABR sat at FIVE indexed passages while nine pages of practice-area content —
+ * roughly a thousand words each — sat one link from its home page. Nothing
+ * reported it. `broken-knowledge` watches sources that FAIL, and there is a
+ * blind spot next to it: a source that succeeded, and a business that simply
+ * has too few. The system was content because nothing had gone wrong.
+ *
+ * It was found by counting rows by hand. That is the argument for this operator
+ * — not the five passages, which are now fixed, but that finding them required
+ * somebody to go looking. Tenant #6 onboarded with the ingestion step skipped
+ * produces an agent that answers every question from nothing, deployed and
+ * live, with every check green.
+ *
+ * WHAT THIS DOES NOT CLAIM. Chunk count is not answer quality. A hundred
+ * passages of marketing copy answer less than twenty of real FAQ, and no
+ * threshold here can tell the difference. It is a floor, not a grade: below it
+ * the agent certainly cannot cover its own business, above it nothing is
+ * asserted. The thresholds are deliberately far below anything arguable, so a
+ * finding is never a matter of taste.
+ */
+const THIN_KNOWLEDGE_CHUNKS = 15;
+
+const thinKnowledge: Operator = {
+  slug: "thin-knowledge",
+  title: "Agent has almost nothing to answer from",
+  description:
+    "This business's agent is answering customers from very little indexed content. Replies will be vague and escalate often, and nothing else reports it because no source has failed.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{
+      sources: string;
+      chunks: string;
+    }>(
+      `select count(distinct s.id)::text as sources,
+              count(k.id)::text          as chunks
+         from knowledge_sources s
+         left join knowledge_chunks k on k.source_id = s.id
+        where s.organization_id = $1
+          and s.status <> 'failed'`,
+      [organizationId]
+    );
+
+    const sources = Number(rows[0]?.sources ?? 0);
+    const chunks = Number(rows[0]?.chunks ?? 0);
+    if (chunks >= THIN_KNOWLEDGE_CHUNKS) return [];
+
+    // One finding per business, not per missing page — there is one thing to do
+    // about it, and the fingerprint is constant so re-running reconciles onto
+    // the same row rather than accumulating.
+    return [
+      {
+        fingerprint: "knowledge-volume",
+        // Nothing at all is a different problem from not enough: the first is
+        // almost always a skipped onboarding step, the second a thin website.
+        severity: chunks === 0 ? ("urgent" as const) : ("warn" as const),
+        title:
+          chunks === 0
+            ? "This agent has no knowledge at all"
+            : `This agent knows only ${plural(chunks, "passage")}`,
+        detail:
+          chunks === 0
+            ? "Every reply is generated with nothing to draw on. If this business is reachable by customers, it is answering them from nothing."
+            : `${plural(sources, "source")} indexed. Below roughly ${THIN_KNOWLEDGE_CHUNKS} passages an agent cannot cover its own services, so it answers vaguely and escalates often — which reads as the agent being poor rather than under-supplied.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   overdueFollowUp,
   unownedFollowUp,
   brokenKnowledge,
+  thinKnowledge,
 ];
 
 export interface OperatorRunSummary {

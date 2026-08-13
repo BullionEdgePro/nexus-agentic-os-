@@ -138,12 +138,30 @@ test("the offline tenant has no source list at all", () => {
   // exists is a trap for whoever reads it next.
   assert.equal(TENANT_SOURCES["atif-ali-production"], undefined);
 
-  // ABR replaced it. abshlaw.com is a single page with NO sitemap, so the URL
-  // is listed by hand — a crawler pointed at it would have found nothing and
-  // reported a clean run.
+  // ABR replaced it. abshlaw.com has NO sitemap, so its pages are listed by
+  // hand — a crawler pointed at it would have found nothing and reported a
+  // clean run.
+  //
+  // This assertion used to pin the list to exactly ["https://www.abshlaw.com/"]
+  // because a comment said the site was a single page. It is ten, and the
+  // practice-area pages carry about a thousand words each. So the test was
+  // enforcing the mistake: any correction to the source list failed it, and the
+  // path of least resistance was to leave ABR's agent knowing five passages.
+  //
+  // It now pins the two properties that are actually true — hand-listed, and
+  // covering the practice areas customers ask about — rather than a snapshot of
+  // the list, which is the part expected to grow.
   assert.ok(TENANT_SOURCES["abr"], "ABR must have a source list");
   assert.deepEqual(TENANT_SOURCES["abr"].sitemaps, []);
-  assert.deepEqual(TENANT_SOURCES["abr"].pages, ["https://www.abshlaw.com/"]);
+  const abrPages = TENANT_SOURCES["abr"].pages ?? [];
+  assert.ok(abrPages.includes("https://www.abshlaw.com/"), "the home page stays listed");
+  for (const area of ["litigation", "criminal-law", "corporate-law", "family-law"]) {
+    assert.ok(
+      abrPages.some((u) => u.includes(area)),
+      `a litigation firm's agent must know about ${area}`
+    );
+  }
+  assert.ok(abrPages.every((u) => u.startsWith("https://www.abshlaw.com/")), "one host only");
 });
 
 test("sitemap parsing ignores nested index files", () => {

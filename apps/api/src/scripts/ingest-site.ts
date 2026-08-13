@@ -95,14 +95,35 @@ export const TENANT_SOURCES: Record<string, TenantSource> = {
   },
 
   abr: {
-    // abshlaw.com is a single-page site — the practice areas, team, and contact
-    // details all live on `/`, with no sitemap. So the "sitemap" here is the
-    // page itself; `extractLocations` finds nothing in HTML, and the fallback
-    // below supplies the URL directly.
+    // THIS ENTRY SAID "abshlaw.com IS A SINGLE-PAGE SITE" AND IT IS NOT.
+    //
+    // The claim was written once, was plausible — the landing page really does
+    // carry a summary of everything — and then decided how much a litigation
+    // firm's agent was allowed to know. ABR ended up with five indexed
+    // passages while nine pages of real practice-area content sat one link
+    // away, each around a thousand words. A comment nobody re-checked was the
+    // whole reason.
+    //
+    // There is still no sitemap, so the pages are hand-listed. They are listed
+    // rather than crawled for the reason at the top of this file: what is
+    // EXCLUDED is the substance, and a crawler would have taken the insights
+    // feed and the testimonials with everything else.
     sitemaps: [],
-    pages: ["https://www.abshlaw.com/"],
-    exclude: /$^/, // nothing to exclude from a hand-listed page
-    note: "litigation, arbitration and criminal defence practice areas",
+    pages: [
+      "https://www.abshlaw.com/",
+      "https://www.abshlaw.com/overview.html",
+      "https://www.abshlaw.com/our-expertise.html",
+      "https://www.abshlaw.com/litigation.html",
+      "https://www.abshlaw.com/criminal-law.html",
+      "https://www.abshlaw.com/corporate-law.html",
+      "https://www.abshlaw.com/family-law.html",
+      "https://www.abshlaw.com/property-law.html",
+      "https://www.abshlaw.com/maritime-law.html",
+      "https://www.abshlaw.com/construction-law.html",
+      "https://www.abshlaw.com/intellectual-property.html",
+    ],
+    exclude: /$^/, // nothing to exclude from a hand-listed set
+    note: "litigation, criminal, corporate, family, property, maritime, construction and IP practice areas",
   },
 
   // atif-ali-production was removed from the platform on 2026-08-08 (migration
