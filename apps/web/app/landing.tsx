@@ -114,6 +114,7 @@ export default function Landing() {
   // is set — pressing the button with it would simply fail.
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showCode, setShowCode] = useState(false);
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -323,12 +324,47 @@ export default function Landing() {
               </svg>
               <input
                 id="pass"
-                type="password"
+                type={showCode ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="XXXXX-XXXXX"
                 autoComplete="one-time-code"
+                autoCapitalize="characters"
+                spellCheck={false}
               />
+              {/*
+                An access code is transcribed from a message, not remembered.
+                Masking it means a single mistyped character produces "that
+                sign-in doesn't match" with no way to see which one — the person
+                cannot tell a typo from a wrong code, and neither can whoever
+                they ask for help. Revealing it is the difference between a
+                two-second fix and a support conversation.
+
+                type="button" is load-bearing: a bare <button> inside a form
+                defaults to type="submit", so tapping the eye would submit the
+                half-typed code and show the failure it was meant to prevent.
+              */}
+              <button
+                type="button"
+                className="reveal"
+                onClick={() => setShowCode((v) => !v)}
+                aria-label={showCode ? "Hide access code" : "Show access code"}
+                aria-pressed={showCode}
+                title={showCode ? "Hide" : "Show"}
+              >
+                {showCode ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                    <path d="M3 3l18 18" />
+                    <path d="M10.6 5.1A9 9 0 0 1 21 12a17 17 0 0 1-3.1 3.9M6.6 6.6A17 17 0 0 0 3 12a9 9 0 0 0 12.5 4.4" />
+                    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 

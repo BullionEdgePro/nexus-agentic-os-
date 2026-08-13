@@ -456,3 +456,28 @@
 @media (max-width: 900px) {
   .deck-root .app { grid-template-columns: 1fr; }
 }
+
+/* Reveal control for the access-code field.
+   Absolutely positioned inside .inp rather than added to its flex flow, so the
+   existing input keeps its full width and the icon does not reflow the row. */
+.inp { position: relative; }
+.inp input { padding-right: 42px; }
+.reveal {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(22, 22, 15, 0.55);
+  cursor: pointer;
+}
+.reveal svg { width: 17px; height: 17px; }
+.reveal:hover { color: rgba(22, 22, 15, 0.9); background: rgba(22, 22, 15, 0.06); }
+.reveal:focus-visible { outline: 2px solid #1d3fbf; outline-offset: 1px; }
