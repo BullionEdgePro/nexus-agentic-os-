@@ -106,6 +106,11 @@ export const NAV: NavItem[] = [
         <path d="M14 11a4 4 0 0 0-5.7-.4l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7" />
       </svg>
     ),
+    // /api/links is operatorOnly server side. Without this an employee saw the
+    // tab, opened it, and got the error state — the deep links are one set for
+    // the whole platform, spanning every business, so there is nothing here
+    // scoped to theirs to show even in principle.
+    operatorOnly: true,
   },
   {
     href: "/deck/broadcasts",
