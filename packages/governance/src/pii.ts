@@ -36,31 +36,44 @@ function luhnValid(digits: string): boolean {
  * this runs on every outgoing AI message, so noisy matches would train
  * agents/reviewers to ignore it.
  */
-export function scanForPii(text: string): PiiMatch[] {
-  const matches: PiiMatch[] = [];
+export interface ScanOptions {
+  /**
+   * The business's OWN published material — the retrieved knowledge-base
+   * passages the reply was grounded in. Anything that looks like PII and also
+   * appears verbatim here is the business quoting itself, not leaking somebody.
+   *
+   * Deliberately NOT the conversation history. That can carry a third party's
+   * details a customer typed in, and repeating those back out is exactly the
+   * leak this scan exists to catch.
+   */
+  publishedContext?: string;
+}
 
-  for (const match of text.matchAll(EMAIL_RE)) {
-    matches.push({ type: "email", redacted: redact(match[0]) });
-  }
-  for (const match of text.matchAll(EMIRATES_ID_RE)) {
-    matches.push({ type: "emirates_id", redacted: redact(match[0]) });
-  }
-  for (const match of text.matchAll(SSN_RE)) {
-    matches.push({ type: "ssn", redacted: redact(match[0]) });
-  }
+export function scanForPii(text: string, options: ScanOptions = {}): PiiMatch[] {
+  // The raw value is carried only inside this function. `PiiMatch` exposes the
+  // redacted form alone, and these matches are written into evaluation notes
+  // that get stored and displayed — so the unredacted string must not escape.
+  const found: Array<PiiMatch & { raw: string }> = [];
+  const add = (type: PiiMatch["type"], raw: string) =>
+    found.push({ type, redacted: redact(raw), raw });
+
+  for (const match of text.matchAll(EMAIL_RE)) add("email", match[0]);
+  for (const match of text.matchAll(EMIRATES_ID_RE)) add("emirates_id", match[0]);
+  for (const match of text.matchAll(SSN_RE)) add("ssn", match[0]);
   for (const match of text.matchAll(CREDIT_CARD_RE)) {
     const digits = match[0].replace(/\D/g, "");
     if (digits.length >= 13 && digits.length <= 19 && luhnValid(digits)) {
-      matches.push({ type: "credit_card", redacted: redact(match[0]) });
+      add("credit_card", match[0]);
     }
   }
   for (const match of text.matchAll(PHONE_RE)) {
     const digits = match[0].replace(/\D/g, "");
     // Skip anything already counted as a credit card / Emirates ID digit run.
-    if (digits.length >= 8 && digits.length <= 15) {
-      matches.push({ type: "phone", redacted: redact(match[0]) });
-    }
+    if (digits.length >= 8 && digits.length <= 15) add("phone", match[0]);
   }
 
-  return matches;
+  const published = options.publishedContext ?? "";
+  return found
+    .filter((match) => !published.includes(match.raw))
+    .map(({ raw: _raw, ...match }) => match);
 }

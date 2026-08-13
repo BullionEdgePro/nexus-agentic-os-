@@ -104,6 +104,7 @@ async function main() {
           draftReply: reply.text,
           conversationHistory: `customer: ${question}`,
           ragContext: hits.map((h) => h.content).join("\n\n"),
+          businessName: organization.name,
         });
         console.log(
           `  governance: hallucination risk ${verdict.hallucinationRisk}, PII ${

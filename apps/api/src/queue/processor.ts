@@ -405,9 +405,35 @@ async function processSingleTextMessage(
 
     if (!result.text) return;
 
+    // THE JUDGE WAS BEING ASKED TO AUDIT GROUNDED ANSWERS WITH THE GROUNDING
+    // REMOVED.
+    //
+    // This call passed only the draft and the conversation history. Every fact
+    // the agent correctly took from the knowledge base therefore looked, to the
+    // judge, like an assertion supported by nothing — which biases it toward
+    // "high" on exactly the replies that did their job properly. High escalates
+    // for every tenant outside the tolerant allowlist.
+    //
+    // Retrieval happens inside `agent.respond`, so the passages are not in
+    // scope here as a variable; they are in the tool calls the agent actually
+    // made. Reconstructing the context from those is the honest definition of
+    // "what this reply should be grounded in" — it is what the agent read, not
+    // what a second search might have found.
+    const retrieved = result.toolCalls
+      .filter((call) => call.name === "search_knowledge")
+      .map((call) => (typeof call.output === "string" ? call.output : JSON.stringify(call.output)))
+      .join("\n\n");
+
     const evaluation = await evaluateOutgoingMessage({
       draftReply: result.text,
       conversationHistory: history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
+      // Empty when the agent answered without searching, which is a real state
+      // and correctly reads as "nothing supports this" rather than as missing
+      // plumbing.
+      ragContext: retrieved || undefined,
+      // Who is speaking. Without it, an agent naming its own company scores as
+      // a hallucination — see HallucinationCheckInput.businessName.
+      businessName: serving.name,
     });
 
     // Deterministic backstop for the twin's identity rules: the prompt forbids

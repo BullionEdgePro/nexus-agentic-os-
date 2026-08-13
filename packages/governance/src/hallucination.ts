@@ -11,6 +11,24 @@ export interface HallucinationCheckInput {
   draftReply: string;
   conversationHistory: string; // last few turns, flattened as plain text
   ragContext?: string; // retrieved knowledge-base passages the reply should be grounded in, if any
+  /**
+   * The business whose agent wrote this. WITHOUT IT THE JUDGE MARKS AN AGENT
+   * NAMING ITS OWN COMPANY AS A HALLUCINATION.
+   *
+   * Found on the first production run after the judge came back to life. Juris
+   * Prime Legal's agent answered an eviction question well, declined to give
+   * legal advice, offered a consultation — and scored HIGH. Verbatim: "The
+   * draft reply references 'Juris Prime Legal' as a service provider and
+   * implies the ability to set up consultations with their attorneys, but this
+   * company and service offering are not mentioned anywhere in the conversation
+   * history or retrieved context."
+   *
+   * The judge was right on its own terms. It had simply never been told who was
+   * speaking. High risk escalates for every tenant, so this would have blocked
+   * nearly every reply the three strict businesses produce — a correct answer,
+   * withheld, and replaced by a promise of a human.
+   */
+  businessName?: string;
 }
 
 /**
@@ -65,6 +83,16 @@ export async function evaluateHallucinationRisk(
         {
           role: "user",
           content:
+            // Identity first, because it changes how everything after it reads:
+            // a business describing its own services is the speaker, not an
+            // unsupported factual assertion.
+            (input.businessName
+              ? `You are auditing a reply written BY ${input.businessName} to one of its own ` +
+                `customers. The business naming itself, describing its own services, or ` +
+                `inviting a consultation is NOT a hallucination — it is the speaker. Judge the ` +
+                `verifiable claims instead: prices, timeframes, legal or factual assertions, ` +
+                `and promises about what will happen next.\n\n`
+              : "") +
             `Conversation history:\n${input.conversationHistory || "(none)"}\n\n` +
             `Retrieved context:\n${input.ragContext || "(none provided)"}\n\n` +
             `Draft reply to audit:\n${input.draftReply}`,
