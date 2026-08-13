@@ -131,3 +131,80 @@ function tailContext(previous: string, overlapChars: number): string {
   const snapped = boundary === -1 ? tail : tail.slice(boundary + 1);
   return snapped ? `${snapped.trim()}\n\n` : "";
 }
+
+/* ------------------------------------------------------------------ */
+/* Placeholder text                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Lorem ipsum, in the forms a themed site actually ships it.
+ *
+ * FOUND IN PRODUCTION. SFS International's knowledge base contained four
+ * chunks of placeholder text: its `/privacy/` page is an unreplaced Houzez
+ * theme page whose entire body is Lorem ipsum, and `/terms-and-conditions/`
+ * carries two paragraphs of it among seven real ones. The agent could retrieve
+ * and cite either.
+ *
+ * The existing curation excludes theme demo pages BY URL — `grid-full-width`,
+ * `with-parallax`, `apartments-in-new-york`. That works for pages named after
+ * the theme and cannot possibly work for a page named `/privacy/`, which is
+ * exactly what a real privacy policy is called. A URL cannot tell you whether
+ * the words underneath it mean anything.
+ *
+ * Deliberately narrow. These are Latin fragments that essentially never occur
+ * in genuine business copy, and no attempt is made to detect "low quality" or
+ * "thin" text — that judgement belongs to a person, and a filter that guesses
+ * would silently delete real content, which is far worse than keeping filler.
+ */
+const PLACEHOLDER_MARKERS = [
+  "lorem ipsum",
+  "dolor sit amet",
+  "consectetur adipiscing",
+  "sed do eiusmod",
+  "tempor incididunt",
+  "quis nostrud exercitation",
+  "duis aute irure",
+  "excepteur sint occaecat",
+];
+
+/** True when this text is placeholder filler rather than content. */
+export function isPlaceholderText(text: string): boolean {
+  const haystack = text.toLowerCase();
+  const hits = PLACEHOLDER_MARKERS.filter((marker) => haystack.includes(marker));
+  if (hits.length === 0) return false;
+
+  // TWO INDEPENDENT MARKERS IS THE RULE, and it is the rule because the first
+  // version was "one marker, in a chunk under 400 characters" — which flagged a
+  // genuine 370-character paragraph in which a design agency said it never
+  // ships lorem ipsum. Its own test caught it. Length is not evidence of
+  // anything: filler comes in long pages and real copy comes in short ones.
+  //
+  // Real filler always trips several, because the specimen is one continuous
+  // passage — "Lorem ipsum dolor sit amet, consectetur adipiscing elit" is
+  // three markers in a single sentence. Writing ABOUT it names it once.
+  if (hits.length >= 2) return true;
+
+  // The one exception: a chunk that is essentially nothing but the marker. Not
+  // a length heuristic on the content — a bound on how much room there is for
+  // anything else to be present.
+  return haystack.trim().length < 60;
+}
+
+/**
+ * Drop placeholder chunks and renumber the survivors.
+ *
+ * PER CHUNK, not per page, and that is the whole design. `/terms-and-conditions/`
+ * is two paragraphs of Lorem ipsum and seven of real terms; refusing the page
+ * would throw away the seven, and keeping it whole leaves filler the agent can
+ * quote back to a customer. Neither is acceptable, so the unit of judgement is
+ * the chunk.
+ *
+ * `chunk_index` is renumbered because it is stored and ordered on. Leaving gaps
+ * would work today and quietly break the first thing that assumes the indexes
+ * of a source are contiguous.
+ */
+export function dropPlaceholderChunks(chunks: TextChunk[]): TextChunk[] {
+  return chunks
+    .filter((chunk) => !isPlaceholderText(chunk.content))
+    .map((chunk, index) => ({ ...chunk, index }));
+}

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { getPool, withTenant } from "@nexus/db";
-import { chunkText } from "./chunk.js";
+import { chunkText, dropPlaceholderChunks } from "./chunk.js";
 import { embedTexts, EMBEDDING_MODEL } from "./embed.js";
 import { fetchDocument, type FetchedDocument } from "./fetch-url.js";
 import { stripSharedBoilerplate } from "./html.js";
@@ -159,7 +159,30 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
     : await insertSource(input, kind, contentHash);
 
   try {
-    const chunks = chunkText(input.content);
+    // Placeholder filler is removed before embedding, not after. Embedding it
+    // would spend a model call on text that must not be retrievable, and the
+    // vector would sit in the same table as real content waiting for a query it
+    // happens to match.
+    const split = chunkText(input.content);
+    const chunks = dropPlaceholderChunks(split);
+
+    // A page whose every chunk was filler is REPORTED, not quietly stored as
+    // "indexed, 0 passages". SFS's /privacy/ is exactly this: an unreplaced
+    // Houzez theme page under a URL a real privacy policy would use. Marked
+    // indexed it would sit on the knowledge screen looking healthy, and the
+    // operator sweep would see a source that had not failed. Marked failed, it
+    // says what is wrong and where — and `broken-knowledge` surfaces it without
+    // anybody counting rows.
+    if (split.length > 0 && chunks.length === 0) {
+      const message = "Every passage on this page is placeholder text (Lorem ipsum), so nothing was indexed. The page most likely still carries its website theme's sample content.";
+      await getPool().query(
+        `update knowledge_sources set status = 'failed', error = $2, last_checked_at = now()
+         where id = $1`,
+        [sourceId, message]
+      );
+      return { sourceId, chunks: 0, skipped: false };
+    }
+
     if (chunks.length === 0) {
       await markIndexed(sourceId);
       return { sourceId, chunks: 0, skipped: false };

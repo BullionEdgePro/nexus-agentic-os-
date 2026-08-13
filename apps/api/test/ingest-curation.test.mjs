@@ -83,10 +83,26 @@ test("the informational pages that remain are the ones worth answering from", ()
     "/about/",
     "/contact/",
     "/frequently-asked-questions/",
-    "/insights/",
     "/privacy-policy/",
     "/terms-and-conditions/",
   ]);
+});
+
+test("the two pages that look informational and are not", () => {
+  const kept = selectPages(SFS_SITEMAP, sfs.exclude);
+
+  // /privacy/ is an unreplaced Houzez theme page whose entire body is Lorem
+  // ipsum. It had FIVE indexed passages in production and the agent could cite
+  // them. Every other theme leftover is excluded by a pattern naming the theme,
+  // which cannot work here — /privacy/ is precisely what a real privacy policy
+  // is called. Excluding it must not take the genuine one with it.
+  assert.ok(!kept.includes("https://sfsintrealestate.com/privacy/"));
+  assert.ok(kept.includes("https://sfsintrealestate.com/privacy-policy/"));
+
+  // /insights/ 302s to the home page. Indexed, it becomes a second source
+  // holding a copy of the home page under a different title — the duplicate
+  // failure §8 already records, where both copies get cited.
+  assert.ok(!kept.includes("https://sfsintrealestate.com/insights/"));
 });
 
 test("the attestation tenant keeps its guides and drops only the blog index", () => {

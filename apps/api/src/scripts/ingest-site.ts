@@ -89,8 +89,27 @@ export const TENANT_SOURCES: Record<string, TenantSource> = {
     //
     // Character classes include digits deliberately: a first pass written as
     // `grid-[a-z-]*` let `grid-full-width-2-cols` straight through.
+    //
+    // TWO PAGES ADDED TO THIS LIST AFTER READING WHAT WAS ACTUALLY INDEXED:
+    //
+    //   /privacy/    — an unreplaced Houzez theme page whose entire body is
+    //                  Lorem ipsum. It had five indexed passages and the agent
+    //                  could cite them. Everything else the theme left behind
+    //                  is excluded by a URL pattern naming the theme, which
+    //                  cannot work here: `/privacy/` is precisely what a real
+    //                  privacy policy is called. The genuine SFS policy lives
+    //                  at /privacy-policy/ and IS indexed.
+    //
+    //   /insights/   — 302s to the home page. Indexing it creates a second
+    //                  source holding a copy of the home page under a
+    //                  different title, which §8 of ARCHITECTURE-ABOS records
+    //                  as a real failure: both copies get cited.
+    //
+    // The URL list is not the durable fix — `dropPlaceholderChunks` in
+    // packages/knowledge is, because it looks at the words rather than the
+    // address. This entry stops SFS re-indexing a page that has nothing to say.
     exclude:
-      /\/(property|grid-[a-z0-9-]*|with-[a-z0-9-]*|list-layout[a-z0-9-]*|listings[a-z0-9-]*|home-[a-z0-9-]*|my-[a-z0-9-]*|compare-properties|saved-search|search-results|select-your-package|complete-order|create-listing|favorite-properties|invoices|membership-info|packages|stripe|thank-you|testing|inquiry-form|agents-2|agencies|board|blog)\/|new-york|los-angeles|miami|brooklyn/,
+      /\/(property|grid-[a-z0-9-]*|with-[a-z0-9-]*|list-layout[a-z0-9-]*|listings[a-z0-9-]*|home-[a-z0-9-]*|my-[a-z0-9-]*|compare-properties|saved-search|search-results|select-your-package|complete-order|create-listing|favorite-properties|invoices|membership-info|packages|stripe|thank-you|testing|inquiry-form|agents-2|agencies|board|blog|insights|privacy)\/|new-york|los-angeles|miami|brooklyn/,
     note: "agency information, FAQ and terms — deliberately no property listings",
   },
 
