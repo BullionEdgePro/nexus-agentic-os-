@@ -130,7 +130,7 @@ export default function Landing() {
       return;
     }
     if (password.trim().length < 4) {
-      setError("Password must be at least 4 characters.");
+      setError("That access code looks too short — check the one your manager sent you.");
       return;
     }
     setBusy(true);
@@ -296,8 +296,26 @@ export default function Landing() {
             </div>
           </div>
 
+          {/*
+            THE LABEL SAID "PASSWORD" WHILE THE HELP TEXT DIRECTLY BENEATH IT
+            SAID "sign in with the access code your manager issued you".
+
+            Reported by the first person who tried to use it: they looked for a
+            code field, saw a password field, and concluded the feature was
+            missing. It was not — the box was right, its name was wrong.
+
+            Staff do not have passwords. They are issued a one-time access code
+            (create-employee.ts), stored only as a hash. A field labelled
+            "Password" invites somebody to type a password they were never
+            given, fail, and ask for a reset that does not exist.
+
+            `type="password"` stays — that is about masking the characters, not
+            about what the credential is called. The placeholder now shows the
+            real shape of a code rather than generic dots, so it is obvious at a
+            glance which credential belongs here.
+          */}
           <div className="field">
-            <label htmlFor="pass">Password</label>
+            <label htmlFor="pass">Access code</label>
             <div className="inp">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <rect x="4" y="10" width="16" height="10" rx="2" />
@@ -308,7 +326,8 @@ export default function Landing() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••"
+                placeholder="XXXXX-XXXXX"
+                autoComplete="one-time-code"
               />
             </div>
           </div>
