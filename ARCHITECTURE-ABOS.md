@@ -8,7 +8,7 @@ This is the engineering plan of record. It is deliberately opinionated about
 sequencing, because the order these features land in matters more than any
 individual design.
 
-**Status: 2026-08-11.** Phases 0, 2 and 3 shipped and verified. Feature 12 is
+**Status: 2026-08-13.** Phases 0, 2 and 3 shipped and verified. Feature 12 is
 **complete** — RLS is applied and verified *enforcing*: from ABR's tenant
 context, Zipicka's ten contacts are invisible, while Zipicka still reads its
 own ten. Tenant isolation is structural rather than by convention for the
@@ -19,9 +19,15 @@ first thing that makes tenant #2 acquiring customers plausible without an ad
 budget.
 
 Section 9 is the register of what has *not* been done and why — read that
-before planning the next block of work. Section 8's last three rows are the
-most important thing in this document: source-text tests cannot see what the
-database decides, and three scripts exist because of it.
+before planning the next block of work. Section 8 is the most important thing
+in this document: source-text tests cannot see what the database decides, and
+four scripts exist because of it.
+
+**Every number in this document should be assumed stale until re-counted.** In
+one session it was wrong about the test count, whether RLS was applied, whether
+the knowledge screen existed, how many conversations were muted, and how much
+content one tenant's site had. Each was written when true. The census in §9.1
+carries the date it was taken for that reason.
 
 ---
 
@@ -67,13 +73,17 @@ Corrected sequence, each step independently verifiable:
 1. ~~Create a least-privilege app role~~ **done** (migration 006)
 2. ~~Cut `DATABASE_URL` over and verify~~ **done.** Failures here are loud
    (`permission denied`), rollback is one env var
-3. **Tenant-context plumbing** — `SET LOCAL app.current_org` per tenant-scoped
-   request, plus an application assertion that fails **loudly** on a missing
-   context rather than quietly returning nothing
-4. **Enable RLS + policies**, table by table, verifying row counts after each
+3. ~~**Tenant-context plumbing**~~ **done** — `SET LOCAL app.current_org` per
+   tenant-scoped request via AsyncLocalStorage, plus an application assertion
+   that fails **loudly** on a missing context rather than quietly returning
+   nothing
+4. ~~**Enable RLS + policies**~~ **done** (migration 018), gated behind
+   `rls-preflight.ts` rather than a traffic soak and confirmed *enforcing* by
+   `rls-verify.ts`
 
-Step 4 is the dangerous one: a wrong policy returns zero rows with no error. It
-must never ship without the step-3 assertion in front of it.
+Step 4 was the dangerous one: a wrong policy returns zero rows with no error,
+which is why it never shipped without the step-3 assertion in front of it. The
+whole sequence is complete.
 
 **A design mismatch to resolve first.** Classic RLS assumes one tenant per
 request. Here the operator is *deliberately* a super-user across all five
@@ -136,13 +146,13 @@ and adding structure rather than replacing it.
                         │           │           │
               ┌─────────▼──┐ ┌──────▼─────┐ ┌───▼───────────┐
               │ reply      │ │ operators  │ │ knowledge     │
-              │ worker ✅  │ │ (not built)│ │ re-index ✅   │
+              │ worker ✅  │ │ every 10m ✅│ │ re-index ✅   │
               └─────────┬──┘ └──────┬─────┘ └───┬───────────┘
                         │           │           │
                     ┌───▼───────────▼───────────▼──────────────┐
                     │  Postgres · least-privilege role ✅      │
                     │  embeddings as normalized real[]          │
-                    │  RLS: not yet (see §2.2)                  │
+                    │  RLS applied and verified enforcing ✅    │
                     └──────────────────────────────────────────┘
 ```
 
@@ -174,7 +184,7 @@ and adding structure rather than replacing it.
 |---|---|
 | **0 — Survivability** | Verified backups (dump → test-restore → rotate, nightly); 5-tenant cap removed; governance fails safe for unknown tenants |
 | **1 — Employee Agent Layer** | `employees`, presence engine (pure, DST-aware, overnight shifts, UTC fallback), attributed AI twin with signature backstop, employee-aware routing |
-| **2 — Knowledge** | Schema + chunker + Gemini embeddings + citation-bearing retrieval; URL connector with SSRF guard; cross-page boilerplate stripping; 6-hourly re-indexing; **328 live chunks across all five businesses**, retrieval verified against real customer questions |
+| **2 — Knowledge** | Schema + chunker + Gemini embeddings + citation-bearing retrieval; URL connector with SSRF guard; cross-page boilerplate stripping; 6-hourly re-indexing; **395 live chunks across all five businesses**, retrieval verified against real customer questions |
 | **3 — Lead Intelligence** | Rules-based scoring with signal audit trail; direction-aware spam detection; complaints always urgent |
 | **12 — Security** | API authentication (was fully open, leaking customer PII); WebSocket auth; inbox login gate; app de-privileged from Postgres superuser |
 | **7 — Follow-ups** | The buildable half of the workspace: a promise made in a conversation, owned by a named person, with a date, raisable from the inbox and travelling back to the customer — it reaches the agent's context and the handover brief when that person messages again. No boards |
@@ -254,7 +264,7 @@ phone number and narrows immediately.
 | 5 | Neural Brain | 🟡 The gate it was blocked on is built: redaction fails closed, and what may cross a tenant boundary is an allow-list of structured fields — never prose. The shared store itself is not built |
 | 6 | PAUL v2 | 🟡 `.claude/` layer installed; self-improvement loop not built |
 | 7 | Workspace | 🟡 The scoped slice is built: follow-ups tied to a conversation, owned, dated, raisable from the inbox — and they now travel back to the customer, reaching both the agent's context and the handover brief when that person messages again. Boards, views and automations are the months, and none is asked for yet |
-| 8 | Operators | 🟡 **Built, and §2.3 answered by construction rather than by decision.** Four operators sweep every business every 10 minutes and call no model at all — customer waiting for a reply, overdue follow-up, unowned follow-up, failing knowledge source. The design property that matters is that a finding can be **retracted**: each pass computes the complete truth and reconciles, so the list shrinks as well as grows. Paid inference remains an open choice, now additive rather than blocking |
+| 8 | Operators | 🟡 **Built, and §2.3 answered by construction rather than by decision.** Five operators sweep every business every 10 minutes and call no model at all — customer waiting for a reply, overdue follow-up, unowned follow-up, failing knowledge source, and an agent with almost nothing to answer from. The fifth exists because ABR's five indexed passages were found by counting rows by hand: `broken-knowledge` watches sources that FAIL, and a business with too few working sources has nothing wrong with it in that sense. The design property that matters is that a finding can be **retracted**: each pass computes the complete truth and reconciles, so the list shrinks as well as grows. Paid inference remains an open choice, now additive rather than blocking |
 | 9 | Command Center | 🟡 Deck on live queries, plus team activity and agent quality. One rollup table exists (daily quality); the overview still aggregates live |
 | 10 | Memory | 🟡 Semantic + episodic (per-business contact memory, expiring, forgettable). Procedural not formalised |
 | 11 | Predictive BI | ⛔ Blocked on data volume |
@@ -307,6 +317,7 @@ normal state, never as an error**:
 | `order by <non-unique> limit 1` | An agent's reply can land on the same microsecond as the message it answers. `order by created_at desc limit 1` then picks between them by coin flip — and the customer-waiting operator's first production run reported a customer as ignored while the reply sat in the database beside their message. The second instance of this pattern in the table, written by someone who had already read the first |
 | Cleanup keyed on a variable a failure prevents from setting | `schema-check` deleted its probe `where id = $1` using an id assigned from a return value. The one run where `createTask` threw *after its INSERT committed* left the id unset — so the cleanup did nothing, on the single run where there was something to clean. It works perfectly on every run where nothing went wrong, which is every run where it does not matter. Found days later by an operator reporting the orphan as a real overdue promise |
 | Suppression keyed on a record that was never written | The customer-waiting operator skips cold pitches by asking whether an `inbound_pitch` assessment EXISTS. Every conversation predating lead scoring being wired into the pipeline has no assessment at all, so the absence read as "not a pitch" — and the platform's only open urgent finding was a data broker (*"Latest Owner, buyer and investor data available… Do you need a database?"*) reported as a customer ignored for 260.8 hours. The classifier could answer correctly the whole time; nobody had asked it. **The general form: a guard that requires a positive signal fails open wherever that signal was never collected, and that is precisely the historical data nobody re-examines** |
+| A comment that decided what an agent was allowed to know | ABR's ingestion entry opened with "abshlaw.com is a single-page site… with no sitemap". Plausible, written once, never re-checked — and wrong: ten pages, eight of them practice areas of about a thousand words each. A litigation firm's agent knew five passages. The test made it durable by pinning the page list to exactly that one URL, so **correcting the mistake failed the build** and leaving it alone was the path of least resistance. A test can hold an error in place more effectively than the error can hold itself |
 | A flag that only ever turns off | `is_human_handoff` pauses the agent and is cleared when a human works the conversation. With nobody on the rota that clearing never happens, so a single escalation mutes a customer permanently. Four production conversations sat in it, and the state is indistinguishable from a conversation a colleague is actively handling — which is exactly what the inbox showed |
 | A count in a test standing in for a property | An assertion that `hasActiveEmployees(...).catch(() => true)` appears **exactly three times** failed the moment a fourth, correctly guarded, call site was added. It reported a regression that had not happened, and its obvious repair — bump 3 to 4 — is a habit that eventually waves through the unguarded call it exists to catch. The property is "every call site is guarded"; the number was never the point |
 | A cookie jar asked to hold two scopes for one name | `res.cookies.set()` is keyed by NAME. Sign-out cleared the session twice on purpose — once scoped to `.nexusagenticos.com`, once host-only for older sessions — and the second call **replaced** the first rather than adding a header. Production sent one `Set-Cookie` with no `Domain` while the live cookie carries one, so sign-out returned 200 and cleared nothing. The belt-and-braces line added to make it *more* thorough is what broke it, and the response looked correct in every respect a status code can express |
@@ -381,16 +392,22 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   | juris-prime-legal | 25 | 123 | 0 | 0 |
   | juris-prime | 17 | 91 | 0 | 0 |
   | zipicka | 6 | 80 | 11 | 0 |
+  | abr | 11 | 72 | 0 | 0 |
   | sfs-international | 6 | 29 | 0 | 0 |
-  | abr | 1 | 5 | 0 | 0 |
 
   Four businesses have an agent that knows their work and has never been asked a
-  question. The one with customers has the *third* largest knowledge base. Two
-  numbers in that table are worth acting on independently of traffic: **abr has
-  five chunks**, because abshlaw.com is a single page and there is nothing more
-  to index — a litigation practice whose agent knows five passages will be vague
-  and escalate constantly, and the fix is content, not code. And **active staff
-  is zero everywhere**, which is the escalation gap in §9.5 stated as a number.
+  question. The one with customers has the *third* largest knowledge base.
+
+  **ABR was 1 source and 5 chunks when first counted.** Its entry in
+  `ingest-site.ts` opened with "abshlaw.com is a single-page site… with no
+  sitemap", which was written once, was plausible, and was wrong — the site has
+  ten pages, eight of them practice areas of roughly a thousand words each. A
+  comment nobody re-checked decided how much a litigation firm's agent was
+  allowed to know, and the test pinned the page list to exactly that one URL, so
+  correcting it failed the build. Now 11 sources, 72 chunks.
+
+  **Active staff is zero everywhere**, which is §9.5's escalation gap as a
+  number rather than a paragraph.
 - **Meta billing and business verification.** Bulk sending is built, templates
   are submitted, the engine is tested. It cannot send until WhatsApp has a
   payment method and verification completes. Neither is an engineering task.
