@@ -35,7 +35,7 @@ test("the pause is guarded in ONE place, not at each call site", () => {
   const body = fn.slice(0, fn.indexOf("\n}"));
   assert.ok(body.length > 200, "the function slice must not be empty");
 
-  const guard = body.indexOf("hasActiveEmployees");
+  const guard = body.indexOf("hasStaffOnShift");
   const pause = body.indexOf("setConversationHandoff");
   assert.ok(guard !== -1, "the guard must be present");
   assert.ok(guard < pause, "it must run before the pause");
@@ -45,7 +45,7 @@ test("the pause is guarded in ONE place, not at each call site", () => {
 test("the governance path checks the SERVING business, not the number owner", () => {
   // On a shared number the law firm may have staff while the retailer does not.
   // The question is whether anyone can pick up THIS conversation.
-  assert.match(PROCESSOR, /hasActiveEmployees\(serving\.id\)/);
+  assert.match(PROCESSOR, /hasStaffOnShift\(serving\.id\)/);
 });
 
 test("both escalation paths are covered, not just the governance one", () => {
@@ -53,7 +53,7 @@ test("both escalation paths are covered, not just the governance one", () => {
   // goes through sendFallbackBestEffort rather than the governance branch.
   const fallback = PROCESSOR.slice(PROCESSOR.indexOf("async function sendFallbackBestEffort"));
   const body = fallback.slice(0, fallback.indexOf("\n}"));
-  assert.match(body, /hasActiveEmployees\(organization\.id\)/);
+  assert.match(body, /hasStaffOnShift\(organization\.id\)/);
   assert.match(body, /canHandOver \? FALLBACK_REPLY : FALLBACK_REPLY_NO_STAFF/);
 });
 
@@ -98,8 +98,11 @@ test("a failed staff lookup assumes there IS somebody", () => {
   // The literal 3 failed the moment a fourth call site was added — correctly
   // guarded — which is a test reporting a regression that did not happen, and
   // an invitation to fix it by bumping a number without reading the new code.
-  const all = PROCESSOR.match(/hasActiveEmployees\([^)]*\)/g) ?? [];
-  const guarded = PROCESSOR.match(/hasActiveEmployees\([^)]*\)\.catch\(\(\) => true\)/g) ?? [];
+  // Both availability questions, because both can throw and both must fail
+  // toward 'assume somebody is there' rather than silently weakening a reply.
+  const all = PROCESSOR.match(/has(?:ActiveEmployees|StaffOnShift)\([^)]*\)/g) ?? [];
+  const guarded =
+    PROCESSOR.match(/has(?:ActiveEmployees|StaffOnShift)\([^)]*\)\.catch\(\(\) => true\)/g) ?? [];
   assert.ok(all.length >= 3, "the staff lookup must still be consulted");
   assert.equal(guarded.length, all.length, "every call site must default to true on failure");
 });

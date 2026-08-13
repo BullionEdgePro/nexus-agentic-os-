@@ -41,6 +41,7 @@ import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads
 import { evaluateOutgoingMessage, shouldEscalateReply } from "@nexus/governance";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
+import { hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
 
 const FALLBACK_REPLY =
@@ -266,6 +267,12 @@ async function processSingleTextMessage(
   // involved. A conversation genuinely being handled is untouched, because that
   // business has staff.
   if (isHumanHandoff && !aiPaused) {
+    // ROTA, NOT SHIFT — deliberately different from the escalation sites below.
+    //
+    // The question here is "could this handoff ever be picked up", not "is
+    // somebody at their desk this minute". Using presence would release a
+    // paused conversation every night at 3am and hand it back to the agent,
+    // even though the person it was given to will read it in the morning.
     const someoneCanHandle = await hasActiveEmployees(organization.id).catch(() => true);
     if (!someoneCanHandle) {
       logger.warn(
@@ -466,7 +473,7 @@ async function processSingleTextMessage(
     // and skip a handoff that was warranted; wrongly assumed staffed, it
     // behaves exactly as the system did before this change.
     const canHandOver = shouldEscalate
-      ? await hasActiveEmployees(serving.id).catch(() => true)
+      ? await hasStaffOnShift(serving.id).catch(() => true)
       : false;
 
     const finalText = shouldEscalate
@@ -848,7 +855,7 @@ async function sendFallbackBestEffort(
     // combination abandons the customer while looking healthy. Failure reads as
     // "there is somebody", preserving the previous behaviour rather than
     // silently weakening the reply on a transient error.
-    const canHandOver = await hasActiveEmployees(organization.id).catch(() => true);
+    const canHandOver = await hasStaffOnShift(organization.id).catch(() => true);
     const text = canHandOver ? FALLBACK_REPLY : FALLBACK_REPLY_NO_STAFF;
 
     await sendWhatsAppText(phoneNumberId, contactWaId, text);
@@ -894,7 +901,7 @@ async function flagHandoffBestEffort(organization: Organization, conversationId:
   try {
     // Conservative on failure: assume somebody is there, which preserves the
     // behaviour this function had before the guard existed.
-    const canHandOver = await hasActiveEmployees(organization.id).catch(() => true);
+    const canHandOver = await hasStaffOnShift(organization.id).catch(() => true);
     if (!canHandOver) {
       logger.warn(
         { conversationId, business: organization.slug },

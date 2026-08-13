@@ -7,6 +7,15 @@ import assert from "node:assert/strict";
 
 const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversationHandoff: [] };
 
+mock.module(new URL("../src/services/availability.ts", import.meta.url), {
+  namedExports: {
+    // Mirrors the hasActiveEmployees stub above: these tests were written
+    // for a business that HAS somebody available, and the escalation path
+    // now asks a presence-aware question instead of a rota one.
+    hasStaffOnShift: async () => true,
+  },
+});
+
 mock.module("@nexus/db", {
   exports: {
     // Returns TRUE, preserving what these fixtures were written to test.
@@ -15,6 +24,11 @@ mock.module("@nexus/db", {
     // would silently change what they cover rather than extending it — the
     // empty-rota branch is covered by escalation-needs-a-destination.test.mjs.
     hasActiveEmployees: async () => true,
+    // Needed by src/services/availability.ts, which the processor now imports.
+    // These mocks stub @nexus/db by enumeration, so a missing export is a
+    // module-load failure rather than a wrong answer.
+    listEmployees: async () => [],
+    withTenant: async (_org, fn) => fn(),
 
     // Added when follow-ups joined the reply path. These fixtures have no
     // outstanding promises, so the honest stub is an empty list — a mock that
