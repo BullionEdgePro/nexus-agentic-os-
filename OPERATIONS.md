@@ -47,10 +47,14 @@ anything. Each of these runs the real code against the real database.
 | `schema-check` | Does SQL that has never executed actually work? | After adding or changing any query |
 | `rls-preflight` | Does every path carry a tenant context, and is the guard live? | Before applying RLS policies |
 | `rls-verify` | Do the policies *enforce*, or merely exist? | After applying them, and after adding a tenant |
+| `retrieval-check` | Does each business's agent find the RIGHT page? | After re-indexing a site, and after changing a source list |
 
 `schema-check` writes to a probe contact and deletes it, and stops before
 enqueueing anything — proving the bulk-send path works must not cost a customer
 a WhatsApp message.
+
+`retrieval-check` costs one embedding call per probe (18 today), so it is the
+one to run deliberately rather than on every deploy.
 
 Between them these found: an audience count filtering on a column that does not
 exist, a broadcast insert whose parameter Postgres could not type (so no

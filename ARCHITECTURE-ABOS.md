@@ -21,7 +21,7 @@ budget.
 Section 9 is the register of what has *not* been done and why — read that
 before planning the next block of work. Section 8 is the most important thing
 in this document: source-text tests cannot see what the database decides, and
-four scripts exist because of it.
+five scripts exist because of it.
 
 **Every number in this document should be assumed stale until re-counted.** In
 one session it was wrong about the test count, whether RLS was applied, whether
@@ -343,6 +343,7 @@ running the real functions against the real database:
 | `self-check.ts` | Do the shipped features still work end to end? |
 | `rls-preflight.ts` | Does every path carry a tenant context, and is the guard actually live? |
 | `schema-check.ts` | Does the SQL that has never run work — including the bulk-send path, before a customer triggers it? |
+| `retrieval-check.ts` | Does each business's agent find the RIGHT page? 18 real customer questions, each naming the page that should answer it. `self-check` asks whether *anything* matched, which was green throughout the period ABR held five passages from a single page |
 | `rls-verify.ts` | Do the policies *enforce*, or merely exist? Checks the app role is not a superuser, owner, or bypass-holder first, because any of those makes the rest theatre. |
 
 `schema-check.ts` found two defects on its first two runs, both of which would
@@ -353,7 +354,7 @@ have failed at its first step for every user, and the campaign engine had been i
 that state since it was written. Neither was visible to any test, because the SQL
 only fails when Postgres plans it and nothing had ever asked it to.
 
-Run all three after any change that touches a query. They found, between them,
+Run all five after any change that touches a query. They found, between them,
 a broken audience count, an unguarded write path, and an upsert that erased
 fields — none of which any source-text test could have seen.
 
