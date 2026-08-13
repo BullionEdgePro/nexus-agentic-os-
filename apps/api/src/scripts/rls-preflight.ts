@@ -317,10 +317,19 @@ async function main(): Promise<void> {
   console.log("\nUnauthenticated routes (must establish their own context)");
   {
     const AUTH_ROUTES = ["employee-auth.ts", "admin-auth.ts"];
+    // Comments stripped FIRST. A doc comment that mentions "messages" or
+    // "tasks" is not a query, and the slice below runs to the next export —
+    // which means it swallows the NEXT function's doc comment too. Together
+    // those flagged recordAdminLogin, which touches only `admins`, a table
+    // deliberately outside tenant scope because scoping the registry of
+    // administrators to a tenant is circular. Reading prose as SQL is the same
+    // mistake this file's own scrubSql() exists to avoid.
     const dbSource = readdirSync(join(root, "..", "..", "packages", "db", "src"))
       .filter((f) => f.endsWith(".ts"))
       .map((f) => readFileSync(join(root, "..", "..", "packages", "db", "src", f), "utf8"))
-      .join("\n");
+      .join("\n")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ");
 
     let checked = 0;
     for (const routeFile of AUTH_ROUTES) {
@@ -345,9 +354,12 @@ async function main(): Promise<void> {
           allOk = line(false, `${routeFile} → ${fn}`, "NOT FOUND in packages/db") && allOk;
           continue;
         }
+        // Stop at the function's OWN closing brace — a top-level `}` in the
+        // first column — rather than at the next export, so nothing that
+        // follows it is read as part of this function.
         const rest = dbSource.slice(start);
-        const next = rest.slice(1).search(/\nexport\s+(?:async\s+)?function\s/);
-        const body = next === -1 ? rest : rest.slice(0, next + 1);
+        const end = rest.search(/\n\}/);
+        const body = end === -1 ? rest : rest.slice(0, end + 2);
 
         const touchesTenantTable = TENANT_TABLES.some((table) =>
           new RegExp(`(^|[^a-z0-9_])${table}([^a-z0-9_]|$)`, "i").test(body)
