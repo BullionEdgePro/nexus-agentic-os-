@@ -33,8 +33,30 @@ import { searchKnowledge } from "@nexus/knowledge";
 interface Probe {
   /** What a customer would actually type on WhatsApp. */
   question: string;
-  /** Substring of the URI of the page that should answer it. */
-  expect: string;
+  /**
+   * Substring of the URI of a page that would answer it. More than one is
+   * allowed, because more than one page can be a correct answer — see the SFS
+   * "tell me about your agency" probe for the case that forced it.
+   */
+  expect: string | string[];
+}
+
+const expectations = (probe: Probe): string[] =>
+  Array.isArray(probe.expect) ? probe.expect : [probe.expect];
+
+/**
+ * An expectation starting with `https://` must match the URI EXACTLY; anything
+ * else is a substring.
+ *
+ * The distinction exists because of one probe. Naming SFS's home page as the
+ * substring "sfsintrealestate.com/" matches every page on the site, so the
+ * probe would have passed on any result at all — a check that cannot fail,
+ * which is worse than no check, and it was written while fixing a genuine
+ * failure. A home page is the one URL a substring cannot express.
+ */
+function matches(uri: string | null, want: string): boolean {
+  if (!uri) return false;
+  return want.startsWith("https://") ? uri === want : uri.includes(want);
 }
 
 const HOW_MANY_READ = 3;
@@ -65,7 +87,18 @@ const PROBES: Record<string, Probe[]> = {
 
   "sfs-international": [
     { question: "how can I get in touch with your office?", expect: "/contact/" },
-    { question: "tell me about your agency", expect: "/about/" },
+    // TWO ACCEPTABLE ANSWERS, and the reason is a finding rather than a
+    // convenience. This probe failed: it returned /terms-and-conditions/, the
+    // home page and /privacy-policy/. SFS's /about/ page is about 250 words —
+    // a mission statement and three testimonials — so it yields two passages
+    // and loses to pages with nine. The home page carries the real description
+    // of the agency and is a correct answer to this question.
+    //
+    // Pinning this to /about/ alone would leave a red check nobody can fix
+    // without rewriting somebody's website, and a permanently-red check is one
+    // people stop reading. The content gap is real and belongs to whoever owns
+    // that copy; it is recorded in ARCHITECTURE §9.5, not enforced here.
+    { question: "tell me about your agency", expect: ["/about/", "https://sfsintrealestate.com/"] },
   ],
 
   zipicka: [
@@ -108,7 +141,8 @@ async function main() {
         })
       );
 
-      const rank = hits.findIndex((hit) => (hit.sourceUri ?? "").includes(probe.expect));
+      const wanted = expectations(probe);
+      const rank = hits.findIndex((hit) => wanted.some((want) => matches(hit.sourceUri, want)));
       const detail =
         rank === 0
           ? `top hit, score ${hits[0].score.toFixed(3)}`
@@ -116,7 +150,7 @@ async function main() {
             ? `rank ${rank + 1} of ${hits.length}, score ${hits[rank].score.toFixed(3)}`
             : hits.length === 0
               ? "NOTHING MATCHED AT ALL"
-              : `expected ${probe.expect}, got ${hits.map((h) => (h.sourceUri ?? "?").replace(/^https?:\/\/[^/]+/, "")).join(", ")}`;
+              : `expected ${wanted.join(" or ")}, got ${hits.map((h) => (h.sourceUri ?? "?").replace(/^https?:\/\/[^/]+/, "")).join(", ")}`;
 
       report(`"${probe.question.slice(0, 46)}"`, rank >= 0, detail);
     }

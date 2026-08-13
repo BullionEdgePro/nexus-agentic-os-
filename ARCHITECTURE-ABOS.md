@@ -482,6 +482,16 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   alef/yaa/taa-marbuta variants, Arabic-Indic digits) so real spelling variation
   matches. Languages beyond those still score 0 and floor at `low` — a
   deliberate floor, not a failure: the lead reaches the inbox, just unranked.
+- **SFS's own pages are thinner than its legal boilerplate.** Its `/about/` is
+  roughly 250 words — a mission statement and three testimonials — so it yields
+  two passages, while `/terms-and-conditions/` yields seven and the home page
+  nine. Asked *"tell me about your agency"*, retrieval returns the terms and the
+  privacy policy above the about page. Nothing is broken; there is simply not
+  much written about the business on the business's website. `/contact/` yields
+  one passage. This is content, not code, and it belongs to whoever owns that
+  copy. Found by `retrieval-check.ts`, which asks a real customer question and
+  names the page that should answer it — the chunk counts alone showed 29
+  passages and looked fine.
 - **Rules are whack-a-mole against adversarial senders.** One spam message still
   reads 30/normal after two rounds of hardening. This is the argument for
   *rules first, model second*, not for more rules.
