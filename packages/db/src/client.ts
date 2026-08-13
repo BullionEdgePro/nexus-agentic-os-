@@ -1,5 +1,10 @@
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
-import { getTenantContext, runWithContext, describeTenantContext } from "./tenant-context.js";
+import {
+  getTenantContext,
+  runWithContext,
+  runWithoutContext,
+  describeTenantContext,
+} from "./tenant-context.js";
 
 let pool: Pool | undefined;
 
@@ -219,6 +224,25 @@ export function withAllTenants<T>(reason: string, fn: () => Promise<T>): Promise
     (client) => ({ scope: "all", reason, client }),
     fn
   );
+}
+
+/**
+ * Runs `fn` with NO tenant context, on a pool connection like any unauthenticated
+ * caller gets.
+ *
+ * This exists for verification, not for feature code. A gate that exercises a
+ * sign-in path from inside `withTenant(...)` proves nothing about that path: the
+ * ambient context makes an unscoped query succeed for the probe and return zero
+ * rows for the real HTTP route, which has no context to inherit. `self-check`
+ * asserted "sign-in lookup by email" and passed, every run, while employee
+ * sign-in was broken in production for every employee — because the check ran
+ * somewhere the caller never stands.
+ *
+ * So: use this to assert that something works for a caller who has proven
+ * nothing yet. Never to escape a scope you are supposed to be inside.
+ */
+export function withoutTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return runWithoutContext(fn);
 }
 
 export { getTenantContext, describeTenantContext };

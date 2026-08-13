@@ -20,6 +20,7 @@ import {
   getPool,
   withTenant,
   withAllTenants,
+  withoutTenant,
   findOrganizationBySlug,
   listOrganizations,
   createEmployee,
@@ -310,15 +311,23 @@ async function main() {
     const code = generateAccessCode();
     check("issue access code", await setEmployeeAccessCodeHash(employee.id, hashAccessCode(code)));
 
-    const byEmail = await findEmployeeForLogin("self-check@nexus.invalid");
-    check("sign-in lookup by email", byEmail?.id === employee.id);
-    const byCode = await findEmployeeForLogin(PROBE_CODE.toUpperCase());
+    // Run the lookups with NO tenant context, because that is the only place
+    // the real caller ever stands: /auth/employee is unauthenticated by
+    // necessity — resolving the identifier is what discovers the tenant.
+    //
+    // These same four checks passed on every run while employee sign-in was
+    // broken in production for every employee, because they inherited the
+    // withTenant(zipicka.id) scope above. The probe held a context the route
+    // could not have, so it exercised a code path the route never reached.
+    const byEmail = await withoutTenant(() => findEmployeeForLogin("self-check@nexus.invalid"));
+    check("sign-in lookup by email, unauthenticated", byEmail?.id === employee.id);
+    const byCode = await withoutTenant(() => findEmployeeForLogin(PROBE_CODE.toUpperCase()));
     check("sign-in lookup is case-insensitive", byCode?.id === employee.id);
     check("correct code verifies", verifyAccessCode(code, byEmail?.accessCodeHash ?? null));
     check("wrong code does not verify", !verifyAccessCode("AAAAA-BBBBB", byEmail?.accessCodeHash ?? null));
     check("scope names the right business", byEmail?.organizationSlug === "zipicka", byEmail?.organizationSlug);
 
-    await recordEmployeeLogin(employee.id);
+    await recordEmployeeLogin(employee.id, zipicka.id);
     check("record login", true);
 
     // The assigned-conversations query — the most intricate SQL in the layer,

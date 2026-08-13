@@ -41,6 +41,11 @@ export function describeTenantContext(): string {
   return context.scope === "tenant" ? `tenant:${context.organizationId}` : `all:${context.reason}`;
 }
 
+/** Runs `fn` with the ambient tenant context removed. See `withoutTenant`. */
+export function runWithoutContext<T>(fn: () => Promise<T>): Promise<T> {
+  return storage.exit(fn);
+}
+
 export function runWithContext<T>(context: TenantContext, fn: () => Promise<T>): Promise<T> {
   return storage.run(context, fn);
 }

@@ -55,7 +55,7 @@ employeeAuthRoute.post("/employee", async (c) => {
 
   // Best-effort: a failed bookkeeping write must not deny a valid sign-in.
   try {
-    await recordEmployeeLogin(candidate.id);
+    await recordEmployeeLogin(candidate.id, candidate.organizationId);
   } catch (err) {
     logger.error({ employeeId: candidate.id, err }, "Failed to record employee login");
   }

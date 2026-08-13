@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants, withTenant } from "./client.js";
 import type { Employee, PresenceSource, PresenceStatus, WeeklySchedule } from "@nexus/shared";
 
 interface EmployeeRow {
@@ -306,16 +306,25 @@ export async function findEmployeeForLogin(
   const needle = identifier.trim().toLowerCase();
   if (!needle) return null;
 
-  const { rows } = await getPool().query<{
-    id: string;
-    organization_id: string;
-    slug: string;
-    org_name: string;
-    full_name: string;
-    employee_code: string;
-    access_code_hash: string | null;
-  }>(
-    `select e.id, e.organization_id, o.slug, o.name as org_name,
+  // Cross-tenant BY NECESSITY: sign-in is the one moment the tenant is not yet
+  // known — resolving the identifier is what discovers it. Without this wrapper
+  // RLS matches no rows, `rows.length !== 1` is true for every employee alive,
+  // and the route reports "no unique active match" for a correct access code.
+  // That is not hypothetical: it is how this function behaved from the day RLS
+  // was switched on until 2026-08-13, and nothing failed loudly enough to say
+  // so — the guard warns, the query returns zero rows, and a legitimate sign-in
+  // is indistinguishable from a wrong code.
+  const { rows } = await withAllTenants("employee sign-in — identifier lookup", () =>
+    getPool().query<{
+      id: string;
+      organization_id: string;
+      slug: string;
+      org_name: string;
+      full_name: string;
+      employee_code: string;
+      access_code_hash: string | null;
+    }>(
+      `select e.id, e.organization_id, o.slug, o.name as org_name,
             e.full_name, e.employee_code, e.access_code_hash
        from employees e
        join organizations o on o.id = e.organization_id
@@ -323,7 +332,8 @@ export async function findEmployeeForLogin(
         and o.is_active = true
         and (lower(e.email) = $1 or lower(e.employee_code) = $1)
       limit 2`,
-    [needle]
+      [needle]
+    )
   );
 
   // Two matches means the identifier is ambiguous across businesses — an
@@ -344,8 +354,23 @@ export async function findEmployeeForLogin(
   };
 }
 
-export async function recordEmployeeLogin(employeeId: string): Promise<void> {
-  await getPool().query(`update employees set last_login_at = now() where id = $1`, [employeeId]);
+/**
+ * Stamp the successful sign-in.
+ *
+ * Takes the organisation because the caller has just resolved it and an
+ * unscoped `update` here fails in the quietest way available: RLS matches no
+ * rows, the statement SUCCEEDS with a row count of zero, and the caller's
+ * best-effort try/catch has nothing to catch. `last_login_at` simply never
+ * moves, which reads as "nobody has ever signed in" — the same thing an unused
+ * account looks like.
+ */
+export async function recordEmployeeLogin(
+  employeeId: string,
+  organizationId: string
+): Promise<void> {
+  await withTenant(organizationId, () =>
+    getPool().query(`update employees set last_login_at = now() where id = $1`, [employeeId])
+  );
 }
 
 export interface AssignedConversation {
