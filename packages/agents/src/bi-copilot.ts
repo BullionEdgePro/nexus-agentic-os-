@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { completeText } from "./anthropic-text.js";
 import { getPool } from "@nexus/db";
 
 /**
@@ -220,32 +220,21 @@ interface Routed {
  * doing it, and the user has no way to tell.
  */
 async function route(question: string): Promise<Routed> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { id: null, days: 30 };
+  if (!process.env.ANTHROPIC_API_KEY) return { id: null, days: 30 };
 
-  const ai = new GoogleGenAI({ apiKey });
   const menu = QUESTIONS.map((q) => `${q.id}: ${q.describes}`).join("\n");
 
-  const response = await ai.models.generateContent({
-    model: process.env.NEXUS_ROUTER_MODEL ?? "gemini-3.5-flash",
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text:
-              `Match the user's question to one of these, or to none.\n\n${menu}\n\n` +
+  const routed = await completeText({
+    prompt:
+      `Match the user's question to one of these, or to none.\n\n${menu}\n\n` +
               `User question: "${question}"\n\n` +
               `Reply with JSON only: {"id": "<one id or null>", "days": <number of days the question covers, default 30>}. ` +
               `Use null when the question is not clearly one of the listed ones. Do not guess.`,
-          },
-        ],
-      },
-    ],
+    maxTokens: 100,
   });
 
   try {
-    const text = (response.text ?? "").replace(/```json|```/g, "").trim();
+    const text = (routed ?? "").replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(text) as { id?: string | null; days?: number };
     const id = parsed.id && QUESTIONS.some((q) => q.id === parsed.id) ? parsed.id : null;
     // Clamped, not trusted. The model supplies this and it reaches a query.

@@ -20,7 +20,18 @@ const MAX_TOOL_ITERATIONS = 4;
 export class AnthropicDomainAgent implements DomainAgent {
   constructor(
     public readonly config: AgentConfig,
-    private readonly businessSlug: BusinessSlug
+    private readonly businessSlug: BusinessSlug,
+    /**
+     * Present when this agent is an employee's twin rather than the org agent.
+     *
+     * Carried over from the Gemini agent when the reply path moved to
+     * Anthropic. It is not cosmetic: it reaches the tool context and scopes
+     * knowledge retrieval to tenant-wide sources PLUS this employee's own.
+     * Omitting it compiles, runs, and quietly answers every twin from the
+     * tenant default — an employee's own SOPs would simply stop being found,
+     * with no error and a plausible-looking reply.
+     */
+    private readonly employeeId: string | null = null
   ) {}
 
   async respond(
@@ -34,6 +45,7 @@ export class AnthropicDomainAgent implements DomainAgent {
       organizationId: event.organizationId,
       businessSlug: this.businessSlug,
       contactWaId: event.contactWaId,
+      employeeId: this.employeeId,
     };
 
     const messages: Anthropic.MessageParam[] = [

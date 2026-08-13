@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { completeText } from "./anthropic-text.js";
 import { listOpenTasksForConversation, type TaskRecord } from "@nexus/db";
 import { loadRecentHistory } from "./switchboard.js";
 
@@ -157,8 +157,7 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
     return EMPTY("Nothing has been said in this conversation yet.", 0, followUps);
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return EMPTY("Summaries are not configured on this deployment.", history.length, followUps);
   }
 
@@ -167,16 +166,9 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
     .join("\n");
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: process.env.NEXUS_ROUTER_MODEL ?? "gemini-3.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text:
-                `A colleague is about to continue this WhatsApp conversation from their own phone. ` +
+    const drafted = await completeText({
+      prompt:
+        `A colleague is about to continue this WhatsApp conversation from their own phone. ` +
                 `Write them two or three sentences covering, in this order: anything we have already ` +
                 `promised or committed to, what the customer is actually asking for, and what is still ` +
                 `unresolved.\n\n` +
@@ -184,13 +176,9 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
                 `than filling it in — they are about to act on this, and a confident guess is worse ` +
                 `than an admitted gap. Write plainly, no preamble, no bullet points.\n\n` +
                 `Transcript:\n${transcript}`,
-            },
-          ],
-        },
-      ],
+      maxTokens: 400,
     });
-
-    const summary = (response.text ?? "").trim();
+    const summary = (drafted ?? "").trim();
     if (!summary) return EMPTY("The summary came back empty.", history.length, followUps);
 
     return {

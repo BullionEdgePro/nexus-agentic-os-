@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { completeText } from "./anthropic-text.js";
 import { getContactMemory, upsertContactMemory } from "@nexus/db";
 import { loadRecentHistory } from "./switchboard.js";
 
@@ -27,8 +27,7 @@ export async function rememberContact(input: {
   contactId: string;
   conversationId: string;
 }): Promise<{ written: boolean; reason?: string }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { written: false, reason: "no api key" };
+  if (!process.env.ANTHROPIC_API_KEY) return { written: false, reason: "no api key" };
 
   const history = await loadRecentHistory(input.conversationId, 40);
   if (history.length < MIN_MESSAGES_TO_REMEMBER) {
@@ -44,16 +43,9 @@ export async function rememberContact(input: {
   const existing = await getContactMemory(input.organizationId, input.contactId);
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: process.env.NEXUS_ROUTER_MODEL ?? "gemini-3.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text:
-                `Keep a short standing note about this customer so a colleague picking up a future ` +
+    const summary_ = await completeText({
+      prompt:
+        `Keep a short standing note about this customer so a colleague picking up a future ` +
                 `conversation knows who they are.\n\n` +
                 (existing ? `Existing note:\n${existing.summary}\n\n` : "") +
                 `Latest conversation:\n${transcript}\n\n` +
@@ -62,13 +54,9 @@ export async function rememberContact(input: {
                 `budget, seniority, urgency or intent from tone — a guess written down becomes a ` +
                 `fact the next reader acts on. If the existing note is contradicted by the latest ` +
                 `conversation, prefer the latest. No preamble.`,
-            },
-          ],
-        },
-      ],
+      maxTokens: 300,
     });
-
-    const summary = (response.text ?? "").trim().slice(0, MAX_MEMORY_CHARS);
+    const summary = (summary_ ?? "").trim().slice(0, MAX_MEMORY_CHARS);
     if (!summary) return { written: false, reason: "empty summary" };
 
     await upsertContactMemory({

@@ -1,7 +1,18 @@
 import { getPool } from "@nexus/db";
 import type { AgentConfig, Employee, InboundMessageEvent, Organization } from "@nexus/shared";
 import { composeTwinSystemPrompt } from "@nexus/employees";
-import { GeminiDomainAgent } from "./gemini-domain-agent.js";
+// THE CUSTOMER REPLY PATH RUNS ON ANTHROPIC.
+//
+// GeminiDomainAgent is gone from this file. It is the same interface and the
+// same per-tenant config — the agent's behaviour comes from its agent_configs
+// row, not from the class — so a tenant's system prompt, tool allowlist and RAG
+// collection are untouched by the swap. What changes is which vendor generates
+// the words a customer reads, and which quota that draws on.
+//
+// The `model` column on each agent_configs row must hold an Anthropic model id
+// after this. Migration 030 rewrites them; a row still naming a Gemini model
+// would fail at request time with a 404 on every message that tenant receives.
+import { AnthropicDomainAgent } from "./domain-agent.js";
 import type { ConversationTurn, DomainAgent } from "./types.js";
 
 interface AgentConfigRow {
@@ -47,7 +58,7 @@ export type AgentTenant = Pick<Organization, "id" | "slug">;
 export async function routeToDomainAgent(tenant: AgentTenant): Promise<DomainAgent | null> {
   const config = await loadActiveAgentConfig(tenant.id);
   if (!config) return null;
-  return new GeminiDomainAgent(config, tenant.slug);
+  return new AnthropicDomainAgent(config, tenant.slug);
 }
 
 /**
@@ -66,7 +77,7 @@ export async function routeToEmployeeTwin(
   if (!config) return null;
 
   if (!employee || !employee.twinEnabled) {
-    return new GeminiDomainAgent(config, tenant.slug);
+    return new AnthropicDomainAgent(config, tenant.slug);
   }
 
   const twinConfig: AgentConfig = {
@@ -80,7 +91,7 @@ export async function routeToEmployeeTwin(
     ragCollection: employee.knowledgeCollection ?? config.ragCollection,
   };
 
-  return new GeminiDomainAgent(twinConfig, tenant.slug, employee.id);
+  return new AnthropicDomainAgent(twinConfig, tenant.slug, employee.id);
 }
 
 async function loadActiveAgentConfig(organizationId: string): Promise<AgentConfig | null> {

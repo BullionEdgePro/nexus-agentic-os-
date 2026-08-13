@@ -1,3 +1,7 @@
+import Anthropic from "@anthropic-ai/sdk";
+// Still Google, and only here. Embeddings are the one call Anthropic cannot
+// serve, so this file now pings two vendors — which is the new architecture
+// stated in code rather than in a comment somewhere else.
 import { GoogleGenAI } from "@google/genai";
 import { getPool, withAllTenants } from "@nexus/db";
 import { EMBEDDING_MODEL } from "@nexus/knowledge";
@@ -45,6 +49,7 @@ export async function preflightModels(): Promise<ModelPreflightResult[]> {
          group by model`
       )
   );
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
   // The embedding model is subject to exactly the same silent-retirement risk
@@ -66,10 +71,18 @@ export async function preflightModels(): Promise<ModelPreflightResult[]> {
       try {
         // Smallest possible real call — a bad model name fails here the same
         // way it would on a customer's message, which is the point.
-        await ai.models.generateContent({
+        // Smallest real call this vendor accepts. It costs a token and it is
+        // the only thing that distinguishes "configured" from "callable" —
+        // a key with no credit lists models happily and fails on use.
+        //
+        // This is also the earliest possible detection of the failure that
+        // silently disabled the governance judge: an Anthropic key with a zero
+        // balance answers every request with 400 "credit balance is too low",
+        // and until this ran on the right vendor nothing said so at boot.
+        await anthropic.messages.create({
           model,
-          contents: "ping",
-          config: { maxOutputTokens: 1 },
+          max_tokens: 1,
+          messages: [{ role: "user", content: "ping" }],
         });
         return { model, tenants, ok: true };
       } catch (err) {
