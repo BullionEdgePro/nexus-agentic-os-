@@ -8,6 +8,7 @@ import {
 // Pure and rules-based — no model call, so using it here keeps operators within
 // the property that makes them cheap enough to run every ten minutes.
 import { scoreLead } from "@nexus/leads";
+import { JUDGE_UNAVAILABLE } from "@nexus/governance";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -424,12 +425,77 @@ const thinKnowledge: Operator = {
   },
 };
 
+/**
+ * Governance is not actually judging anything.
+ *
+ * FOUND IN PRODUCTION 2026-08-13, by generating one reply per business and
+ * reading the verdict beside it. The Anthropic key has no credit, so every
+ * judge call throws and `evaluateHallucinationRisk` returns "medium". That
+ * value is not a verdict; it is the absence of one, and nothing downstream can
+ * tell the difference:
+ *
+ *   juris-prime, juris-prime-legal, abr — not on the medium-tolerant allowlist,
+ *     so `shouldEscalateReply` returns true for EVERY reply. Three businesses
+ *     escalating everything they generate, and with an empty rota that means
+ *     the customer gets the no-staff fallback instead of the good, grounded
+ *     answer the agent actually wrote.
+ *
+ *   zipicka, sfs-international — tolerant of medium, so every reply goes out
+ *     having been checked by nothing at all.
+ *
+ * Neither state raises an error. The deck shows "hallucination risk medium",
+ * which reads exactly like a judge that ran.
+ *
+ * This operator calls no model, which is the property that matters: it has to
+ * work on the day the models are the thing that is broken. It counts recent
+ * evaluations whose notes carry the marker the judge writes when it cannot be
+ * reached.
+ */
+const JUDGE_LOOKBACK_HOURS = 24;
+
+const judgeOffline: Operator = {
+  slug: "judge-offline",
+  title: "Governance is not checking replies",
+  description:
+    "The hallucination judge could not be reached, so every reply is being recorded as medium risk without being examined. Strict businesses escalate everything; tolerant ones send everything unchecked.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{ failed: string; total: string }>(
+      `select count(*) filter (where notes like $2 || '%')::text as failed,
+              count(*)::text                                     as total
+         from ai_message_evaluations
+        where organization_id = $1
+          and created_at > now() - ($3 || ' hours')::interval`,
+      [organizationId, JUDGE_UNAVAILABLE, String(JUDGE_LOOKBACK_HOURS)]
+    );
+
+    const failed = Number(rows[0]?.failed ?? 0);
+    const total = Number(rows[0]?.total ?? 0);
+    if (failed === 0) return [];
+
+    // Urgent whenever it is happening at all. A judge that fails intermittently
+    // is not a degraded judge — it is one whose verdicts you cannot trust,
+    // because a "medium" from a working call and a "medium" from a failed one
+    // are the same row.
+    return [
+      {
+        fingerprint: "judge-unavailable",
+        severity: "urgent" as const,
+        title: `Governance did not examine ${plural(failed, "reply", "replies")}`,
+        detail: `${failed} of ${total} evaluations in the last ${JUDGE_LOOKBACK_HOURS} hours recorded the judge as unreachable, and each was stored as "medium" risk without being read. Usually a model API key that is out of credit or over quota.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   overdueFollowUp,
   unownedFollowUp,
   brokenKnowledge,
   thinKnowledge,
+  judgeOffline,
 ];
 
 export interface OperatorRunSummary {

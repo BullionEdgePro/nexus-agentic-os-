@@ -13,6 +13,15 @@ export interface HallucinationCheckInput {
   ragContext?: string; // retrieved knowledge-base passages the reply should be grounded in, if any
 }
 
+/**
+ * Marker written into the notes when the judge could not be reached.
+ *
+ * Exported and matched on rather than re-typed as a string literal in two
+ * places: an operator that searches for text a developer might reword is an
+ * operator that goes quiet the day somebody improves the wording.
+ */
+export const JUDGE_UNAVAILABLE = "GOVERNANCE JUDGE UNAVAILABLE —";
+
 export interface HallucinationCheckResult {
   risk: HallucinationRisk;
   notes: string;
@@ -73,9 +82,26 @@ export async function evaluateHallucinationRisk(
     }
     return { risk: "medium", notes: "Judge returned an unparseable response." };
   } catch (err) {
+    // "medium" IS NOT A VERDICT HERE, IT IS THE ABSENCE OF ONE, and the two are
+    // indistinguishable to every consumer downstream.
+    //
+    // Found in production 2026-08-13: the Anthropic key has no credit, so every
+    // judge call had been throwing and returning this. `shouldEscalateReply`
+    // escalates on medium for every tenant outside the tolerant allowlist, so
+    // the three legal businesses were escalating every reply they generated,
+    // while zipicka and sfs-international were sending replies nobody had
+    // checked. Neither shows as an error. The deck reports "hallucination risk
+    // medium" and that reads like the judge did its job.
+    //
+    // The value stays "medium" deliberately — it is the safe reading, and
+    // changing the enum would push a new state into every consumer. What
+    // changes is that the note now carries a MACHINE-MATCHABLE marker, so the
+    // `judge-offline` operator can count these without a model call and say
+    // out loud that governance is not running. See apps/api/src/services/
+    // operators.ts.
     return {
       risk: "medium",
-      notes: `Judge call failed, defaulting to medium: ${err instanceof Error ? err.message : String(err)}`,
+      notes: `${JUDGE_UNAVAILABLE} ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }
