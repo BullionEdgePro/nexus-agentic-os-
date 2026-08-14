@@ -37,6 +37,7 @@ import {
   rememberContact,
   describeOpenFollowUps,
   upcomingBookingsNote,
+  classifyIntent,
 } from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
@@ -76,28 +77,14 @@ const FALLBACK_REPLY_NO_STAFF =
 // classify and never answer the menu, re-asking forever is worse than silence.
 const MAX_TRIAGE_ATTEMPTS = 3;
 
-// Map the tool the agent chose to a coarse intent label for analytics. A tool
-// call is a strong, free, deterministic intent signal — no extra LLM call.
-// A reply with no tool use is treated as a general inquiry (intent = null).
-const TOOL_INTENT: Record<string, string> = {
-  check_inventory: "inventory_inquiry",
-  book_appointment: "appointment_booking",
-  // Asking for times IS the booking intent, whether or not the customer went on
-  // to take one. Left out, every conversation that got as far as being offered a
-  // slot and then stalled would be filed as a general enquiry — which hides the
-  // one number worth watching on a new feature: how many people were offered an
-  // appointment and did not take it.
-  check_availability: "appointment_booking",
-  search_knowledge: "knowledge_lookup",
-};
-
-function deriveIntent(toolCalls: Array<{ name: string }>): string | null {
-  for (const call of toolCalls) {
-    const intent = TOOL_INTENT[call.name];
-    if (intent) return intent;
-  }
-  return null;
-}
+// Intent classification moved to `classifyIntent` (@nexus/agents/intent.ts).
+//
+// It used to live here as a tool-only lookup returning null when no tool fired,
+// which was 83% of production traffic — so F5's pooled store had almost no
+// source to read and could never have filled, however many businesses signed
+// up. The replacement also reads the message text, via the bilingual rules lead
+// scoring already runs, and returns `unknown` rather than null when it cannot
+// place a message. Null now means the classifier did not run at all.
 
 // Time from the customer's message to our reply, in ms. Guards against clock
 // skew / malformed timestamps and caps at 24h so a stray value can't overflow
@@ -576,7 +563,7 @@ async function processSingleTextMessage(
     await recordMetricBestEffort({
       organizationId: organization.id,
       conversationId,
-      intent: deriveIntent(result.toolCalls),
+      intent: classifyIntent({ text: message.text?.body, toolCalls: result.toolCalls }).intent,
       resolvedBy: shouldEscalate ? "human_agent" : "ai_agent",
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,

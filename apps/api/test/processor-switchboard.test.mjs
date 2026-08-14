@@ -7,6 +7,8 @@
 // classifier nothing calls is decoration.
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { classifyIntent } from "../../../packages/agents/src/intent.ts";
+
 
 // Imported before the mocks are installed, so these are the REAL implementations
 // and the scenarios below exercise genuine classification rather than a stub
@@ -128,6 +130,11 @@ mock.module("@nexus/db", {
 
 mock.module("@nexus/agents", {
   exports: {
+    // The REAL classifier, imported by path so it bypasses this very mock.
+    // Stubbing it would have these tests assert against a classification no
+    // customer message ever produces, and would hide the case that matters:
+    // the reply path writing a NULL intent, which F5 cannot see.
+    classifyIntent,
     // Memory is an enhancement on the reply path; these tests are about the
     // reply itself. Returning "no memory" is the honest default — a mock that
     // supplied one would test a code path the assertions do not check.

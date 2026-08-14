@@ -1,4 +1,5 @@
 import { getPool } from "./client.js";
+import { NON_PATTERN_INTENTS } from "@nexus/shared";
 
 /**
  * Agent quality, measured by what humans did rather than by what the AI thinks.
@@ -253,6 +254,13 @@ export async function getEscalationHotspots(
          from conversation_metrics
         where organization_id = $1
           and intent is not null
+          -- Same exclusion as the F5 rollup, for a sharper version of the same
+          -- reason. This ranking exists to send someone to fix a knowledge gap.
+          -- inbound_pitch is spam and is the largest share of traffic on this
+          -- number, so it would head the list and send them to write a help
+          -- page for spammers; unknown is not an enquiry type at all, and "fix
+          -- the unknown intent" is not an action anyone can take.
+          and intent <> all($4::text[])
           and recorded_at > now() - ($2::integer * interval '1 day')
         group by conversation_id
      )
@@ -264,7 +272,7 @@ export async function getEscalationHotspots(
      having count(*) >= $3
       order by (count(*) filter (where escalated))::numeric / count(*) desc, count(*) desc
       limit 8`,
-    [organizationId, days, minConversations]
+    [organizationId, days, minConversations, NON_PATTERN_INTENTS]
   );
 
   return rows.map((row) => ({

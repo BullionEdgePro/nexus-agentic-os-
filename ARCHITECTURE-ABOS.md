@@ -214,8 +214,9 @@ demonstrably been sent.
 
 ### ✅ Phase 0 — Survivability
 ### ✅ Phase 2 — Knowledge
-Remaining: connectors beyond URL (Shopify, Drive, PDFs, OCR); Neural Brain (F5);
-layered memory (F10) formalisation.
+Remaining: connectors beyond URL (Shopify, Drive, PDFs, OCR); Neural Brain (F5)
+— store built, intent classification built 2026-08-14, consumer deliberately not
+built (§9.2); layered memory (F10) formalisation.
 ### 🟡 Phase 3 — Revenue surface
 Lead intelligence done. **Campaign engine (F4) not started** — see §2.5.
 ### ⛔ Phase 4 — Workspace & Operators
@@ -452,6 +453,28 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   two-tenant threshold correctly serves nothing today. Wiring a consumer to a
   permanently-empty source is how you get code nobody can tell is broken. Revisit
   when a second business contributes.
+
+  **Correction, 2026-08-14 — the store was empty for a second and more
+  fundamental reason, and that one was a defect.** F5 pools conversations
+  carrying an intent; intent was derived from tool calls alone; 83% of
+  production traffic fires no tool. So five sixths of the platform was written
+  with a NULL intent and was invisible to the store, which would not have filled
+  when a second business arrived either. The two emptinesses were
+  indistinguishable from outside — both are an empty table — and only one of
+  them was ever going to be fixed by waiting.
+
+  Fixed by `classifyIntent` (`packages/agents/src/intent.ts`), which reads the
+  message text through the bilingual rules lead scoring already runs, so there
+  is no new model call and no second keyword list to drift out of step. Three
+  decisions in it are load-bearing: `unknown` is returned rather than a
+  friendly-sounding default, so NULL now means the classifier did not run and is
+  a real signal; `unknown` and `inbound_pitch` are stored but excluded from
+  pooling, because spam is the largest share of traffic on this number and would
+  otherwise have been the first pattern to qualify and the first thing the
+  Neural Brain ever said; and `getBrainStatus` now reports coverage and names it
+  as the binding constraint ahead of the tenant count.
+
+  The consumer is still not built, and the reasoning above still holds.
 - **Deck overview on rollups (F9 remainder).** The rollup pattern exists
   (`agent_quality_daily`). Converting the overview at fourteen conversations buys
   nothing and adds a staleness failure mode. Revisit when volume justifies it.

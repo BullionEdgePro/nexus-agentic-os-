@@ -1,5 +1,6 @@
 import { getPool } from "./client.js";
 import type { ConversationMetricInput, OverviewMetrics, SenderType } from "@nexus/shared";
+import { NON_PATTERN_INTENTS } from "@nexus/shared";
 
 /**
  * Records one analytics row per handled inbound message: token spend,
@@ -51,10 +52,18 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
       `select count(*)::text n from ai_message_evaluations
        where evaluated_at >= now() - interval '24 hours' and (pii_flagged or hallucination_risk = 'high')`
     ),
+    // "What are customers asking about" — so the same exclusion as the F5
+    // rollup and the escalation hotspots. unknown is not a subject and
+    // inbound_pitch is not a customer; together they are the majority of
+    // traffic, and unfiltered they would fill most of a six-slot chart with
+    // neither. How much traffic they account for is a real number, but it is a
+    // coverage number and it is reported as one — see getIntentCoverage.
     pool.query<{ intent: string | null; c: string }>(
       `select intent, count(*)::text c from conversation_metrics
        where recorded_at >= now() - interval '7 days' and intent is not null
-       group by intent order by count(*) desc limit 6`
+         and intent <> all($1::text[])
+       group by intent order by count(*) desc limit 6`,
+      [NON_PATTERN_INTENTS]
     ),
     pool.query<{ slug: string; name: string; mc: string; oc: string }>(
       `select o.slug, o.name,
