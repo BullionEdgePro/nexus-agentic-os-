@@ -61,6 +61,43 @@ export interface TeamMember {
   isActive: boolean;
   whatsappReady: boolean;
   presence: { status: string; source: string; shouldTwinRespond: boolean };
+  timezone: string;
+  workingHours: WeeklySchedule;
+  breakSchedule: WeeklySchedule;
+  /**
+   * Hours a week the rota covers, computed server-side.
+   *
+   * Zero means the person is NOT bookable and will not be offered for
+   * escalation. That is deliberate behaviour, not a bug — but it was invisible
+   * on this screen for the whole life of the employee layer, so it is now a
+   * value the UI can show rather than a consequence somebody discovers later.
+   */
+  weeklyHours: number;
+}
+
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export interface TimeWindow {
+  start: string;
+  end: string;
+}
+export type WeeklySchedule = Partial<Record<Weekday, TimeWindow[]>>;
+
+/**
+ * Save an employee's rota.
+ *
+ * Rejects with the day and window named when a time is malformed, rather than
+ * storing jsonb that reads back as "never working". Returns the recomputed
+ * weekly hours so the caller can show what was actually stored.
+ */
+export function saveSchedule(
+  orgSlug: BusinessSlug,
+  employeeId: string,
+  input: { workingHours?: WeeklySchedule; breakSchedule?: WeeklySchedule; timezone?: string }
+): Promise<{ employee: TeamMember; weeklyHours: number; presence: TeamMember["presence"] }> {
+  return request(`/api/organizations/${orgSlug}/employees/${employeeId}/schedule`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export interface DirectContact {

@@ -13,6 +13,7 @@ import {
   pauseAiForContact,
   getConversationRouting,
   setEmployeeAccessCodeHash,
+  updateEmployeeSchedule,
 } from "@nexus/db";
 import {
   buildDirectContact,
@@ -20,6 +21,8 @@ import {
   resolvePresence,
   generateAccessCode,
   hashAccessCode,
+  parseWeeklySchedule,
+  weeklyHours,
 } from "@nexus/employees";
 import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
 import { publishInboxEvent } from "../lib/pubsub.js";
@@ -60,6 +63,12 @@ employeesRoute.get("/:slug/employees", async (c) => {
       digitalSignature: undefined,
       presence: resolvePresence(employee),
       whatsappReady: normalizeWhatsAppNumber(employee.whatsappNumber) !== null,
+      // Derived here rather than in the browser so the list can say "0 hours"
+      // out loud. An employee with an empty rota is not bookable and will not
+      // be offered for escalation — true since the employee layer shipped, and
+      // invisible on this screen until now, which is how every business ended
+      // up permanently off-shift without anybody seeing a fault.
+      weeklyHours: weeklyHours(employee.workingHours),
     })),
   });
 });
@@ -134,6 +143,77 @@ employeesRoute.delete("/:slug/employees/:employeeId", async (c) => {
 
   const changed = await deactivateEmployee(employee.id);
   return c.json({ deactivated: changed, employeeId: employee.id });
+});
+
+/**
+ * Set an employee's rota.
+ *
+ * THE MISSING HALF OF THE EMPLOYEE LAYER. Nothing anywhere could write
+ * `working_hours` until 2026-08-14, so every employee created through the
+ * product had an empty one — and an empty rota means NOT available, on purpose.
+ * The result was an employee layer that shipped, worked, and was permanently
+ * off-shift: the agent would not promise a specialist and, once appointments
+ * landed, could not offer a single slot.
+ *
+ * Validated before it is stored, and this is the part that matters. `jsonb`
+ * accepts any shape at all, so `{"Monday": [...]}` or `{"mon": [{"from":
+ * "9am"}]}` would save cleanly and read back as a rota matching no window,
+ * ever — the person silently unbookable with nothing to see. Errors name the
+ * day and the window so whoever typed it can fix it.
+ *
+ * Not operator-only. Someone changing their own working hours is the most
+ * ordinary thing on this screen, and `requireTenantScope` has already pinned the
+ * :slug to the caller's business. The employee-belongs-to-this-org check below
+ * is what stops one business editing another's rota.
+ */
+employeesRoute.patch("/:slug/employees/:employeeId/schedule", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const employee = await findEmployeeById(c.req.param("employeeId"));
+  if (!employee || employee.organizationId !== organization.id) {
+    // Same 404 for "no such employee" and "not yours" — telling one business
+    // that an id exists elsewhere is an answer it has no reason to have.
+    return c.json({ error: "Employee not found" }, 404);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: "Nothing to change." }, 400);
+
+  const working = "workingHours" in body ? parseWeeklySchedule(body.workingHours) : null;
+  const breaks = "breakSchedule" in body ? parseWeeklySchedule(body.breakSchedule) : null;
+
+  const errors = [...(working?.errors ?? []), ...(breaks?.errors ?? [])];
+  if (errors.length > 0) {
+    // 400 with every problem at once, not the first. An editor that reports one
+    // bad window per save turns a five-day rota into five round trips.
+    return c.json({ error: errors.join(" "), errors }, 400);
+  }
+
+  const updated = await updateEmployeeSchedule(employee.id, {
+    workingHours: working?.schedule,
+    breakSchedule: breaks?.schedule,
+    timezone: typeof body.timezone === "string" && body.timezone.trim() ? body.timezone.trim() : undefined,
+  });
+  if (!updated) return c.json({ error: "Employee not found" }, 404);
+
+  const hours = weeklyHours(updated.workingHours);
+  logger.info(
+    { employeeId: updated.id, organization: organization.slug, weeklyHours: hours },
+    hours === 0
+      ? "Rota saved with no working hours — this employee is not bookable and will not be offered for escalation"
+      : "Rota saved"
+  );
+
+  // `weeklyHours` and `presence` ride along so the screen can say what the rota
+  // MEANS rather than only what it says. A saved rota totalling zero hours is
+  // the exact state this endpoint exists to make visible, so it is reported
+  // rather than left for someone to infer from an empty diary later.
+  return c.json({
+    employee: { ...updated, digitalSignature: undefined },
+    weeklyHours: hours,
+    presence: resolvePresence(updated),
+  });
 });
 
 /**

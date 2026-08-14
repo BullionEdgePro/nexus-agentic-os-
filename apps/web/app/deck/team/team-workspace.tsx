@@ -18,6 +18,7 @@ import {
   type HandoverBrief,
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
+import { RotaEditor } from "./rota-editor";
 import "../deck.css";
 import "./team.css";
 
@@ -362,6 +363,17 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                     <span className="wa">
                       {member.whatsappReady ? member.whatsappNumber : "no WhatsApp number"}
                     </span>
+                    {/*
+                      An unset rota is called out in the list, not only inside
+                      the editor. Somebody with no hours is never offered an
+                      appointment and never promised to a customer on
+                      escalation — correct behaviour, and previously invisible
+                      here, which is how every business ended up permanently
+                      off-shift with nothing to see.
+                    */}
+                    {member.isActive && (member.weeklyHours ?? 0) === 0 ? (
+                      <span className="team-norota">no hours set</span>
+                    ) : null}
                   </button>
                   <button
                     type="button"
@@ -381,6 +393,24 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                   >
                     Remove
                   </button>
+                  {selected?.id === member.id ? (
+                    <RotaEditor
+                      business={business}
+                      member={member}
+                      onSaved={(updated) => {
+                        // Replace in place rather than refetching the list. A
+                        // reload would drop the selection and close the editor
+                        // the moment somebody saved, which reads as the save
+                        // having failed.
+                        setTeam((current) =>
+                          current.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+                        );
+                        setSelected((current) =>
+                          current && current.id === updated.id ? { ...current, ...updated } : current
+                        );
+                      }}
+                    />
+                  ) : null}
                 </li>
               ))}
             </ul>

@@ -260,6 +260,51 @@ export async function deactivateEmployee(employeeId: string): Promise<boolean> {
 }
 
 /**
+ * Set an employee's working hours and breaks.
+ *
+ * THERE WAS NO WRITER FOR THESE COLUMNS AT ALL until 2026-08-14, and the gap was
+ * invisible because nothing errored: `createEmployee` does not take a rota, so
+ * every employee ever created through the product arrived with `working_hours =
+ * '{}'`. `isScheduledThroughout` and `hasStaffOnShift` both treat an empty rota
+ * as NOT available — deliberately, because promising a person nobody has said is
+ * working is the failure those functions exist to prevent. The consequence was
+ * that the entire employee layer was, in production, permanently off-shift.
+ *
+ * It surfaced only when appointments shipped and the diary could offer nothing:
+ * an agent politely declining to book, forever, with every container green. The
+ * bookings self-check had to set a probe rota with raw SQL because this function
+ * did not exist, which was the tell.
+ *
+ * Validation belongs to `parseWeeklySchedule` in @nexus/employees, at the route,
+ * so a bad rota is rejected with the day and window named rather than stored as
+ * jsonb that reads back as "never working". This function takes an already
+ * validated schedule and does not re-check it — one validator, at the edge.
+ */
+export async function updateEmployeeSchedule(
+  employeeId: string,
+  input: { workingHours?: WeeklySchedule; breakSchedule?: WeeklySchedule; timezone?: string }
+): Promise<Employee | null> {
+  const { rows } = await getPool().query<EmployeeRow>(
+    `update employees
+        set working_hours  = coalesce($2::jsonb, working_hours),
+            break_schedule = coalesce($3::jsonb, break_schedule),
+            -- Timezone travels with the rota because it is meaningless without
+            -- one: "09:00–17:00" is not a fact until you know whose morning.
+            timezone       = coalesce($4, timezone),
+            updated_at     = now()
+      where id = $1
+      returning *`,
+    [
+      employeeId,
+      input.workingHours ? JSON.stringify(input.workingHours) : null,
+      input.breakSchedule ? JSON.stringify(input.breakSchedule) : null,
+      input.timezone ?? null,
+    ]
+  );
+  return rows[0] ? toEmployee(rows[0]) : null;
+}
+
+/**
  * Store a freshly issued access code hash, replacing any previous one.
  *
  * Reissuing is the whole recovery story: there is no reset flow because there
