@@ -7,8 +7,63 @@ import { getPool, withAllTenants } from "./client.js";
 const here = dirname(fileURLToPath(import.meta.url));
 config({ path: join(here, "..", "..", "..", ".env") }); // monorepo root .env, regardless of cwd
 
+/**
+ * MIGRATIONS RUN AS THE OWNER. THE APPLICATION ROLE CANNOT RUN THEM, BY DESIGN.
+ *
+ * `nexus_app` is the least-privilege role migration 006 created: usage on the
+ * schema and DML on tables, and deliberately no CREATE. That is not an
+ * oversight to work around — it is load-bearing. RLS policies do not apply to a
+ * table's owner, so the application MUST connect as a non-owner or every policy
+ * in migration 018 silently stops enforcing. `rls-verify` asserts exactly that.
+ *
+ * Which makes `docker compose exec api npm run db:migrate` wrong, and it was
+ * only discovered on 2026-08-14 when a migration finally ran under strict:
+ * `permission denied for schema public` (42501), thirty lines into a stack
+ * trace, after the runner had already connected and begun work.
+ *
+ * So the connection is chosen explicitly here. `MIGRATION_DATABASE_URL` should
+ * carry owner credentials; without it this falls back to `DATABASE_URL`, which
+ * is right for local development where they are the same role and wrong in
+ * production — which is what the preflight below exists to say out loud.
+ *
+ * Assigned before any query, because the pool is built lazily on first use.
+ */
+if (process.env.MIGRATION_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.MIGRATION_DATABASE_URL;
+}
+
 const schemaPath = join(here, "..", "schema.sql");
 const migrationsDir = join(here, "..", "migrations");
+
+/**
+ * Refuse to start rather than fail a third of the way in.
+ *
+ * The failure this replaces was not that the migration stopped — it is that it
+ * stopped AFTER connecting, in a Postgres error naming a schema, with nothing
+ * anywhere saying "you are connected as the wrong role". An operator reading it
+ * has to already know the answer to understand the question.
+ *
+ * Checked with `has_schema_privilege` rather than by attempting DDL and
+ * catching, so nothing is half-applied before the problem is known.
+ */
+async function assertCanMigrate(): Promise<void> {
+  const { rows } = await getPool().query<{ role: string; can_create: boolean }>(
+    `select current_user as role,
+            has_schema_privilege(current_user, 'public', 'CREATE') as can_create`
+  );
+  const { role, can_create } = rows[0] ?? { role: "unknown", can_create: false };
+  if (can_create) {
+    console.log(`Connected as "${role}" — able to run DDL.`);
+    return;
+  }
+  throw new Error(
+    `Connected as "${role}", which has no CREATE on schema public, so migrations cannot run. ` +
+      `That role is the least-privilege application role and is meant to lack DDL — RLS would ` +
+      `stop enforcing if the app owned its tables. Run migrations as the owner instead: set ` +
+      `MIGRATION_DATABASE_URL to owner credentials, or apply the file directly with ` +
+      `\`docker exec -i <postgres> psql -U <owner> -d <db> -v ON_ERROR_STOP=1 -f -\`.`
+  );
+}
 
 /**
  * schema.sql is the fresh-install baseline and is NOT idempotent (plain
@@ -61,6 +116,8 @@ async function isFreshDatabase(): Promise<boolean> {
  * thing that cannot run inside a transaction.
  */
 async function main() {
+  await withAllTenants("migrate: privilege preflight", () => assertCanMigrate());
+
   if (await withAllTenants("migrate: detect fresh database", () => isFreshDatabase())) {
     await withAllTenants("migrate: baseline schema", () =>
       getPool().query(readFileSync(schemaPath, "utf8"))

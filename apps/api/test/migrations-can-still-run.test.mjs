@@ -95,6 +95,37 @@ test("no migration uses CREATE INDEX CONCURRENTLY", () => {
   }
 });
 
+test("it refuses to start as a role that cannot run DDL", () => {
+  // The second wall, hit immediately after the first was cleared: the api
+  // container connects as `nexus_app`, which migration 006 deliberately created
+  // without CREATE on schema public. That is not a bug to route around — RLS
+  // does not apply to a table's owner, so the application MUST be a non-owner or
+  // every policy in migration 018 quietly stops enforcing.
+  //
+  // So the runner has to fail on the FIRST query rather than thirty lines into a
+  // Postgres stack trace at file 001, and it has to name the role and the fix.
+  assert.match(MIGRATE_CODE, /has_schema_privilege\(current_user, 'public', 'CREATE'\)/);
+  assert.match(MIGRATE_CODE, /assertCanMigrate/);
+  assert.match(MIGRATE, /MIGRATION_DATABASE_URL to owner credentials/);
+  // Preflight runs before anything is applied, so nothing is half-migrated when
+  // the problem is discovered.
+  const main = MIGRATE.slice(MIGRATE.indexOf("async function main()"));
+  assert.ok(
+    main.indexOf("assertCanMigrate") < main.indexOf("isFreshDatabase"),
+    "the privilege check must run before any migration work"
+  );
+});
+
+test("the owner connection is chosen before the pool is built", () => {
+  // The pool is lazy, so MIGRATION_DATABASE_URL only takes effect if it is
+  // assigned before the first query. Assigned after, it would be ignored in
+  // silence and migrations would run as the app role again.
+  assert.ok(
+    MIGRATE.indexOf("MIGRATION_DATABASE_URL") < MIGRATE.indexOf("async function main()"),
+    "the connection override must be applied at module load, before any query"
+  );
+});
+
 test("a failure stops the run rather than reporting success", () => {
   // The loop awaits each file, and main() has no try/catch swallowing it, so a
   // throw propagates to the handler that exits non-zero. A migration runner that

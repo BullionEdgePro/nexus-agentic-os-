@@ -176,3 +176,49 @@ so every incoming message would have failed until the migration caught up.
 The tell is simple: **if the diff adds a column name to a `select`, the
 migration goes first.** When unsure, run the migration first — it is idempotent
 by convention here, and running it early costs nothing.
+
+## How to actually run one — as the OWNER, never as the app
+
+This was not written down anywhere until 2026-08-14, so every deploy guessed,
+and the guess that looks most natural is wrong:
+
+```
+docker compose -f docker-compose.prod.yml exec -T api npm run db:migrate   # WRONG
+```
+
+The api container connects as **`nexus_app`**, the least-privilege role created
+by migration 006: usage on the schema, DML on tables, and no CREATE. That is
+deliberate and load-bearing — **RLS policies do not apply to a table's owner**,
+so if the application connected as the owner, every policy in migration 018
+would silently stop enforcing. `rls-verify` fails the build if the app role ever
+gains ownership. So the app role cannot run DDL, and should never be able to.
+
+Migrations therefore run as the owner, `nexus`. Either:
+
+```bash
+# Preferred: point the runner at owner credentials.
+docker compose -f docker-compose.prod.yml exec -T \
+  -e MIGRATION_DATABASE_URL="postgresql://nexus:<pw>@postgres:5432/nexus" \
+  api npm run db:migrate
+```
+
+```bash
+# Or apply a single file directly, which needs no credentials from the host.
+docker exec -i nexus-postgres-1 psql -U nexus -d nexus -v ON_ERROR_STOP=1 -f - \
+  < packages/db/migrations/0NN-name.sql
+```
+
+`ON_ERROR_STOP=1` matters: without it psql reports success after a failed
+statement, which on this platform means a migration that changed nothing and a
+deploy declared finished on the strength of it.
+
+Two failures worth recognising, because both were mistaken for the other:
+
+| Message | Cause |
+|---|---|
+| `Query touched tenant-scoped table "..." with no tenant context` | The runner is not wrapping files in `withAllTenants`. Fixed 2026-08-14 — see `migrate.ts`. If it returns, migrations are running unscoped, and any write to a tenant-scoped table would match **zero rows without erroring** |
+| `permission denied for schema public` (42501) | Running as `nexus_app`. Use the owner, per above |
+
+`migrate.ts` now refuses to start when the connected role has no CREATE on
+`public`, and names the role and the fix, rather than failing partway through
+the file list.
