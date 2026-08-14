@@ -1,4 +1,4 @@
-import { listEmployees, withTenant } from "@nexus/db";
+import { listEmployees, withServingTenant } from "@nexus/db";
 import { resolvePresence } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
 
@@ -29,8 +29,25 @@ import { logger } from "../lib/logger.js";
  * names that case separately so "nobody is working right now" and "nobody has
  * told us when this person works" are never confused for one another.
  */
+/**
+ * `withServingTenant`, NOT `withTenant`, AND THE DIFFERENCE WAS INVISIBLE.
+ *
+ * This is asked about the SERVING business, from inside the reply pipeline's
+ * transaction — which is scoped to the number's OWNER, because all five
+ * businesses share Zipicka's number. `withTenant` nested inside `withTenant`
+ * deliberately reuses the outer context, so the wrapper here did nothing at all:
+ * the query ran as Zipicka, RLS matched none of Juris Prime's employees, and
+ * `listEmployees` returned an empty array.
+ *
+ * Which lands on the `active.length === 0` line below and returns false. Not
+ * "nobody is on shift" — the earlier, quieter branch that does not even log the
+ * distinction it was written to log. For four of the five businesses this
+ * function has been answering "you have no staff at all", so escalation has been
+ * taking the FALLBACK_REPLY_NO_STAFF path regardless of who was actually at
+ * their desk. Every container green, every reply plausible.
+ */
 export async function hasStaffOnShift(organizationId: string): Promise<boolean> {
-  const employees = await withTenant(organizationId, () => listEmployees(organizationId));
+  const employees = await withServingTenant(organizationId, () => listEmployees(organizationId));
   const active = employees.filter((employee) => employee.isActive);
   if (active.length === 0) return false;
 

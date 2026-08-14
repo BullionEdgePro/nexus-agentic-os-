@@ -85,6 +85,11 @@ mock.module("@nexus/db", {
     // quietly change what the agent was asked.
     listOpenTasksForContact: async () => [],
 
+    // Widens the owner-scoped transaction to a business on the same number.
+    // Running the body is the honest stub: what is under test is the reply
+    // pipeline, not the scoping, and swallowing the callback would skip it.
+    withServingTenant: async (_organizationId, fn) => fn(),
+
     // The processor runs inside an explicit cross-tenant context, because a
     // WhatsApp message identifies its tenant only by phone number id. These
     // just run the body: what is under test is the reply pipeline, not the
@@ -128,6 +133,10 @@ mock.module("@nexus/agents", {
     // supplied one would test a code path the assertions do not check.
     recallContact: async () => null,
     describeOpenFollowUps: () => null,
+    // These fixtures have no appointments, so the honest stub is "no note". A
+    // mock that invented one would exercise a branch these assertions never
+    // check and quietly change what the agent was asked.
+    upcomingBookingsNote: async () => null,
     rememberContact: async () => ({ written: false }),
     classifyBusiness,
     buildTriageMessage,

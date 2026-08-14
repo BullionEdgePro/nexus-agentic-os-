@@ -228,6 +228,98 @@ export function withAllTenants<T>(reason: string, fn: () => Promise<T>): Promise
 }
 
 /**
+ * Runs `fn` for ANOTHER business served by the same WhatsApp number, on the
+ * transaction that is already open.
+ *
+ * THE HOLE THIS FILLS, AND IT IS NOT A SMALL ONE.
+ *
+ * Migration 010 put all five businesses on Zipicka's number. Every inbound
+ * message therefore belongs to Zipicka — the number's owner — and the reply
+ * pipeline opens `withTenant(owner.id)` around the whole job. But the
+ * switchboard then decides the enquiry is for, say, Juris Prime, and everything
+ * after that point is asked about the SERVING business: its staff, its
+ * follow-ups, its memory of this customer, and now its bookings.
+ *
+ * Those reads were being made inside the owner's context. RLS matched no rows.
+ * Nothing threw, because a policy that filters everything out returns an empty
+ * result, and `withTenant` nested inside `withTenant` deliberately reuses the
+ * outer context rather than opening a second one — so `withTenant(serving.id,
+ * ...)` at those call sites was a no-op that read exactly like a fix.
+ *
+ * The two ways out that do not work:
+ *
+ *   A second connection (`withoutTenant` then `withTenant`) opens a separate
+ *   transaction. The conversation and contact rows this job just wrote are not
+ *   committed yet, so a booking referencing them fails on a foreign key — on
+ *   first-message bookings only, which is the subset nobody would test.
+ *
+ *   Widening the policy so the number's owner can see what it serves puts the
+ *   check on every row of every read, and hands the retailer standing access to
+ *   the law firm's customer commitments. The relationship is real for one
+ *   statement; it should not become a permanent grant.
+ *
+ * So the context is switched on the connection already in hand — same
+ * transaction, same snapshot, restored in a `finally` — and the switch is
+ * refused unless the two businesses genuinely share a number. That last part is
+ * what keeps this from being a general-purpose way out of RLS: the argument is
+ * checked against the data, not taken on trust, so it can only reach a business
+ * the caller is already answering the phone for.
+ */
+export async function withServingTenant<T>(
+  organizationId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  if (!organizationId) throw new Error("withServingTenant requires an organizationId");
+
+  const context = getTenantContext();
+  // No ambient scope: this is an ordinary scoped unit of work and opens its own
+  // transaction. Degrading to `withTenant` rather than throwing is what makes
+  // this a safe drop-in at call sites reached from both inside and outside the
+  // message pipeline — `hasStaffOnShift` is called three times from within the
+  // owner's transaction and once from a fallback path that has none, and a
+  // version that threw would turn a correct call into an outage on the path
+  // that matters most.
+  if (!context) return withTenant(organizationId, fn);
+  // Already cross-tenant on purpose (the operator deck, the inbound worker
+  // before it knows the tenant). Nothing to widen.
+  if (context.scope === "all") return fn();
+  if (context.organizationId === organizationId) return fn();
+
+  const client = context.client;
+  const { rows } = await client.query<{ shared: boolean }>(
+    `select exists (
+       select 1
+         from organizations owner, organizations serving
+        where owner.id = $1
+          and serving.id = $2
+          and serving.is_active
+          and owner.whatsapp_phone_number_id is not null
+          and owner.whatsapp_phone_number_id <> ''
+          and owner.whatsapp_phone_number_id = serving.whatsapp_phone_number_id
+     ) as shared`,
+    [context.organizationId, organizationId]
+  );
+  if (!rows[0]?.shared) {
+    throw new Error(
+      `Refusing to widen tenant scope from ${context.organizationId} to ${organizationId}: ` +
+        "those businesses do not share a WhatsApp number, so one is not serving the other's callers."
+    );
+  }
+
+  const restore = context.organizationId;
+  try {
+    await client.query("select set_config('app.current_org', $1, true)", [organizationId]);
+    return await runWithContext({ scope: "tenant", organizationId, client }, fn);
+  } finally {
+    // Restored even on the throw path. Leaving the connection pointed at the
+    // serving business would silently re-scope the REST of the owner's
+    // transaction — the outbound message, the evaluation, the metric — and
+    // those writes would fail the policy one by one with no obvious cause.
+    await client.query("select set_config('app.current_org', $1, true)", [restore]);
+  }
+}
+
+/**
  * Runs `fn` with NO tenant context, on a pool connection like any unauthenticated
  * caller gets.
  *

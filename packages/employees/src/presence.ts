@@ -177,6 +177,61 @@ export function resolvePresence(employee: Employee, now: Date = new Date()): Res
   };
 }
 
+/**
+ * Is this employee scheduled to be working at some other moment?
+ *
+ * `resolvePresence` answers "is this person available NOW", and it is the wrong
+ * question for a diary. It consults the manual override first, which is correct
+ * for right-now and meaningless for Thursday: somebody who set themselves to
+ * "online for the next hour" has told you nothing about next week, and somebody
+ * on a two-day "busy" override should still be bookable for the month after it
+ * expires. Booking against the override would let a temporary state block or
+ * open permanent time.
+ *
+ * So this reads the SCHEDULE only, through the same `localClock` /
+ * `scheduleContains` pair `resolvePresence` uses. That shared path is the point:
+ * two functions answering "is this person working" from two different notions of
+ * a working week is the exact drift that put `hasActiveEmployees` and
+ * `resolvePresence` at odds and had the agent promising specialists who were
+ * asleep.
+ *
+ * An employee with no schedule is NOT bookable — the same deliberate choice
+ * `hasStaffOnShift` makes. Offering a slot because nobody has said when someone
+ * works means promising a customer a time nobody has agreed to.
+ */
+export function isScheduledAt(employee: Employee, when: Date): boolean {
+  if (!employee.isActive) return false;
+  if (Object.keys(employee.workingHours ?? {}).length === 0) return false;
+
+  const clock = localClock(when, employee.timezone);
+  if (!scheduleContains(employee.workingHours, clock)) return false;
+  // A break is time the person is at work and not available to meet anyone.
+  return !scheduleContains(employee.breakSchedule ?? {}, clock);
+}
+
+/**
+ * Is this employee scheduled for EVERY minute of a window?
+ *
+ * Checking only the start would sell the last half hour before closing as a
+ * one-hour consultation. Working hours are expressed to the minute, so the
+ * window is sampled rather than reasoned about — five-minute steps plus the
+ * final instant, which for the 15-to-120 minute appointments this platform takes
+ * is a couple of dozen pure comparisons and no I/O.
+ *
+ * The end is sampled as `end - 1ms`, not `end`: a shift that runs to 17:00 must
+ * still accept an appointment ending at exactly 17:00, and `scheduleContains`
+ * treats a window as half-open.
+ */
+export function isScheduledThroughout(employee: Employee, startsAt: Date, endsAt: Date): boolean {
+  if (endsAt.getTime() <= startsAt.getTime()) return false;
+
+  const STEP_MS = 5 * 60_000;
+  for (let t = startsAt.getTime(); t < endsAt.getTime(); t += STEP_MS) {
+    if (!isScheduledAt(employee, new Date(t))) return false;
+  }
+  return isScheduledAt(employee, new Date(endsAt.getTime() - 1));
+}
+
 function twinShouldRespond(employee: Employee, status: PresenceStatus): boolean {
   if (!employee.twinEnabled) return false;
   if (employee.humanFirst && HUMAN_PRESENT.has(status)) return false;

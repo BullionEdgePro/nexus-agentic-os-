@@ -1,0 +1,106 @@
+/* Appointments.
+ *
+ * Inherits the deck's chrome from activity.css and the list vocabulary from
+ * tasks.css — .tk-item, .tk-main, .tk-meta, .tk-actions are all reused rather
+ * than restyled, so the two working surfaces read as the same product and a
+ * change to one moves both. Only what a diary needs that a task list does not
+ * lives here.
+ *
+ * All colour comes through the tokens in deck.css. Nothing below hard-codes a
+ * hex, so the dark theme follows for free. */
+
+/* --- the time, as the first thing read --- */
+
+/* A diary is scanned by WHEN, not by what. The time therefore leads the row as
+   its own column, rather than sitting in the meta line where a task's due date
+   sits — a due date is one attribute of the work, and an appointment time is
+   the work. */
+.bk-item { align-items: stretch; }
+
+.bk-when {
+  flex: 0 0 118px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 14px;
+  border-right: 1px solid var(--line);
+}
+
+.bk-when strong {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  font-weight: 400;
+}
+
+.bk-when span {
+  font-family: var(--display);
+  font-size: 19px;
+  line-height: 1.1;
+  font-weight: 500;
+  /* Times are compared down the column, so the digits have to line up. */
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* The zone is always shown, never inferred. An unlabelled "15:00" invites the
+   reader to assume it is their own — and repeating that to a customer is the
+   one mistake this page can make that looks entirely correct. */
+.bk-when em {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  font-style: normal;
+  color: var(--pencil);
+}
+
+/* --- past appointments --- */
+
+/* Faded rather than hidden. An operator asking whether yesterday's viewing
+   actually happened has to have somewhere to look, and the answer is the point
+   of the Attended / No show buttons on these rows. */
+.bk-item.bk-past { opacity: 0.7; }
+.bk-item.bk-past .bk-when span { color: var(--graphite); }
+
+/* --- assignment --- */
+
+.bk-actions { align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+
+.bk-actions select {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  padding: 6px 9px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  max-width: 150px;
+}
+
+.bk-actions select:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 2px;
+}
+
+/* --- narrow screens --- */
+
+/* Below the fold of a phone the time column would squeeze the subject into two
+   characters a line, so it becomes a header strip instead of a gutter. */
+@media (max-width: 640px) {
+  .bk-when {
+    flex: 1 1 100%;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0 0 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .bk-when span { font-size: 16px; }
+  .bk-actions { justify-content: flex-start; }
+}

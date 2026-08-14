@@ -15,6 +15,7 @@ import { activityRoute } from "./routes/activity.js";
 import { qualityRoute } from "./routes/quality.js";
 import { linksRoute, publicLinksRoute } from "./routes/links.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
+import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
@@ -112,6 +113,10 @@ app.route("/api/tasks", tasksRoute);
 // Tasks raised from inside a conversation. Composed onto the conversations
 // router so requireConversationScope has already settled access.
 app.route("/api/conversations", conversationTasksRoute);
+// The diary. Not operator-only for the same reason follow-ups are not: the
+// person who has been booked is the person who needs to see it.
+app.route("/api/bookings", bookingsRoute);
+app.route("/api/conversations", conversationBookingsRoute);
 // Operator findings. Same shape as tasks: narrowed by role inside the handler,
 // because this path has no :slug either.
 app.route("/api/operators", operatorsRoute);

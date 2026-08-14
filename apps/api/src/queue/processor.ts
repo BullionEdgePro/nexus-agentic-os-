@@ -24,6 +24,7 @@ import {
   hasActiveEmployees,
   listOpenTasksForContact,
   withTenant,
+  withServingTenant,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import {
@@ -35,6 +36,7 @@ import {
   recallContact,
   rememberContact,
   describeOpenFollowUps,
+  upcomingBookingsNote,
 } from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
@@ -80,6 +82,12 @@ const MAX_TRIAGE_ATTEMPTS = 3;
 const TOOL_INTENT: Record<string, string> = {
   check_inventory: "inventory_inquiry",
   book_appointment: "appointment_booking",
+  // Asking for times IS the booking intent, whether or not the customer went on
+  // to take one. Left out, every conversation that got as far as being offered a
+  // slot and then stalled would be filed as a general enquiry — which hides the
+  // one number worth watching on a new feature: how many people were offered an
+  // appointment and did not take it.
+  check_availability: "appointment_booking",
   search_knowledge: "knowledge_lookup",
 };
 
@@ -358,7 +366,16 @@ async function processSingleTextMessage(
     // must remember them separately. contactId already encodes that (contacts
     // are unique per organization), so this is belt and braces on a mistake
     // that would be invisible if made.
-    const recalled = await recallContact(serving.id, contactId).catch(() => null);
+    //
+    // `withServingTenant` on all three enrichments below, for the reason spelled
+    // out on hasStaffOnShift: this transaction is scoped to the number's owner,
+    // and every one of these asks about the serving business. Read as the owner,
+    // RLS returned nothing and each enrichment degraded to "there is nothing to
+    // add" — which is exactly what an empty result legitimately means, so
+    // nothing anywhere could tell the two apart.
+    const recalled = await withServingTenant(serving.id, () =>
+      recallContact(serving.id, contactId)
+    ).catch(() => null);
 
     // What this business still owes this customer.
     //
@@ -372,7 +389,9 @@ async function processSingleTextMessage(
     // here is: a customer waiting on a reply must not wait on a follow-up
     // lookup. An empty list is indistinguishable from a failed one to
     // everything downstream, which is correct — both mean "nothing to add".
-    const owed = await listOpenTasksForContact(serving.id, contactId).catch(() => []);
+    const owed = await withServingTenant(serving.id, () =>
+      listOpenTasksForContact(serving.id, contactId)
+    ).catch(() => []);
     const owedNote = describeOpenFollowUps(
       owed.map((task) => ({
         title: task.title,
@@ -382,12 +401,24 @@ async function processSingleTextMessage(
       })),
       serving.timezone ?? "Asia/Dubai"
     );
-    // Both notes are prepended, each fenced separately rather than merged.
-    // They are different kinds of fact carrying different instructions —
-    // memory is what we know about this person, follow-ups are what we owe
-    // them and must not claim to have done — and running them together would
-    // blur which caution applies to which.
-    const notes = [recalled ? recallNote(recalled) : null, owedNote].filter(
+    // What this customer already has in the diary.
+    //
+    // The moment an appointment matters most is when the person who made it
+    // writes back — "what time am I coming in?", "can we move it?". Without
+    // this the agent answers that fluently and wrongly, and worse, happily
+    // books a second appointment on top of the first. The exclusion constraint
+    // would not stop it: two bookings for the same customer with two different
+    // employees are not a double-booking as far as the database is concerned.
+    const bookedNote = await withServingTenant(serving.id, () =>
+      upcomingBookingsNote(serving.id, contactId, serving.timezone ?? "Asia/Dubai")
+    ).catch(() => null);
+
+    // Each note is prepended fenced separately rather than merged. They are
+    // different kinds of fact carrying different instructions — memory is what
+    // we know about this person, follow-ups are what we owe them and must not
+    // claim to have done, appointments are what is already agreed — and running
+    // them together would blur which caution applies to which.
+    const notes = [recalled ? recallNote(recalled) : null, owedNote, bookedNote].filter(
       (note): note is string => note !== null
     );
 
@@ -406,6 +437,13 @@ async function processSingleTextMessage(
         messageId: message.id,
         text: text.body,
         timestamp: message.timestamp,
+        // Carried so book_appointment can write a row naming an actual person.
+        // A booking tool that had to resolve the customer itself would have to
+        // guess from the wa_id, and on a shared number the same number is a
+        // different contact for a different business. Passing what this job
+        // already resolved is the only version with no guess in it.
+        contactId,
+        conversationId,
       },
       withRecall
     );

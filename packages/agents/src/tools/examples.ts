@@ -4,7 +4,11 @@ import { defaultToolRegistry } from "./registry.js";
 // Domain tools available to the agent swarm. check_inventory is wired to
 // Shopify's Storefront API (Zipicka) using a public storefront access token —
 // far simpler to provision than an Admin API token, and read-only by design.
-// book_appointment is still a stub until a booking backend is chosen.
+//
+// book_appointment used to live here as a stub. It is now real, and moved to
+// ./bookings.ts alongside check_availability, because the two only make sense
+// together: the first offers times computed from staff rotas and the live diary,
+// the second takes one of them.
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2024-10";
 const INVENTORY_LOOKUP_TIMEOUT_MS = 8000;
@@ -128,48 +132,4 @@ export const checkInventoryTool: ToolDefinition = {
   },
 };
 
-/**
- * book_appointment: capture a booking request for human follow-up.
- *
- * No calendar backend is wired yet, and this is the ONLY tool configured for
- * four of the five tenants — whose system prompts actively offer to book
- * consultations, viewings, and discovery calls. It used to throw, which fed a
- * raw internal string ("not wired to a calendar yet") back to the model as a
- * tool error, risking that implementation detail being paraphrased to a
- * customer.
- *
- * Failing soft instead matches check_inventory: return a structured result the
- * model can act on honestly. The request details come back in the payload so
- * the reply can confirm what was captured, and the agent tells the customer a
- * human will confirm — which is true, and is what actually happens once the
- * conversation escalates.
- */
-export const bookAppointmentTool: ToolDefinition = {
-  name: "book_appointment",
-  description:
-    "Record a request for a consultation, viewing, or appointment. Booking is confirmed by a human, " +
-    "so acknowledge the request and tell the customer a colleague will confirm the time — never state " +
-    "the appointment as already booked.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      serviceName: { type: "string" },
-      preferredTime: { type: "string", description: "ISO 8601 datetime, or the customer's own wording" },
-      contactName: { type: "string" },
-    },
-    required: ["serviceName", "preferredTime"],
-  },
-  handler: async (input) => ({
-    booked: false,
-    captured: true,
-    request: {
-      serviceName: String(input.serviceName ?? "").trim() || null,
-      preferredTime: String(input.preferredTime ?? "").trim() || null,
-      contactName: String(input.contactName ?? "").trim() || null,
-    },
-    note: "Request captured. A team member confirms the final time — do not tell the customer it is already booked.",
-  }),
-};
-
 defaultToolRegistry.register(checkInventoryTool);
-defaultToolRegistry.register(bookAppointmentTool);

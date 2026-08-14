@@ -51,6 +51,11 @@ const TABLES = [
   // Added with migration 027. A finding names the customer who is waiting or
   // the commitment that is late, so it carries the same isolation.
   "operator_findings",
+  // Added with migration 031. A booking names a customer, a phone number, a
+  // time and a place they will be — arguably the most sensitive row on the
+  // platform, and the only one that describes where somebody will physically
+  // be.
+  "bookings",
 ];
 
 let failures = 0;

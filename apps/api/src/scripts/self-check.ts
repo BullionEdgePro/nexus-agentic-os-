@@ -33,6 +33,10 @@ import {
   listConversationsForEmployee,
   findSharedNumberBusinesses,
   getDisplayNumbers,
+  createBooking,
+  setBookingStatus,
+  listUpcomingBookingsForContact,
+  SlotTakenError,
 } from "@nexus/db";
 import {
   generateAccessCode,
@@ -41,7 +45,7 @@ import {
   buildDirectContact,
   resolvePresence,
 } from "@nexus/employees";
-import { classifyBusiness, buildDeepLink } from "@nexus/agents";
+import { classifyBusiness, buildDeepLink, findAvailableSlots } from "@nexus/agents";
 import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
 import { searchKnowledge } from "@nexus/knowledge";
 
@@ -49,6 +53,8 @@ import { searchKnowledge } from "@nexus/knowledge";
 const PROBE_CODE = "zz-nexus-self-check";
 // Not a dialable number, so it cannot match a real contact even by accident.
 const PROBE_WA_ID = "999000000000001";
+/** Constant, so cleanup can find the debris whatever failed above it. */
+const PROBE_BOOKING_SUBJECT = "Self check probe — not a real appointment";
 
 let failures = 0;
 
@@ -81,6 +87,199 @@ async function removeProbe(organizationId: string) {
     organizationId,
     PROBE_CODE,
   ]);
+}
+
+/**
+ * Booking, end to end, against the live database — including the refusal.
+ *
+ * THE ONE PROPERTY THAT CANNOT BE TESTED ANYWHERE ELSE. Every other check on
+ * this feature reads source text or runs against a mock, and neither can know
+ * whether `bookings_no_double_booking` exists, is valid, or still covers the
+ * rows it was written for. A gist exclusion constraint is not ordinary DDL: it
+ * needs `btree_gist` installed, it silently covers nothing if the WHERE clause
+ * drifts, and application code catching `23P01` is catching an error only
+ * Postgres can raise. If that constraint were dropped tomorrow, every test in
+ * the suite would still pass and two customers would be given the same slot.
+ *
+ * EACH STEP IS ITS OWN COMMITTED TRANSACTION, for the reason the sign-in check
+ * above had to learn: two inserts inside one transaction prove the constraint
+ * fires, but they do not reproduce the situation it exists for. Two customers
+ * messaging at the same moment are two connections. Committing between them is
+ * what makes the second insert a genuine race against a row that is really
+ * there.
+ *
+ * The probe employee is given a 24/7 schedule deliberately. A realistic one
+ * would make this check pass or fail according to what time somebody happened
+ * to run it, and a diagnostic that is only true in the mornings teaches people
+ * to ignore it. The narrow-schedule behaviour — that an unscheduled employee is
+ * never offered — is pure, and asserted in the unit suite.
+ */
+async function checkBookingRoundTrip(organizationId: string) {
+  console.log("\nBookings (committed, against the live constraint)");
+
+  const ALWAYS: Record<string, Array<{ start: string; end: string }>> = {
+    mon: [{ start: "00:00", end: "23:59" }],
+    tue: [{ start: "00:00", end: "23:59" }],
+    wed: [{ start: "00:00", end: "23:59" }],
+    thu: [{ start: "00:00", end: "23:59" }],
+    fri: [{ start: "00:00", end: "23:59" }],
+    sat: [{ start: "00:00", end: "23:59" }],
+    sun: [{ start: "00:00", end: "23:59" }],
+  };
+
+  await withTenant(organizationId, () => removeProbe(organizationId));
+
+  const employee = await withTenant(organizationId, async () => {
+    const created = await createEmployee({
+      organizationId,
+      employeeCode: PROBE_CODE,
+      fullName: "Self Check Bookable",
+      jobTitle: "Diagnostic",
+      timezone: "Asia/Dubai",
+    });
+    // No writer exists for working_hours in packages/db — schedules are set by
+    // hand today — so the probe's is set here directly rather than pretending
+    // an API for it exists.
+    await getPool().query(`update employees set working_hours = $2::jsonb where id = $1`, [
+      created.id,
+      JSON.stringify(ALWAYS),
+    ]);
+    return created;
+  });
+
+  const contactId = await withTenant(organizationId, async () => {
+    const { rows } = await getPool().query<{ id: string }>(
+      `insert into contacts (organization_id, wa_id, display_name)
+       values ($1, $2, 'Self check probe')
+       on conflict (organization_id, wa_id) do update set display_name = excluded.display_name
+       returning id`,
+      [organizationId, PROBE_WA_ID]
+    );
+    return rows[0].id;
+  });
+
+  // Far enough ahead that it cannot collide with anything real, and on a grid
+  // boundary so it matches what findAvailableSlots would have offered.
+  const startsAt = new Date(Date.now() + 72 * 3_600_000);
+  startsAt.setUTCMinutes(0, 0, 0);
+  const endsAt = new Date(startsAt.getTime() + 60 * 60_000);
+
+  try {
+    const slots = await withTenant(organizationId, () =>
+      findAvailableSlots({ organizationId, durationMinutes: 60, limit: 3 })
+    );
+    check(
+      "availability offers real slots",
+      slots.length > 0,
+      slots.length > 0 ? `${slots.length} offered, first ${slots[0].startsAt}` : "none offered"
+    );
+    check(
+      "an offered slot names who would take it",
+      slots.every((slot) => Boolean(slot.employeeId && slot.employeeName)),
+      "a slot with nobody on it is a promise the diary cannot keep"
+    );
+
+    const first = await withTenant(organizationId, () =>
+      createBooking({
+        organizationId,
+        contactId,
+        employeeId: employee.id,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        subject: PROBE_BOOKING_SUBJECT,
+      })
+    );
+    check("a booking is taken", first.status === "confirmed", `${first.startsAt} with ${first.employeeName}`);
+
+    // THE REFUSAL. Overlapping by half an hour, on the same employee, from a
+    // separate committed transaction — the second customer.
+    const overlapStart = new Date(startsAt.getTime() + 30 * 60_000);
+    let refused = false;
+    let refusedAs = "";
+    try {
+      await withTenant(organizationId, () =>
+        createBooking({
+          organizationId,
+          contactId,
+          employeeId: employee.id,
+          startsAt: overlapStart.toISOString(),
+          endsAt: new Date(overlapStart.getTime() + 60 * 60_000).toISOString(),
+          subject: PROBE_BOOKING_SUBJECT,
+        })
+      );
+      refusedAs = "the overlapping booking was ACCEPTED";
+    } catch (err) {
+      // Asserting the TYPE, not merely that something threw. A raw
+      // exclusion_violation reaching a caller means the mapping in
+      // createBooking has drifted, and the agent would tell a customer the
+      // system was broken instead of offering them another time.
+      refused = err instanceof SlotTakenError;
+      refusedAs = refused
+        ? "SlotTakenError"
+        : `${err instanceof Error ? err.name : "unknown"} — not mapped to SlotTakenError`;
+    }
+    check("an overlapping booking is refused by the database", refused, refusedAs);
+
+    // And the other half of the guarantee: cancelling must genuinely free the
+    // slot. A constraint that never releases is a diary that fills up forever.
+    await withTenant(organizationId, () => setBookingStatus(first.id, "cancelled"));
+    let rebooked = false;
+    try {
+      const second = await withTenant(organizationId, () =>
+        createBooking({
+          organizationId,
+          contactId,
+          employeeId: employee.id,
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          subject: PROBE_BOOKING_SUBJECT,
+        })
+      );
+      rebooked = second.status === "confirmed";
+    } catch {
+      rebooked = false;
+    }
+    check("cancelling frees the slot for somebody else", rebooked);
+
+    const upcoming = await withTenant(organizationId, () =>
+      listUpcomingBookingsForContact(organizationId, contactId)
+    );
+    check(
+      "the reply path can read the customer's appointments",
+      upcoming.some((booking) => booking.subject === PROBE_BOOKING_SUBJECT),
+      `${upcoming.length} upcoming`
+    );
+  } finally {
+    // By SUBJECT and by wa_id, never by an id a failure may have prevented
+    // being assigned — the lesson schema-check's cleanup is written around. A
+    // probe appointment left in production appears in the diary as a real
+    // customer somebody is expected to meet, and holds a slot the constraint
+    // will refuse to everybody else.
+    await withTenant(organizationId, async () => {
+      await getPool()
+        .query(`delete from bookings where organization_id = $1 and subject = $2`, [
+          organizationId,
+          PROBE_BOOKING_SUBJECT,
+        ])
+        .catch(() => undefined);
+      await getPool()
+        .query(`delete from contacts where organization_id = $1 and wa_id = $2`, [
+          organizationId,
+          PROBE_WA_ID,
+        ])
+        .catch(() => undefined);
+      await removeProbe(organizationId);
+    });
+
+    const leftover = await withTenant(organizationId, async () => {
+      const { rows } = await getPool().query<{ n: string }>(
+        `select count(*)::text as n from bookings where organization_id = $1 and subject = $2`,
+        [organizationId, PROBE_BOOKING_SUBJECT]
+      );
+      return Number(rows[0]?.n ?? 0);
+    });
+    check("probe appointments removed", leftover === 0, leftover === 0 ? "" : `${leftover} left behind`);
+  }
 }
 
 /**
@@ -457,6 +656,7 @@ async function main() {
   });
 
   await checkUnauthenticatedSignIn(zipicka.id);
+  await checkBookingRoundTrip(zipicka.id);
 
   console.log(
     failures === 0

@@ -17,6 +17,24 @@ export interface ToolContext {
    * surface in another's answers.
    */
   employeeId?: string | null;
+  /**
+   * The customer and the thread, for tools that WRITE rather than look up.
+   *
+   * Optional because one caller genuinely has neither: `dry-run-reply` probes an
+   * agent with a fabricated wa_id and no conversation, and forcing it to invent
+   * a contact id would put a fake customer in a real business's records. Every
+   * caller that answers an actual person supplies both, and
+   * `bookings-are-real.test.mjs` asserts the reply pipeline does — without it,
+   * a pipeline that stopped passing them would still compile and every booking
+   * would quietly fall back to promising a human, which is the stub's behaviour
+   * restored by accident.
+   *
+   * A tool that needs these must refuse when they are absent rather than
+   * substitute anything — a booking filed against the wrong contact is worse
+   * than a booking not made.
+   */
+  contactId?: string | null;
+  conversationId?: string | null;
 }
 
 export interface AgentReplyResult {

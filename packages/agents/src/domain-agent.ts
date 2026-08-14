@@ -46,6 +46,8 @@ export class AnthropicDomainAgent implements DomainAgent {
       businessSlug: this.businessSlug,
       contactWaId: event.contactWaId,
       employeeId: this.employeeId,
+      contactId: event.contactId ?? null,
+      conversationId: event.conversationId ?? null,
     };
 
     const messages: Anthropic.MessageParam[] = [

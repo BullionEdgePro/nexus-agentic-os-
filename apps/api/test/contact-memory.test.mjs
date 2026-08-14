@@ -105,7 +105,25 @@ test("the memory is written after the customer has their reply", () => {
 });
 
 test("a recall failure degrades to no memory rather than no reply", () => {
-  assert.match(PROCESSOR, /recallContact\(serving\.id, contactId\)\.catch\(\(\) => null\)/);
+  assert.match(PROCESSOR, /recallContact\(serving\.id, contactId\)\s*\n?\s*\)\.catch\(\(\) => null\)/);
+});
+
+test("recall is read in the serving business's own tenant scope", () => {
+  // The argument said `serving.id` and the read still returned nothing. All
+  // five businesses share one number, so the reply pipeline's transaction is
+  // scoped to its OWNER; RLS filtered out every row belonging to the business
+  // actually being served, and "no stored memory" is what a first-time customer
+  // legitimately looks like. Four of the five tenants had been recalling
+  // nothing, indefinitely, with no symptom.
+  //
+  // The write on line ~580 was always correct — it fires after the transaction
+  // closes and opens its own — which is why memory was being stored and never
+  // read back.
+  assert.match(
+    PROCESSOR,
+    /withServingTenant\(serving\.id, \(\) =>\s*\n?\s*recallContact\(serving\.id, contactId\)/,
+    "recall must widen the owner's scope to the serving business"
+  );
 });
 
 // ============================================================

@@ -51,6 +51,13 @@ import {
   completeTask,
   listOpenTasksForContact,
   reconcileFindings,
+  createBooking,
+  listBookings,
+  listBookingsForConversation,
+  listUpcomingBookingsForContact,
+  countBookings,
+  setBookingStatus,
+  assignBooking,
 } from "@nexus/db";
 import { OPERATORS } from "../services/operators.js";
 
@@ -64,6 +71,7 @@ const PROBE_WA_ID = "999000000000002";
  */
 const PROBE_TASK_TITLE = "Schema check probe — not real work";
 const PROBE_OPERATOR = "schema-check-probe";
+const PROBE_BOOKING_SUBJECT = "Schema check probe — not a real appointment";
 
 let failures = 0;
 
@@ -297,6 +305,82 @@ async function main(): Promise<void> {
             failures++;
           }
         }
+
+        // ---- appointments (migrations 031 and 032) ----
+        //
+        // Every query in packages/db/bookings.ts is new, and one of them runs
+        // on the live reply path the moment a customer with an appointment
+        // writes back. By this script's own premise that makes all of them
+        // unverified — and the ones with something to get wrong are the same
+        // shapes that already bit once here: an insert returning through three
+        // joins, an aggregate with three `filter` clauses, and two guarded
+        // updates.
+        //
+        // The probe is left UNASSIGNED on purpose. `bookings_no_double_booking`
+        // only covers rows naming an employee, so the clash cannot be exercised
+        // without one — and creating an employee here would make this script
+        // something other than what it says it is. That round-trip belongs in
+        // self-check, which already keeps a reserved probe employee, and this
+        // stops at "does the SQL plan and return what it claims".
+        const startsAt = new Date(Date.now() + 26 * 3_600_000);
+        const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
+        const booked = await step("create booking", () =>
+          createBooking({
+            organizationId: org.id,
+            contactId: id,
+            startsAt: startsAt.toISOString(),
+            endsAt: endsAt.toISOString(),
+            subject: PROBE_BOOKING_SUBJECT,
+          })
+        );
+        if (booked) {
+          // The insert returns through BOOKING_SELECT's joins, one of which is
+          // an INNER join to contacts. A wrong join condition would return no
+          // row rather than an error — and `rows[0]` would then be undefined,
+          // which is the loud version. A wrong business join returns a row with
+          // a null name, which is the quiet one, so it is checked by name.
+          if (!booked.businessName || !booked.businessTimezone) {
+            console.log("  FAIL  booking returns its business (null name or timezone)");
+            failures++;
+          } else {
+            console.log("  ok    booking returns its business");
+          }
+
+          await step("list bookings", () => listBookings({ organizationId: org.id }));
+          await step("count bookings", () => countBookings(org.id));
+          await step("bookings for a conversation", () => listBookingsForConversation(booked.id));
+
+          // The reply-path lookup. A break here is not a page that fails to
+          // load — it is the agent path throwing on live customer traffic.
+          const upcoming = await step("upcoming bookings for a contact", () =>
+            listUpcomingBookingsForContact(org.id, id)
+          );
+          if (upcoming && !upcoming.some((b) => b.id === booked.id)) {
+            console.log("  FAIL  the probe booking is findable   (created but not returned)");
+            failures++;
+          } else if (upcoming) {
+            console.log("  ok    the probe booking is findable");
+          }
+
+          // Reassignment to nobody. Exercises assignBooking's own query without
+          // needing an employee — the branch that validates one is covered in
+          // self-check, where a real probe employee exists.
+          await step("unassign booking", () => assignBooking(booked.id, null));
+
+          const cancelledBooking = await step("cancel booking", () =>
+            setBookingStatus(booked.id, "cancelled")
+          );
+          // Guarded on `status <> $2`, so a second cancel must return null
+          // rather than restamping the row. Same property completeTask has, and
+          // the same reason: a repeated click must not rewrite history.
+          const cancelAgain = await setBookingStatus(booked.id, "cancelled").catch(() => null);
+          if (cancelledBooking?.status === "cancelled" && cancelAgain === null) {
+            console.log("  ok    cancelling twice is refused");
+          } else {
+            console.log("  FAIL  cancelling twice is refused  (second call changed the row)");
+            failures++;
+          }
+        }
       });
     }
   } finally {
@@ -324,6 +408,19 @@ async function main(): Promise<void> {
       await getPool()
         .query(`delete from tasks where organization_id = $1 and title = $2`, [org.id, PROBE_TASK_TITLE])
         .catch(() => undefined);
+      // By SUBJECT, not by the id this run happens to hold — the same lesson
+      // the task cleanup above is written around. `createBooking` can throw
+      // after its INSERT has committed (SlotTakenError is raised from the catch,
+      // and a data-modifying CTE cannot see its own write), which leaves the
+      // returned id undefined while the row exists. A probe appointment left in
+      // production is worse than a probe task: it shows up in the diary as a
+      // real customer somebody is expected to meet.
+      await getPool()
+        .query(`delete from bookings where organization_id = $1 and subject = $2`, [
+          org.id,
+          PROBE_BOOKING_SUBJECT,
+        ])
+        .catch(() => undefined);
       // Any findings raised about it go too, by the same argument.
       await getPool()
         .query(`delete from operator_findings where organization_id = $1 and operator = $2`, [
@@ -345,8 +442,16 @@ async function main(): Promise<void> {
     // becomes a fake customer in someone's audience count.
     const leftover = await withTenant(org.id, async () => {
       const { rows } = await getPool().query<{ n: string }>(
-        `select count(*)::text as n from contacts where organization_id = $1 and wa_id = $2`,
-        [org.id, PROBE_WA_ID]
+        `select (
+           (select count(*) from contacts where organization_id = $1 and wa_id = $2)
+           -- Counted separately even though contact_id cascades, because a
+           -- probe appointment is the worst debris this script can leave: it
+           -- appears in the diary as a real customer somebody is expected to
+           -- meet, and it holds a slot the constraint will refuse to anybody
+           -- else.
+           + (select count(*) from bookings where organization_id = $1 and subject = $3)
+         )::text as n`,
+        [org.id, PROBE_WA_ID, PROBE_BOOKING_SUBJECT]
       );
       return Number(rows[0]?.n ?? 0);
     });

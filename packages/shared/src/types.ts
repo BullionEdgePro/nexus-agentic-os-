@@ -69,6 +69,16 @@ export interface InboundMessageEvent {
   messageId: string;
   text: string;
   timestamp: string;
+  /**
+   * The stored contact and conversation this message became.
+   *
+   * Optional only because `dry-run-reply` has neither — it probes an agent with
+   * a reserved wa_id and deliberately writes nothing. The live pipeline always
+   * has both by the time it calls an agent, and tools that record something
+   * against a customer (book_appointment) refuse without them.
+   */
+  contactId?: string;
+  conversationId?: string;
 }
 
 export interface AgentConfig {

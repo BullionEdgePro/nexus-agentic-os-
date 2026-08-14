@@ -77,6 +77,20 @@ export const NAV: NavItem[] = [
     ),
   },
   {
+    href: "/deck/bookings",
+    label: "Appointments",
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M3 10h18M8 3v4M16 3v4" />
+        <path d="M9.2 14.6l1.6 1.6 3.6-3.6" />
+      </svg>
+    ),
+    // Deliberately NOT operatorOnly. The person who has been booked is the
+    // person who needs the diary — /api/bookings narrows an employee to their
+    // own business inside the route, exactly as follow-ups does.
+  },
+  {
     href: "/deck/team",
     label: "Team",
     icon: (

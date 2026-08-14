@@ -162,18 +162,46 @@ test("the lookup is scoped to the serving business and the contact", () => {
   assert.match(TASKS_DB, /where t\.organization_id = \$1\s*\n\s*and t\.contact_id = \$2\s*\n\s*and t\.status = 'open'/);
 });
 
+test("the lookup runs in the serving business's own tenant scope", () => {
+  // ASKING FOR THE RIGHT BUSINESS IS NOT THE SAME AS BEING ALLOWED TO READ IT.
+  //
+  // The argument above was always `serving.id`, and for four of the five
+  // businesses this returned nothing anyway. All five share Zipicka's number,
+  // so the reply pipeline's transaction is scoped to Zipicka; RLS matched none
+  // of the serving business's tasks; the list came back empty; and an empty
+  // list means "nothing outstanding", which is exactly what a customer with
+  // nothing outstanding produces. There was no symptom to notice.
+  //
+  // `withServingTenant` is the only thing that makes the argument true. Note it
+  // cannot be `withTenant` — nested inside the outer one that is a documented
+  // no-op, which is how the bug survived reading like a fix.
+  assert.match(
+    PROCESSOR,
+    /withServingTenant\(serving\.id, \(\) =>\s*\n?\s*listOpenTasksForContact\(serving\.id, contactId\)\s*\n?\s*\)/,
+    "the follow-up lookup must widen the owner's scope to the serving business"
+  );
+  assert.ok(
+    !/(?<!withServing)withTenant\(serving\.id/.test(PROCESSOR),
+    "withTenant(serving.id) nested inside withTenant(owner) is a no-op, not a scope"
+  );
+});
+
 test("a follow-up lookup cannot delay or break a customer's reply", () => {
   // The inbound path is the one thing that must never degrade. An empty list
   // and a failed lookup are indistinguishable downstream, which is correct:
   // both mean "nothing to add".
-  assert.match(PROCESSOR, /listOpenTasksForContact\(serving\.id, contactId\)\.catch\(\(\) => \[\]\)/);
+  assert.match(PROCESSOR, /listOpenTasksForContact\(serving\.id, contactId\)\s*\n?\s*\)\.catch\(\(\) => \[\]\)/);
 });
 
-test("memory and obligations stay separate notes", () => {
+test("memory, obligations and appointments stay separate notes", () => {
   // Different kinds of fact carrying different cautions — what we know about
-  // someone versus what we owe them and must not claim to have done. Merged,
-  // it would be unclear which warning governs which half.
-  assert.match(PROCESSOR, /const notes = \[recalled \? recallNote\(recalled\) : null, owedNote\]/);
+  // someone, what we owe them and must not claim to have done, and what is
+  // already agreed and must not be double-booked. Merged, it would be unclear
+  // which warning governs which part.
+  assert.match(
+    PROCESSOR,
+    /const notes = \[recalled \? recallNote\(recalled\) : null, owedNote, bookedNote\]/
+  );
   assert.match(PROCESSOR, /function recallNote\(recalled: string\): string/);
 });
 

@@ -526,6 +526,70 @@ export function createConversationTask(
 }
 
 // ============================================================
+// Appointments
+// ============================================================
+
+export type BookingStatus = "confirmed" | "cancelled" | "completed" | "no_show";
+
+export interface BookingRecord {
+  id: string;
+  organizationId: string;
+  businessName: string;
+  businessSlug: string;
+  /** Render appointment times in THIS zone, not the reader's. See the page. */
+  businessTimezone: string;
+  contactId: string;
+  contactName: string | null;
+  contactWaId: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  conversationId: string | null;
+  startsAt: string;
+  endsAt: string;
+  status: BookingStatus;
+  subject: string | null;
+  notes: string | null;
+  /** Decided by the database clock — do not recompute from startsAt in the browser. */
+  isPast: boolean;
+  createdAt: string;
+}
+
+export interface BookingCounts {
+  upcoming: number;
+  today: number;
+  unassigned: number;
+}
+
+export function getBookings(
+  options: {
+    business?: BusinessSlug | "";
+    status?: BookingStatus | "all";
+    upcoming?: boolean;
+  } = {}
+): Promise<{ bookings: BookingRecord[]; counts: BookingCounts }> {
+  const query = new URLSearchParams();
+  if (options.business) query.set("business", options.business);
+  if (options.status) query.set("status", options.status);
+  if (options.upcoming) query.set("upcoming", "1");
+  const suffix = query.toString();
+  return request(`/api/bookings${suffix ? `?${suffix}` : ""}`);
+}
+
+export function updateBooking(
+  bookingId: string,
+  change: { status?: BookingStatus; employeeId?: string | null }
+): Promise<{ booking: BookingRecord }> {
+  return request(`/api/bookings/${bookingId}`, { method: "PATCH", body: JSON.stringify(change) });
+}
+
+/** Appointments that came out of one conversation, cancellations included. */
+export function getConversationBookings(
+  conversationId: string
+): Promise<{ bookings: BookingRecord[] }> {
+  return request(`/api/conversations/${conversationId}/bookings`);
+}
+
+// ============================================================
 // Header: search, and the signed-in account
 // ============================================================
 

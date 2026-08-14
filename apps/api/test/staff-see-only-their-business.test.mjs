@@ -45,6 +45,7 @@ const TAB_API = {
   "/inbox": "/api/organizations/",
   "/deck/operators": "/api/operators",
   "/deck/tasks": "/api/tasks",
+  "/deck/bookings": "/api/bookings",
   "/deck/team": "/api/organizations/",
   "/deck/knowledge": "/api/organizations/",
   "/deck/links": "/api/links",
