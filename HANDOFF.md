@@ -108,6 +108,13 @@ gates green afterwards, `procedures` still at 0 rows. The first scheduled infere
 * **Migration 034** — `proposed_steps`, dismissal memory, review stamps, one inferred row per
   situation.
 
+**Measured on deploy day, so nobody re-derives it:** of Zipicka's 13 conversations in the last 60
+days, exactly **1** is evidence this writer will use — and the reason is not the strictness of the
+filter. Seven carry no intent at all (historical rows from before the intent vocabulary landed) and
+five are spam or `unknown`, which is 12 of 13 before any of the conversation-shape rules are
+applied. F10 is gated on intent coverage exactly as F5 was, and grows from here as classified
+traffic accumulates. An empty screen for the next few weeks is the correct output.
+
 Three rules are load-bearing and each has a test: the writer never activates anything; it proposes
 to an active procedure rather than editing it; a dismissed suggestion needs **double** the evidence
 before it may ask again.
