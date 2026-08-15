@@ -130,7 +130,19 @@ test("both doors into assignment check the employee's business", () => {
 test("tasks is on the tenant-scoped table list", () => {
   // Missing from this list, an unscoped query against tasks would be allowed
   // through the assertion and then silently return nothing under RLS.
-  assert.match(CLIENT, /"contact_memory",\s*\n(\s*\/\/[^\n]*\n)*\s*"tasks",/);
+  //
+  // Asserted as MEMBERSHIP, not as adjacency to whatever happened to precede it.
+  // The original matched `"contact_memory"` followed directly by `"tasks"`, so
+  // inserting an unrelated table between them failed this test — reporting a
+  // regression in tasks that had not happened, and inviting the next person to
+  // fix it by reordering the list rather than by reading it. A test that breaks
+  // when something correct is added teaches people to distrust it.
+  const list = CLIENT.slice(
+    CLIENT.indexOf("const TENANT_SCOPED_TABLES"),
+    CLIENT.indexOf("];", CLIENT.indexOf("const TENANT_SCOPED_TABLES"))
+  );
+  assert.ok(list.length > 50, "the table list must not be empty");
+  assert.match(list, /"tasks"/);
 });
 
 test("the migration enables RLS and refuses to finish if it did not", () => {
