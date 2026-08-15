@@ -151,6 +151,13 @@ export interface ConversationMetricInput {
   outputTokens: number;
   firstResponseMs?: number | null;
   resolutionMs?: number | null;
+  /**
+   * The F10 procedure that was in front of the agent when this reply was
+   * composed, if any. Stamped even when governance then blocked the reply —
+   * see migration 036 for why excluding those would make the success rate
+   * unable to go down.
+   */
+  procedureId?: string | null;
 }
 
 /** Aggregated snapshot powering the command-deck overview. */

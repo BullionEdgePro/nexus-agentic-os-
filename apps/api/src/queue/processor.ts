@@ -35,6 +35,7 @@ import {
   resolveTriageReply,
   recallContact,
   rememberContact,
+  recallProcedure,
   describeOpenFollowUps,
   upcomingBookingsNote,
   classifyIntent,
@@ -400,14 +401,39 @@ async function processSingleTextMessage(
       upcomingBookingsNote(serving.id, contactId, serving.timezone ?? "Asia/Dubai")
     ).catch(() => null);
 
+    // How this business works through this kind of enquiry (F10).
+    //
+    // The only one of these four enrichments that changes the SHAPE of the
+    // reply rather than adding a fact to it — and the only one that a person
+    // had to switch on before it could do anything. Null for almost every
+    // message: the business needs an active procedure for the intent the text
+    // rules read, and today none of them has one.
+    //
+    // Same failure-soft treatment as the other three, and the same
+    // `withServingTenant` for the same reason: read as the number's owner, RLS
+    // returns nothing and the agent answers with no procedure — which is
+    // exactly what "this business has none" looks like, so nothing downstream
+    // could tell the two apart.
+    const procedure = await withServingTenant(serving.id, () =>
+      recallProcedure(serving.id, text.body)
+    ).catch(() => null);
+
     // Each note is prepended fenced separately rather than merged. They are
     // different kinds of fact carrying different instructions — memory is what
     // we know about this person, follow-ups are what we owe them and must not
-    // claim to have done, appointments are what is already agreed — and running
-    // them together would blur which caution applies to which.
-    const notes = [recalled ? recallNote(recalled) : null, owedNote, bookedNote].filter(
-      (note): note is string => note !== null
-    );
+    // claim to have done, appointments are what is already agreed, a procedure
+    // is the order to work in and not a source of facts — and running them
+    // together would blur which caution applies to which.
+    //
+    // The procedure goes LAST, nearest the customer's message. The other three
+    // are context to hold in mind; this one is an instruction about what to do
+    // next, and instructions belong closest to the thing they act on.
+    const notes = [
+      recalled ? recallNote(recalled) : null,
+      owedNote,
+      bookedNote,
+      procedure?.note ?? null,
+    ].filter((note): note is string => note !== null);
 
     const withRecall = notes.length
       ? [...notes.map((content) => ({ role: "assistant" as const, content })), ...history]
@@ -568,6 +594,17 @@ async function processSingleTextMessage(
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
       firstResponseMs: firstResponseMsFrom(message.timestamp),
+      // Stamped whether or not the reply survived governance. An escalated
+      // reply is one the procedure shaped and a human still had to take over —
+      // the single most informative outcome it can have. Recording only the
+      // ones that went out would make "ended without a human" true of nearly
+      // every stamped conversation by construction. See migration 036.
+      //
+      // Note this may disagree with `intent` on the same row: selection ran on
+      // the text before the agent replied, the recording runs after and can see
+      // which tool fired. The stamp records what was APPLIED, which is the
+      // thing the counters are meant to count.
+      procedureId: procedure?.procedureId ?? null,
     });
   } catch (err) {
     logger.error({ conversationId, sentToCustomer, err }, "AI reply pipeline failed");

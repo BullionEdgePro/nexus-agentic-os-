@@ -193,16 +193,30 @@ test("a follow-up lookup cannot delay or break a customer's reply", () => {
   assert.match(PROCESSOR, /listOpenTasksForContact\(serving\.id, contactId\)\s*\n?\s*\)\.catch\(\(\) => \[\]\)/);
 });
 
-test("memory, obligations and appointments stay separate notes", () => {
+test("memory, obligations, appointments and the procedure stay separate notes", () => {
   // Different kinds of fact carrying different cautions — what we know about
-  // someone, what we owe them and must not claim to have done, and what is
-  // already agreed and must not be double-booked. Merged, it would be unclear
-  // which warning governs which part.
+  // someone, what we owe them and must not claim to have done, what is already
+  // agreed and must not be double-booked, and (F10) the order to work in, which
+  // is not a source of facts at all. Merged, it would be unclear which warning
+  // governs which part.
   assert.match(
     PROCESSOR,
-    /const notes = \[recalled \? recallNote\(recalled\) : null, owedNote, bookedNote\]/
+    /const notes = \[\s*recalled \? recallNote\(recalled\) : null,\s*owedNote,\s*bookedNote,\s*procedure\?\.note \?\? null,\s*\]/
   );
   assert.match(PROCESSOR, /function recallNote\(recalled: string\): string/);
+});
+
+test("the procedure sits last, nearest the customer's message", () => {
+  // The other three are context to hold in mind; a procedure is an instruction
+  // about what to do next, and instructions belong closest to the thing they
+  // act on. Pinned because reordering this list is a one-character edit whose
+  // effect on the reply nobody would see in a diff.
+  const array = PROCESSOR.slice(PROCESSOR.indexOf("const notes = ["));
+  const entries = array.slice(0, array.indexOf("]"));
+  assert.ok(
+    entries.indexOf("procedure?.note") > entries.indexOf("bookedNote"),
+    "the procedure note must come after the factual notes"
+  );
 });
 
 test("the promise reaches the conversation from any earlier one", () => {

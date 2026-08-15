@@ -153,6 +153,40 @@ export async function getProcedure(
   return rows[0] ? toProcedure(rows[0]) : null;
 }
 
+/**
+ * The procedure the agent should follow for this situation, or null.
+ *
+ * THE ONE FUNCTION HERE THAT RUNS ON THE LIVE REPLY PATH, which changes what it
+ * is allowed to do. It takes a single indexed read and returns null for almost
+ * every call — most businesses have no procedures and most enquiries have no
+ * active one — so the common case costs one query that finds nothing.
+ *
+ * Active only. A draft is a suggestion nobody has agreed to, and this is the
+ * function that would turn one into a customer's reply.
+ *
+ * Scoped to one business by argument AND by the caller's tenant context. On a
+ * shared number the reply is composed for the SERVING business, so the caller
+ * must wrap this in `withServingTenant` — read as the number's owner, RLS
+ * returns nothing and the agent silently answers with no procedure at all,
+ * which is indistinguishable from "this business has none".
+ */
+export async function getActiveProcedure(
+  organizationId: string,
+  intentCategory: string,
+  language = "en"
+): Promise<ProcedureRecord | null> {
+  const { rows } = await getPool().query<ProcedureRow>(
+    `${PROCEDURE_SELECT}
+      where p.organization_id = $1
+        and p.intent_category = $2
+        and p.language = $3
+        and p.is_active
+      limit 1`,
+    [organizationId, intentCategory, language]
+  );
+  return rows[0] ? toProcedure(rows[0]) : null;
+}
+
 export interface ProcedureCounts {
   /** Shaping replies right now. */
   active: number;
@@ -519,6 +553,93 @@ export async function dismissProcedureSuggestion(
   );
   if (!rows[0]) return null;
   return getProcedure(organizationId, id);
+}
+
+/**
+ * Recompute `times_applied` and `times_succeeded` from what was actually
+ * stamped on the metric rows.
+ *
+ * RECOMPUTED, NEVER INCREMENTED. The reply path records one fact — this
+ * procedure shaped this reply (migration 036) — and these two numbers are read
+ * back out of it. A counter bumped from the reply path could not be
+ * recomputed, could not be audited back to the conversations behind it, and
+ * would drift the first time a job retried. Same argument as the quality
+ * rollups, which is why this runs on the same cycle as them.
+ *
+ * WHAT `times_succeeded` HONESTLY MEANS, and it is not success.
+ *
+ * It counts conversations where the procedure was applied, no colleague joined,
+ * and the customer wrote again after the agent's reply. That is the same
+ * evidence the inference writer learns from, and it has the same hole: a
+ * customer who gave up leaves silence, and so does one who was helped. The
+ * column was named `times_succeeded` in migration 033 before there was a writer
+ * to define it; the name is kept because renaming a column is not worth a
+ * migration, but NOTHING IN THE UI IS ALLOWED TO CALL IT SUCCESS. The review
+ * screen says "ended without a human", which is the measurable thing.
+ *
+ * Per CONVERSATION, not per reply. A chatty exchange where the agent answered
+ * six times is one conversation the procedure was used on, and counting it as
+ * six would make talkative customers look like proof.
+ */
+export async function rollUpProcedureOutcomes(organizationId: string): Promise<number> {
+  const { rowCount } = await getPool().query(
+    `with applied as (
+       -- One row per (procedure, conversation), collapsing repeat replies.
+       select distinct cm.procedure_id, cm.conversation_id
+         from conversation_metrics cm
+        where cm.organization_id = $1
+          and cm.procedure_id is not null
+     ),
+     shape as (
+       -- The same bar the inference writer uses, computed the same way: no
+       -- human in the conversation at all, and the customer came back after the
+       -- agent had answered. Aggregated separately from the CTE above and
+       -- joined on conversation_id, because joining messages into that query
+       -- would fan out and multiply every count.
+       select m.conversation_id,
+              count(*) filter (where m.sender_type = 'human_agent') as human,
+              max(m.created_at) filter (where m.sender_type = 'contact')  as last_in,
+              min(m.created_at) filter (where m.sender_type = 'ai_agent') as first_ai
+         from messages m
+        where m.organization_id = $1
+        group by m.conversation_id
+     ),
+     tally as (
+       select a.procedure_id,
+              count(*)                                        as applied,
+              count(*) filter (
+                where s.human = 0 and s.last_in > s.first_ai
+              )                                               as contained
+         from applied a
+         -- LEFT, so the two numbers answer two different questions. "Applied"
+         -- is true the moment the procedure shaped a reply and must not depend
+         -- on the conversation's later shape; only "contained" does. An inner
+         -- join would silently drop a conversation whose messages could not be
+         -- read and quietly shrink the denominator — which is the same bias
+         -- migration 036 refuses on the escalation side.
+         left join shape s on s.conversation_id = a.conversation_id
+        group by a.procedure_id
+     )
+     update procedures p
+        set times_applied   = coalesce(t.applied, 0),
+            times_succeeded = coalesce(t.contained, 0),
+            updated_at      = now()
+       from (
+         -- LEFT-joined against every procedure of this business, so one that
+         -- stops being used falls back to zero rather than keeping the number
+         -- it had when it was last applied. A stale count that only ever rises
+         -- is the failure this whole function is written around.
+         select p2.id, t2.applied, t2.contained
+           from procedures p2
+           left join tally t2 on t2.procedure_id = p2.id
+          where p2.organization_id = $1
+       ) t
+      where p.id = t.id
+        and (p.times_applied, p.times_succeeded)
+            is distinct from (coalesce(t.applied, 0), coalesce(t.contained, 0))`,
+    [organizationId]
+  );
+  return rowCount ?? 0;
 }
 
 export interface OperatorProcedureInput {

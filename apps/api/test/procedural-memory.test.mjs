@@ -30,6 +30,10 @@ const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
 
 const MIGRATION_033 = read("packages", "db", "migrations", "033-procedures.sql");
 const MIGRATION_034 = read("packages", "db", "migrations", "034-procedure-review.sql");
+const MIGRATION_036 = read("packages", "db", "migrations", "036-procedure-applied.sql");
+const RECALL = read("packages", "agents", "src", "procedure-recall.ts");
+const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
+const ROLLUP = read("apps", "api", "src", "services", "quality-rollup.ts");
 const STORE = read("packages", "db", "src", "procedures.ts");
 const WRITER = read("apps", "api", "src", "services", "procedure-inference.ts");
 const ROUTE = read("apps", "api", "src", "routes", "procedures.ts");
@@ -384,6 +388,131 @@ test("what is running and what is suggested are shown side by side", () => {
   assert.match(SCREEN, /procedure\.proposedSteps \? \(/);
   assert.match(SCREEN, /Use this instead/);
   assert.match(SCREEN, /Keep what we have/);
+});
+
+// ============================================================
+// The half that speaks
+// ============================================================
+
+test("only an ACTIVE procedure can reach a customer", () => {
+  // The single line between "a draft nobody agreed to" and "what a business
+  // says to its customers".
+  const lookup = STORE.slice(STORE.indexOf("export async function getActiveProcedure"));
+  assert.match(lookup.slice(0, lookup.indexOf("]")), /and p\.is_active/);
+});
+
+test("spam and unclassifiable messages can never carry a procedure", () => {
+  // Broadest possible blast radius for the least evidence: a procedure keyed on
+  // `unknown` would apply to whatever the rules failed to read.
+  assert.match(RECALL, /if \(!isPatternIntent\(intent\)\) return null/);
+});
+
+test("the reply path degrades to no procedure rather than failing", () => {
+  // Same treatment as the other three enrichments. A customer waiting on a
+  // reply must not wait on a procedure lookup, and must never lose the reply to
+  // one.
+  assert.match(PROCESSOR, /recallProcedure\(serving\.id, text\.body\)\s*\n?\s*\)\.catch\(\(\) => null\)/);
+  // And it asks the SERVING business, not the number's owner — read as the
+  // owner, RLS returns nothing and the agent silently answers with no
+  // procedure, which is indistinguishable from the business having none.
+  assert.match(PROCESSOR, /withServingTenant\(serving\.id, \(\) =>\s*recallProcedure/);
+});
+
+test("the procedure is an order of work, not a licence to invent facts", () => {
+  // The failure that would matter most: a step saying "quote the fee" read as
+  // permission to produce one. Retrieval stays the only source of substance.
+  assert.match(RECALL, /it is the order to /);
+  assert.match(RECALL, /not a source of facts/);
+  // And it must not become an interrogation when the customer has already
+  // answered half of it.
+  assert.match(RECALL, /a default, not a script/);
+});
+
+test("the agent must not recite the procedure to the customer", () => {
+  // The only one of the three cautions a customer would actually see if it were
+  // dropped — an agent announcing "step one…", or reading a business's internal
+  // method out to whoever asks.
+  assert.match(RECALL, /Do not read these steps out/);
+});
+
+test("selection runs on text alone, and says so", () => {
+  // classifyIntent's better signal is the tool the agent called, which does not
+  // exist yet at selection time. Recording that honestly is what stops someone
+  // "fixing" the apparent inconsistency later by moving selection after the
+  // reply — where it could no longer shape it.
+  assert.match(RECALL, /THE INTENT USED HERE IS A PREDICTION/);
+  assert.match(RECALL, /classifyIntent\(\{ text \}\)/);
+});
+
+// ============================================================
+// Counting what happened, not what we hoped
+// ============================================================
+
+test("the counters are derived, never incremented", () => {
+  // A counter bumped from the reply path cannot be recomputed, cannot be
+  // audited back to the conversations behind it, and drifts the first time a
+  // job retries. This codebase has written that lesson down twice already.
+  assert.match(MIGRATION_036, /add column if not exists procedure_id uuid/);
+  assert.match(STORE, /export async function rollUpProcedureOutcomes/);
+  const roll = STORE.slice(STORE.indexOf("export async function rollUpProcedureOutcomes"));
+  assert.ok(
+    !/times_applied\s*=\s*times_applied|\+\s*1/.test(roll.slice(0, roll.indexOf("[organizationId]"))),
+    "outcomes must be recomputed from the stamps, never incremented"
+  );
+  assert.match(roll, /set times_applied\s*= coalesce\(t\.applied, 0\)/);
+});
+
+test("an escalated reply still counts as applied", () => {
+  // THE BIAS THIS AVOIDS. Stamping only replies that went out as the agent's
+  // own would make "ended without a human" true of nearly every stamped
+  // conversation by construction — a success rate that cannot go down.
+  const stamp = PROCESSOR.slice(PROCESSOR.indexOf("procedureId: procedure?.procedureId"));
+  assert.ok(!/shouldEscalate/.test(stamp.slice(0, 120)), "the stamp must not be conditional on escalation");
+  assert.match(MIGRATION_036, /A success rate that\n-- cannot go down is not a measurement/);
+});
+
+test("a procedure that stops being used falls back to zero", () => {
+  // A stale count that only ever rises is the same failure in a quieter form.
+  const roll = STORE.slice(STORE.indexOf("export async function rollUpProcedureOutcomes"));
+  assert.match(roll, /left join tally t2 on t2\.procedure_id = p2\.id/);
+});
+
+test("one conversation counts once, however chatty", () => {
+  const roll = STORE.slice(STORE.indexOf("export async function rollUpProcedureOutcomes"));
+  assert.match(roll, /select distinct cm\.procedure_id, cm\.conversation_id/);
+});
+
+test("nothing calls it success, because it is not success", () => {
+  // The column is `times_succeeded` — named in 033 before there was a writer to
+  // define it. What it counts is "nobody had to step in and the customer kept
+  // replying", which has the same hole as the inference evidence: someone who
+  // gave up leaves the same silence.
+  assert.match(STORE, /NOTHING IN THE UI IS ALLOWED TO CALL IT SUCCESS/);
+  assert.match(SCREEN, /ended\n\s*without a human/);
+  // VISIBLE TEXT ONLY. The first version of this failed on
+  // `{procedure.timesSucceeded}` — the field name, which no reader ever sees —
+  // and would have forced a rename of the column to satisfy a test about
+  // wording. Comments and interpolated expressions are stripped so the
+  // assertion is about what appears on the page.
+  const visible = SCREEN.replace(/\{\/\*[\s\S]*?\*\/\}/g, " ").replace(/\{[^{}]*\}/g, " ");
+  assert.ok(
+    !/succeeded|success/i.test(visible),
+    "the screen must not present the containment count as success"
+  );
+});
+
+test("outcomes are recomputed hourly, with the numbers a person reads", () => {
+  // Not on the daily inference cycle: these are the figures somebody uses to
+  // decide whether to keep a procedure switched on, and a number up to 24 hours
+  // stale is one they would be right to distrust.
+  assert.match(ROLLUP, /rollUpProcedureOutcomes\(organization\.id\)/);
+  // Outside the per-day loop — the counters are a running total, not a daily
+  // figure, and recomputing them three times per run is identical work twice.
+  const perOrg = ROLLUP.slice(ROLLUP.indexOf("for (const organization of organizations)"));
+  assert.ok(
+    perOrg.indexOf("rollUpProcedureOutcomes") > perOrg.indexOf("rollUpQualityDay"),
+    "the outcome rollup belongs after the day loop, not inside it"
+  );
 });
 
 // ============================================================

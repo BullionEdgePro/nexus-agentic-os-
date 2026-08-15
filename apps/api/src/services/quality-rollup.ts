@@ -1,4 +1,10 @@
-import { listOrganizations, rollUpQualityDay, rollUpSharedPatterns, withTenant } from "@nexus/db";
+import {
+  listOrganizations,
+  rollUpQualityDay,
+  rollUpProcedureOutcomes,
+  rollUpSharedPatterns,
+  withTenant,
+} from "@nexus/db";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -32,6 +38,26 @@ export async function rollUpRecentQuality(windowDays = WINDOW_DAYS): Promise<num
         // no rollup and no signal that it was skipped.
         logger.error({ organization: organization.slug, day, err }, "Quality rollup failed");
       }
+    }
+
+    // How the business's procedures are actually doing, recomputed from the
+    // stamps the reply path left on the metric rows (migration 036).
+    //
+    // On this cycle rather than the daily inference one, because these are the
+    // numbers a person reads while deciding whether to keep a procedure switched
+    // on — and a figure that is up to 24 hours stale is one they would be right
+    // to distrust. It is a single statement per business over an indexed
+    // column, so hourly costs nothing.
+    //
+    // Outside the per-day loop: the counters are a running total over all of a
+    // procedure's history, not a figure per day, and recomputing them three
+    // times per business per run would just do identical work twice.
+    try {
+      await withTenant(organization.id, () => rollUpProcedureOutcomes(organization.id));
+    } catch (err) {
+      // Never fatal to the quality rollups above, which are the ones an owner
+      // actually looks at.
+      logger.error({ organization: organization.slug, err }, "Procedure outcome rollup failed");
     }
   }
 

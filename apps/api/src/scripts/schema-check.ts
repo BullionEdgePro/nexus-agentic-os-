@@ -67,6 +67,9 @@ import {
   dismissProcedureSuggestion,
   replaceProcedureSteps,
   createOperatorProcedure,
+  getActiveProcedure,
+  rollUpProcedureOutcomes,
+  recordConversationMetric,
 } from "@nexus/db";
 import { OPERATORS } from "../services/operators.js";
 import {
@@ -238,6 +241,69 @@ async function main(): Promise<void> {
           replaceProcedureSteps(org.id, id, probeSteps, "schema-check")
         );
         await step("deactivate", () => setProcedureActive(org.id, id, false, "schema-check"));
+      }
+
+      // ---- the half that speaks (migration 036) ----
+      //
+      // Every query below is new and none had ever been planned: the live
+      // reply-path lookup, the metric insert now carrying `procedure_id`, and
+      // the rollup that derives both counters from it. The reply-path one is
+      // the dangerous member of that set — a break there is not a page that
+      // fails to load, it is the agent path throwing on live customer traffic.
+      if (id) {
+        await step("reply path finds the active procedure", async () => {
+          await setProcedureActive(org.id, id, true, "schema-check");
+          const found = await getActiveProcedure(org.id, PROBE_INTENT);
+          if (found?.id !== id) throw new Error("an active procedure was not found by the reply path");
+          return found;
+        });
+
+        // A stamped metric row, so the rollup has something real to count. The
+        // conversation and contact are created here and discarded with
+        // everything else when this transaction rolls back.
+        const stamped = await step("stamp a reply with the procedure", async () => {
+          const { rows: c } = await getPool().query<{ id: string }>(
+            `insert into contacts (organization_id, wa_id, display_name)
+             values ($1, $2, 'Schema check probe')
+             on conflict (organization_id, wa_id) do update set display_name = excluded.display_name
+             returning id`,
+            [org.id, PROBE_WA_ID]
+          );
+          const { rows: conv } = await getPool().query<{ id: string }>(
+            `insert into conversations (organization_id, contact_id) values ($1, $2) returning id`,
+            [org.id, c[0].id]
+          );
+          await recordConversationMetric({
+            organizationId: org.id,
+            conversationId: conv[0].id,
+            intent: "knowledge_lookup",
+            resolvedBy: "ai_agent",
+            inputTokens: 1,
+            outputTokens: 1,
+            procedureId: id,
+          });
+          return conv[0].id;
+        });
+
+        if (stamped) {
+          await step("recompute procedure outcomes", () => rollUpProcedureOutcomes(org.id));
+          const counted = await getProcedure(org.id, id);
+          // Applied is 1 — the procedure shaped a reply. Contained is 0,
+          // because this probe conversation has no messages and therefore
+          // cannot meet the "nobody stepped in and the customer came back"
+          // bar. That asymmetry is the point of the LEFT join in the rollup:
+          // the two numbers answer two different questions.
+          if (counted?.timesApplied === 1 && counted.timesSucceeded === 0) {
+            console.log("  ok    applied counts the reply, contained does not assume it went well");
+          } else {
+            console.log(
+              `  FAIL  outcomes are derived correctly (applied=${counted?.timesApplied}, contained=${counted?.timesSucceeded})`
+            );
+            failures++;
+          }
+        }
+
+        await setProcedureActive(org.id, id, false, "schema-check");
       }
 
       // Written by hand, which is the other insert and takes the other branch of

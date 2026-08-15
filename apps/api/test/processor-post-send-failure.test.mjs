@@ -97,6 +97,13 @@ mock.module("@nexus/agents", {
     // mock that invented one would exercise a branch these assertions never
     // check and quietly change what the agent was asked.
     upcomingBookingsNote: async () => null,
+    // No active procedure, which is the state every business is in today
+    // and will be in for weeks: F10 needs 5 well-handled conversations of
+    // one kind before it proposes anything, and a person must then switch
+    // it on. A mock that supplied one would change what the agent was
+    // asked in tests whose assertions are about the reply path itself —
+    // the applied-procedure path is covered in procedural-memory.test.mjs.
+    recallProcedure: async () => null,
     rememberContact: async () => ({ written: false }),
     routeToEmployeeTwin: async () => ({
       config: { id: "agent-1" },

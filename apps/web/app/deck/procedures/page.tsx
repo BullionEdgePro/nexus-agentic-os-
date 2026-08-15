@@ -331,8 +331,20 @@ export default function ProceduresPage() {
                   ) : (
                     <span>written by hand</span>
                   )}
-                  {procedure.isActive && procedure.timesApplied > 0 ? (
-                    <span>followed {procedure.timesApplied} times</span>
+                  {/* "ended without a human", never "succeeded" — even though
+                      the column is called times_succeeded. It counts
+                      conversations where nobody had to step in and the customer
+                      kept replying, which is the measurable thing; calling that
+                      success would assert exactly what the caveat at the foot of
+                      this page says the platform cannot see. */}
+                  {procedure.timesApplied > 0 ? (
+                    <span>
+                      followed on {procedure.timesApplied} conversation
+                      {procedure.timesApplied === 1 ? "" : "s"} · {procedure.timesSucceeded} ended
+                      without a human
+                    </span>
+                  ) : procedure.isActive ? (
+                    <span>not used yet</span>
                   ) : null}
                   {procedure.reviewedBy ? <span>last decided by {procedure.reviewedBy}</span> : null}
                   {procedure.dismissedAt ? (
