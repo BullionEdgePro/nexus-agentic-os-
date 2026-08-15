@@ -75,16 +75,25 @@ cd /opt/nexus && docker compose -f docker-compose.prod.yml exec -T worker \
 | `rls-preflight` | Every path carries a tenant context; auth routes establish their own |
 | `retrieval-check` | 18 probes each find their page in the top 3 |
 
-Last full run: **all five PASS**, 6 operators `0 standing` across 5 businesses, 6/6 containers up,
-590 tests, typecheck clean.
+Last full run (15 Aug 2026, after the F10 deploy): **all five PASS**, 6/6 containers up, 625 tests,
+typecheck clean. `schema-check` now also covers every F10 query, including the writes — inside a
+transaction it rolls back, because `procedures` grants no DELETE and a probe row could never be
+cleaned up.
+
+**One flake worth knowing about.** `self-check` aborted on its first run with a connect timeout to
+Google's embedding endpoint (`172.217.113.4:443`), one line after a retrieval had succeeded, and
+passed cleanly on retry. Nothing to do with F10 — but embeddings are on the live reply path, so if
+retrieval starts failing intermittently, VPS egress to Google is the first place to look rather
+than the index.
 
 ## 4. State of the system
 
 **Complete (7/15):** Employee Agent Layer · Knowledge Ingestion · Lead Intelligence · Security &
 Tenant Isolation · Campaign Engine · Appointment Booking · Shared Intelligence (F5).
 
-**In progress — F10 Procedural Memory.** The foundation (033) now has both halves that were
-missing. **Written, not yet deployed:**
+**In progress — F10 Procedural Memory. Live since 15 August 2026**, migration 034 applied, all five
+gates green afterwards, `procedures` still at 0 rows. The first scheduled inference runs
+**16 Aug 00:00 UTC** (04:00 Dubai); the queue's repeat key is registered in Redis. What shipped:
 
 * **The inference writer** — `apps/api/src/services/procedure-inference.ts`, daily on its own
   queue. Reads conversations no human joined, where the customer kept replying after the agent's
@@ -97,7 +106,7 @@ missing. **Written, not yet deployed:**
   Knowledge, so `requireTenantScope` and the tenant middleware apply and RLS is doing real work.
   Activate, edit, accept, dismiss, or write one by hand.
 * **Migration 034** — `proposed_steps`, dismissal memory, review stamps, one inferred row per
-  situation. Not yet applied to production.
+  situation.
 
 Three rules are load-bearing and each has a test: the writer never activates anything; it proposes
 to an active procedure rather than editing it; a dismissed suggestion needs **double** the evidence
@@ -176,20 +185,16 @@ read correctly and parsed to nothing. All were found by verifying the produced r
 
 ## 6. Next session
 
-**Deploy F10 first, in this order**, because the code is written and unrun:
+**First, look at what the writer produced overnight** — `/deck/procedures`, one business at a time.
+On current traffic it will most likely have proposed nothing and said why, which is the designed
+behaviour rather than a fault: Zipicka is the only business with customers, and the threshold is 5
+well-handled conversations for one kind of enquiry. If the screen instead shows a suggestion,
+**read the steps before anything else**: that is the first output of a model this platform has ever
+put in front of a person as a proposal, and whether the steps are a method or a paraphrase of one
+conversation is the judgement the whole feature turns on.
 
-```bash
-# 1. migration 034 — as `nexus`, never through the api container (see §2)
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U nexus -d nexus -v ON_ERROR_STOP=1 < packages/db/migrations/034-procedure-review.sql
-# 2. build and restart api + worker, then run the gates
-docker compose -f docker-compose.prod.yml exec -T worker npx tsx apps/api/src/scripts/schema-check.ts
-```
-
-`schema-check` now exercises every one of F10's queries against the real schema, including the
-writes — inside a transaction it rolls back, because `procedures` grants no DELETE and a probe row
-could not be cleaned up. None of that SQL has ever been planned by Postgres; on past form that is
-where the first failure will be.
+Note the deploy needed `web` rebuilt as well as `api` and `worker` — §2's recipe names only the
+latter two, which is right for most changes and wrong for any that touch the deck.
 
 Then say: **"continue F10 — put active procedures in front of the agent."**
 
