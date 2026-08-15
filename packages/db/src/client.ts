@@ -44,6 +44,7 @@ const TENANT_SCOPED_TABLES = [
   "conversation_metrics",
   "contact_memory",
   "procedures",
+  "reengagement_attempts",
   "tasks",
   "operator_findings",
   "bookings",
