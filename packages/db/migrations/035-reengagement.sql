@@ -39,6 +39,16 @@ create table if not exists reengagement_attempts (
 
   sent_at timestamptz not null default now(),
 
+  -- When this contact becomes reachable again.
+  --
+  -- Stored rather than computed, because the obvious form —
+  -- `tstzrange(sent_at, sent_at + interval '30 days')` inside the constraint —
+  -- is rejected: `timestamptz + interval` is STABLE, not IMMUTABLE, and an
+  -- exclusion constraint may only index immutable expressions. A range over two
+  -- plain columns is immutable, so the window becomes a column and the default
+  -- supplies the 30 days.
+  cooldown_until timestamptz not null default now() + interval '30 days',
+
   -- Did it work? Set when the contact replies. Not a guess: 'replied' means a
   -- real inbound message arrived after sent_at.
   outcome text not null default 'sent'
@@ -58,11 +68,17 @@ create table if not exists reengagement_attempts (
 -- the cost of nudging too often is a block or a quality-rating cut, and both are
 -- far more expensive than a lead that goes cold. Widening this is a decision
 -- someone should have to make on purpose.
+-- The first run of this migration created the table and then failed on the
+-- constraint below, so production briefly held the table WITHOUT its cooldown.
+-- This makes the column addition re-runnable rather than assuming a clean slate.
+alter table reengagement_attempts
+  add column if not exists cooldown_until timestamptz not null default now() + interval '30 days';
+
 alter table reengagement_attempts drop constraint if exists reengagement_one_per_month;
 alter table reengagement_attempts add constraint reengagement_one_per_month
   exclude using gist (
     contact_id with =,
-    tstzrange(sent_at, sent_at + interval '30 days') with &&
+    tstzrange(sent_at, cooldown_until) with &&
   );
 
 create index if not exists reengagement_org_sent_idx
