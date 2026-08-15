@@ -18,6 +18,7 @@ import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
 import { proceduresRoute } from "./routes/procedures.js";
+import { forecastsRoute } from "./routes/forecasts.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
@@ -101,6 +102,11 @@ app.route("/api/organizations", employeesRoute);
 // context — and therefore RLS — is established by the middleware rather than by
 // the handler remembering to narrow.
 app.route("/api/organizations", proceduresRoute);
+// Predictive BI, mounted here for the same reason as the two above and NOT
+// under /api/quality, where the rest of the reporting lives: `forecasts` is a
+// tenant-scoped table with an RLS policy, and this mount is what gives it a
+// tenant context to enforce against. See routes/forecasts.ts.
+app.route("/api/organizations", forecastsRoute);
 app.route("/api/conversations", conversationsRoute);
 // Assignment and the personal-WhatsApp handoff hang off a conversation id,
 // so they compose onto the same /api/conversations router.

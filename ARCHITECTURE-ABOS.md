@@ -268,7 +268,7 @@ phone number and narrows immediately.
 | 8 | Operators | 🟡 **Built, and §2.3 answered by construction rather than by decision.** Five operators sweep every business every 10 minutes and call no model at all — customer waiting for a reply, overdue follow-up, unowned follow-up, failing knowledge source, and an agent with almost nothing to answer from. The fifth exists because ABR's five indexed passages were found by counting rows by hand: `broken-knowledge` watches sources that FAIL, and a business with too few working sources has nothing wrong with it in that sense. The design property that matters is that a finding can be **retracted**: each pass computes the complete truth and reconciles, so the list shrinks as well as grows. Paid inference remains an open choice, now additive rather than blocking |
 | 9 | Command Center | 🟡 Deck on live queries, plus team activity and agent quality. One rollup table exists (daily quality); the overview still aggregates live |
 | 10 | Memory | 🟡 Semantic + episodic (per-business contact memory, expiring, forgettable). Procedural not formalised |
-| 11 | Predictive BI | ⛔ Blocked on data volume |
+| 11 | Predictive BI | 🟡 **Built, and built around the refusal.** Seven-day demand forecasts per business from `agent_quality_daily`, by weekday median, calling no model. What makes it not numerology is that it will not speak without evidence: four weeks of history, ten days with actual traffic, and fourteen days of rolling-origin backtest before a single number is shown — and where it refuses, the sentence saying why takes the chart's place. Every forecast is stored *before* the day it describes with the naive "same weekday last week" recorded beside it, then marked against what happened; the published accuracy counts only claims made in advance, is never totalled across horizons, and says so when the naive guess is winning. On today's traffic every metric correctly refuses. That is the output, not a gap |
 | 12 | Security | ✅ **Complete.** Auth, least-privilege, tenant context, and RLS applied and *verified enforcing* — `nexus_app` is not a superuser, holds no bypass, owns no tables, and one business cannot read another's rows while still reading its own |
 | 13 | Marketplace | ⛔ Needs a data-egress policy first |
 | 14 | Self-improving AI | 🟡 Escalation, containment and correction rate from human actions, plus escalation hotspots pointing at the knowledge screen. Automatic action is deliberately not taken — the judgement of whether a rate is wrong belongs to someone who knows the business |
@@ -492,7 +492,18 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
 
 ### 9.4 Blocked on data, not code
 
-- **Predictive BI (F11)** — one live tenant makes this numerology.
+- ~~**Predictive BI (F11)** — one live tenant makes this numerology.~~ **Stale —
+  built, by taking that sentence as the specification rather than as a reason to
+  wait.** The observation was right and is now enforced in code: nothing is
+  forecast until four weeks of history, ten active days and a fourteen-day
+  rolling-origin backtest exist for that business, and an all-zero series — which
+  four of five businesses have — is refused by name, because it satisfies every
+  length check, backtests perfectly, and would render a confident flat forecast
+  with a tight interval and a glowing score. Every claim is written down before
+  its day with the naive baseline stored alongside, so "is this worth running?"
+  is arithmetic rather than opinion. What remains blocked on volume is not the
+  feature but its output: today it refuses everywhere, and the refusal is the
+  honest reading of the data.
 - **Model-based lead scoring** — needs labelled won/lost outcomes. The current
   rules are generating exactly that history.
 - **Self-improving AI (F14)** — needs a ground-truth set before it can act.

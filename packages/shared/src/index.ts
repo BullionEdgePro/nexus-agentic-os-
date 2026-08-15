@@ -2,3 +2,4 @@ export * from "./types.js";
 export * from "./normalize.js";
 export * from "./intents.js";
 export * from "./procedures.js";
+export * from "./forecast.js";

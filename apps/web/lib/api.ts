@@ -736,6 +736,95 @@ export function getConversationBookings(
 }
 
 // ============================================================
+// Forecasts (F11 Predictive BI)
+// ============================================================
+
+export type ForecastMetric = "conversations" | "escalated";
+
+/**
+ * Why a metric cannot be forecast, and what the method scored when it could.
+ *
+ * `blockedBecause` is the field this screen was designed around rather than a
+ * fallback. Most businesses here have no customers, so a refusal is the normal
+ * response and needs to read as an answer.
+ */
+export interface MetricReadiness {
+  metric: ForecastMetric;
+  label: string;
+  historyDays: number;
+  activeDays: number;
+  blockedBecause: string | null;
+  /** The method marked against this business's own past. Null when blocked. */
+  backtest: {
+    days: number;
+    methodMae: number;
+    baselineMae: number;
+    beatsBaseline: boolean;
+  } | null;
+}
+
+export interface ForecastStatus {
+  lastCompleteDay: string | null;
+  horizonDays: number;
+  metrics: MetricReadiness[];
+}
+
+export interface StoredForecast {
+  metric: ForecastMetric;
+  targetDay: string;
+  horizonDays: number;
+  predicted: number;
+  intervalLow: number;
+  intervalHigh: number;
+  /** What "the same weekday last week" said at the same moment. */
+  baseline: number;
+  historyDays: number;
+  madeAt: string;
+}
+
+export interface ScoredForecast extends StoredForecast {
+  actual: number;
+  error: number;
+  baselineError: number;
+}
+
+/**
+ * How the claims actually committed to in advance have turned out.
+ *
+ * Never totalled across horizons — a claim made overnight and one made six days
+ * out are different claims, and averaging them produces a figure that improves
+ * whenever the job runs late.
+ */
+export interface ForecastAccuracy {
+  metric: ForecastMetric;
+  horizonDays: number;
+  scored: number;
+  methodMae: number;
+  baselineMae: number;
+  beatsBaseline: boolean;
+  insideInterval: number;
+  publishable: boolean;
+}
+
+export function getForecast(orgSlug: BusinessSlug): Promise<{
+  status: ForecastStatus;
+  upcoming: StoredForecast[];
+  accuracy: ForecastAccuracy[];
+  recent: ScoredForecast[];
+}> {
+  return request(`/api/organizations/${orgSlug}/forecast`);
+}
+
+export function refreshForecast(orgSlug: BusinessSlug): Promise<{
+  scored: number;
+  written: number;
+  refusedAsBackdated: number;
+  blocked: number;
+}> {
+  return request(`/api/organizations/${orgSlug}/forecast/refresh`, { method: "POST" });
+}
+
+// ============================================================
 // Header: search, and the signed-in account
 // ============================================================
 

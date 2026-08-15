@@ -80,6 +80,15 @@ tests, typecheck clean. `schema-check` now also covers every F10 query, includin
 transaction it rolls back, because `procedures` grants no DELETE and a probe row could never be
 cleaned up.
 
+**F11 has NOT been through these gates yet — it is built and unshipped.** Locally: typecheck clean,
+**673 tests pass / 0 fail** (35 new), `next build` clean. `schema-check` has been extended to cover
+every F11 query and has not been run, because it needs the real database. Run it first, before the
+migration is considered done: it is the only thing that has ever caught SQL that Postgres could not
+plan. Its F11 section **forces the INSERT** rather than calling `produceForecasts` and accepting a
+quiet zero — the writer refuses on thin history, which every business currently has, so the natural
+call would plan the reads, write nothing, report success, and leave the insert as unverified as it
+was until the first business finally accumulated traffic.
+
 **One flake worth knowing about.** `self-check` aborted on its first run with a connect timeout to
 Google's embedding endpoint (`172.217.113.4:443`), one line after a retrieval had succeeded, and
 passed cleanly on retry. Nothing to do with F10 — but embeddings are on the live reply path, so if
@@ -90,7 +99,7 @@ than the index.
 
 **Complete (8/15):** Employee Agent Layer · Knowledge Ingestion · Lead Intelligence · Security &
 Tenant Isolation · Campaign Engine · Appointment Booking · Shared Intelligence (F5) · **Procedural
-Memory (F10)**.
+Memory (F10)**. **Built but not yet deployed: Predictive BI (F11)** — see below.
 
 **F10 went live on 15 August 2026** — migrations 034 and 036 applied, all five gates green
 afterwards, `procedures` at 0 rows. The first scheduled inference runs **16 Aug 00:00 UTC**
@@ -142,7 +151,37 @@ is a live change to what customers are told, so it wants a person's decision, no
 messaging limits; does not block drafting. All five templates are **Active**, and
 `syncAllTemplates()` has run against the live API (7 approved per business, 0 retired).
 
-**Blocked on reality:** F11 Predictive BI needs data volume that will now accumulate.
+**F11 Predictive BI is built and not yet deployed (15 Aug 2026).** Migration 037, a `forecasts`
+table, a daily queue, `/api/organizations/:slug/forecast`, and a deck screen at `/deck/forecast`
+("What's coming"). Seven-day demand forecasts per business — conversations, and conversations
+needing a person — from `agent_quality_daily`, by weekday median. **It calls no model**, for the
+same reason F8's operators do not and one more: a model asked for a number always returns one and
+cannot be asked for its error distribution, which is the only part of a forecast worth having.
+
+The reason this is not the numerology the architecture doc warned about, in one line each:
+
+* **It refuses more often than it speaks, and says which constraint binds.** Four weeks of history,
+  ten days with actual traffic, fourteen days of rolling-origin backtest. The all-zero series gets
+  its own named refusal, because four of five businesses have one — it passes every length check,
+  backtests perfectly (predicting zero is always right), and would otherwise render a confident flat
+  forecast with a tight interval and a glowing accuracy score. That output is not useless; it is
+  convincing, which is worse.
+* **Every claim is written down before its day, with the naive baseline beside it.** "The same
+  weekday last week" is stored at prediction time, not recomputed later, so "was this worth running?"
+  is arithmetic. When the naive guess wins, the screen says so in the same size type.
+* **It cannot mark its own homework.** The backtest predicts each past day from only the days before
+  it. The *live* accuracy figure counts only rows whose `made_at` precedes the start of the day they
+  describe — enforced in the writer's SQL *and* again in the read, so a hand-inserted row can exist
+  and can never earn a score. Accuracy is never totalled across horizons: averaged, it would improve
+  whenever the job ran late.
+* **The table cannot forget its misses.** No DELETE grant. A reporting feature able to drop its own
+  wrong rows reports 100% forever.
+
+**What it will show on Monday: nothing, everywhere, with a sentence.** Zipicka has weeks of history
+and 13 conversations in 60 days; the other four have no customers. Every metric is expected to
+refuse. That is the designed output and the screen is built around it — same shape as F10's empty
+review queue, and the same instruction applies: do not read the empty state as a fault.
+
 F13 Marketplace needs a data-egress policy decision.
 
 **Partial by design, not neglect:** F14 measures quality but will not act automatically — judging
@@ -207,6 +246,27 @@ about findings that only ever accumulate. A nightly writer that re-proposes what
 yesterday is the same failure: `dismissed_evidence` stores how strong the case was when it was
 turned down, so "it has been a while" is not enough to ask again.
 
+**Record the dumb alternative at the same instant, or you can never find out.** F11 stores what "the
+same weekday last week" said in the same row as the forecast, written at the same moment from the
+same data. Recomputed afterwards, the comparison would be made from information the baseline never
+had, and the method would win by construction. The general form: when you ship something clever,
+write down what the obvious thing would have said, at the time, in the same place — otherwise "was
+this worth building?" becomes a matter of opinion, and the opinion belongs to whoever built it.
+
+**A prediction that has not been written down in advance is a memory.** F11's accuracy figure counts
+only rows whose `made_at` precedes the start of the day they describe. The guard is in the writer's
+SQL *and* repeated in the read, because a guard in one place holds until somebody inserts a row
+another way. A backdated row can exist in that table; it can never earn a score. Note what could not
+be done: this is exactly the case for a CHECK constraint, and a CHECK containing `now()` is not
+re-evaluated against rows already stored — so it would look like a guarantee and behave like a
+suggestion. When the database cannot hold the guarantee, put it in the read path, not the caller.
+
+**A denominator that grows when the job runs late is not an accuracy.** F11 groups its error by
+horizon and refuses to total across them. A claim made overnight and one made six days out are
+different claims of different difficulty; averaged together, the published figure improves every time
+the scheduler slips. Same family as migration 019's warning about what gets left out of the bottom of
+a fraction.
+
 **Check the artefact, not the screen.** Every defect found in this session presented as normal
 operation — no error, no alert, dashboards green. The sign-in that had never worked, a governance
 judge dead behind a defaulted setting, Lorem ipsum indexed as knowledge, a permission file that
@@ -235,6 +295,24 @@ answered half of them, which the note explicitly warns against and which a promp
 (truecopyattestions.com, jurisprimelegal.ae, sfsintrealestate.com, abshlaw.com). All 18 retrieval
 probes pass against them, and without them every customer lands in the triage menu first.
 
-After that, the two features gated on the same thing F10 is — data volume — are F11 Predictive BI
-and, indirectly, F5. Every one of them gets better as intent coverage does, which makes the intent
-classifier the load-bearing part of the next three features rather than any one of them.
+**F11 is written and unshipped, and shipping it is four steps.** Push to both repos, apply migration
+037 as `nexus` via psql (never through `db:migrate` — see §2), rebuild **api, worker AND web**, then
+run `schema-check` before believing anything. The web rebuild is not optional here: this change adds
+a deck screen, and §2's recipe names only api and worker.
+
+When it is up, the thing to look at is not the forecast. **It is whether the refusals name the right
+constraint.** Open `/deck/forecast` for each business in turn and read the sentence under each
+heading. Zipicka should say it has too few complete days or too few active ones; the other four
+should say they have had no customer conversations at all. If any of them instead shows seven
+confident bars, stop and look at why — on this much traffic that is not good news, it is the failure
+this feature was shaped to prevent, and it would look exactly like success.
+
+The first genuinely informative moment is roughly four weeks after Zipicka crosses the thresholds,
+when `MIN_SCORED_FORECASTS` is met and the earned accuracy table appears for the first time. Read the
+baseline column before the method column. If the naive guess is winning, the honest thing is to say
+so on the screen — which it already does — and the honest fix is a better method, not a wider
+interval.
+
+Beyond that, F5 is gated on the same thing, and every one of these gets better as intent coverage
+does, which makes the intent classifier the load-bearing part of the next three features rather than
+any one of them.

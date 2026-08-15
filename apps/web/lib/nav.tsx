@@ -162,6 +162,23 @@ export const NAV: NavItem[] = [
     operatorOnly: true,
   },
   {
+    href: "/deck/forecast",
+    label: "What's coming",
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M3 16.5l5-5 3.5 3.5L21 6" />
+        <path d="M15.5 6H21v5.5" />
+        <path d="M3 20.5h18" strokeDasharray="2.5 2.5" />
+      </svg>
+    ),
+    // Reporting, so it sits at the end — but deliberately NOT operatorOnly,
+    // unlike the three screens around it. Those hold management information
+    // about staff. How many customers are expected on Thursday is the business's
+    // own operational information, and the person rostering Thursday is the one
+    // who needs it. /api/organizations/:slug/forecast narrows an employee to
+    // their own business, exactly as Knowledge and the diary do.
+  },
+  {
     href: "/deck/quality",
     label: "Agent quality",
     icon: (

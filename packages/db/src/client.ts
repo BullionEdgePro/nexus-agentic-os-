@@ -48,6 +48,7 @@ const TENANT_SCOPED_TABLES = [
   "tasks",
   "operator_findings",
   "bookings",
+  "forecasts",
 ];
 // Not on the list, and each for a reason worth stating:
 //

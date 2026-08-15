@@ -17,6 +17,8 @@ import {
   scheduleProcedureInference,
 } from "./queue/procedures-queue.js";
 import { processProcedureInferenceJob } from "./queue/procedures-processor.js";
+import { FORECAST_QUEUE, scheduleForecastCycle } from "./queue/forecast-queue.js";
+import { processForecastJob } from "./queue/forecast-processor.js";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -81,6 +83,18 @@ proceduresWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Procedure inference failed")
 );
 
+// Concurrency 1. Two passes at once would both write the same (business, metric,
+// target day, horizon) row, and the upsert refuses to touch a row that has
+// already been scored — so the loser of the race silently does nothing while
+// reporting success.
+const forecastWorker = new Worker(FORECAST_QUEUE, processForecastJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+forecastWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Forecast cycle failed")
+);
+
 reindexWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Knowledge re-index job failed")
 );
@@ -131,6 +145,12 @@ scheduleProcedureInference()
   .then(() => logger.info("Procedure inference scheduled (daily)"))
   .catch((err) => logger.warn({ err }, "Could not schedule procedure inference"));
 
+// Daily, and the interval is part of the measurement rather than a saving — a
+// claim re-made hourly is graded on hindsight. See forecast-queue.ts.
+scheduleForecastCycle()
+  .then(() => logger.info("Forecast cycle scheduled (daily)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule forecast cycle"));
+
 // Verify every configured model is actually callable. A model that 404s does
 // not crash anything — it just makes every customer receive the generic
 // fallback reply while the system looks healthy — so it has to be shouted
@@ -164,6 +184,7 @@ async function shutdown() {
     // is killed mid-sweep rather than allowed to finish.
     operatorsWorker.close(),
     proceduresWorker.close(),
+    forecastWorker.close(),
   ]);
   process.exit(0);
 }

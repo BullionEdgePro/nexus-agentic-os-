@@ -1,0 +1,289 @@
+/* What's coming — predictive BI.
+ *
+ * Inherits the deck chrome (.act-root, .act-head, .act-tabs, .act-table,
+ * .act-empty) from activity.css, which the page imports alongside deck.css.
+ * Only what is specific to showing a forecast lives here.
+ *
+ * Every colour comes through the tokens in deck.css, so both themes follow and
+ * nothing below hard-codes a hex. */
+
+/* --- run it now --- */
+
+.fc-run {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 18px 0 6px;
+}
+
+.fc-btn {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 9px 15px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--vellum-card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.fc-btn:hover:not(:disabled) { border-color: var(--blueprint); color: var(--blueprint); }
+.fc-btn:disabled { opacity: 0.5; cursor: default; }
+
+.fc-run-note,
+.fc-sub {
+  font-size: 12.5px;
+  color: var(--graphite);
+  max-width: 62ch;
+  line-height: 1.5;
+  flex: 1 1 320px;
+}
+
+.fc-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--graphite);
+  margin: 4px 0 0;
+}
+
+/* --- one measure --- */
+
+.fc-metric {
+  margin: 30px 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+
+.fc-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.fc-metric-head h2 {
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* The evidence count sits in the heading rather than a footnote. How many days
+   the figure rests on is not an aside; on this platform it is usually the
+   reason the figure is absent. */
+.fc-evidence {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+/* --- the refusal ---
+ *
+ * Takes the space the chart would have had, and is styled as content rather
+ * than as an error. For most businesses here this IS the screen, and for months
+ * — a red panel would say something is broken when nothing is. */
+.fc-blocked {
+  margin: 14px 0 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--pencil);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 16px 18px;
+}
+
+.fc-blocked strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 5px;
+}
+
+.fc-blocked p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--graphite);
+  max-width: 70ch;
+}
+
+/* --- the backtest ---
+ *
+ * The losing case is amber, not red, and it is not hidden. A method that does
+ * not beat the naive baseline is a result worth reading, not a fault. */
+.fc-backtest {
+  margin: 14px 0 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blueprint);
+  border-radius: var(--r);
+  background: var(--blueprint-soft);
+  padding: 13px 16px;
+}
+
+.fc-backtest.warn {
+  border-left-color: var(--warn);
+  background: rgba(169, 118, 47, 0.07);
+}
+
+.fc-backtest p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--graphite);
+  max-width: 74ch;
+}
+
+.fc-backtest b { color: var(--ink); font-weight: 600; }
+
+/* --- the seven days ---
+ *
+ * The INTERVAL is the bar and the prediction is a line inside it, deliberately
+ * inverted from the usual chart. Drawn the other way round, the eye reads the
+ * midpoint as the answer and the whiskers as decoration — which on four weeks
+ * of history is precisely backwards. */
+.fc-bars {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin: 18px 0 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.fc-bar {
+  flex: 1 1 0;
+  min-width: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.fc-bar-track {
+  position: relative;
+  width: 100%;
+  height: 128px;
+  border-bottom: 1px solid var(--line-strong);
+  background: linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 100% 32px;
+}
+
+.fc-bar-range {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  background: var(--blueprint-soft);
+  border: 1px solid rgba(29, 63, 191, 0.35);
+  border-radius: var(--r-sm);
+}
+
+.fc-bar-mid {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  height: 2px;
+  background: var(--blueprint);
+  transform: translateY(1px);
+}
+
+.fc-bar-value {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+.fc-bar-range-label,
+.fc-bar-date {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--pencil);
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-bar-day {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--graphite);
+}
+
+/* --- earned accuracy --- */
+
+.fc-accuracy { margin: 22px 0 0; }
+
+.fc-accuracy h3 {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  margin: 0 0 8px;
+}
+
+.fc-unchecked {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--graphite);
+  max-width: 74ch;
+}
+
+.fc-acc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.fc-acc-table th {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  text-align: right;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 400;
+}
+
+.fc-acc-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.fc-acc-table th:first-child,
+.fc-acc-table td:first-child { text-align: left; }
+
+.fc-acc-table tbody tr:last-child td { border-bottom: 0; }
+
+.fc-good { color: var(--good); font-weight: 600; }
+.fc-warn { color: var(--warn); font-weight: 600; }
+
+/* --- the caveat ---
+ *
+ * Not small print. It states what the method cannot know — campaigns, holidays,
+ * a competitor closing — and on a page of confident-looking numbers that is the
+ * sentence most worth reading. */
+.fc-caveat {
+  margin: 34px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--graphite);
+  max-width: 74ch;
+}

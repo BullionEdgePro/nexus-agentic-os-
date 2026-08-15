@@ -70,7 +70,18 @@ import {
   getActiveProcedure,
   rollUpProcedureOutcomes,
   recordConversationMetric,
+  FORECAST_METRICS,
+  getForecastStatus,
+  getLastCompleteDay,
+  getCompleteHistory,
+  getUpcomingForecasts,
+  getForecastAccuracy,
+  getRecentlyScored,
+  scoreDueForecasts,
+  produceForecasts,
+  recordForecasts,
 } from "@nexus/db";
+import { addDays } from "@nexus/shared";
 import { OPERATORS } from "../services/operators.js";
 import {
   findWellHandledConversations,
@@ -341,6 +352,131 @@ async function main(): Promise<void> {
     console.log("  ok    the probe procedures were rolled back");
   } else {
     console.log(`  FAIL  probe procedures survived (${strays}) — they cannot be deleted`);
+    failures++;
+  }
+
+  // ---- predictive BI (migration 037) ----
+  //
+  // Every query in packages/db/forecasts.ts is new. Three of them have the
+  // shapes that have actually bitten in this file before: an UPDATE ... FROM
+  // across two tables, an aggregate with a `filter` clause over a BETWEEN, and —
+  // the one to watch — `target_day::timestamp at time zone o.timezone` in a
+  // WHERE, which Postgres has to be able to type before it can plan.
+  //
+  // THE WRITE IS FORCED RATHER THAN INVITED, and that is the point of this
+  // section. `produceForecasts` refuses on thin history, and on this platform
+  // every business currently has thin history — so calling it would plan the
+  // reads, write nothing, report success, and leave the INSERT exactly as
+  // unverified as it was. The first time that statement ever ran would be the
+  // day a business finally accumulated enough traffic. So `recordForecasts` is
+  // called directly below with a hand-built prediction.
+  //
+  // Rolled back rather than probe-and-deleted, for the same reason as the
+  // procedures above: migration 037 grants no DELETE on `forecasts`, because a
+  // reporting feature able to drop its own wrong rows will report perfect
+  // accuracy forever.
+  console.log("\nPredictive BI (F11)");
+
+  await withTenant(org.id, async () => {
+    await step("forecast status", () => getForecastStatus(org.id));
+    await step("last complete day", () => getLastCompleteDay(org.id));
+    for (const metric of FORECAST_METRICS) {
+      await step(`history: ${metric}`, () => getCompleteHistory(org.id, metric));
+    }
+    await step("upcoming forecasts", () => getUpcomingForecasts(org.id));
+    await step("earned accuracy", () => getForecastAccuracy(org.id));
+    await step("recently marked", () => getRecentlyScored(org.id));
+    // Plans the UPDATE ... FROM. Matches nothing today, which does not matter —
+    // Postgres still has to type and plan every statement.
+    await step("score due forecasts", () => scoreDueForecasts(org.id));
+    // The refusal path end to end. Expected to write nothing and to say so.
+    await step("produce forecasts", () => produceForecasts(org.id));
+  });
+
+  try {
+    await withTenant(org.id, async () => {
+      // Far enough ahead that it is unambiguously in the future in every
+      // timezone this platform serves, so the writer's own "has this day begun?"
+      // clause cannot refuse it for a reason unrelated to the schema.
+      const targetDay = addDays(new Date().toISOString().slice(0, 10), 30);
+
+      const written = await step("store a forecast", () =>
+        recordForecasts(org.id, "conversations", [
+          {
+            targetDay,
+            horizonDays: 7,
+            predicted: 4,
+            intervalLow: 1,
+            intervalHigh: 7,
+            baseline: 3,
+            method: "schema_check_probe",
+            historyDays: 30,
+          },
+        ])
+      );
+
+      if (written?.written !== 1) {
+        console.log(
+          `  FAIL  the forecast row is written      (written=${written?.written}, refused=${written?.refusedAsBackdated})`
+        );
+        failures++;
+      } else {
+        console.log("  ok    the forecast row is written");
+      }
+
+      // Read back through the real accessor, which is where the timezone
+      // comparison in the WHERE actually gets planned against live data.
+      const back = await step("read it back", () => getUpcomingForecasts(org.id));
+      const found = back?.some((row) => row.targetDay === targetDay);
+      console.log(found ? "  ok    it comes back as upcoming" : "  FAIL  the stored forecast did not come back");
+      if (!found) failures++;
+
+      // The refusal, exercised rather than asserted. A day already begun must be
+      // turned away by the SQL, not by the caller.
+      const backdated = await step("refuse a backdated forecast", () =>
+        recordForecasts(org.id, "conversations", [
+          {
+            targetDay: addDays(new Date().toISOString().slice(0, 10), -1),
+            horizonDays: 1,
+            predicted: 4,
+            intervalLow: 1,
+            intervalHigh: 7,
+            baseline: 3,
+            method: "schema_check_probe",
+            historyDays: 30,
+          },
+        ])
+      );
+      if (backdated?.written === 0 && backdated?.refusedAsBackdated === 1) {
+        console.log("  ok    yesterday is refused by the database");
+      } else {
+        console.log(
+          `  FAIL  a backdated forecast was accepted (written=${backdated?.written}) — accuracy can now be fabricated`
+        );
+        failures++;
+      }
+
+      throw new RolledBack();
+    });
+  } catch (err) {
+    if (!(err instanceof RolledBack)) throw err;
+  }
+
+  const strayForecasts = await withTenant(org.id, async () => {
+    const { rows } = await getPool().query<{ n: string }>(
+      `select count(*)::text as n
+         from forecasts
+        where organization_id = $1 and method = 'schema_check_probe'`,
+      [org.id]
+    );
+    return Number(rows[0]?.n ?? 0);
+  });
+  if (strayForecasts === 0) {
+    console.log("  ok    the probe forecasts were rolled back");
+  } else {
+    console.log(
+      `  FAIL  probe forecasts survived (${strayForecasts}) — they cannot be deleted, and they will be scored`
+    );
     failures++;
   }
 

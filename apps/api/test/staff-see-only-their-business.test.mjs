@@ -52,6 +52,12 @@ const TAB_API = {
   // employee for the same reason: it is that business's own material rather
   // than management information about its staff.
   "/deck/procedures": "/api/organizations/",
+  // Predictive BI. Sits among the reporting tabs at the end of the rail, but is
+  // addressed per organization rather than under /api/quality — so unlike its
+  // neighbours it is NOT operator-only. How many customers are expected on
+  // Thursday is the business's own operational information, and the person
+  // rostering Thursday is the one who needs it.
+  "/deck/forecast": "/api/organizations/",
   "/deck/links": "/api/links",
   "/deck/broadcasts": "/api/broadcasts",
   "/deck/activity": "/api/activity",
