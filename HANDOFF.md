@@ -75,8 +75,8 @@ cd /opt/nexus && docker compose -f docker-compose.prod.yml exec -T worker \
 | `rls-preflight` | Every path carries a tenant context; auth routes establish their own |
 | `retrieval-check` | 18 probes each find their page in the top 3 |
 
-Last full run (15 Aug 2026, after the F10 deploy): **all five PASS**, 6/6 containers up, 625 tests,
-typecheck clean. `schema-check` now also covers every F10 query, including the writes — inside a
+Last full run (15 Aug 2026, after F10 was completed): **all five PASS**, 6/6 containers up, 638
+tests, typecheck clean. `schema-check` now also covers every F10 query, including the writes — inside a
 transaction it rolls back, because `procedures` grants no DELETE and a probe row could never be
 cleaned up.
 
@@ -88,12 +88,13 @@ than the index.
 
 ## 4. State of the system
 
-**Complete (7/15):** Employee Agent Layer · Knowledge Ingestion · Lead Intelligence · Security &
-Tenant Isolation · Campaign Engine · Appointment Booking · Shared Intelligence (F5).
+**Complete (8/15):** Employee Agent Layer · Knowledge Ingestion · Lead Intelligence · Security &
+Tenant Isolation · Campaign Engine · Appointment Booking · Shared Intelligence (F5) · **Procedural
+Memory (F10)**.
 
-**In progress — F10 Procedural Memory. Live since 15 August 2026**, migration 034 applied, all five
-gates green afterwards, `procedures` still at 0 rows. The first scheduled inference runs
-**16 Aug 00:00 UTC** (04:00 Dubai); the queue's repeat key is registered in Redis. What shipped:
+**F10 went live on 15 August 2026** — migrations 034 and 036 applied, all five gates green
+afterwards, `procedures` at 0 rows. The first scheduled inference runs **16 Aug 00:00 UTC**
+(04:00 Dubai); the queue's repeat key is registered in Redis. All three parts shipped:
 
 * **The inference writer** — `apps/api/src/services/procedure-inference.ts`, daily on its own
   queue. Reads conversations no human joined, where the customer kept replying after the agent's
@@ -105,8 +106,20 @@ gates green afterwards, `procedures` still at 0 rows. The first scheduled infere
 * **The review screen** — `/deck/procedures` ("How we answer"), addressed per organization like
   Knowledge, so `requireTenantScope` and the tenant middleware apply and RLS is doing real work.
   Activate, edit, accept, dismiss, or write one by hand.
-* **Migration 034** — `proposed_steps`, dismissal memory, review stamps, one inferred row per
-  situation.
+* **The reply path** — `packages/agents/src/procedure-recall.ts`, called from the processor
+  alongside memory, follow-ups and appointments, and prepended **last** so the instruction sits
+  nearest the customer's message. Selection runs on the message text alone, because
+  `classifyIntent`'s better signal — the tool the agent called — does not exist yet at that point.
+  The note says the order is a default rather than a script, that it never licenses a fact
+  retrieval did not supply, and that it must never be read out to the customer.
+* **The counters** — `times_applied` / `times_succeeded` are **derived hourly** from a
+  `procedure_id` stamped on the metric row, never incremented. The stamp is written even when
+  governance blocked the reply; excluding escalations would make "ended without a human" true by
+  construction.
+* **Migrations 034 and 036** — `proposed_steps`, dismissal memory, review stamps, one inferred row
+  per situation; then the applied-procedure stamp. **036, not 035**: another workstream took that
+  number for `035-reengagement.sql` mid-change, and the one that had been applied nowhere is the one
+  that moved.
 
 **Measured on deploy day, so nobody re-derives it:** of Zipicka's 13 conversations in the last 60
 days, exactly **1** is evidence this writer will use — and the reason is not the strictness of the
@@ -115,13 +128,15 @@ five are spam or `unknown`, which is 12 of 13 before any of the conversation-sha
 applied. F10 is gated on intent coverage exactly as F5 was, and grows from here as classified
 traffic accumulates. An empty screen for the next few weeks is the correct output.
 
-Three rules are load-bearing and each has a test: the writer never activates anything; it proposes
+Four rules are load-bearing and each has a test: the writer never activates anything; it proposes
 to an active procedure rather than editing it; a dismissed suggestion needs **double** the evidence
-before it may ask again.
+before it may ask again; and nothing in the UI calls the containment count success.
 
-**Still to do on F10:** wiring active procedures into the agent prompt, and `times_applied` /
-`times_succeeded` (columns exist, nothing increments them). Until that lands, an activated
-procedure is recorded and reviewed but does not yet reach a reply.
+**The one link never exercised end to end**, stated rather than left to be assumed: no real
+customer message has yet met an active procedure, because there are none. `schema-check` proves the
+lookup, the stamp and the rollup against the live schema, and the processor wiring is covered by
+tests over the source — but the first genuine proof will be a conversation. Activating a procedure
+is a live change to what customers are told, so it wants a person's decision, not a deploy step.
 
 **Blocked on Meta, not code:** business verification is *in review* (~2 working days). Lifts
 messaging limits; does not block drafting. All five templates are **Active**, and
@@ -180,6 +195,13 @@ customers with nobody asked — and the row would still read "active", so the sc
 it as reviewed. The newer inference goes to `proposed_steps` instead. The general form: when a job
 and a person write to the same row, the job gets its own column.
 
+**A measurement whose denominator excludes its own failures cannot go down.** F10 stamps the
+procedure that shaped a reply even when governance blocked that reply and handed the conversation
+to a person. Recording only the replies that went out would have been the tidier code and would
+have made "ended without a human" true of nearly every stamped conversation — a success rate that
+rises to 100% and stays there, on a feature whose whole purpose is to be judged. Before trusting
+any rate on this platform, look at what was left out of the bottom of the fraction.
+
 **A refusal has to be remembered, or the queue becomes wallpaper.** Migration 027 made this point
 about findings that only ever accumulate. A nightly writer that re-proposes what somebody rejected
 yesterday is the same failure: `dismissed_evidence` stores how strong the case was when it was
@@ -203,9 +225,16 @@ conversation is the judgement the whole feature turns on.
 Note the deploy needed `web` rebuilt as well as `api` and `worker` — §2's recipe names only the
 latter two, which is right for most changes and wrong for any that touch the deck.
 
-Then say: **"continue F10 — put active procedures in front of the agent."**
+**F10 is finished and needs traffic, not code.** Its remaining risk is not in the writer or the
+screen; it is that nobody has yet watched a real customer meet an active procedure. When the first
+one is switched on, read the next few replies in the inbox before trusting it — the specific thing
+to look for is the agent working through the steps like a form on a customer who had already
+answered half of them, which the note explicitly warns against and which a prompt cannot guarantee.
 
-That is the half that actually changes a reply, and it is deliberately last: the boundary landed
-first, then the review, and only now the thing that speaks. Two decisions are waiting there — where
-in the prompt a procedure sits relative to retrieved knowledge, and what increments
-`times_applied` / `times_succeeded` without turning "the agent followed it" into "it worked".
+**The highest-value item available is still not code:** publish the four deep links
+(truecopyattestions.com, jurisprimelegal.ae, sfsintrealestate.com, abshlaw.com). All 18 retrieval
+probes pass against them, and without them every customer lands in the triage menu first.
+
+After that, the two features gated on the same thing F10 is — data volume — are F11 Predictive BI
+and, indirectly, F5. Every one of them gets better as intent coverage does, which makes the intent
+classifier the load-bearing part of the next three features rather than any one of them.
