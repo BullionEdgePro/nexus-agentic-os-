@@ -17,4 +17,5 @@ export * from "./onboarding.js";
 export * from "./tasks.js";
 export * from "./bookings.js";
 export * from "./operators.js";
+export * from "./procedures.js";
 export * from "./search.js";

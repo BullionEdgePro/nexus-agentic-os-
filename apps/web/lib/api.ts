@@ -428,6 +428,115 @@ export function removeKnowledge(orgSlug: BusinessSlug, id: string): Promise<{ ok
   return request(`/api/organizations/${orgSlug}/knowledge/${id}`, { method: "DELETE" });
 }
 
+// ============================================================
+// Procedures (F10)
+// ============================================================
+
+export interface ProcedureStep {
+  text: string;
+}
+
+export interface ProcedureRecord {
+  id: string;
+  businessName: string;
+  intentCategory: string;
+  language: string;
+  steps: ProcedureStep[];
+  /** A newer inference waiting on a person. Null when there is nothing to weigh. */
+  proposedSteps: ProcedureStep[] | null;
+  proposedAt: string | null;
+  source: "operator" | "inferred";
+  derivedFromCount: number;
+  timesApplied: number;
+  timesSucceeded: number;
+  isActive: boolean;
+  lastInferredAt: string | null;
+  dismissedAt: string | null;
+  dismissedEvidence: number | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  updatedAt: string;
+}
+
+/**
+ * Why there is nothing to review yet.
+ *
+ * Carried alongside the list rather than inferred from its length, because
+ * "empty" has several causes and only some of them are worth waiting out.
+ */
+export interface InferenceReadiness {
+  windowDays: number;
+  minConversations: number;
+  conversations: number;
+  wellHandled: number;
+  perIntent: { intent: string; wellHandled: number; enough: boolean }[];
+  blockedBecause: string | null;
+  canRun: boolean;
+}
+
+export interface ProcedureCounts {
+  active: number;
+  drafts: number;
+  proposals: number;
+}
+
+export function getProcedures(orgSlug: BusinessSlug): Promise<{
+  procedures: ProcedureRecord[];
+  counts: ProcedureCounts;
+  readiness: InferenceReadiness;
+  intents: string[];
+}> {
+  return request(`/api/organizations/${orgSlug}/procedures`);
+}
+
+export interface InferenceRunSummary {
+  considered: number;
+  written: number;
+  proposed: number;
+  skipped: number;
+}
+
+export interface InferenceRun {
+  intents: {
+    intent: string;
+    wellHandled: number;
+    write?: { outcome: string; note?: string };
+    skipped?: { reason: string; detail?: string };
+  }[];
+}
+
+export function inferProcedures(
+  orgSlug: BusinessSlug
+): Promise<{ run: InferenceRun; summary: InferenceRunSummary }> {
+  return request(`/api/organizations/${orgSlug}/procedures/infer`, { method: "POST" });
+}
+
+export function createProcedure(
+  orgSlug: BusinessSlug,
+  input: { intentCategory: string; steps: string[]; activate?: boolean }
+): Promise<{ procedure: ProcedureRecord }> {
+  return request(`/api/organizations/${orgSlug}/procedures`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * One endpoint for the four review decisions — activate, edit, accept, dismiss.
+ * They share every guard, and the question being answered is always the same
+ * one: what should this procedure look like now.
+ */
+export function updateProcedure(
+  orgSlug: BusinessSlug,
+  id: string,
+  input: { isActive?: boolean; steps?: string[]; accept?: boolean; dismiss?: boolean }
+): Promise<{ procedure: ProcedureRecord }> {
+  return request(`/api/organizations/${orgSlug}/procedures/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 export interface BusinessLink {
   slug: string;
   name: string;

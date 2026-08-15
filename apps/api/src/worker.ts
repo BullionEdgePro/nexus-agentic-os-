@@ -12,6 +12,11 @@ import { QUALITY_ROLLUP_QUEUE, scheduleQualityRollup } from "./queue/quality-que
 import { processQualityRollupJob } from "./queue/quality-processor.js";
 import { OPERATORS_QUEUE, scheduleOperators } from "./queue/operators-queue.js";
 import { processOperatorsJob } from "./queue/operators-processor.js";
+import {
+  PROCEDURE_INFERENCE_QUEUE,
+  scheduleProcedureInference,
+} from "./queue/procedures-queue.js";
+import { processProcedureInferenceJob } from "./queue/procedures-processor.js";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -64,6 +69,18 @@ operatorsWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Operator sweep failed")
 );
 
+// Concurrency 1, like the operator sweep and for a related reason. Two passes
+// running at once would each read the same conversations, each call the model,
+// and each write the result — paying twice to have the second one overwrite the
+// first with the same thing, or with a plausible variant of it.
+const proceduresWorker = new Worker(PROCEDURE_INFERENCE_QUEUE, processProcedureInferenceJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+proceduresWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Procedure inference failed")
+);
+
 reindexWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Knowledge re-index job failed")
 );
@@ -108,6 +125,12 @@ scheduleOperators()
   .then(() => logger.info("Operators scheduled (every 10m)"))
   .catch((err) => logger.warn({ err }, "Could not schedule operators"));
 
+// Daily, not hourly: this one calls a model per business and produces something
+// a person has to read. See procedures-queue.ts.
+scheduleProcedureInference()
+  .then(() => logger.info("Procedure inference scheduled (daily)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule procedure inference"));
+
 // Verify every configured model is actually callable. A model that 404s does
 // not crash anything — it just makes every customer receive the generic
 // fallback reply while the system looks healthy — so it has to be shouted
@@ -136,6 +159,11 @@ async function shutdown() {
     reindexWorker.close(),
     templateSyncWorker.close(),
     qualityWorker.close(),
+    // operatorsWorker was missing from this list — noticed while adding the one
+    // below it. A worker left out is not closed on SIGTERM, so its in-flight job
+    // is killed mid-sweep rather than allowed to finish.
+    operatorsWorker.close(),
+    proceduresWorker.close(),
   ]);
   process.exit(0);
 }

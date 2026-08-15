@@ -112,6 +112,21 @@ export const NAV: NavItem[] = [
     ),
   },
   {
+    href: "/deck/procedures",
+    label: "How we answer",
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M5 5.5h3M5 12h3M5 18.5h3" />
+        <path d="M11.5 5.5H19M11.5 12H19M11.5 18.5H19" />
+      </svg>
+    ),
+    // Sits directly after Knowledge, and the pairing is the argument: knowledge
+    // is what the agent answers FROM, this is the order it answers IN. Deliberately
+    // NOT operatorOnly, for the same reason Knowledge is not — it is the
+    // business's own material, and the person who knows whether "ask which
+    // country first" is right is the person who does the job.
+  },
+  {
     href: "/deck/links",
     label: "Customer links",
     icon: (

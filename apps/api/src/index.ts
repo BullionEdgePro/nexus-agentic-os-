@@ -17,6 +17,7 @@ import { linksRoute, publicLinksRoute } from "./routes/links.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
+import { proceduresRoute } from "./routes/procedures.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
@@ -95,6 +96,11 @@ app.route("/api/organizations", organizationsRoute);
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.
 app.route("/api/organizations", knowledgeRoute);
 app.route("/api/organizations", employeesRoute);
+// Procedural memory, addressed per organization for the same reason knowledge
+// is: it is that business's own material, and mounting it here means the tenant
+// context — and therefore RLS — is established by the middleware rather than by
+// the handler remembering to narrow.
+app.route("/api/organizations", proceduresRoute);
 app.route("/api/conversations", conversationsRoute);
 // Assignment and the personal-WhatsApp handoff hang off a conversation id,
 // so they compose onto the same /api/conversations router.

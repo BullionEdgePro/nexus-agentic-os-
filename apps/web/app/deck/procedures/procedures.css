@@ -1,0 +1,307 @@
+/* How we answer — procedural memory review.
+ *
+ * Inherits the deck chrome (.act-root, .act-head, .act-tabs, .act-empty) from
+ * activity.css, which the page imports alongside deck.css. Only what is
+ * specific to reviewing a procedure lives here.
+ *
+ * Every colour comes through the tokens in deck.css, so both themes follow and
+ * nothing below hard-codes a hex. */
+
+/* --- the three numbers --- */
+
+.pr-counts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 20px 0 4px;
+}
+
+.pr-count {
+  flex: 1 1 150px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pr-count strong {
+  font-family: var(--display);
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.pr-count span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+/* Only when non-zero. A permanent green panel reading "0 shaping replies" would
+   make the one state on this page with consequences invisible when it arrives. */
+.pr-count.live { border-color: rgba(63, 107, 74, 0.38); background: rgba(63, 107, 74, 0.06); }
+.pr-count.live strong { color: var(--good); }
+.pr-count.warn { border-color: rgba(169, 118, 47, 0.38); background: rgba(169, 118, 47, 0.07); }
+.pr-count.warn strong { color: var(--warn); }
+
+/* --- run it now --- */
+
+.pr-run {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 18px 0 0;
+}
+
+.pr-run button,
+.pr-new button,
+.pr-actions button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 9px 18px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--vellum);
+  cursor: pointer;
+}
+
+.pr-run button:disabled,
+.pr-new button:disabled,
+.pr-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.pr-actions button.quiet {
+  background: transparent;
+  color: var(--graphite);
+  border-color: var(--line-strong);
+}
+
+.pr-run button:focus-visible,
+.pr-new button:focus-visible,
+.pr-actions button:focus-visible,
+.pr-field select:focus-visible,
+.pr-field textarea:focus-visible,
+.pr-edit textarea:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 2px;
+}
+
+.pr-run span { font-size: 12.5px; line-height: 1.5; color: var(--graphite); flex: 1 1 260px; }
+
+.pr-result {
+  margin: 12px 0 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--blueprint);
+}
+
+/* --- why there is nothing yet --- */
+
+/* An explained absence, given the same weight as a result. An unexplained empty
+   list reads as a broken page, which sends someone to fix the wrong thing. */
+.pr-blocked {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blueprint);
+  border-radius: var(--r);
+  background: var(--blueprint-soft);
+  padding: 16px 18px;
+  margin: 18px 0 4px;
+}
+
+.pr-blocked strong { font-family: var(--display); font-size: 16px; font-weight: 500; color: var(--ink); }
+.pr-blocked p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: var(--graphite); }
+
+.pr-blocked ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pr-blocked li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.pr-blocked em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--graphite); }
+
+/* --- the procedures --- */
+
+.pr-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.pr-item {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 14px 16px;
+}
+
+/* State carried by the left rule as well as by the words, so the shape of the
+   list reads before any of it is read. Live is the one with consequences. */
+.pr-item.live { border-left-color: var(--good); }
+.pr-item.proposed { border-left-color: var(--warn); }
+
+.pr-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pr-intent {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.pr-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.pr-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: var(--graphite);
+  white-space: nowrap;
+}
+
+.pr-pill.on { border-color: rgba(63, 107, 74, 0.45); color: var(--good); background: rgba(63, 107, 74, 0.07); }
+.pr-pill.operator { border-color: rgba(29, 63, 191, 0.35); color: var(--blueprint); background: var(--blueprint-soft); }
+
+/* --- the steps --- */
+
+/* Numbered, because the order IS the procedure. A bulleted list of the same
+   sentences would be a set of tips, which is a different claim entirely. */
+.pr-steps {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pr-steps li {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* --- a suggested change to something already live --- */
+
+.pr-proposal {
+  margin: 14px 0 0;
+  border: 1px dashed rgba(169, 118, 47, 0.5);
+  border-radius: var(--r);
+  background: rgba(169, 118, 47, 0.05);
+  padding: 12px 14px;
+}
+
+.pr-proposal-head {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.pr-proposal .pr-steps { margin-top: 10px; }
+
+/* --- meta and actions --- */
+
+.pr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin: 12px 0 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.pr-dismissed { color: var(--warn); }
+
+.pr-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px; }
+
+/* --- editing --- */
+
+.pr-edit { margin-top: 12px; }
+.pr-edit label { display: flex; flex-direction: column; gap: 5px; }
+
+.pr-edit span,
+.pr-field span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.pr-edit textarea,
+.pr-field textarea,
+.pr-field select {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--vellum);
+  color: var(--ink);
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+}
+
+.pr-edit-note,
+.pr-new-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--pencil);
+}
+
+/* --- writing one by hand --- */
+
+.pr-new {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 16px 18px 18px;
+  margin: 24px 0 6px;
+}
+
+.pr-new .act-sub-head { margin: 0; }
+.pr-new-note { margin-bottom: 14px; }
+.pr-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; max-width: 560px; }

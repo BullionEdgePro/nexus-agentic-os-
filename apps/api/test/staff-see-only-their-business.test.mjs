@@ -48,6 +48,10 @@ const TAB_API = {
   "/deck/bookings": "/api/bookings",
   "/deck/team": "/api/organizations/",
   "/deck/knowledge": "/api/organizations/",
+  // Addressed per organization, exactly like Knowledge, and reachable by an
+  // employee for the same reason: it is that business's own material rather
+  // than management information about its staff.
+  "/deck/procedures": "/api/organizations/",
   "/deck/links": "/api/links",
   "/deck/broadcasts": "/api/broadcasts",
   "/deck/activity": "/api/activity",

@@ -58,8 +58,21 @@ import {
   countBookings,
   setBookingStatus,
   assignBooking,
+  listProcedures,
+  countProcedures,
+  getProcedure,
+  upsertInferredProcedure,
+  setProcedureActive,
+  acceptProposal,
+  dismissProcedureSuggestion,
+  replaceProcedureSteps,
+  createOperatorProcedure,
 } from "@nexus/db";
 import { OPERATORS } from "../services/operators.js";
+import {
+  findWellHandledConversations,
+  getInferenceReadiness,
+} from "../services/procedure-inference.js";
 
 /** Deliberately implausible, and the same shape self-check.ts already uses. */
 const PROBE_WA_ID = "999000000000002";
@@ -128,6 +141,141 @@ async function main(): Promise<void> {
   console.log("\nOperators (read-only, run against a real tenant)");
   for (const operator of OPERATORS) {
     await withTenant(org.id, () => step(`operator ${operator.slug}`, () => operator.run(org.id)));
+  }
+
+  // ---- procedural memory (migrations 033 and 034) ----
+  //
+  // Every query in packages/db/procedures.ts and in the inference writer is new,
+  // which by this script's own premise makes all of them unverified. The shapes
+  // with something to get wrong are the ones that have bitten here before: two
+  // CTEs joined on conversation_id, an aggregate with three `filter` clauses,
+  // and four guarded updates.
+  //
+  // THE WRITES RUN INSIDE A TRANSACTION THAT IS DELIBERATELY ROLLED BACK, which
+  // is a different technique from the probe-and-delete used everywhere else in
+  // this file — and it is forced by the design rather than chosen for elegance.
+  // Migrations 033 and 034 grant no DELETE on `procedures` to the application
+  // role, because a procedure that was once active is the record of how a
+  // business answered its customers for a while. So a probe row here could not
+  // be cleaned up: it would sit on the review screen forever, looking like a
+  // real suggestion somebody had to rule on.
+  //
+  // Postgres plans and executes every statement below regardless; the rollback
+  // only discards the result. That is the whole point of running them.
+  console.log("\nProcedural memory (F10)");
+
+  await withTenant(org.id, async () => {
+    await step("well-handled conversations", () => findWellHandledConversations(org.id));
+    await step("inference readiness", () => getInferenceReadiness(org.id));
+    await step("list procedures", () => listProcedures(org.id));
+    await step("count procedures", () => countProcedures(org.id));
+  });
+
+  class RolledBack extends Error {}
+  const PROBE_INTENT = "schema_check_probe";
+  const probeSteps = [{ text: "Schema check probe — not a real procedure" }];
+
+  try {
+    await withTenant(org.id, async () => {
+      const created = await step("infer a procedure", () =>
+        upsertInferredProcedure({
+          organizationId: org.id,
+          intentCategory: PROBE_INTENT,
+          language: "en",
+          steps: probeSteps,
+          derivedFromCount: 5,
+        })
+      );
+
+      if (created?.outcome !== "created") {
+        console.log(`  FAIL  the inferred row is created      (outcome=${created?.outcome})`);
+        failures++;
+      } else {
+        console.log("  ok    the inferred row is created");
+      }
+
+      const id = created?.procedureId;
+      if (id) {
+        // Off by default is the whole restraint of this feature. Asserted on the
+        // row as READ BACK, not on the default in the migration — those are two
+        // different claims and only this one is about what happened.
+        const readBack = await getProcedure(org.id, id);
+        if (readBack?.isActive === false && readBack.source === "inferred") {
+          console.log("  ok    it arrives switched off and marked inferred");
+        } else {
+          console.log("  FAIL  it arrives switched off          (a procedure activated itself)");
+          failures++;
+        }
+
+        await step("activate", () => setProcedureActive(org.id, id, true, "schema-check"));
+
+        // With it active, a differing inference must become a PROPOSAL rather
+        // than an edit. This is the property the whole review model rests on.
+        const second = await step("re-infer while active", () =>
+          upsertInferredProcedure({
+            organizationId: org.id,
+            intentCategory: PROBE_INTENT,
+            language: "en",
+            steps: [...probeSteps, { text: "A second step, so the inference differs" }],
+            derivedFromCount: 6,
+          })
+        );
+        const afterSecond = await getProcedure(org.id, id);
+        if (second?.outcome === "proposed" && afterSecond?.steps.length === 1) {
+          console.log("  ok    an active procedure is proposed to, not rewritten");
+        } else {
+          console.log(
+            `  FAIL  an active procedure is not rewritten (outcome=${second?.outcome}, steps=${afterSecond?.steps.length})`
+          );
+          failures++;
+        }
+
+        await step("accept the proposal", () => acceptProposal(org.id, id, "schema-check"));
+        await step("dismiss a suggestion", () =>
+          dismissProcedureSuggestion(org.id, id, "schema-check")
+        );
+        await step("edit by hand", () =>
+          replaceProcedureSteps(org.id, id, probeSteps, "schema-check")
+        );
+        await step("deactivate", () => setProcedureActive(org.id, id, false, "schema-check"));
+      }
+
+      // Written by hand, which is the other insert and takes the other branch of
+      // the unique-index catch.
+      await step("write one by hand", () =>
+        createOperatorProcedure({
+          organizationId: org.id,
+          intentCategory: `${PROBE_INTENT}_operator`,
+          language: "en",
+          steps: probeSteps,
+          activate: false,
+          reviewedBy: "schema-check",
+        })
+      );
+
+      throw new RolledBack();
+    });
+  } catch (err) {
+    if (!(err instanceof RolledBack)) throw err;
+  }
+
+  // Prove the rollback worked rather than assuming it. If it did not, a probe
+  // procedure is now sitting on somebody's review screen — and unlike every
+  // other probe in this file, nothing in the application can remove it.
+  const strays = await withTenant(org.id, async () => {
+    const { rows } = await getPool().query<{ n: string }>(
+      `select count(*)::text as n
+         from procedures
+        where organization_id = $1 and intent_category like $2`,
+      [org.id, `${PROBE_INTENT}%`]
+    );
+    return Number(rows[0]?.n ?? 0);
+  });
+  if (strays === 0) {
+    console.log("  ok    the probe procedures were rolled back");
+  } else {
+    console.log(`  FAIL  probe procedures survived (${strays}) — they cannot be deleted`);
+    failures++;
   }
 
   // ---- writes, against a probe that is always removed ----

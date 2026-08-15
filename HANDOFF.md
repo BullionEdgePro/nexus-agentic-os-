@@ -83,9 +83,29 @@ Last full run: **all five PASS**, 6 operators `0 standing` across 5 businesses, 
 **Complete (7/15):** Employee Agent Layer · Knowledge Ingestion · Lead Intelligence · Security &
 Tenant Isolation · Campaign Engine · Appointment Booking · Shared Intelligence (F5).
 
-**In progress — F10 Procedural Memory.** Foundation is live: `procedures` table, RLS verified,
-registered in `TENANT_SCOPED_TABLES`, **0 rows and no writer**. Remaining: the inference writer,
-a review screen, and wiring active procedures into the agent prompt.
+**In progress — F10 Procedural Memory.** The foundation (033) now has both halves that were
+missing. **Written, not yet deployed:**
+
+* **The inference writer** — `apps/api/src/services/procedure-inference.ts`, daily on its own
+  queue. Reads conversations no human joined, where the customer kept replying after the agent's
+  answer and the thread has been quiet a day; needs **5** of them for one kind of enquiry before it
+  will call a procedure a procedure. Excludes `unknown` and `inbound_pitch` for the same reason F5
+  does. Output is checked against the PII scanner **and** against the names of the customers it was
+  drawn from — a hit throws the whole inference away, because a procedure goes into the prompt for
+  every future customer of that business.
+* **The review screen** — `/deck/procedures` ("How we answer"), addressed per organization like
+  Knowledge, so `requireTenantScope` and the tenant middleware apply and RLS is doing real work.
+  Activate, edit, accept, dismiss, or write one by hand.
+* **Migration 034** — `proposed_steps`, dismissal memory, review stamps, one inferred row per
+  situation. Not yet applied to production.
+
+Three rules are load-bearing and each has a test: the writer never activates anything; it proposes
+to an active procedure rather than editing it; a dismissed suggestion needs **double** the evidence
+before it may ask again.
+
+**Still to do on F10:** wiring active procedures into the agent prompt, and `times_applied` /
+`times_succeeded` (columns exist, nothing increments them). Until that lands, an activated
+procedure is recorded and reviewed but does not yet reach a reply.
 
 **Blocked on Meta, not code:** business verification is *in review* (~2 working days). Lifts
 messaging limits; does not block drafting. All five templates are **Active**, and
@@ -138,6 +158,17 @@ Two separate false positives came from this.
 regression that had not happened. Assert membership. A test that breaks when something correct is
 added trains people to ignore it.
 
+**A background writer must not edit what a person approved.** F10's writer runs nightly over the
+same table a human reviews. Overwriting an active procedure would change how a business answers its
+customers with nobody asked — and the row would still read "active", so the screen would still show
+it as reviewed. The newer inference goes to `proposed_steps` instead. The general form: when a job
+and a person write to the same row, the job gets its own column.
+
+**A refusal has to be remembered, or the queue becomes wallpaper.** Migration 027 made this point
+about findings that only ever accumulate. A nightly writer that re-proposes what somebody rejected
+yesterday is the same failure: `dismissed_evidence` stores how strong the case was when it was
+turned down, so "it has been a while" is not enough to ask again.
+
 **Check the artefact, not the screen.** Every defect found in this session presented as normal
 operation — no error, no alert, dashboards green. The sign-in that had never worked, a governance
 judge dead behind a defaulted setting, Lorem ipsum indexed as knowledge, a permission file that
@@ -145,8 +176,24 @@ read correctly and parsed to nothing. All were found by verifying the produced r
 
 ## 6. Next session
 
-Say: **"continue F10 — the inference writer and review screen."**
+**Deploy F10 first, in this order**, because the code is written and unrun:
 
-That is the first feature that changes *how* the agent answers rather than what it knows, so the
-judgement matters more than the code. The boundary is already in place, which was the right thing
-to land first.
+```bash
+# 1. migration 034 — as `nexus`, never through the api container (see §2)
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U nexus -d nexus -v ON_ERROR_STOP=1 < packages/db/migrations/034-procedure-review.sql
+# 2. build and restart api + worker, then run the gates
+docker compose -f docker-compose.prod.yml exec -T worker npx tsx apps/api/src/scripts/schema-check.ts
+```
+
+`schema-check` now exercises every one of F10's queries against the real schema, including the
+writes — inside a transaction it rolls back, because `procedures` grants no DELETE and a probe row
+could not be cleaned up. None of that SQL has ever been planned by Postgres; on past form that is
+where the first failure will be.
+
+Then say: **"continue F10 — put active procedures in front of the agent."**
+
+That is the half that actually changes a reply, and it is deliberately last: the boundary landed
+first, then the review, and only now the thing that speaks. Two decisions are waiting there — where
+in the prompt a procedure sits relative to retrieved knowledge, and what increments
+`times_applied` / `times_succeeded` without turning "the agent followed it" into "it worked".
