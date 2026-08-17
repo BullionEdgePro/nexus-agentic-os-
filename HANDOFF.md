@@ -745,6 +745,19 @@ binary's `size --json` emits `{"count":1,"bytes":6367051,...}` and that the scri
 `6367051` from it, matching `stat` exactly — the parser had until then only ever been tested against
 a stub. rclone's config-not-found NOTICE goes to stderr, which the script already discards.
 
+**Secrets go in `/etc/nexus-backup.env` (mode 600), not the crontab.** The script sources it before
+reading anything, so the cron line stays exactly as it is. The template is on the box with both
+values empty, which is the inert state. Verified by setting `BACKUP_REMOTE` in that file and
+watching the run reach the passphrase guard — the file is genuinely being read, not assumed to be.
+
+**A deploy failed silently on the way here, and is worth remembering.** `git pull` printed
+"Aborting", left HEAD where it was, and the verification run I did next exercised the OLD script
+while looking like a pass. Caught by checking HEAD and grepping the deployed file rather than
+reading an exit code. The cause was standing: `backup-db.sh` was mode 644 in git while its own
+header told you to `chmod +x` it on the server, so every pull touching that file aborted on the
+local mode change. **The bit is now in git** (and forced into the mirror too, since Windows ignores
+file modes) — the server needs no chmod and the modification no longer exists.
+
 **Three things still needed, and the third is easy to miss:**
 
 1. `rclone config` — **a remote must actually be defined.** There is no `~/.config/rclone/rclone.conf`
