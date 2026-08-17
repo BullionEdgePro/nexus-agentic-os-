@@ -455,13 +455,19 @@ async function processSingleTextMessage(
       upcomingBookingsNote(serving.id, contactId, serving.timezone ?? "Asia/Dubai")
     ).catch(() => null);
 
-    // How this business works through this kind of enquiry (F10).
+    // How this business works through this kind of enquiry (F10), or failing
+    // that what the platform has seen of enquiries like it (F5).
     //
     // The only one of these four enrichments that changes the SHAPE of the
-    // reply rather than adding a fact to it — and the only one that a person
-    // had to switch on before it could do anything. Null for almost every
-    // message: the business needs an active procedure for the intent the text
-    // rules read, and today none of them has one.
+    // reply rather than adding a fact to it. It used to also be the only one a
+    // person had to switch on before it could do anything, and that is no
+    // longer quite true: where a business has no procedure of its own, pooled
+    // guidance can speak without anyone at that business having approved it.
+    // See the fencing in procedure-recall.ts — own material first, two-tenant
+    // and twenty-sample floors, no numbers into the prompt, and no procedure id
+    // stamped, because no procedure was applied. Null for almost every message
+    // either way: today no business has an active procedure and no pattern is
+    // deep enough to qualify.
     //
     // Same failure-soft treatment as the other three, and the same
     // `withServingTenant` for the same reason: read as the number's owner, RLS

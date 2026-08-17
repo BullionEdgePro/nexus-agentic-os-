@@ -636,10 +636,43 @@ a decision about one business's answers being shaped by other businesses' outcom
 its own argument — not least because there are 0 shareable patterns today, so it would change
 nothing and prove nothing.
 
+## F5's other half — pooled guidance now reaches a reply
+
+**This is the only thing on the platform that shapes what a customer is told without a person at
+that business having approved it.** Everything else — procedures, phrases, catalogue material —
+arrives switched off and waits for somebody. That departure is deliberate, because a business with
+no history is exactly who F5 was described as being for, but it is fenced hard:
+
+* **Own material always wins.** The pooled branch is only reached when `getActiveProcedure` returns
+  nothing. A procedure somebody here wrote, or read and switched on, is never second to a generic
+  tendency.
+* **The pool's thresholds, not the caller's.** `getSharedGuidance` is reused rather than re-queried,
+  because it is the single place the two-tenant filter and 20-sample floor live. Its own comment
+  says what a second query would cost: one tenant's history handed back as platform knowledge with
+  nobody downstream able to tell. This caller does not get to set its own bar.
+* **A usefulness floor on top:** `POOLED_ESCALATION_FLOOR = 0.5`. Below that it is a kind of enquiry
+  usually handled fine, and preparing a handoff for it would make the agent worse at the majority
+  it could have answered.
+* **No numbers and no other business reach the prompt.** The rate decides whether to speak and is
+  then dropped — a model handed "78%" eventually hands it to a customer, and "most people in your
+  position end up needing a lawyer" is a sentence no business here would choose to send.
+* **It stamps no `procedureId`.** `times_applied` is recomputed from those stamps, so a borrowed id
+  would inflate a real procedure's usage with conversations it never shaped.
+* **Fails soft**, and the note tells the agent explicitly that this is *not* a reason to hand over
+  early — without that line, "this usually needs a person" reads to a model as licence to stop
+  trying.
+
+**Inert today and verified so:** 0 patterns meet two-tenants-and-twenty in production. Seeding a
+qualifying one in a rolled-back transaction confirmed it would be returned (`legal_inquiry`, rate
+0.78), so the chain works and is simply waiting on traffic.
+
+The selection is a pure exported function, `selectPooledGuidance`, tested with real patterns rather
+than by matching source — wrong language, wrong intent, and an off-by-one on the floor would each
+produce a note that reads perfectly sensibly in front of a customer and is about something else.
+
 ## The next task
 
-**Decide whether pooled guidance should reach a reply at all** — the half of F5 that remains, and a
-product decision before it is a code one.
+**F5 is complete.** What remains for it is traffic, not code.
 
 **ABR's office number** — one value unblocks the last phrase draft.
 

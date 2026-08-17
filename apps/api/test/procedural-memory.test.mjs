@@ -24,6 +24,7 @@ import { dirname, join } from "node:path";
 
 import { parseProcedureSteps, procedureStepsEqual, MAX_PROCEDURE_STEPS } from "@nexus/shared";
 import { findLeakInSteps } from "../src/services/procedure-inference.ts";
+import { selectPooledGuidance } from "@nexus/agents";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
@@ -555,4 +556,108 @@ test("no model call is made while holding a database transaction open", () => {
     "completeText must not be called inside a withTenant callback"
   );
   console.log("PASS: F10 proposes, a person decides, and nothing changes a reply until they do");
+});
+
+// ============================================================
+// F5's pooled guidance, the one thing that speaks unapproved
+// ============================================================
+
+test("a business's own procedure always beats the pool", () => {
+  // The entire safety argument for letting cross-business patterns reach a
+  // reply. Pooled guidance is for a business with no history of its own; a
+  // procedure somebody here wrote, or read and switched on, must never be
+  // second to a generic tendency.
+  const ownAt = RECALL.indexOf("const procedure = await getActiveProcedure");
+  const pooledAt = RECALL.indexOf("getSharedGuidance()");
+  assert.ok(ownAt > 0 && pooledAt > 0, "both lookups must be present");
+  assert.ok(ownAt < pooledAt, "the business's own procedure is consulted first");
+  // And the pooled branch is unreachable when one was found.
+  assert.match(RECALL, /if \(procedure\) \{[\s\S]*?return \{[\s\S]*?source: "business"/);
+});
+
+test("pooled guidance stamps no procedure id", () => {
+  // `times_applied` is recomputed from these stamps. A pooled note carrying a
+  // borrowed id would inflate a real procedure's usage with conversations it
+  // never shaped, and the number would stop being auditable back to them —
+  // which was the whole reason it is recomputed rather than incremented.
+  assert.match(RECALL, /procedureId: null, intent, source: "pooled"/);
+  const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
+  assert.match(PROCESSOR, /procedureId: procedure\?\.procedureId \?\? null/);
+});
+
+test("the pooled selector answers correctly for real patterns", () => {
+  // Behaviour rather than source text. Every branch here is invisible from the
+  // outside: a wrong language match, an off-by-one on the floor, or taking the
+  // first row regardless of intent all produce a note that reads perfectly
+  // sensibly in front of a customer and is about something else.
+  const pattern = (over) => ({
+    intentCategory: "legal_inquiry",
+    language: "en",
+    escalationRate: 0.78,
+    ...over,
+  });
+
+  assert.equal(selectPooledGuidance([pattern()], "legal_inquiry"), true);
+
+  // Speaks only about the enquiry in front of it.
+  assert.equal(selectPooledGuidance([pattern()], "purchase_inquiry"), false);
+  // ...and does not fall through to whatever else is in the pool.
+  assert.equal(
+    selectPooledGuidance([pattern({ intentCategory: "complaint" }), pattern()], "legal_inquiry"),
+    true
+  );
+
+  // Language must match, or it offers guidance where a procedure could not have
+  // existed anyway.
+  assert.equal(selectPooledGuidance([pattern({ language: "ar" })], "legal_inquiry"), false);
+
+  // The floor: usually-needs-a-person, not sometimes.
+  assert.equal(selectPooledGuidance([pattern({ escalationRate: 0.49 })], "legal_inquiry"), false);
+  assert.equal(selectPooledGuidance([pattern({ escalationRate: 0.5 })], "legal_inquiry"), true);
+
+  // An empty pool is the state today, and must simply say nothing.
+  assert.equal(selectPooledGuidance([], "legal_inquiry"), false);
+});
+
+test("the thresholds are the pool's, not this caller's", () => {
+  // getSharedGuidance is the one place the two-tenant filter and the 20-sample
+  // floor live. A second query here would be a second place to forget them,
+  // and its own comment says what that costs: one tenant's history handed back
+  // to it as platform knowledge, with nobody downstream able to tell.
+  assert.match(RECALL, /getSharedGuidance\(\)/);
+  assert.ok(
+    !/from shared_patterns/i.test(RECALL),
+    "recall must not query the pooled table itself"
+  );
+  // Its own extra bar is about usefulness, and is stated as a named constant
+  // rather than a literal buried in a condition.
+  // Named constant rather than a literal buried in a condition. The comparison
+  // itself is covered by behaviour above, not by matching the source that
+  // implements it.
+  assert.match(RECALL, /POOLED_ESCALATION_FLOOR = 0\.5/);
+  assert.match(RECALL, /escalationRate >= POOLED_ESCALATION_FLOOR/);
+});
+
+test("no number and no other business reaches the prompt", () => {
+  // A model handed "78%" eventually hands it to a customer, and "most people in
+  // your position end up needing a lawyer" is a sentence no business here would
+  // choose to send. The rate decides whether to speak and is then dropped.
+  const note = RECALL.slice(RECALL.indexOf("const POOLED_NOTE ="));
+  const body = note.slice(0, note.indexOf(";\n"));
+  assert.ok(!/%|\d+ (of|per)|escalationRate|sampleCount/.test(body), "no figures in the note");
+  assert.ok(
+    !/other business|another business|platform-wide|tenant/i.test(body),
+    "the note must not tell the agent where this came from"
+  );
+  // And it must not read as licence to give up, which is how a model hears
+  // "this usually needs a person" without the rest.
+  assert.match(body, /not a reason to hand over early/);
+  assert.match(body, /Answer normally/);
+});
+
+test("a pooled read that fails costs the reply nothing", () => {
+  // The business had no procedure either way, so the honest degradation is the
+  // behaviour from before F5 was wired in at all.
+  const branch = RECALL.slice(RECALL.indexOf("try {", RECALL.indexOf("getSharedGuidance")));
+  assert.match(branch, /catch \{\s*return null;\s*\}/);
 });
