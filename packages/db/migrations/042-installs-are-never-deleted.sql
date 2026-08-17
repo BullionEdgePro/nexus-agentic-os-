@@ -1,0 +1,35 @@
+-- The same finding as 039's, one table over, found the same way.
+--
+-- 039 caught that `grant select on catalog_items` did not remove the insert,
+-- update and delete an earlier blanket grant had already placed, and fixed it
+-- with a revoke. It granted `select, insert, update on catalog_installs` in the
+-- next line and did NOT revoke there — so the blanket DELETE survived on the
+-- install table, and `information_schema.role_table_grants` read back, on the
+-- live database on 2026-08-17, immediately after 040 and 041 were applied:
+--
+--   catalog_installs | DELETE
+--   catalog_installs | INSERT
+--   catalog_installs | SELECT
+--   catalog_installs | UPDATE
+--   catalog_items    | SELECT
+--
+-- WHY THAT MATTERS RATHER THAN BEING UNTIDY. `removeCatalogInstall` stamps
+-- `removed_at` and never issues a DELETE, and the marketplace test asserts no
+-- delete statement exists anywhere in the db layer. Both are true. But they are
+-- statements about the code, and the guarantee 039 wrote down — "a business that
+-- ran a pack ran it, and the row is the only record of that" — was being kept
+-- only by the application's good manners. The database would have allowed any
+-- future code path, or any hand-typed statement on the app connection, to erase
+-- that history. Migration 040's partial unique index is conditional on
+-- `removed_at is null`, so a deleted row does not merely lose the record: it
+-- silently makes a second install of the same pack look like a first.
+--
+-- The lesson 039 wrote is that a grant does not undo what is already there.
+-- This is that lesson applied to the line directly beneath the one that learned
+-- it. Revoke first, then grant, on every table — not only the one that failed.
+--
+-- Verified by reading role_table_grants back afterwards, not by trusting the
+-- statements below.
+
+revoke all on catalog_installs from nexus_app;
+grant select, insert, update on catalog_installs to nexus_app;

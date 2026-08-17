@@ -183,6 +183,30 @@ test("removing an install stamps it rather than deleting it", () => {
     "a business that ran a pack ran it — the row is the only record of that"
   );
   assert.match(db, /set removed_at = now\(\)/);
+
+  // And the database must not merely be asked nicely. 039 revoked on
+  // catalog_items and not on catalog_installs, so the blanket DELETE from an
+  // earlier grant survived there — read back off the live database on
+  // 2026-08-17. The code above was the only thing keeping the history, which
+  // matters more than it sounds: 040's uniqueness is conditional on
+  // `removed_at is null`, so a deleted row does not just lose the record, it
+  // makes a second install look like a first.
+  const fix = MIGRATIONS.find((m) => m.file === "042-installs-are-never-deleted.sql");
+  assert.ok(fix, "042-installs-are-never-deleted.sql is missing");
+  const sql = sqlCode(fix.sql);
+  const revokeAt = sql.indexOf("revoke all on catalog_installs from nexus_app");
+  const grantAt = sql.indexOf("grant select, insert, update on catalog_installs to nexus_app");
+  assert.ok(revokeAt !== -1, "042 must revoke on catalog_installs");
+  assert.ok(grantAt !== -1, "042 must re-grant the three privileges the app does need");
+  assert.ok(revokeAt < grantAt, "the revoke has to come before the grant, or it undoes it");
+
+  // No migration may hand delete back.
+  for (const { file, sql: raw } of MIGRATIONS) {
+    assert.ok(
+      !/grant[^;]*\bdelete\b[^;]*\bon catalog_installs\b/i.test(sqlCode(raw)),
+      `${file}: grants delete on catalog_installs — removal must stamp, never erase`
+    );
+  }
 });
 
 test("installing is not activating", () => {

@@ -401,8 +401,24 @@ into the live agent. There is deliberately **no activation switch**: a control r
 that changed nothing customers experience is exactly the plausible-normal-state failure this
 platform keeps producing.
 
-**NOT DEPLOYED.** Migrations 040 and 041 are unapplied — they must run as the owner via `psql`,
-never `exec api npm run db:migrate`.
+**DEPLOYED 2026-08-17.** VPS at `bcf3903`, 6/6 containers up, model preflight OK for both models
+across all five tenants. Migrations 040, 041 and 042 applied as the owner via `psql` against the
+mounted migrations directory inside the postgres container — never `exec api npm run db:migrate`.
+Verified in production by reading back, not by exit code: the old constraint is gone and the
+partial index reads `(organization_id, catalog_item_id) WHERE (removed_at IS NULL)`; six items
+published; `nexus_app` sees all six under `app.tenant_scope='all'`; and an insert into
+`catalog_items` as `nexus_app` fails with `permission denied`, so the boundary is real on the live
+database and not only in the migration text.
+
+**Migration 042 — the 039 lesson, one line further down.** Reading the grants back after 040 and
+041 showed `nexus_app` holding **DELETE on `catalog_installs`**. 039 revoked on `catalog_items`
+and then granted on `catalog_installs` in the next line without revoking, so the blanket DELETE
+survived there. `removeCatalogInstall` stamps and never deletes, and the test asserts no delete
+statement exists — but both are facts about the code, and the guarantee was being kept by the
+application's manners rather than by the database. It matters more than it sounds: 040's
+uniqueness is conditional on `removed_at is null`, so a deleted row does not merely lose the
+record, it makes a second install of the same pack look like a first. **Revoke first, then grant,
+on every table in the file — not only the one that failed.**
 
 ## The next task
 
