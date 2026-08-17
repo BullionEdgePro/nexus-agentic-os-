@@ -45,6 +45,7 @@ const TENANT_SCOPED_TABLES = [
   "contact_memory",
   "procedures",
   "reengagement_attempts",
+  "catalog_installs",
   "tasks",
   "operator_findings",
   "bookings",
@@ -60,6 +61,15 @@ const TENANT_SCOPED_TABLES = [
 //   broadcast_recipients       — has no organization_id. It is reached only
 //                                through a broadcast, which is scoped, so the
 //                                policy on the parent is what protects it.
+//   catalog_items              — the marketplace catalogue. A shared registry
+//                                every business reads, like organizations.
+//                                Scoping it to one tenant would be circular,
+//                                and it holds no tenant data by construction:
+//                                it has no organization_id and no foreign key
+//                                to any tenant table, which is what makes
+//                                "nothing leaves" a property rather than a rule.
+//                                `catalog_installs` IS scoped — which packs a
+//                                business chose is that business's business.
 //   routing_keywords           — not a table at all. It is a column on
 //                                organizations, and listing it here made the
 //                                shared-number lookup look tenant-scoped when
