@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 #
-# Nexus Postgres backup — dump, verify, rotate.
+# Nexus Postgres backup — dump, verify, send off-box, rotate.
 #
 # The verification step is the point of this script. A dump file that exists is
 # not a backup; a dump file that has been restored successfully is. This one
 # restores every dump into a throwaway database and asserts the schema and data
 # actually came back, so a silently-truncated or corrupt dump fails loudly on
 # the night it happens instead of on the night you need it.
+#
+# The off-box step applies the same rule one level up: a copy that lives on the
+# disk it is protecting is not off-box, and an upload that exited 0 is not a
+# copy until it has been read back. It is inert until BACKUP_REMOTE is set, and
+# says so on every run rather than letting silence pass for safety.
+#
+# Restoring an off-box copy:
+#   gpg --batch --quiet --decrypt --passphrase "$BACKUP_PASSPHRASE" \
+#       nexus-YYYYMMDD-HHMMSS.sql.gz.gpg > nexus.sql.gz
+#   ...then the same restore line as below.
 #
 # Install on the VPS:
 #   chmod +x /opt/nexus/scripts/backup-db.sh
@@ -87,7 +97,74 @@ org_count="$("${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$verify_db"
 log "Verified: $table_count tables, $org_count organizations restored cleanly"
 
 # ---------------------------------------------------------------
-# 3. Rotate
+# 3. Off-box copy
+# ---------------------------------------------------------------
+#
+# THE GAP THIS CLOSES, AND THE ONE IT CANNOT. Everything above proves the dump
+# restores. All of it lands in /opt/nexus/backups, on the same disk as the
+# database it is protecting. That covers the failure people actually hit —
+# somebody drops a table, a migration goes wrong — and covers nothing at all if
+# the disk or the VPS goes. There are no Hostinger snapshots on this box.
+#
+# Placed AFTER verification on purpose: the only dump worth sending anywhere is
+# one that has just been proved to restore. Uploading first would fill a bucket
+# with files carrying the same unknown as the local ones.
+#
+# ENCRYPTION IS NOT OPTIONAL WHEN A REMOTE IS SET. These dumps contain real
+# customers' WhatsApp conversations — names, numbers, what they asked a law firm
+# about. Putting that in a third-party bucket in the clear is a decision nobody
+# made deliberately, so this refuses rather than making it quietly. gpg is
+# already on the box; symmetric is enough here and needs no key distribution.
+#
+# Configure with:
+#   BACKUP_REMOTE=b2:nexus-backups      # any rclone remote:path
+#   BACKUP_PASSPHRASE=<long secret>     # kept OFF this machine as well
+#
+# Unset, this step does nothing but say so — every single run, and again in the
+# final line. A backup script that stays silent about not being off-box is the
+# same shape as the dump that was never restored: fine until it is not.
+if [ -z "${BACKUP_REMOTE:-}" ]; then
+  offsite="NOT off-box — local disk only"
+  log "Off-box copy: SKIPPED. BACKUP_REMOTE is not set, so this dump exists only on"
+  log "              this machine, beside the database it is protecting. Losing the"
+  log "              disk loses both. See the header for the two values needed."
+else
+  command -v rclone >/dev/null \
+    || fail "BACKUP_REMOTE is set but rclone is not installed — install it (curl https://rclone.org/install.sh | sudo bash) and configure the remote, or unset BACKUP_REMOTE"
+
+  [ -n "${BACKUP_PASSPHRASE:-}" ] \
+    || fail "BACKUP_REMOTE is set but BACKUP_PASSPHRASE is not — refusing to upload customer conversations unencrypted"
+
+  encrypted="$dump_file.gpg"
+  # --batch/--yes so it never waits on a tty inside cron, which would hang the
+  # run rather than fail it.
+  printf '%s' "$BACKUP_PASSPHRASE" \
+    | gpg --batch --yes --quiet --symmetric --cipher-algo AES256 \
+          --passphrase-fd 0 --output "$encrypted" "$dump_file" \
+    || fail "encryption failed — nothing uploaded"
+
+  log "Uploading $(basename "$encrypted") ($(du -h "$encrypted" | cut -f1)) to $BACKUP_REMOTE"
+  rclone copy "$encrypted" "$BACKUP_REMOTE" --no-traverse \
+    || fail "upload to $BACKUP_REMOTE failed"
+
+  # READ IT BACK. "rclone copy exited 0" is the same class of evidence as "the
+  # dump file exists" — this script exists because that was not good enough.
+  local_size="$(stat -c%s "$encrypted")"
+  remote_size="$(rclone size "$BACKUP_REMOTE/$(basename "$encrypted")" --json 2>/dev/null \
+    | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p')"
+
+  [ -n "$remote_size" ] \
+    || fail "uploaded to $BACKUP_REMOTE but could not read the object back — treat this as no off-box copy"
+  [ "$remote_size" = "$local_size" ] \
+    || fail "off-box copy is $remote_size bytes, local is $local_size — truncated upload"
+
+  rm -f "$encrypted"
+  offsite="off-box, encrypted, $remote_size bytes verified"
+  log "Off-box copy verified: $remote_size bytes at $BACKUP_REMOTE"
+fi
+
+# ---------------------------------------------------------------
+# 4. Rotate
 # ---------------------------------------------------------------
 # Only prunes AFTER a verified-good backup exists, so a run of failures can
 # never quietly delete the last known-good copy.
@@ -95,4 +172,7 @@ deleted="$(find "$BACKUP_DIR" -name 'nexus-*.sql.gz' -mtime "+$RETENTION_DAYS" -
 log "Rotation: removed $deleted backup(s) older than $RETENTION_DAYS days"
 
 remaining="$(find "$BACKUP_DIR" -name 'nexus-*.sql.gz' | wc -l)"
-log "OK — $remaining backup(s) retained in $BACKUP_DIR"
+# The summary line carries the off-box state, because it is the line a person
+# actually skims in a log they are not reading closely. "OK" on its own would
+# read as fully protected on the day it is anything but.
+log "OK — $remaining backup(s) retained in $BACKUP_DIR; latest is $offsite"
