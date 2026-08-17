@@ -698,11 +698,31 @@ Verified against production rather than assumed: three conversations match the S
 broker and a pet-food manufacturer, neither carrying an assessment). **One real person surfaces** —
 someone who said "Hi", was promised a colleague, and has waited 388 hours.
 
+**The operator fired on its first live sweep**, exactly once and on exactly the right person:
+
+```
+urgent | Usman office was promised a colleague 16 days ago and nobody came | standing
+```
+
+Both cold pitches were suppressed by the `scoreLead` fallback, as intended.
+
+**Usman's conversation was taken off handover 2026-08-17** (`is_human_handoff = false`), so the
+agent answers again instead of staying silent behind a promise nobody kept.
+
+**What that does NOT do, and it matters:** un-pausing sends nothing. Usman said "Hi" sixteen days
+ago and will still hear nothing unless they write again — at which point the agent now replies
+rather than sitting mute. Actually reaching out is a message to a real customer and is somebody's
+decision to make, not a side effect of clearing a flag.
+
+**Three conversations remain muted, deliberately:** `khan` (a data broker), `Tim Cao Muzan pet` (a
+pet-food manufacturer) and one contact named for a law firm — all cold pitches, all correctly
+suppressed by the operator. Nobody needs to answer a data broker, and un-pausing them would only
+spend model calls on sales pitches.
+
 ## The next task
 
-**Somebody should answer Usman, or take that conversation off handover so the agent resumes.** The
-operator will report it on the next 10-minute sweep; it is one real customer of the one business
-with real customers.
+**Nothing is queued.** Every remaining feature is blocked on traffic, an external integration, or an
+explicit "not asked for" — measured, not assumed, twice today.
 
 **F5 is complete.** What remains for it is traffic, not code. So is most of the rest: F9's rollups
 were measured today at **0.202 ms across 13 conversations and 60 messages** — building read models
