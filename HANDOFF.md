@@ -894,6 +894,45 @@ steps and gains the v2 proposal, and an active phrase is untouched by the update
   degrades gracefully (the tool catches, the agent says a colleague will confirm, governance still
   applies), so this is a resilience question, not an incident.
 
+## Considered and declined: suppressing the triage menu for cold pitches
+
+A state sweep on 2026-08-17 found the last three active days sent **nothing but the triage menu** —
+six sends, no AI replies. Every sender was a cold B2B pitch: a property developer opening "This is
+Shahed from Gutti Development", somebody saying "hi" twice, and a real-estate data seller. One of
+them was already scored `inbound_pitch` and still received two menus.
+
+There is a real cost to that. §2.5 warns that WhatsApp quality-rating decay restricts numbers, and
+this number was only recently recovered from Klaviyo. Handing a menu to a spammer spends sends and
+invites blocks on the one number all five businesses share.
+
+**Declined anyway, and the reason is the platform's own rule.** Lead scoring is rules-based and its
+own §9.5 entry admits it is whack-a-mole — one spam message still reads `30/normal` after two rounds
+of hardening. Suppressing a customer-facing message on that classifier means a *misclassified real
+customer gets silence*, which is the exact failure this codebase has spent the session removing:
+four muted conversations, a release that could never fire, an escalation that promised nobody.
+
+Note where the platform already draws this line and stays consistent with it: pitch suppression
+exists in the **operators** — `customer-waiting` and `handover-abandoned` both skip pitches — because
+suppressing a finding only costs an operator a line in a list. Nothing on the **reply path** ever
+suppresses a message. That asymmetry is deliberate and this would have broken it.
+
+Revisit only if lead scoring becomes model-based with measured precision, which §9.4 already blocks
+on labelled outcomes.
+
+## What the same sweep confirmed healthy
+
+Checked directly rather than via any summary, because "the operator reports zero" is how four
+customers stayed hidden for sixteen days:
+
+* **Governance is evaluating every reply** — 12 AI replies, 12 evaluations, 1:1 across every day
+  with traffic. The 8 August gap in `operator_findings` was quiet traffic, not a stopped judge.
+* **All five businesses have an active agent config** on `claude-sonnet-5`, so a routed conversation
+  cannot hit the silent `No active agent configured` return.
+* **35 message templates, all APPROVED, synced today** — `template-rejected` reporting zero is honest.
+* **Nobody is waiting on a reply.** Two conversations have a customer speaking last; both are cold
+  pitches, both correctly suppressed.
+* Knowledge sources: 0 failed, 0 stale. No failed outbound messages. No open tasks or bookings.
+
 ## Lessons added this session
 
 **Counting something is not knowing what was counted.** I reported "ten dead buttons on every
