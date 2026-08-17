@@ -667,16 +667,28 @@ const reengagementCandidate: Operator = {
          from contacts ct
         where ct.organization_id = $1
           and ct.reengagement_opted_out = false
-          -- Their last conversation ended a while ago.
+          -- Quiet is measured on MESSAGES, not on the conversation row.
+          --
+          -- The first version read conversations.updated_at, which does not
+          -- exist — the table keeps opened_at and closed_at. It threw for all
+          -- five businesses on the first sweep, which is the correct outcome
+          -- for a column that was assumed rather than read.
+          --
+          -- Messages are the better signal regardless: a conversation left open
+          -- is not a customer still talking, and a closed one they wrote to
+          -- yesterday is not a customer who went quiet.
           and exists (
-            select 1 from conversations c
+            select 1
+              from messages m
+              join conversations c on c.id = m.conversation_id
              where c.contact_id = ct.id
-               and c.updated_at < now() - ($2 || ' days')::interval
           )
           and not exists (
-            select 1 from conversations c
+            select 1
+              from messages m
+              join conversations c on c.id = m.conversation_id
              where c.contact_id = ct.id
-               and c.updated_at >= now() - ($2 || ' days')::interval
+               and m.created_at >= now() - ($2 || ' days')::interval
           )
           -- Not already inside a cooldown from a previous attempt.
           and not exists (
