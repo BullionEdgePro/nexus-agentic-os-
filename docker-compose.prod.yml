@@ -44,6 +44,31 @@ services:
       context: .
       dockerfile: Dockerfile.api
     restart: unless-stopped
+    # LOGS MUST OUTLIVE THE CONTAINER THAT WROTE THEM.
+    #
+    # Docker's default json-file driver stores logs under the container's own
+    # directory, and `up -d --build` does not restart a container — it replaces
+    # it. Every deploy therefore deletes the entire log history of the service
+    # being deployed.
+    #
+    # That is worse here than almost anywhere, because this platform's whole
+    # method for finding its failures is reading logs after the fact: the
+    # Gemini 404, the BullMQ colon, the empty-rota mute, the judge returning
+    # "medium" because it could not be reached — every one was found by going
+    # back and looking. On 2026-08-17 an unexplained inbound message could not
+    # be diagnosed at all, because eight deploys that day had erased the two
+    # days of worker logs that would have said what happened.
+    #
+    # journald keeps them on the host, survives container replacement, and is
+    # already persistent on this box (/var/log/journal). `docker compose logs`
+    # still works — journald is one of the drivers Docker can read back — so
+    # nothing about the existing workflow changes, and journald's own
+    # SystemMaxUse cap keeps it from filling the disk the way an unbounded
+    # json-file can.
+    logging:
+      driver: journald
+      options:
+        tag: "nexus-{{.Name}}"
     env_file: .env
     environment:
       NODE_ENV: production
@@ -73,6 +98,12 @@ services:
       dockerfile: Dockerfile.api
     command: ["npx", "tsx", "apps/api/src/worker.ts"]
     restart: unless-stopped
+    # Same as api, and this is the one that matters most: the reply pipeline,
+    # the operators and every scheduled job log here. See the note above.
+    logging:
+      driver: journald
+      options:
+        tag: "nexus-{{.Name}}"
     env_file: .env
     environment:
       NODE_ENV: production
