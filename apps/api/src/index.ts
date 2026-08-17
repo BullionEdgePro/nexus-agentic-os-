@@ -18,6 +18,7 @@ import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
 import { proceduresRoute } from "./routes/procedures.js";
+import { catalogRoute } from "./routes/catalog.js";
 import { forecastsRoute } from "./routes/forecasts.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
@@ -72,6 +73,13 @@ app.use("/api/quality", operatorOnly);
 app.use("/api/quality/*", operatorOnly);
 app.use("/api/broadcasts", operatorOnly);
 app.use("/api/broadcasts/*", operatorOnly);
+// The marketplace. Not because the catalogue is sensitive — it holds no
+// business's data at all, by construction — but because installing a pack
+// changes what every customer of that business is eventually told, and the
+// screen shows what all five businesses are running side by side. That is an
+// owner's decision and an owner's view, not a sales executive's.
+app.use("/api/catalog", operatorOnly);
+app.use("/api/catalog/*", operatorOnly);
 
 // Every /api/* request runs inside a database tenant context — a named one for
 // a single business, an explicitly-reasoned cross-tenant one otherwise. Placed
@@ -116,6 +124,13 @@ app.route("/api/metrics", metricsRoute);
 app.route("/api/activity", activityRoute);
 app.route("/api/quality", qualityRoute);
 app.route("/api/links", linksRoute);
+// The marketplace, mounted flat rather than under /api/organizations/:slug like
+// Knowledge and Procedures. The catalogue is one shelf for the whole platform
+// and the useful view of it — who is running what — spans every business, so
+// there is no per-business form of this route to mount. Installs name their
+// business explicitly in the request; see routes/catalog.ts for why that is the
+// boundary here rather than RLS.
+app.route("/api/catalog", catalogRoute);
 // Not operator-only, unlike the four above it. A follow-up list is the working
 // surface of the person doing the work, not management information about them,
 // so employees reach it too — narrowed to their own business inside the route,

@@ -18,5 +18,6 @@ export * from "./tasks.js";
 export * from "./bookings.js";
 export * from "./operators.js";
 export * from "./procedures.js";
+export * from "./catalog.js";
 export * from "./forecasts.js";
 export * from "./search.js";

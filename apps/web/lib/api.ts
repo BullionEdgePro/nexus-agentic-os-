@@ -23,6 +23,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/**
+ * Turn an API failure into something the operator can act on.
+ *
+ * `request` throws `API 400 on /path: {"error":"..."}`, which carries the
+ * status for a developer and buries the one part written for a person. Several
+ * routes go to real trouble over that sentence — "another procedure for this
+ * kind of enquiry is already active" is a thing someone can fix in one click —
+ * and showing it wrapped in transport detail wastes the effort.
+ *
+ * Lives here rather than on a page because it was already written twice over on
+ * the way to being written a third time. This codebase has paid for two copies
+ * of one fact before: the nav rail and the API's operator-only list drifted
+ * apart precisely because nothing connected them.
+ */
+export function readableError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const match = /\{"error":"([^"]+)"\}/.exec(raw);
+  if (match) return match[1];
+  if (raw.includes("API 401")) return "Your session expired. Sign in again.";
+  return "Could not reach the platform. Check the connection and try again.";
+}
+
 export function getOrganizations(): Promise<{ organizations: Organization[] }> {
   return request("/api/organizations");
 }
@@ -547,6 +569,93 @@ export interface BusinessLink {
 
 export function getLinks(): Promise<{ links: BusinessLink[] }> {
   return request("/api/links");
+}
+
+// ============================================================
+// Marketplace (F13)
+// ============================================================
+
+export type CatalogItemKind = "template" | "procedure" | "knowledge_pack";
+
+export interface CatalogItem {
+  id: string;
+  slug: string;
+  kind: CatalogItemKind;
+  title: string;
+  summary: string;
+  /** Shape depends on `kind`. Rendered generically — see the page. */
+  payload: Record<string, unknown>;
+  suitsIndustry: string | null;
+  language: string;
+  version: number;
+  publishedAt: string | null;
+}
+
+export interface CatalogInstall {
+  id: string;
+  organizationId: string;
+  businessName: string;
+  businessSlug: string;
+  catalogItemId: string;
+  itemSlug: string;
+  itemTitle: string;
+  itemKind: CatalogItemKind;
+  /** What this business is running. May trail `availableVersion`. */
+  installedVersion: number;
+  availableVersion: number;
+  isActive: boolean;
+  installedAt: string;
+  removedAt: string | null;
+}
+
+export interface CatalogCounts {
+  published: number;
+  installs: number;
+  businesses: number;
+  outdated: number;
+}
+
+/**
+ * The shelf, the installs and the totals in one call.
+ *
+ * `activationWired` is the honest one. An install currently records a decision
+ * and nothing more — no catalogue payload has been connected to the live agent
+ * yet — so the page reads this rather than implying that installing something
+ * changed what customers hear.
+ */
+export function getCatalog(): Promise<{
+  items: CatalogItem[];
+  installs: CatalogInstall[];
+  counts: CatalogCounts;
+  activationWired: boolean;
+}> {
+  return request("/api/catalog");
+}
+
+export function installCatalogItem(
+  organizationSlug: string,
+  itemSlug: string
+): Promise<{ install: CatalogInstall }> {
+  return request("/api/catalog/installs", {
+    method: "POST",
+    body: JSON.stringify({ organizationSlug, itemSlug }),
+  });
+}
+
+/**
+ * The business is named as well as the install id.
+ *
+ * /api/catalog is cross-tenant, so the id alone would be enough to remove any
+ * business's install — the route checks the two against each other rather than
+ * trusting whichever id arrived.
+ */
+export function removeCatalogInstall(
+  organizationSlug: string,
+  installId: string
+): Promise<{ install: CatalogInstall }> {
+  return request(`/api/catalog/installs/${installId}?business=${encodeURIComponent(organizationSlug)}`, {
+    method: "DELETE",
+  });
 }
 
 // ============================================================

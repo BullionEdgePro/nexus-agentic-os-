@@ -127,6 +127,28 @@ export const NAV: NavItem[] = [
     // country first" is right is the person who does the job.
   },
   {
+    href: "/deck/catalogue",
+    label: "Catalogue",
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <rect x="3" y="4" width="7" height="7" rx="1.2" />
+        <rect x="14" y="4" width="7" height="7" rx="1.2" />
+        <rect x="3" y="15" width="7" height="5" rx="1.2" />
+        <path d="M17.5 14.5v6M14.5 17.5h6" />
+      </svg>
+    ),
+    // Third in the material group, after Knowledge and How we answer, because
+    // it is where both of those can come from ready-made.
+    //
+    // Operator-only, and it is the one entry in this group that is. Knowledge
+    // and procedures are the business's own material and the person doing the
+    // job is trusted with them. Installing a pack changes what every customer
+    // of that business is eventually told, and this screen shows all five
+    // businesses side by side — an owner's decision on an owner's view.
+    // /api/catalog refuses employees, so the rail must not offer it.
+    operatorOnly: true,
+  },
+  {
     href: "/deck/links",
     label: "Customer links",
     icon: (

@@ -58,6 +58,14 @@ const TAB_API = {
   // Thursday is the business's own operational information, and the person
   // rostering Thursday is the one who needs it.
   "/deck/forecast": "/api/organizations/",
+  // The marketplace. Operator-only, and the odd one out among the three
+  // "material" tabs: Knowledge and How we answer are the business's own
+  // material and its own staff are trusted with them, but installing a pack
+  // changes what every customer of that business is eventually told — and this
+  // screen shows all five businesses at once, which no employee may see. Mounted
+  // flat at /api/catalog rather than under /api/organizations/:slug precisely so
+  // `operatorOnly` can guard the whole prefix.
+  "/deck/catalogue": "/api/catalog",
   "/deck/links": "/api/links",
   "/deck/broadcasts": "/api/broadcasts",
   "/deck/activity": "/api/activity",

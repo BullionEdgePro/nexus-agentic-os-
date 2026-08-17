@@ -14,6 +14,7 @@ import {
   getEmployeeLeads,
   type EmployeeLead,
   type TeamMember,
+  readableError,
   type AssignedConversation,
   type HandoverBrief,
 } from "@/lib/api";
@@ -597,14 +598,8 @@ function labelFor(slug: BusinessSlug): string {
 /**
  * Turn an API failure into something the operator can act on.
  *
- * The raw message is `API 400 on /path: {"error":"..."}` — the useful part is
- * the server's sentence, so it is pulled out rather than shown wrapped in
- * transport detail nobody can do anything about.
+ * Moved to lib/api.ts when the catalogue needed the same thing, rather than
+ * copied. It sits next to the `request` whose error format it unpicks, which is
+ * the only place the two can be kept in step.
  */
-function readable(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  const match = /\{"error":"([^"]+)"\}/.exec(raw);
-  if (match) return match[1];
-  if (raw.includes("API 401")) return "Your session expired. Sign in again.";
-  return "Could not reach the platform. Check the connection and try again.";
-}
+const readable = readableError;

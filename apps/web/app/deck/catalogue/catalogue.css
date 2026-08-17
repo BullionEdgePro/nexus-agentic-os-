@@ -1,0 +1,269 @@
+/* ============================================================
+   The catalogue (F13). Shares the ledger tokens from activity.css.
+
+   The shelf is the interface. Every card shows its actual contents
+   before the Install button, because installing something whose
+   steps you have not read is agreeing to text you have never seen.
+
+   There is deliberately no "active" styling anywhere in this file.
+   Nothing installed is connected to the live agent yet, and a green
+   dot claiming otherwise would be the lie the page is written to
+   avoid.
+   ============================================================ */
+
+/* The egress policy, given the weight of a rule rather than a caption. */
+.mk-policy {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blueprint);
+  border-radius: var(--r-sm);
+  background: var(--blueprint-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 78ch;
+}
+.mk-policy strong { color: var(--ink); }
+
+.mk-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0 0;
+}
+
+.mk-count {
+  flex: 1 1 150px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 12px 14px;
+}
+.mk-count strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 26px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.mk-count span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--graphite);
+  line-height: 1.35;
+}
+.mk-count.live strong { color: var(--good); }
+.mk-count.warn strong { color: var(--warn); }
+
+/* What installing does and does not do. Loud, because the honest
+   reading of this screen depends on it. */
+.mk-banner {
+  margin: 18px 0 0;
+  padding: 13px 15px;
+  border: 1px solid rgba(169, 118, 47, .38);
+  border-radius: var(--r-sm);
+  background: rgba(169, 118, 47, .07);
+}
+.mk-banner strong { font-size: 13.5px; color: var(--ink); }
+.mk-banner p {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 74ch;
+}
+
+.mk-target {
+  margin: -4px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--pencil);
+}
+
+.mk-group { margin-top: 8px; }
+.mk-group-blurb {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--graphite);
+}
+
+.mk-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.mk-item {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 15px 17px;
+}
+/* Installed reads as taken, not as running — the border is ink, not the
+   green this file refuses to use. */
+.mk-item.on { border-left-color: var(--blueprint); }
+
+.mk-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mk-head h3 {
+  font-family: var(--display);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.mk-version {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--pencil);
+  font-variant-numeric: tabular-nums;
+}
+
+.mk-summary {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--graphite);
+}
+
+/* The contents, always visible. Not behind a disclosure: a person
+   deciding whether to install should not have to ask to see what
+   they are installing. */
+.mk-contents {
+  margin-top: 11px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--vellum);
+}
+
+.mk-body {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.mk-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mk-steps li {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.mk-docs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mk-docs li { font-size: 12px; line-height: 1.45; }
+.mk-docs strong { display: block; color: var(--ink); }
+.mk-docs span { color: var(--graphite); }
+
+.mk-note {
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--graphite);
+}
+
+.mk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* Pushed to the foot of the card so buttons line up across a row of
+     cards whose contents are different lengths. */
+  margin-top: auto;
+  padding-top: 13px;
+}
+
+.mk-actions button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 9px 13px;
+  border: 1px solid var(--blueprint);
+  border-radius: var(--r-sm);
+  background: var(--blueprint);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.mk-actions button:disabled { opacity: .55; cursor: default; }
+
+.mk-actions .mk-remove {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--graphite);
+}
+
+.mk-state {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--graphite);
+}
+
+.mk-behind {
+  margin: 10px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--warn);
+}
+
+.mk-table {
+  width: 100%;
+  margin-top: 14px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.mk-table th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  font-weight: 400;
+  padding: 0 10px 7px 0;
+  border-bottom: 1px solid var(--line-strong);
+}
+.mk-table td {
+  padding: 9px 10px 9px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  vertical-align: top;
+}
+.mk-table td em { font-style: normal; color: var(--warn); }

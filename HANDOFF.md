@@ -182,7 +182,9 @@ and 13 conversations in 60 days; the other four have no customers. Every metric 
 refuse. That is the designed output and the screen is built around it — same shape as F10's empty
 review queue, and the same instruction applies: do not read the empty state as a fault.
 
-F13 Marketplace needs a data-egress policy decision.
+F13 Marketplace's egress policy was decided (nothing leaves) and the catalogue is built. Its empty
+state is the same instruction again: a shelf with nothing on it and a shelf that failed to load
+must not look alike.
 
 **Partial by design, not neglect:** F14 measures quality but will not act automatically — judging
 whether an escalation rate is wrong needs business knowledge. F8's operators call no model at all,
@@ -366,18 +368,48 @@ and a guess is worse than a gap. Result: `inbound_pitch` 8, `unknown` 6, `knowle
 
 ## State
 
-**9 of 15 complete.** 673 tests, typecheck clean, all five gates green under `strict`,
-11/11 operators reporting 0 standing across 5 businesses, 6/6 containers up.
+**9 of 15 complete.** 684 tests, typecheck clean, `next build` clean, all five gates green under
+`strict`, 11/11 operators reporting 0 standing across 5 businesses, 6/6 containers up. The 11 new
+tests are `marketplace-installs-only.test.mjs`, which asserts the egress boundary is still the
+shape of the tables rather than a rule — including that no later migration ever gives
+`catalog_items` an `organization_id` or a foreign key to a tenant table.
 
-## The next task, precisely scoped
+## The F13 catalogue page and install action — BUILT, NOT DEPLOYED
 
-**Build the F13 catalogue page and install action.** Schema, boundary and privileges are proven, so
-this is UI on solid ground. Six files: DB layer, API route, web client, the page, a nav entry, and
-the `TAB_API` mapping in `staff-see-only-their-business.test.mjs` — that test FAILS if a new tab is
-unclassified, which forces the question "may staff see this?" to be answered at build time.
+Operator-only, at `/deck/catalogue` and `/api/catalog`. Mounted flat rather than under
+`/api/organizations/:slug` so `operatorOnly` can guard the whole prefix — and because the useful
+view, who across all five businesses is running what, has no per-business form. Installing changes
+what every customer of that business is eventually told, so it is an owner's screen.
 
-**Recommendation: make it operator-only.** Installing a pack changes what every customer of that
-business is told. That is an owner's decision, not a sales executive's.
+**Two things found while building it, both in migration 039's own stated intentions:**
+
+* `unique (organization_id, catalog_item_id, installed_at)` enforces **nothing**. `installed_at`
+  defaults to `now()`, so two installs in two requests carry two timestamps and both are accepted;
+  the only case it catches is two rows in one transaction, which no code path does. 039's comment
+  says "having it twice at once is not [allowed]" and the database disagreed. **Migration 040**
+  replaces it with a partial unique index on `(organization_id, catalog_item_id) where removed_at
+  is null` — the only shape that can express "unless it was removed".
+* The shelf was empty by design, and an empty shelf cannot be judged: "nothing published" and "the
+  query is broken" render identically. **Migration 041** publishes six items — three procedures,
+  two templates, one knowledge pack — all generic or skeletons. Nothing industry-specific, because
+  a catalogue shipping opinions about a law firm's intake written by nobody who works there is
+  worse than an empty one.
+
+**Installing does not yet change what a customer hears, and the page says so.** An install records
+a decision — which business took which pack, at which version, switched off. No payload is wired
+into the live agent. There is deliberately **no activation switch**: a control reading "active"
+that changed nothing customers experience is exactly the plausible-normal-state failure this
+platform keeps producing.
+
+**NOT DEPLOYED.** Migrations 040 and 041 are unapplied — they must run as the owner via `psql`,
+never `exec api npm run db:migrate`.
+
+## The next task
+
+**Wire activation.** It is the half that makes the catalogue matter, and the larger half: turning
+an installed procedure into a `procedures` row and an installed pack into `knowledge_chunks` for
+that business, inactive, for a person to switch on. That is material entering the prompt for every
+future customer, so it wants its own slice and its own argument.
 
 ## Also outstanding
 
