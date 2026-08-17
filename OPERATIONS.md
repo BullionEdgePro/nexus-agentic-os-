@@ -145,6 +145,20 @@ docker logs --since 30m nexus-worker-1 2>&1 | grep -iE "error|failed" | tail -20
 Then `self-check`. The usual causes are an exhausted model quota, a retired
 model id, or a query referencing something the schema does not have.
 
+**Anything older than the last deploy needs `journalctl`, not `docker logs`.**
+`docker logs` only ever shows the container that is running now, and
+`up -d --build` REPLACES containers rather than restarting them. api and worker
+log to journald (see `docker-compose.prod.yml`) precisely so their history
+outlives that — but you have to ask journald for it:
+```bash
+journalctl CONTAINER_NAME=nexus-worker-1 --since "2 days ago" | grep -iE "error|failed"
+journalctl CONTAINER_NAME=nexus-api-1 --since "2026-08-15" --until "2026-08-16"
+```
+This was added on 2026-08-17 after an unexplained message from two days earlier
+could not be diagnosed at all: eight deploys that day had erased every worker log
+covering it. If you are ever reading this while investigating something old, that
+is the command.
+
 **A page is empty that should have data.**
 Almost always RLS running without a tenant context. `rls-verify` will say so.
 Rolling back is one statement per table and destroys nothing — policies filter
