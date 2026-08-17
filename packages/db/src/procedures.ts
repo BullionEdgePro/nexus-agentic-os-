@@ -23,7 +23,7 @@ import {
  * the /api/organizations/:slug middleware) and the writer (its own withTenant).
  */
 
-export type ProcedureSource = "operator" | "inferred";
+export type ProcedureSource = "operator" | "inferred" | "catalog";
 
 export interface ProcedureRecord {
   id: string;

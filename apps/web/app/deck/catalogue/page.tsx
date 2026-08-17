@@ -6,6 +6,7 @@ import {
   getCatalog,
   installCatalogItem,
   removeCatalogInstall,
+  activateCatalogInstall,
   readableError,
   type CatalogItem,
   type CatalogItemKind,
@@ -123,11 +124,14 @@ export default function CataloguePage() {
     installs: 0,
     businesses: 0,
     outdated: 0,
+    activated: 0,
   });
-  const [activationWired, setActivationWired] = useState(false);
+  const [activatableKinds, setActivatableKinds] = useState<CatalogItemKind[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busySlug, setBusySlug] = useState<string | null>(null);
+  /** What the last activation actually did, per item. The server's own sentence. */
+  const [said, setSaid] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,7 +141,7 @@ export default function CataloguePage() {
       setItems(data.items);
       setInstalls(data.installs);
       setCounts(data.counts);
-      setActivationWired(data.activationWired);
+      setActivatableKinds(data.activatableKinds);
     } catch (err) {
       setError(readableError(err));
     } finally {
@@ -175,6 +179,28 @@ export default function CataloguePage() {
       // "That business already has this one installed" is a state, not a fault,
       // and it is what the person pressing the button needs to read — not a
       // 409 and a path.
+      setError(readableError(err));
+    } finally {
+      setBusySlug(null);
+    }
+  }
+
+  async function activate(item: CatalogItem, installId: string) {
+    setBusySlug(item.slug);
+    setError("");
+    try {
+      const { outcome } = await activateCatalogInstall(business, installId);
+      // The server's sentence, kept per item rather than as one page-level
+      // banner: "indexed, live now" and "added, switched off" are different
+      // facts about different cards, and one shared line would attach the wrong
+      // one to whatever the reader looked at next.
+      const blocked =
+        outcome.kind === "procedure" && outcome.blockedBySource
+          ? ` Something else is already switched on for this kind of enquiry, so you will have to turn that one off first.`
+          : "";
+      setSaid((current) => ({ ...current, [item.slug]: outcome.note + blocked }));
+      await load();
+    } catch (err) {
       setError(readableError(err));
     } finally {
       setBusySlug(null);
@@ -232,6 +258,10 @@ export default function CataloguePage() {
             <strong>{counts.installs}</strong>
             <span>installed</span>
           </div>
+          <div className={`mk-count${counts.activated > 0 ? " live" : ""}`}>
+            <strong>{counts.activated}</strong>
+            <span>added to a business</span>
+          </div>
           <div className="mk-count">
             <strong>{counts.businesses}</strong>
             <span>of {TENANTS.length} businesses using one</span>
@@ -242,19 +272,25 @@ export default function CataloguePage() {
           </div>
         </div>
 
-        {/* The whole reason this banner exists rather than an "active" switch.
-            An install is a recorded decision today and nothing more. */}
-        {!activationWired ? (
-          <div className="mk-banner">
-            <strong>Installing does not change what customers hear — not yet.</strong>
-            <p>
-              An install records that this business has chosen a pack, at the version it chose,
-              switched off. Connecting a pack to the live agent is a separate step and is not
-              built. There is deliberately no switch on this page: a control labelled
-              &ldquo;active&rdquo; that changed nothing would be worse than no control at all.
-            </p>
-          </div>
-        ) : null}
+        {/* Two steps, and the difference between them is the whole safety
+            argument — so it is stated before any button rather than discovered
+            after one. */}
+        <div className="mk-banner">
+          <strong>Installing chooses it. Adding puts it in the business. Neither switches it on.</strong>
+          <p>
+            <em>Add to this business</em> writes a catalogue procedure into{" "}
+            <a href="/deck/procedures">How we answer</a> <strong>switched off</strong>. Somebody
+            turns it on there, where they can see what else is already answering that kind of
+            enquiry. A catalogue button that reached straight into the live prompt is the one
+            thing this design exists to prevent.
+          </p>
+          <p>
+            Knowledge is the exception and it is worth knowing before you press it: an indexed
+            chunk has no switched-off state, so adding a knowledge pack changes what the agent can
+            answer from <strong>immediately</strong> — exactly as adding a source by hand in{" "}
+            <a href="/deck/knowledge">Knowledge</a> already does.
+          </p>
+        </div>
 
         <h2 className="act-sub-head">Installing into</h2>
         <div className="act-tabs">
@@ -298,6 +334,9 @@ export default function CataloguePage() {
                   const here = installedHere.get(item.slug);
                   const busy = busySlug === item.slug;
                   const behind = here && here.installedVersion < item.version;
+                  // Asked of the server's list rather than decided here, so the
+                  // page cannot come to its own view of which kinds work.
+                  const canActivate = activatableKinds.includes(item.kind);
 
                   return (
                     <article className={`mk-item${here ? " on" : ""}`} key={item.slug}>
@@ -318,16 +357,30 @@ export default function CataloguePage() {
                         {here ? (
                           <>
                             <span className="mk-state">
-                              Installed for {tenantName(business)} at v{here.installedVersion},
-                              switched off
+                              {here.isActive
+                                ? `Added to ${tenantName(business)} at v${here.installedVersion}`
+                                : `Installed for ${tenantName(business)} at v${here.installedVersion}, not yet added`}
                             </span>
-                            <button
-                              className="mk-remove"
-                              onClick={() => remove(item, here.id)}
-                              disabled={busy}
-                            >
-                              {busy ? "Removing…" : "Remove"}
-                            </button>
+                            <span className="mk-buttons">
+                              {/* Only offered where the server says the kind can
+                                  actually be activated, and only once. A second
+                                  press is harmless — activation is idempotent by
+                                  the unique index on the install — but a button
+                                  that stays lit after it has done its job invites
+                                  the reader to wonder whether it worked. */}
+                              {!here.isActive && canActivate ? (
+                                <button onClick={() => activate(item, here.id)} disabled={busy}>
+                                  {busy ? "Adding…" : "Add to this business"}
+                                </button>
+                              ) : null}
+                              <button
+                                className="mk-remove"
+                                onClick={() => remove(item, here.id)}
+                                disabled={busy}
+                              >
+                                {busy ? "Removing…" : "Remove"}
+                              </button>
+                            </span>
                           </>
                         ) : (
                           <button onClick={() => install(item)} disabled={busy}>
@@ -335,6 +388,29 @@ export default function CataloguePage() {
                           </button>
                         )}
                       </div>
+
+                      {/* Why the Add button is not there, on the card where
+                          somebody would look for it. An absent control with no
+                          explanation reads as a bug. */}
+                      {here && !here.isActive && !canActivate ? (
+                        <p className="mk-behind">
+                          This one cannot be added automatically. Message wording is not a
+                          WhatsApp template — that table mirrors what Meta has approved — and the
+                          platform has nowhere yet to put authored agent wording. Copy it by hand
+                          for now.
+                        </p>
+                      ) : null}
+
+                      {said[item.slug] ? <p className="mk-said">{said[item.slug]}</p> : null}
+
+                      {here?.isActive ? (
+                        <p className="mk-note">
+                          Removing the install from here will not take this back out — by now it
+                          is {tenantName(business)}&apos;s own material. Turn a procedure off in{" "}
+                          <a href="/deck/procedures">How we answer</a>, or delete a source in{" "}
+                          <a href="/deck/knowledge">Knowledge</a>.
+                        </p>
+                      ) : null}
 
                       {/* Shown only when it is true, and it names both numbers.
                           "An update is available" without saying from what to

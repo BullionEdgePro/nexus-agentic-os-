@@ -420,12 +420,55 @@ uniqueness is conditional on `removed_at is null`, so a deleted row does not mer
 record, it makes a second install of the same pack look like a first. **Revoke first, then grant,
 on every table in the file — not only the one that failed.**
 
+## Activation — BUILT
+
+**It materialises; it does not switch on.** A catalogue procedure becomes a `procedures` row for
+that business with `is_active = false`, and a person turns it on from "How we answer" — the screen
+that already shows what else is answering that situation and already refuses two at once. A
+catalogue button reaching into the live prompt is the one thing 039's design exists to prevent.
+
+Knowledge is the stated exception: a chunk has no switched-off state, so adding a pack changes what
+the agent can answer from immediately — exactly as adding a source by hand already does. The page
+says so above the buttons rather than letting "switched off" be read as covering both.
+
+**Migration 043 — a third `source`, because both existing values are lies here.** Nobody at this
+business wrote a catalogue procedure, and it was drawn from none of this business's conversations.
+`'inferred'` would show "drawn from 0 conversations" (evidence that came out empty, not evidence
+never claimed) and let the writer rewrite it. `'operator'` is the worse trap: **F10 rule 3 makes the
+nightly writer permanently silent wherever an operator procedure is active**, so a generic pack
+installed in a minute would switch off that business's learning about that kind of enquiry, for
+good, silently. So `'catalog'` — and the writer deliberately does NOT defer to it. Both existing
+unique indexes were checked rather than assumed: `procedures_one_active_per_intent` is partial on
+`is_active` (so a catalogue row competes for the single live slot, correctly);
+`procedures_one_inferred_per_intent` is partial on `source = 'inferred'` (so the writer's slot is
+untouched). `procedures_one_per_catalog_install` is what makes activation idempotent.
+
+**TWO KINDS CANNOT BE ACTIVATED, and both are findings rather than unfinished work:**
+
+* **`template`.** `message_templates` is a MIRROR OF META (017) — a local row there recreates
+  exactly the failure that migration was written to prevent, "a bulk send that fails at the last
+  hop, after the broadcast row, the recipient rows and the queue jobs all exist". And these are not
+  Meta templates anyway; they are agent reply wording, **which this platform has no home for at
+  all**. The nearest thing is appending prose to `agent_configs.system_prompt`: one unstructured
+  blob per business, with no way to see what came from where or take it back out. Giving authored
+  wording a home is a design decision about how phrasing enters the reply path and deserves its own
+  slice.
+* **`guidance_only` packs (044).** 041's checklist item is nine QUESTIONS, by its own note. Indexing
+  it would put questions into what retrieval searches, and the knowledge screen would show a base
+  fuller than it is — this platform's signature failure in a new coat.
+
+**There is deliberately no deactivate.** Once material is in the business it IS the business's — the
+procedure may be switched on and shaping replies, the knowledge may have been edited since. Taking
+it back belongs to "How we answer" and "Knowledge", which own those decisions and can show what
+depends on them. Removing the *install* leaves the material in place, and the card says so.
+
 ## The next task
 
-**Wire activation.** It is the half that makes the catalogue matter, and the larger half: turning
-an installed procedure into a `procedures` row and an installed pack into `knowledge_chunks` for
-that business, inactive, for a person to switch on. That is material entering the prompt for every
-future customer, so it wants its own slice and its own argument.
+**Give authored agent wording a home**, which is what the template refusal above is really asking
+for. Today a business can be handed good phrasing and has nowhere to put it but a system prompt.
+
+Or, smaller: **let a business take a catalogue update.** An install records the version it took and
+the card names both numbers, but moving from v1 to v2 means remove-and-reinstall.
 
 ## Also outstanding
 

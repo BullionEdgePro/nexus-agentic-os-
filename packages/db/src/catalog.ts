@@ -313,6 +313,125 @@ export async function removeCatalogInstall(
   return getInstall(rows[0].id);
 }
 
+/**
+ * Write the `procedures` row a catalogue procedure becomes.
+ *
+ * MATERIALISES, DOES NOT SWITCH ON. `is_active` is left at its default of
+ * false, so nothing here changes a single reply. A person turns it on from
+ * "How we answer", which already shows what else is active for that situation
+ * and already refuses two at once — see migration 043 for why the decision
+ * belongs there rather than behind a button on the catalogue.
+ *
+ * `source = 'catalog'` because the two existing values are both untrue of it:
+ * nobody at this business wrote it, and it was drawn from none of this
+ * business's conversations. 043 has the argument, including why the nightly
+ * writer deliberately does NOT defer to it.
+ *
+ * Idempotent by the unique index on `catalog_install_id` (043) rather than by a
+ * read-then-write here, which two clicks could interleave. `on conflict do
+ * nothing` plus a read-back means the second caller gets the first caller's row
+ * rather than an error, which is the honest answer to "activate this" when it
+ * is already activated.
+ */
+export async function materialiseProcedure(input: {
+  organizationId: string;
+  installId: string;
+  intentCategory: string;
+  language: string;
+  steps: { text: string }[];
+}): Promise<{ procedureId: string; created: boolean }> {
+  const { rows } = await getPool().query<{ id: string }>(
+    `insert into procedures
+       (organization_id, intent_category, language, steps, source,
+        is_active, catalog_install_id)
+     values ($1, $2, $3, $4::jsonb, 'catalog', false, $5)
+     on conflict (catalog_install_id) where catalog_install_id is not null
+       do nothing
+     returning id`,
+    [
+      input.organizationId,
+      input.intentCategory,
+      input.language,
+      JSON.stringify(input.steps),
+      input.installId,
+    ]
+  );
+
+  if (rows[0]) return { procedureId: rows[0].id, created: true };
+
+  // Conflict: the row is already there. Read it back rather than reporting a
+  // failure — "already done" and "could not do it" must not look alike.
+  const { rows: existing } = await getPool().query<{ id: string }>(
+    `select id from procedures where catalog_install_id = $1`,
+    [input.installId]
+  );
+  if (!existing[0]) {
+    throw new Error("The procedure was neither written nor found — refusing to report success.");
+  }
+  return { procedureId: existing[0].id, created: false };
+}
+
+/**
+ * Record that an install's material is now present in the business.
+ *
+ * This is what `catalog_installs.is_active` means, and it is worth being exact
+ * because the word is overloaded across two tables: TRUE here says "this pack's
+ * material has been added to this business", NOT "this pack is shaping replies".
+ * Whether the procedure it produced is live is `procedures.is_active`, decided
+ * by a person on a different screen.
+ */
+export async function markInstallActivated(
+  organizationId: string,
+  installId: string
+): Promise<CatalogInstall | null> {
+  const { rows } = await getPool().query<{ id: string }>(
+    `update catalog_installs
+        set is_active = true
+      where id = $1
+        and organization_id = $2
+        and removed_at is null
+      returning id`,
+    [installId, organizationId]
+  );
+  if (!rows[0]) return null;
+  return getInstall(rows[0].id);
+}
+
+/** One live install, by id, narrowed to the business that claims it. */
+export async function findCatalogInstall(
+  organizationId: string,
+  installId: string
+): Promise<CatalogInstall | null> {
+  const { rows } = await getPool().query<CatalogInstallRow>(
+    `${INSTALL_SELECT} where ci.id = $1 and ci.organization_id = $2 and ci.removed_at is null`,
+    [installId, organizationId]
+  );
+  return rows[0] ? toInstall(rows[0]) : null;
+}
+
+/**
+ * Whether a business already has something live for this situation.
+ *
+ * Asked BEFORE activating, purely so the screen can say so — activation itself
+ * does not depend on this, because the procedure it writes arrives switched off
+ * and cannot collide. `procedures_one_active_per_intent` is what actually
+ * refuses a second live procedure, at the moment somebody tries to switch this
+ * one on.
+ */
+export async function activeProcedureFor(
+  organizationId: string,
+  intentCategory: string,
+  language: string
+): Promise<{ id: string; source: string } | null> {
+  const { rows } = await getPool().query<{ id: string; source: string }>(
+    `select id, source from procedures
+      where organization_id = $1 and intent_category = $2 and language = $3 and is_active
+      limit 1`,
+    [organizationId, intentCategory, language]
+  );
+  return rows[0] ?? null;
+}
+
 export interface CatalogCounts {
   /** Published items on the shelf. */
   published: number;
@@ -322,6 +441,8 @@ export interface CatalogCounts {
   businesses: number;
   /** Live installs whose catalogue item has moved on since. */
   outdated: number;
+  /** Live installs whose material has actually been added to the business. */
+  activated: number;
 }
 
 export async function countCatalog(): Promise<CatalogCounts> {
@@ -330,6 +451,7 @@ export async function countCatalog(): Promise<CatalogCounts> {
     installs: string;
     businesses: string;
     outdated: string;
+    activated: string;
   }>(
     `select (select count(*) from catalog_items where published_at is not null)::text as published,
             (select count(*) from catalog_installs where removed_at is null)::text    as installs,
@@ -339,12 +461,15 @@ export async function countCatalog(): Promise<CatalogCounts> {
                from catalog_installs ci
                join catalog_items it on it.id = ci.catalog_item_id
               where ci.removed_at is null
-                and ci.installed_version < it.version)::text                          as outdated`
+                and ci.installed_version < it.version)::text                          as outdated,
+            (select count(*) from catalog_installs
+              where removed_at is null and is_active)::text                           as activated`
   );
   return {
     published: Number(rows[0]?.published ?? 0),
     installs: Number(rows[0]?.installs ?? 0),
     businesses: Number(rows[0]?.businesses ?? 0),
     outdated: Number(rows[0]?.outdated ?? 0),
+    activated: Number(rows[0]?.activated ?? 0),
   };
 }

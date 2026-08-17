@@ -194,6 +194,11 @@
 
 .pr-pill.on { border-color: rgba(63, 107, 74, 0.45); color: var(--good); background: rgba(63, 107, 74, 0.07); }
 .pr-pill.operator { border-color: rgba(29, 63, 191, 0.35); color: var(--blueprint); background: var(--blueprint-soft); }
+/* From the catalogue: distinct from both neighbours on purpose. Not the
+   blueprint of "written here", because nobody at this business wrote it; not
+   the plain pill of "suggested", because it was not drawn from this business's
+   conversations either. */
+.pr-pill.catalog { border-color: rgba(91, 92, 80, 0.45); color: var(--graphite); background: rgba(91, 92, 80, 0.07); }
 
 /* --- the steps --- */
 

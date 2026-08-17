@@ -467,7 +467,7 @@ export interface ProcedureRecord {
   /** A newer inference waiting on a person. Null when there is nothing to weigh. */
   proposedSteps: ProcedureStep[] | null;
   proposedAt: string | null;
-  source: "operator" | "inferred";
+  source: "operator" | "inferred" | "catalog";
   derivedFromCount: number;
   timesApplied: number;
   timesSucceeded: number;
@@ -613,7 +613,29 @@ export interface CatalogCounts {
   installs: number;
   businesses: number;
   outdated: number;
+  /** Installs whose material has actually been added to the business. */
+  activated: number;
 }
+
+/**
+ * What activating one did.
+ *
+ * A procedure lands switched off; a knowledge pack is live the moment it is
+ * indexed, because a chunk has no off state. The `note` is the server's own
+ * sentence about which of those just happened, shown rather than re-derived
+ * here — the two applications must not hold separate opinions about what a
+ * button did.
+ */
+export type ActivationOutcome =
+  | {
+      kind: "procedure";
+      procedureId: string;
+      created: boolean;
+      /** Set when something else is already live for that situation. */
+      blockedBySource: string | null;
+      note: string;
+    }
+  | { kind: "knowledge_pack"; sourceId: string; chunks: number; skipped: boolean; note: string };
 
 /**
  * The shelf, the installs and the totals in one call.
@@ -627,9 +649,29 @@ export function getCatalog(): Promise<{
   items: CatalogItem[];
   installs: CatalogInstall[];
   counts: CatalogCounts;
-  activationWired: boolean;
+  /** Kinds the server will actually activate. `template` is deliberately absent. */
+  activatableKinds: CatalogItemKind[];
 }> {
   return request("/api/catalog");
+}
+
+/**
+ * Put an installed pack's material into the business.
+ *
+ * Materialises; does not switch on. A procedure arrives in How we answer
+ * switched off and a person turns it on there, where they can see what else is
+ * active for the same situation. There is no counterpart to this call — taking
+ * material back out belongs to the screens that own it, because by then it is
+ * the business's own and may have been changed since.
+ */
+export function activateCatalogInstall(
+  organizationSlug: string,
+  installId: string
+): Promise<{ outcome: ActivationOutcome }> {
+  return request(
+    `/api/catalog/installs/${installId}/activate?business=${encodeURIComponent(organizationSlug)}`,
+    { method: "POST" }
+  );
 }
 
 export function installCatalogItem(

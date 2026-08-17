@@ -244,8 +244,16 @@ export default function ProceduresPage() {
                 <div className="pr-head">
                   <p className="pr-intent">{humanise(procedure.intentCategory)}</p>
                   <div className="pr-pills">
+                    {/* Three sources, three labels. This was a binary — operator
+                        or "suggested" — until the catalogue could write one, at
+                        which point a pack nobody here wrote would have read as
+                        this business's own suggestion. See migration 043. */}
                     <span className={`pr-pill ${procedure.source}`}>
-                      {procedure.source === "operator" ? "written here" : "suggested"}
+                      {procedure.source === "operator"
+                        ? "written here"
+                        : procedure.source === "catalog"
+                          ? "from the catalogue"
+                          : "suggested"}
                     </span>
                     <span className={`pr-pill ${procedure.isActive ? "on" : "off"}`}>
                       {procedure.isActive ? "shaping replies" : "switched off"}
@@ -328,6 +336,12 @@ export default function ProceduresPage() {
                       from {procedure.derivedFromCount} conversation
                       {procedure.derivedFromCount === 1 ? "" : "s"} the agent handled alone
                     </span>
+                  ) : procedure.source === "catalog" ? (
+                    // Deliberately NOT "from 0 conversations". A catalogue
+                    // procedure has no evidence from this business behind it,
+                    // and a zero would read as evidence that came out empty
+                    // rather than evidence that was never claimed.
+                    <span>installed from the catalogue, not drawn from this business</span>
                   ) : (
                     <span>written by hand</span>
                   )}

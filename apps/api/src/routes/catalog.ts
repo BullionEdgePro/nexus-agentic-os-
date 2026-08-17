@@ -5,8 +5,10 @@ import {
   countCatalog,
   installCatalogItem,
   removeCatalogInstall,
+  findCatalogInstall,
   findOrganizationBySlug,
 } from "@nexus/db";
+import { activateInstall } from "../services/catalog-activation.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -65,16 +67,17 @@ catalogRoute.get("/", async (c) => {
     installs,
     counts,
     /**
-     * Stated in the payload, not only in the UI copy.
+     * Which kinds can actually be activated, stated in the payload rather than
+     * hardcoded in the page.
      *
-     * An install currently records a decision and nothing more: no catalogue
-     * payload has been wired into the live agent yet, so activating one would
-     * be a switch that changes nothing while claiming to change what customers
-     * hear. That is precisely the plausible-normal-state failure this system
-     * keeps producing, so the API says so and the page repeats it rather than
-     * offering a control that lies.
+     * Two of the three can. `template` cannot, and that is a structural finding
+     * rather than unfinished work: `message_templates` mirrors Meta (017), and
+     * authored agent wording has no home in this platform at all. The page
+     * greys the button and shows the reason from the server, so the two
+     * applications cannot drift on which kinds work — the same failure the nav
+     * rail and the operator-only list already had once.
      */
-    activationWired: false,
+    activatableKinds: ["procedure", "knowledge_pack"],
   });
 });
 
@@ -110,6 +113,63 @@ catalogRoute.post("/installs", async (c) => {
     "Catalogue item installed"
   );
   return c.json({ install: result.install }, 201);
+});
+
+/**
+ * Activate — put this pack's material into the business.
+ *
+ * A procedure lands in "How we answer" SWITCHED OFF and a person turns it on
+ * there. That is not a limitation of this endpoint; it is the design. The
+ * review screen already shows what else is active for the same situation and
+ * already refuses two at once, and a catalogue button that reached past it into
+ * the live prompt would be the single thing 039 was written to prevent.
+ *
+ * There is deliberately NO deactivate here, and the omission is the considered
+ * half. Once a pack's material is in the business it IS the business's — the
+ * procedure may have been switched on and be shaping replies, the knowledge may
+ * have been edited since it arrived. Taking it back out from this screen would
+ * reach across into two surfaces that own those decisions and can show what
+ * else depends on them. "How we answer" turns a procedure off; "Knowledge"
+ * deletes a source. Both already exist, both are where a person can see the
+ * consequences, and neither needed rebuilding here.
+ *
+ * Removing the INSTALL is a different thing again and leaves the material in
+ * place, which the page says out loud rather than letting somebody assume that
+ * un-installing tidies up after itself.
+ */
+catalogRoute.post("/installs/:id/activate", async (c) => {
+  const organizationSlug = c.req.query("business") ?? "";
+  if (!organizationSlug) return c.json({ error: "Say which business." }, 400);
+
+  const organization = await findOrganizationBySlug(organizationSlug);
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const install = await findCatalogInstall(organization.id, c.req.param("id"));
+  if (!install) {
+    return c.json({ error: "That business has no live install with that id." }, 404);
+  }
+
+  const outcome = await activateInstall(organization.id, install);
+  if (!outcome.ok) {
+    // 501 for the two structural refusals — they are not the caller's mistake
+    // and no retry or different input will help. 503 for the embedding outage,
+    // which is temporary and worth trying again. 400 for a payload nobody can
+    // use. Collapsing these would make "try again later" indistinguishable from
+    // "this will never work", which is the difference the operator needs.
+    const status =
+      outcome.refusal === "template-has-no-home" || outcome.refusal === "guidance-only"
+        ? 501
+        : outcome.refusal === "embedding-unavailable"
+          ? 503
+          : 400;
+    logger.info(
+      { business: organization.slug, item: install.itemSlug, refusal: outcome.refusal },
+      "Catalogue activation refused"
+    );
+    return c.json({ error: outcome.message, refusal: outcome.refusal }, status);
+  }
+
+  return c.json({ outcome });
 });
 
 /**
