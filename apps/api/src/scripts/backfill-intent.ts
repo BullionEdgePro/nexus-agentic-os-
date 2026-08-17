@@ -59,9 +59,77 @@ async function backfillOrganization(organizationId: string, slug: string) {
       [organizationId]
     );
 
+    // Conversations that were never measured at all.
+    //
+    // The gap is not null intent on existing rows — there are none of those. It
+    // is seven conversations with no conversation_metrics row whatsoever,
+    // predating the metric write. They are invisible to F5, F10 and F11 because
+    // those features read that table, not `conversations`.
+    //
+    // Recorded honestly: intent, because the customer's words survive and can be
+    // classified now exactly as they would have been then. Tokens, timings and
+    // resolved_by stay NULL, because those are measurements of a reply nobody
+    // took at the time, and inventing them would poison F11's forecasts, which
+    // read the same columns. `resolved_by` is nullable and constrained to three
+    // values; guessing 'ai_agent' would assert an outcome we did not observe.
+    const { rows: unmeasured } = await getPool().query<Row>(
+      `select c.id as metric_id,
+              c.id as conversation_id,
+              (
+                select m.body
+                  from messages m
+                 where m.conversation_id = c.id
+                   and m.sender_type = 'contact'
+                   and m.body is not null
+                 order by m.created_at asc
+                 limit 1
+              ) as text
+         from conversations c
+        where c.organization_id = $1
+          and not exists (
+            select 1 from conversation_metrics cm where cm.conversation_id = c.id
+          )`,
+      [organizationId]
+    );
+
+    let inserted = 0;
+    let insertSkipped = 0;
+    for (const row of unmeasured) {
+      if (!row.text) {
+        insertSkipped += 1;
+        continue;
+      }
+      const { intent } = classifyIntent({ text: row.text });
+      if (intent === "unknown") {
+        insertSkipped += 1;
+        continue;
+      }
+      if (APPLY) {
+        await getPool().query(
+          `insert into conversation_metrics (organization_id, conversation_id, intent, recorded_at)
+           select $1, $2, $3, coalesce(
+                    (select max(m.created_at) from messages m where m.conversation_id = $2),
+                    now()
+                  )
+            where not exists (
+              select 1 from conversation_metrics cm where cm.conversation_id = $2
+            )`,
+          [organizationId, row.conversation_id, intent]
+        );
+      }
+      inserted += 1;
+    }
+
+    if (unmeasured.length > 0) {
+      console.log(
+        `  ${slug}: ${unmeasured.length} never measured — ` +
+          `${inserted} ${APPLY ? "given" : "would be given"} a row, ${insertSkipped} unreadable`
+      );
+    }
+
     if (rows.length === 0) {
-      console.log(`  ${slug}: nothing to backfill`);
-      return { examined: 0, classified: 0, unknown: 0, noText: 0 };
+      if (unmeasured.length === 0) console.log(`  ${slug}: nothing to backfill`);
+      return { examined: unmeasured.length, classified: inserted, unknown: insertSkipped, noText: 0 };
     }
 
     let classified = 0;
