@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
+import { BrainSection } from "./brain-section";
 import "../deck.css";
 import "../activity/activity.css";
 import "./quality.css";
@@ -290,6 +291,11 @@ export default function QualityPage() {
           employee sends from their own phone are invisible here, so a conversation resolved that
           way looks contained.
         </p>
+
+        {/* The platform-wide version of everything above, from the same
+            conversation_metrics rows and the same hourly job. Placed last
+            because a business's own numbers are what an operator came for. */}
+        <BrainSection />
       </div>
     </div>
   );

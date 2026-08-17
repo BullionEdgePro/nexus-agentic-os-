@@ -272,3 +272,57 @@ test("an empty result is written as a result", () => {
   assert.match(PAGE, /Checked within the last ten minutes\./);
   console.log("PASS: operators run without inference, and can retract what they raised");
 });
+
+// ============================================================
+// The classifier stopping must not read as a quiet week
+// ============================================================
+
+test("an operator watches for conversations recorded without an intent", () => {
+  // `IntentCoverage.neverClassified` carried this warning in its own doc
+  // comment for the whole life of F5 — "rising, it means the classifier stopped
+  // running, and that is a defect rather than a quiet week" — and nothing read
+  // it. `getIntentCoverage` was consulted by one hand-run backfill script and
+  // by nothing on a schedule.
+  //
+  // It matters more than it sounds because every consumer of intent degrades to
+  // a plausible empty result: the shared store pools nothing, no procedure is
+  // ever recalled, hotspots empty. All three look like a business with no
+  // traffic, and this feature has already lost months to exactly that
+  // confusion once.
+  const OPERATORS = readFileSync(
+    join(here, "..", "src", "services", "operators.ts"),
+    "utf8"
+  );
+  assert.match(OPERATORS, /slug: "intent-unclassified"/);
+  // Counts NULL intent in a recent window, per business, and says nothing when
+  // there are none — an operator that fires on a healthy system is noise.
+  assert.match(OPERATORS, /count\(\*\) filter \(where intent is null\)/);
+  assert.match(OPERATORS, /if \(missing === 0\) return \[\];/);
+  // Registered, or it is dead code with a test.
+  assert.match(OPERATORS, /OPERATORS: Operator\[\] = \[[\s\S]*intentClassificationStopped/);
+  // Calls no model, like every operator here — it has to work on the day the
+  // models are the thing that broke.
+  const fn = OPERATORS.slice(OPERATORS.indexOf('slug: "intent-unclassified"'));
+  const body = fn.slice(0, fn.indexOf("\n};"));
+  assert.ok(
+    !/anthropic|generateText|embed|gemini/i.test(body),
+    "operators must not call a model"
+  );
+});
+
+test("the brain screen leads with whether it can see, not with what it knows", () => {
+  // Putting the pooled patterns first would repeat the original mistake in a
+  // nicer font: the store spent months reporting an emptiness that looked like
+  // youth while actually reading a sixth of the platform.
+  const SECTION = readFileSync(
+    join(here, "..", "..", "web", "app", "deck", "quality", "brain-section.tsx"),
+    "utf8"
+  );
+  const coverageAt = SECTION.indexOf("conversations measured");
+  const patternsAt = SECTION.indexOf("patterns stored");
+  assert.ok(coverageAt > 0 && patternsAt > 0, "both blocks must be present");
+  assert.ok(coverageAt < patternsAt, "coverage has to come before the pool");
+
+  // And it must not imply the agent is already using any of this.
+  assert.match(SECTION, /not yet reaching any reply/);
+});

@@ -597,9 +597,51 @@ Verified as `nexus_app` under each firm's tenant context: Juris Prime Legal's `n
 now resolves to its own sentence, ABR's still resolves to the platform default. Both firms still
 have **0 conversations**, so nothing has been sent to anybody.
 
+## F5 — the brain can now be seen, and its silence has a watcher
+
+Continuing F5 started with finding out what it actually lacked, and it was not what the status row
+said. **The store is fine.** `shared_patterns` runs on the hourly rollup, the redaction gate holds,
+`/api/quality/shared` has been serving `getSharedGuidance` + `getBrainStatus` for weeks. Two things
+were missing, and the smaller one is the one everybody would have named:
+
+**1. Nothing in the product showed it.** The endpoint had no caller in `lib/api.ts` at all. A pooled
+store nobody can look at cannot be told apart from a broken one — which is the exact confusion this
+feature already lost months to, when intent came from tool calls alone, 83% of traffic fired no
+tool, and the store read a sixth of the platform while reporting an emptiness that looked like
+youth. Now a section on **Agent quality** (not a new tab — it is the platform-wide version of the
+per-business numbers above it, from the same rows and the same job).
+
+**Coverage is rendered ABOVE the patterns, deliberately.** Whether F5 can *see* anything comes
+before what it *knows*; only one of the two is fixable by waiting, and the reverse order is how the
+original defect hid.
+
+**2. `neverClassified` had no watcher — a documented defect nobody could see.** Its own doc comment
+says: rising, "it means the classifier stopped running, and that is a defect rather than a quiet
+week". `getIntentCoverage` was read by one hand-run backfill script and nothing on a schedule. New
+operator **`intent-unclassified`** (12th, calls no model like the rest) raises it per business.
+It matters because *every* consumer of intent degrades to a plausible empty result when
+classification stops: the pool takes nothing, no procedure is ever recalled, hotspots empty — three
+screens all reading as a quiet week.
+
+**A bug this found in itself, visible only by looking at the rendered page.** The first version fell
+back to `?? 0` throughout, so an unreachable API drew "0 conversations measured, 0 patterns stored" —
+the platform reporting it had learned nothing when the truth was that nobody had asked. That is the
+failure the section exists to expose in F5, reproduced by the section. It now refuses to draw any
+number it did not receive.
+
+**Still not done, and it is the bigger half:** `getSharedGuidance` is read by this endpoint and a
+preflight script, and **by nothing on the customer path**. F5 informs a person, never an agent. The
+screen says so in as many words rather than letting a pooled table imply otherwise. Wiring it in is
+a decision about one business's answers being shaped by other businesses' outcomes, and it deserves
+its own argument — not least because there are 0 shareable patterns today, so it would change
+nothing and prove nothing.
+
 ## The next task
 
-**ABR's office number** — one value unblocks the last draft.
+**Decide whether pooled guidance should reach a reply at all** — the half of F5 that remains, and a
+product decision before it is a code one.
+
+**ABR's office number** — one value unblocks the last phrase draft.
 
 **Staffing is the real unlock whenever the owner is ready.** One person with a rota at either firm
 turns `handing_over`, the handover flag, and the whole escalation path from inert to live. See

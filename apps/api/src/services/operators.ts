@@ -767,9 +767,73 @@ const retrievalUnavailable: Operator = {
   },
 };
 
+/**
+ * The classifier stopped, and F5 went quiet in the way it always looks quiet.
+ *
+ * `IntentCoverage.neverClassified` carries this warning in its own doc comment:
+ * it "counts conversations whose metrics carry a NULL intent, which nothing in
+ * the reply path writes any more — so it should only ever be historical rows.
+ * Rising, it means the classifier stopped running, and that is a defect rather
+ * than a quiet week."
+ *
+ * Nothing watched it. `getIntentCoverage` is read by `backfill-intents.ts` and
+ * by nothing else, so the number was only ever consulted by a person running a
+ * script by hand — which is to say, after somebody already suspected a problem.
+ *
+ * WHY THIS IS THE OPERATOR F5 MOST NEEDED. Everything downstream of intent
+ * degrades to a plausible empty result when classification stops. The shared
+ * store pools nothing and reports "not enough tenants yet". Procedure recall
+ * finds no procedure, which is what "this business has none" looks like. The
+ * hotspots list empties. Every one of those reads as a quiet week, and this
+ * feature has already lost its whole first life to exactly that confusion:
+ * intent came from tool calls alone, 83% of traffic fires no tool, and the
+ * store spent months reading a sixth of the platform while looking merely new.
+ *
+ * Per business rather than platform-wide, because that is the shape every
+ * operator has and because a classifier failing for one tenant is a real state —
+ * the reply path is the same code, but traffic is not.
+ *
+ * Calls no model, like every operator here, which is the property that matters
+ * on the day the models are the thing that broke.
+ */
+const INTENT_LOOKBACK_HOURS = 24;
+
+const intentClassificationStopped: Operator = {
+  slug: "intent-unclassified",
+  title: "Conversations are being recorded with no intent",
+  description:
+    "Something wrote a metric row without an intent, which nothing in the reply path does any more. Downstream this looks like a quiet week: the shared brain pools nothing, procedures are never recalled, and hotspots empty — all of it indistinguishable from having no traffic.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{ missing: string; total: string }>(
+      `select count(*) filter (where intent is null)::text  as missing,
+              count(*)::text                                as total
+         from conversation_metrics
+        where organization_id = $1
+          and recorded_at > now() - ($2 || ' hours')::interval`,
+      [organizationId, String(INTENT_LOOKBACK_HOURS)]
+    );
+
+    const missing = Number(rows[0]?.missing ?? 0);
+    const total = Number(rows[0]?.total ?? 0);
+    if (missing === 0) return [];
+
+    return [
+      {
+        fingerprint: "intent-unclassified",
+        severity: "urgent" as const,
+        title: `${missing} of ${total} conversations recorded without an intent`,
+        detail: `In the last ${INTENT_LOOKBACK_HOURS} hours, ${missing} metric rows carry a NULL intent. The reply path always calls the classifier, so this is not a quiet week — it means classification did not run. Everything keyed on intent degrades silently while it lasts: the shared brain pools nothing, no procedure is ever recalled, and escalation hotspots empty. Check the reply pipeline before reading any of those as "not enough traffic yet".`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   retrievalUnavailable,
+  intentClassificationStopped,
   overdueFollowUp,
   unownedFollowUp,
   brokenKnowledge,

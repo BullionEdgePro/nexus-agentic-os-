@@ -631,6 +631,55 @@ export function unfilledPlaceholders(body: string): string[] {
   return [...new Set(found.map((match) => match.trim()))];
 }
 
+// ============================================================
+// The shared brain (F5)
+// ============================================================
+
+export interface SharedPattern {
+  intentCategory: string;
+  language: string;
+  sampleCount: number;
+  escalatedCount: number;
+  escalationRate: number;
+  avgResolutionSeconds: number | null;
+  contributingTenants: number;
+}
+
+/**
+ * How much of the platform's traffic F5 can actually read.
+ *
+ * `neverClassified` is the one to watch: nothing in the reply path writes a
+ * NULL intent any more, so a rising count means classification stopped — a
+ * defect, not a quiet week. The `intent-unclassified` operator raises it; this
+ * screen is where somebody can see the shape of it.
+ */
+export interface IntentCoverage {
+  conversations: number;
+  classified: number;
+  nonPatternOnly: number;
+  neverClassified: number;
+  rate: number;
+}
+
+export interface BrainStatus {
+  patternsStored: number;
+  patternsShareable: number;
+  contributingTenants: number;
+  /** Why the brain has nothing to offer, or null when it does. */
+  blockedBecause: string | null;
+  coverage: IntentCoverage;
+}
+
+/**
+ * Pooled outcomes across every business.
+ *
+ * Operator-only by mount — `/api/quality` is, and this genuinely spans
+ * businesses, so there is no per-tenant form of it to show an employee.
+ */
+export function getSharedBrain(): Promise<{ patterns: SharedPattern[]; status: BrainStatus }> {
+  return request("/api/quality/shared");
+}
+
 export interface BusinessLink {
   slug: string;
   name: string;
