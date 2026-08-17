@@ -8,6 +8,7 @@ import type {
   WhatsAppWebhookEntry,
 } from "@nexus/shared";
 import type { Employee } from "@nexus/shared";
+import { worstRetrievalOutcome } from "@nexus/shared";
 import {
   findOrganizationByPhoneNumberId,
   findOrganizationById,
@@ -599,13 +600,11 @@ async function processSingleTextMessage(
       const output = call.output as { outcome?: string } | string | undefined;
       return typeof output === "object" && output !== null ? output.outcome : undefined;
     });
-    const retrievalOutcome = retrievalCalls.length === 0
-      ? null
-      : outcomes.includes("failed")
-        ? ("failed" as const)
-        : outcomes.includes("hit")
-          ? ("hit" as const)
-          : ("miss" as const);
+    // Worst wins, and 'degraded' sits between 'failed' and 'hit' rather than
+    // beside either. The ordering lives in @nexus/shared as a pure function
+    // because it is a judgement about what an operator gets to see, not a
+    // formatting detail — see worstRetrievalOutcome.
+    const retrievalOutcome = worstRetrievalOutcome(outcomes);
 
     const evaluation = await evaluateOutgoingMessage({
       draftReply: result.text,

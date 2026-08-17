@@ -165,8 +165,13 @@ export interface ConversationMetricInput {
    * ran and found nothing; 'failed' means it could not run at all. Keeping those
    * two apart is the whole point: they are identical to a reader of the
    * conversation, and only one of them is an outage.
+   *
+   * 'degraded' (migration 047) is a third thing that looks like the other two
+   * from outside: semantic search could not run, and keyword search answered in
+   * its place. The customer got an answer, so it is not 'failed'; the provider
+   * was down, so it must not be 'hit'.
    */
-  retrievalOutcome?: "hit" | "miss" | "failed" | null;
+  retrievalOutcome?: "hit" | "miss" | "failed" | "degraded" | null;
 }
 
 /** Aggregated snapshot powering the command-deck overview. */

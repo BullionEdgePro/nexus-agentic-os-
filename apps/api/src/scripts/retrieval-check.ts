@@ -28,7 +28,7 @@
  */
 import { pathToFileURL } from "node:url";
 import { withTenant, withAllTenants, findOrganizationBySlug } from "@nexus/db";
-import { searchKnowledge } from "@nexus/knowledge";
+import { searchKnowledge, searchKnowledgeLexical } from "@nexus/knowledge";
 
 interface Probe {
   /** What a customer would actually type on WhatsApp. */
@@ -116,7 +116,25 @@ function report(label: string, ok: boolean, detail: string) {
   console.log(`  ${ok ? "ok  " : "FAIL"}  ${label} — ${detail}`);
 }
 
+/**
+ * `--lexical` measures the OUTAGE path instead: the same probes, the same
+ * corpus, read by `searchKnowledgeLexical`.
+ *
+ * It exists because the fallback's whole justification is a ratio — during an
+ * outage the alternative is not semantic search, it is nothing — and a ratio
+ * quoted in a code comment stops being measured the moment it is written down.
+ * Three places cite "13 of 18": `retrieve.ts`, the `retrieval-unavailable`
+ * operator's detail text, and HANDOFF. This is what re-derives it.
+ *
+ * IT SETS NO EXIT CODE. A gate that failed when keyword search missed a page
+ * would be asserting that the degraded path is as good as the real one, which is
+ * the opposite of what it is for; the misses are the finding, not a regression.
+ * Read the list.
+ */
+const LEXICAL = process.argv.includes("--lexical");
+
 async function main() {
+  if (LEXICAL) return lexicalSurvey();
   console.log("Retrieval quality — does the right page come back?\n");
 
   for (const [slug, probes] of Object.entries(PROBES)) {
@@ -164,6 +182,59 @@ async function main() {
     return;
   }
   console.log(`PASS — all ${checks} probes found their page within the top ${HOW_MANY_READ}.`);
+}
+
+/**
+ * How much of the knowledge base is still reachable when Google is not.
+ *
+ * Prints the misses in full, because "13 of 18" is the reassuring half of the
+ * finding and the other half is WHICH five and how confidently wrong they look:
+ * a will-and-inheritance question answered from real-estate law outranks correct
+ * hits, so no score threshold removes it. That is why the tool labels these
+ * excerpts as keyword matches and tells the model to ignore any that merely
+ * share a word with the question.
+ */
+async function lexicalSurvey() {
+  console.log("Keyword fallback — what survives an embedding outage?\n");
+
+  let found = 0;
+  let total = 0;
+
+  for (const [slug, probes] of Object.entries(PROBES)) {
+    const organization = await withAllTenants("retrieval-check: tenant registry", () =>
+      findOrganizationBySlug(slug)
+    );
+    if (!organization) continue;
+
+    console.log(`${slug}`);
+    for (const probe of probes) {
+      const hits = await withTenant(organization.id, () =>
+        searchKnowledgeLexical({
+          organizationId: organization.id,
+          query: probe.question,
+          limit: HOW_MANY_READ,
+        })
+      );
+
+      const wanted = expectations(probe);
+      const rank = hits.findIndex((hit) => wanted.some((want) => matches(hit.sourceUri, want)));
+      total += 1;
+      if (rank >= 0) found += 1;
+
+      const detail =
+        rank >= 0
+          ? `rank ${rank + 1} of ${hits.length}`
+          : hits.length === 0
+            ? "nothing matched — the customer would be deferred, as they are today"
+            : `WRONG PAGE: ${hits.map((h) => (h.sourceUri ?? "?").replace(/^https?:\/\/[^/]+/, "") || "/").join(", ")}`;
+
+      console.log(`  ${rank >= 0 ? "ok  " : "    "}  "${probe.question.slice(0, 46)}" — ${detail}`);
+    }
+    console.log("");
+  }
+
+  console.log(`${found} of ${total} probes found their page by keyword alone.`);
+  console.log(`Semantic search finds all ${total}. This is the gap the fallback trades for not being nothing.`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

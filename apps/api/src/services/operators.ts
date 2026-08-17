@@ -737,9 +737,25 @@ const retrievalUnavailable: Operator = {
   title: "The agent cannot read the knowledge base",
   description:
     "Knowledge lookups are failing, so replies are going out ungrounded. Customers are being told a colleague will confirm — which sounds like a business with no answer rather than a provider that is down.",
+  // MIGRATION 047 ADDED A WAY FOR THIS OPERATOR TO GO BLIND, so it sweeps for
+  // two values now. The lexical fallback answers from Postgres when the
+  // embedding provider is unreachable, and it records itself as 'degraded'
+  // rather than 'failed' — which is correct, and which would have quietly
+  // emptied the predicate this operator was built on. A mitigation that
+  // switches off the alarm it was written for leaves the platform worse than
+  // before: the outage would go on being real and stop being visible.
+  //
+  // Both values mean the same upstream fact — semantic search did not run. What
+  // differs is what it cost the customer, and that is what sets severity rather
+  // than what raises the finding.
   run: async (organizationId) => {
-    const { rows } = await getPool().query<{ failed: string; attempted: string }>(
+    const { rows } = await getPool().query<{
+      failed: string;
+      degraded: string;
+      attempted: string;
+    }>(
       `select count(*) filter (where retrieval_outcome = 'failed')::text as failed,
+              count(*) filter (where retrieval_outcome = 'degraded')::text as degraded,
               count(*) filter (where retrieval_outcome is not null)::text as attempted
          from conversation_metrics
         where organization_id = $1
@@ -748,18 +764,31 @@ const retrievalUnavailable: Operator = {
     );
 
     const failed = Number(rows[0]?.failed ?? 0);
+    const degraded = Number(rows[0]?.degraded ?? 0);
     const attempted = Number(rows[0]?.attempted ?? 0);
-    if (failed === 0) return [];
+    const unhealthy = failed + degraded;
+    if (unhealthy === 0) return [];
 
-    // Urgent whenever it is happening at all, like judge-offline and for the
+    // Urgent as soon as anyone was deflected, like judge-offline and for the
     // same reason: a lookup that fails intermittently is not degraded
     // retrieval, it is retrieval you cannot tell apart from an empty shelf.
+    //
+    // Degraded-only stays a warning and is still raised. The customers were
+    // answered, so nobody is being turned away this minute — but they were
+    // answered from keyword matches that nobody has read, on a provider that is
+    // down and will not fix itself, and "it is coping" is the state most likely
+    // to be left running for a week.
+    const deflected = failed > 0;
     return [
       {
         fingerprint: "retrieval-unavailable",
-        severity: "urgent" as const,
-        title: `${failed} of ${attempted} knowledge lookups failed`,
-        detail: `In the last ${RETRIEVAL_LOOKBACK_HOURS} hours, ${failed} lookups could not run — usually the embedding provider being unreachable, out of quota, or a missing key. Replies still went out, ungrounded, telling customers a colleague would confirm. Check egress to the embedding endpoint before assuming the index is at fault.`,
+        severity: deflected ? ("urgent" as const) : ("warn" as const),
+        title: deflected
+          ? `${failed} of ${attempted} knowledge lookups failed`
+          : `${degraded} of ${attempted} replies answered on keyword search`,
+        detail: deflected
+          ? `In the last ${RETRIEVAL_LOOKBACK_HOURS} hours, ${failed} lookups could not run and found nothing to answer from — usually the embedding provider being unreachable, out of quota, or a missing key. Those replies went out ungrounded, telling customers a colleague would confirm.${degraded > 0 ? ` A further ${degraded} were answered by the keyword fallback instead.` : ""} Check egress to the embedding endpoint before assuming the index is at fault.`
+          : `In the last ${RETRIEVAL_LOOKBACK_HOURS} hours, semantic search could not run ${degraded} times and Postgres keyword matching answered instead. Customers were not deflected, which is why this is a warning and not an alarm — but keyword matching finds the right page roughly 13 times in 18 where the real ranker finds it 18, so some of those replies are built on a page that merely shares a word with the question. Check egress to the embedding endpoint, then read those conversations.`,
         subjectKind: "organization",
         subjectId: organizationId,
       },

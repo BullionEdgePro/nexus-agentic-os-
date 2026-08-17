@@ -1,8 +1,26 @@
-import { searchKnowledge } from "@nexus/knowledge";
+import { searchKnowledge, searchKnowledgeLexical } from "@nexus/knowledge";
 import type { ToolDefinition } from "../types.js";
 import { defaultToolRegistry } from "./registry.js";
 
 const SEARCH_TIMEOUT_MS = 8000;
+
+/**
+ * The fallback gets its own, much shorter budget.
+ *
+ * It runs after the primary has already spent up to 8 seconds failing, and a
+ * customer waiting 16 seconds for a degraded answer is a worse outcome than
+ * waiting 8 for an honest deferral. Postgres full-text over a few hundred chunks
+ * returns in single-digit milliseconds; anything approaching this ceiling means
+ * the database is in trouble too, and there is nothing left to fall back to.
+ */
+const LEXICAL_TIMEOUT_MS = 2500;
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+  ]);
+}
 
 /**
  * search_knowledge: grounded retrieval over the tenant's own documents.
@@ -39,16 +57,14 @@ export const searchKnowledgeTool: ToolDefinition = {
     if (!query) return { found: false, note: "No search query was provided." };
 
     try {
-      const hits = await Promise.race([
+      const hits = await withTimeout(
         searchKnowledge({
           organizationId: ctx.organizationId,
           employeeId: ctx.employeeId ?? null,
           query,
         }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("timeout")), SEARCH_TIMEOUT_MS)
-        ),
-      ]);
+        SEARCH_TIMEOUT_MS
+      );
 
       if (hits.length === 0) {
         return {
@@ -74,6 +90,72 @@ export const searchKnowledgeTool: ToolDefinition = {
       };
     } catch (err) {
       const reason = err instanceof Error && err.message === "timeout" ? "timed out" : "failed";
+
+      // ----------------------------------------------------------------
+      // SEMANTIC SEARCH IS DOWN. READ THE SAME SHELF WITH WORDS.
+      // ----------------------------------------------------------------
+      //
+      // Reached only from this catch, never from a miss. The knowledge is
+      // sitting in the database as plain text and Postgres needs no provider to
+      // match words in it, so the choice during an outage is between a keyword
+      // answer and telling every customer for the duration that a colleague
+      // will confirm — which sounds like a business with nothing on file.
+      //
+      // Failing soft twice over: if this throws as well, nothing is lost that
+      // was not already lost, and the reply goes out exactly as it did before
+      // this existed.
+      try {
+        const lexical = await withTimeout(
+          searchKnowledgeLexical({
+            organizationId: ctx.organizationId,
+            employeeId: ctx.employeeId ?? null,
+            query,
+          }),
+          LEXICAL_TIMEOUT_MS
+        );
+
+        if (lexical.length > 0) {
+          return {
+            found: true,
+            // Its own outcome, not 'hit'. A degraded answer that recorded
+            // itself as a healthy one would hide the outage inside its own
+            // mitigation and leave `retrieval-unavailable` sweeping for a
+            // failure that had stopped being written down.
+            outcome: "degraded" as const,
+            // The real guard on this feature, and it is addressed to the model
+            // rather than enforced by a number. Measured on the 18 retrieval
+            // probes, keyword search returns a confidently wrong page often
+            // enough to matter — "what happens to my property when I die"
+            // returns real-estate law, because two areas of law share a noun —
+            // and it outranks correct hits when it does, so no score threshold
+            // can catch it. Judging whether a passage actually answers the
+            // question is the one part of this a model does better than the
+            // matcher, so it is told plainly what it is holding.
+            degraded: true,
+            note:
+              "Semantic search is unavailable, so these excerpts were found by matching WORDS, " +
+              "not meaning. Treat them as unverified: use one only if it plainly answers what " +
+              "the customer actually asked, and ignore any that merely share a word with the " +
+              "question. If none of them clearly answers it, say a colleague will confirm — " +
+              "that is the right outcome here, not a failure.",
+            results: lexical.map((hit) => ({
+              excerpt: hit.content,
+              source: hit.sourceTitle,
+              uri: hit.sourceUri,
+              indexedAt: hit.lastIndexedAt,
+              // No `relevance`. The semantic path's number is a cosine
+              // similarity against a floor of 0.55 and this one is a
+              // `ts_rank_cd` with no floor at all; printing both under one name
+              // invites the model — and anyone reading a transcript — to
+              // compare two things that do not share a scale.
+              match: "keyword" as const,
+            })),
+          };
+        }
+      } catch {
+        // Deliberately silent. The outcome below is already the honest one.
+      }
+
       return {
         found: false,
         // The distinction this platform could not previously see: retrieval was
