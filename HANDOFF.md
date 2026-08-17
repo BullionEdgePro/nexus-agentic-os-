@@ -778,10 +778,62 @@ passphrase missing; happy path; a truncated upload where `copy` exits 0 and the 
 for real on production — 6.1M dumped, 30 tables and 6 organizations restored, and the summary line
 now reads `latest is NOT off-box — local disk only`.
 
+## Why businesses 2–5 have no customers — it is not the platform
+
+Read from the live websites on 2026-08-17, because the platform side had been measured to death and
+the constraint was still traffic. **Not one of the five businesses' websites points at the number the
+agent answers on** (`971504805436`):
+
+| business | WhatsApp link on their own site |
+|---|---|
+| SFS International | `phone=3214569874` — the Houzez theme's demo number |
+| Juris Prime | none at all |
+| Juris Prime Legal | none at all |
+| ABR Advocates | `wa.me/971508872523` — a different, working number |
+| Zipicka *(the one with customers)* | `wa.me/971583014766` — also different |
+
+The agent works, the deep links work — all five verified to route end to end, including the
+`juris-prime` / `juris-prime-legal` prefix pair. Nothing points at them. That is the whole gap.
+
+### SFS International, in detail — and it is worse than a dead button
+
+* **Four Houzez demo properties are still published on a live estate agency's site**: "Stylish
+  downtown apartment", "Two-bedroom with sauna", "One-bedroom with balcony", "Central apartment with
+  doorman". They resolve (HTTP 200). A real agency is advertising four apartments that do not exist.
+* Those four are the **only** listings on the site carrying a WhatsApp button — five buttons, all
+  pointing at `3214569874`. Plus five dead `tel:3214569874` links.
+* The **eight real listings** (Jebel Ali Hills, Barsha Heights, the villa plots) have **no WhatsApp
+  button at all**, and their property pages show an agent named `curtainuae2021` with the stock
+  avatar and an **empty phone field**.
+* The platform number is already on the homepage twice as `tel:(971)504805436`, so none of this is a
+  matter of principle — it is unfinished setup.
+
+**Fix, in order:** delete the four demo properties; set WhatsApp and phone on the `curtainuae2021`
+agent record to `971504805436` so the real listings gain a contact route; replace the five remaining
+`tel:` links.
+
+**A correction I had to publish.** The first version of the deliverable said "every property page
+carries a WhatsApp button and a phone button wired to 321 456 9874 — ten of them." That was wrong.
+`grep -c` counts matching *lines*, not occurrences, all ten were on the **homepage**, and I never
+opened a property page before writing it — property pages have none. Caught only by going back to
+make the instruction precise enough to act on. **Counting something is not the same as knowing what
+was counted**, which is this repo's oldest lesson arriving in a new place.
+
+**Deliverable:** https://claude.ai/code/artifact/5e5abf8d-eb55-46ce-ac49-2ff3d0e0afa7 — per-business
+cards worst-first, each with its deep link, a printable QR and a paste-ready snippet. Carries the
+correction inline and in the footer.
+
+**ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
+means the agent takes first contact under the strict legal tier and whoever answers today stops
+hearing from customers. That is the owner's call.
+
 ## The next task
 
 **Two values and one `rclone install` turn the last real risk off.** Until then every backup is one
 disk failure from being no backup.
+
+**Four website edits are what actually move the traffic constraint**, and none of them is engineering
+work on this platform. See the section above.
 
 Nothing else is queued: every remaining feature is blocked on traffic, an external integration, or an
 explicit "not asked for" — measured rather than assumed, five candidate areas today.
@@ -843,6 +895,18 @@ steps and gains the v2 proposal, and an active phrase is untouched by the update
   applies), so this is a resilience question, not an incident.
 
 ## Lessons added this session
+
+**Counting something is not knowing what was counted.** I reported "ten dead buttons on every
+property page" at SFS from `grep -c 3214569874` on the homepage. `grep -c` counts matching *lines*,
+not occurrences; all of them were on the homepage; property pages have none; and the real finding —
+four fictional demo listings still published on a live estate agency — was underneath. It reached a
+shared deliverable before being caught, and only because I went back to make the instruction precise
+enough for somebody to act on. The same shape as every entry below it: a number that looked like an
+answer, believed without asking what produced it.
+
+**An outward-facing claim deserves the treatment a production write gets.** Everything else this
+session was verified by reading it back from the database. The one thing published to a person was
+not, and it was the one thing that was wrong.
 
 **Verify privileges by reading them back.** Migration 039 granted only `select` on `catalog_items`
 and the database still gave `nexus_app` insert, update and delete — an earlier blanket grant had
