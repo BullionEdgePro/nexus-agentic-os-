@@ -738,15 +738,26 @@ proved to restore.
 **Encryption is not optional once a remote is set.** These dumps hold real customers' WhatsApp
 conversations. `BACKUP_REMOTE` without `BACKUP_PASSPHRASE` fails rather than uploading plaintext.
 
-**To switch it on, set two values in the cron environment:**
+**rclone is installed** — `v1.60.1` from the Ubuntu 24.04 repository (2026-08-17), not
+`curl | bash`: a signed, security-maintained package on a production box beats piping a remote
+script into a root shell, and `copy`/`size` have been stable for years. Verified that the real
+binary's `size --json` emits `{"count":1,"bytes":6367051,...}` and that the script's parser reads
+`6367051` from it, matching `stat` exactly — the parser had until then only ever been tested against
+a stub. rclone's config-not-found NOTICE goes to stderr, which the script already discards.
 
-```
-BACKUP_REMOTE=b2:nexus-backups     # any rclone remote:path — S3, B2, R2, Drive, SFTP
-BACKUP_PASSPHRASE=<long secret>    # must NOT also live on this machine
-```
+**Three things still needed, and the third is easy to miss:**
 
-...and install rclone (`curl https://rclone.org/install.sh | sudo bash`). The script refuses with
-that exact line if the remote is set and rclone is missing.
+1. `rclone config` — **a remote must actually be defined.** There is no `~/.config/rclone/rclone.conf`
+   on the box, so a name like `b2:` does not exist yet however correct the env var looks. This is
+   where the bucket and its credentials go.
+2. `BACKUP_REMOTE=<remote>:<path>` in the cron environment.
+3. `BACKUP_PASSPHRASE=<long secret>` — and it must **not** also live on that machine, or the
+   encryption protects nothing that losing the box would not also lose.
+
+**The guards were walked forward one at a time on production.** Before rclone: failed naming rclone.
+After installing it, the same run reaches the next guard and fails with *"BACKUP_REMOTE is set but
+BACKUP_PASSPHRASE is not — refusing to upload customer conversations unencrypted"*. Tonight's cron
+sets no remote at all, so it takes the skip path and exits 0, unchanged.
 
 **Verified before shipping**, six paths in a harness with a stub rclone: unset; rclone missing;
 passphrase missing; happy path; a truncated upload where `copy` exits 0 and the object is short
