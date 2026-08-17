@@ -72,7 +72,13 @@ NAO=<working copy of nexus-agentic-os->
 git -C "$NAO" rm -rq --cached .
 find "$NAO" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 git -C "C:/CLAUDE CODE" archive HEAD:nexus-agentic-os | tar -x -C "$NAO"
-git -C "$NAO" add -A && git -C "$NAO" commit -m "..."
+git -C "$NAO" add -A
+# 2b. THE EXEC BIT DOES NOT SURVIVE THIS. `git rm --cached .` empties the index,
+#     tar on Windows drops the mode, and `add` re-records 644 because
+#     core.fileMode is false here. Re-assert it or the nightly backup silently
+#     stops being runnable:
+git -C "$NAO" update-index --chmod=+x scripts/backup-db.sh
+git -C "$NAO" commit -m "..."
 
 # 3. THIS is the part that breaks: gh is logged in as Rancho-Felipe, which has
 #    no write access to BullionEdgePro, and it hijacks all github.com auth.
@@ -86,6 +92,13 @@ docker compose -f docker-compose.prod.yml up -d api worker
 
 A fresh clone of the mirror also needs `git config user.email/user.name`, or the commit fails
 with "Author identity unknown".
+
+**Step 2b is not housekeeping.** `scripts/backup-db.sh` is the only mode-755 file in the tree, the
+monorepo records it correctly, and the mirror loses it on every rebuild — checked again on 17
+August, and it had flipped back to 644. A `chmod +x` done on the server instead creates a permanent
+local mode diff, which makes `git pull` print "Aborting" while HEAD stays put; that is how a deploy
+once reported success and ran the previous script. Verify with `ls -l` on the VPS, not with the push
+output.
 
 **Migrations run as `nexus`, not `postgres`** (that role does not exist):
 
