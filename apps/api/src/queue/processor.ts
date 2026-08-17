@@ -127,6 +127,48 @@ async function resolvePhrase(
   }
 }
 
+/**
+ * Which business would actually pick this conversation up.
+ *
+ * THE OWNER IS THE WRONG ANSWER AND IT IS THE EASY ONE TO REACH FOR. All five
+ * businesses share Zipicka's number, so every conversation row carries
+ * Zipicka's `organization_id` — including the ones the switchboard sent to ABR
+ * or SFS. Any staffing question asked about `organization.id` is therefore
+ * asked about Zipicka, whoever the customer is actually talking to.
+ *
+ * That has already gone wrong twice on this platform in the other direction:
+ * `hasStaffOnShift` read as the owner and answered "you have no staff at all"
+ * for four of five businesses, and the shared-number RLS trap needed
+ * `withServingTenant` for the same reason. This is the third instance, and it
+ * fails toward silence rather than toward noise.
+ *
+ * Found 2026-08-17 by reading production: two live conversations are owned by
+ * Zipicka and routed to `abr` and `sfs-international`, both of which have zero
+ * employees. A handoff on either would be a permanent mute that the release
+ * below could never clear, because it would be asking whether ZIPICKA has staff
+ * — and Zipicka does.
+ *
+ * Resolved from the conversation's recorded routing rather than threaded
+ * through the call sites, for the reason `flagHandoffBestEffort` already gives
+ * about its own guard: a check every caller has to remember is a check the
+ * fourth caller will not.
+ *
+ * Falls back to the owner when there is no routing or the lookup fails, which
+ * is exactly the behaviour these call sites had before — an unrouted
+ * conversation genuinely belongs to the number's owner.
+ */
+async function businessAnsweringFor(
+  conversationId: string,
+  ownerId: string
+): Promise<string> {
+  try {
+    const routing = await getConversationRouting(conversationId);
+    return routing?.routedOrganizationId ?? ownerId;
+  } catch {
+    return ownerId;
+  }
+}
+
 // How many times a customer may be handed the triage menu before a human takes
 // over. Bounded because the failure mode is a loop: if someone's messages never
 // classify and never answer the menu, re-asking forever is worse than silence.
@@ -323,10 +365,14 @@ async function processSingleTextMessage(
     // somebody at their desk this minute". Using presence would release a
     // paused conversation every night at 3am and hand it back to the agent,
     // even though the person it was given to will read it in the morning.
-    const someoneCanHandle = await hasActiveEmployees(organization.id).catch(() => true);
+    // Asked of the business the switchboard ROUTED this to, not the number's
+    // owner — see businessAnsweringFor. Asking the owner is how this release
+    // could never fire for the four businesses that most need it.
+    const answering = await businessAnsweringFor(conversationId, organization.id);
+    const someoneCanHandle = await hasActiveEmployees(answering).catch(() => true);
     if (!someoneCanHandle) {
       logger.warn(
-        { conversationId, organizationId: organization.id },
+        { conversationId, organizationId: answering, numberOwner: organization.id },
         "Releasing a handoff nobody can take — the business has no active staff"
       );
       // Best-effort: failing to clear the flag must not stop the reply. The
@@ -1051,12 +1097,18 @@ async function sendFallbackBestEffort(
  */
 async function flagHandoffBestEffort(organization: Organization, conversationId: string): Promise<void> {
   try {
+    // THE BUSINESS THAT WOULD TAKE IT, not the number's owner. Every caller
+    // here passes the owner because that is what the pipeline has in hand, and
+    // on a shared number that is Zipicka for all five businesses — so pausing
+    // the agent on ABR's conversation was being decided by whether ZIPICKA has
+    // somebody at their desk. See businessAnsweringFor.
+    const answering = await businessAnsweringFor(conversationId, organization.id);
     // Conservative on failure: assume somebody is there, which preserves the
     // behaviour this function had before the guard existed.
-    const canHandOver = await hasStaffOnShift(organization.id).catch(() => true);
+    const canHandOver = await hasStaffOnShift(answering).catch(() => true);
     if (!canHandOver) {
       logger.warn(
-        { conversationId, business: organization.slug },
+        { conversationId, business: organization.slug, answering },
         "Not pausing the agent — no active staff, so a handoff would abandon this conversation rather than transfer it"
       );
       return;
