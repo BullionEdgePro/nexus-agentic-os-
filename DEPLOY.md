@@ -43,12 +43,16 @@ Docker network, proxied through Caddy.
 ## 3. Get the code onto the server
 
 ```bash
-git clone <your-repo-url> /opt/nexus
-cd /opt/nexus/nexus-agentic-os
+git clone https://github.com/BullionEdgePro/nexus-agentic-os-.git /opt/nexus
+cd /opt/nexus
 ```
 
-(Or `scp`/`rsync` the `nexus-agentic-os/` directory if you don't want the
-whole monorepo on the server.)
+**That repo — note the trailing dash — carries the project FLAT at its root**,
+which is why the path is `/opt/nexus` and not `/opt/nexus/nexus-agentic-os`.
+Development happens in the `nexus-agentic-os/` subdirectory of the `kova-audio`
+monorepo; the deploy repo is a flattened mirror of it. Cloning the monorepo here
+instead would put the compose file one level down and every command in this
+document would miss it.
 
 ## 4. Configure
 
@@ -120,10 +124,23 @@ tells you whether the door is still being walked through.
 ## 6. Updating after a code change
 
 ```bash
-cd /opt/nexus/nexus-agentic-os
-git pull
+cd /opt/nexus
+git pull origin main
 docker compose -f docker-compose.prod.yml up -d --build
+
+# Bound the build cache. Each --build adds BuildKit layers and NOTHING removes
+# them: on 2026-08-17 this had reached 28.9GB of the 31GB in use on the disk,
+# accumulated one deploy at a time. It is invisible until the disk fills, and
+# when the disk fills Postgres is what stops. `until=72h` keeps this week's
+# layers so the next build is still fast, and touches no running container.
+docker builder prune -f --filter until=72h
 ```
+
+**The path is `/opt/nexus`, not `/opt/nexus/nexus-agentic-os`.** This document
+said the latter until 2026-08-17 and it has never existed on the server: the
+deploy repo carries the project flat at its root, so the compose file is
+`/opt/nexus/docker-compose.prod.yml`. Following the old line gave you "No such
+file or directory" at exactly the moment you were trying to ship.
 
 Postgres data persists in the `nexus-postgres-data` named volume across
 rebuilds — `docker compose down` alone won't touch it; only
