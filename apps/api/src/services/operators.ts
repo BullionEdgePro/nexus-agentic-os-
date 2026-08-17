@@ -716,8 +716,60 @@ const reengagementCandidate: Operator = {
   },
 };
 
+// Retrieval is down, and every reply still looks fine.
+//
+// On 15 August 2026 Google's embedding endpoint returned 503 for an extended
+// period. The reply path handled it exactly right: the tool caught the error,
+// the agent kept answering, said it could not confirm the detail, and
+// governance still applied. Nothing was fabricated and nothing crashed.
+//
+// Nobody would have known. A customer being told "a colleague can confirm this"
+// because the provider is down reads identically to being told it because the
+// business genuinely has nothing on file. Over a week, every customer would be
+// politely deflected and the only symptom would be a quiet fall in usefulness.
+//
+// This is the operator that outage argued for. It exists because migration 038
+// finally writes the distinction down — before that there was nothing to sweep.
+const RETRIEVAL_LOOKBACK_HOURS = 6;
+
+const retrievalUnavailable: Operator = {
+  slug: "retrieval-unavailable",
+  title: "The agent cannot read the knowledge base",
+  description:
+    "Knowledge lookups are failing, so replies are going out ungrounded. Customers are being told a colleague will confirm — which sounds like a business with no answer rather than a provider that is down.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{ failed: string; attempted: string }>(
+      `select count(*) filter (where retrieval_outcome = 'failed')::text as failed,
+              count(*) filter (where retrieval_outcome is not null)::text as attempted
+         from conversation_metrics
+        where organization_id = $1
+          and recorded_at > now() - ($2 || ' hours')::interval`,
+      [organizationId, String(RETRIEVAL_LOOKBACK_HOURS)]
+    );
+
+    const failed = Number(rows[0]?.failed ?? 0);
+    const attempted = Number(rows[0]?.attempted ?? 0);
+    if (failed === 0) return [];
+
+    // Urgent whenever it is happening at all, like judge-offline and for the
+    // same reason: a lookup that fails intermittently is not degraded
+    // retrieval, it is retrieval you cannot tell apart from an empty shelf.
+    return [
+      {
+        fingerprint: "retrieval-unavailable",
+        severity: "urgent" as const,
+        title: `${failed} of ${attempted} knowledge lookups failed`,
+        detail: `In the last ${RETRIEVAL_LOOKBACK_HOURS} hours, ${failed} lookups could not run — usually the embedding provider being unreachable, out of quota, or a missing key. Replies still went out, ungrounded, telling customers a colleague would confirm. Check egress to the embedding endpoint before assuming the index is at fault.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
+  retrievalUnavailable,
   overdueFollowUp,
   unownedFollowUp,
   brokenKnowledge,

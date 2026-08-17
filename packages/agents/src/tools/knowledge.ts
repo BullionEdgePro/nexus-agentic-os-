@@ -53,12 +53,17 @@ export const searchKnowledgeTool: ToolDefinition = {
       if (hits.length === 0) {
         return {
           found: false,
+          // Machine-readable, so the caller never has to read the note to learn
+          // what happened. "nothing matched" and "the lookup broke" are
+          // different facts and must not be told apart by parsing prose.
+          outcome: "miss" as const,
           note: "Nothing in the knowledge base matched that closely enough to rely on.",
         };
       }
 
       return {
         found: true,
+        outcome: "hit" as const,
         results: hits.map((hit) => ({
           excerpt: hit.content,
           source: hit.sourceTitle,
@@ -71,6 +76,10 @@ export const searchKnowledgeTool: ToolDefinition = {
       const reason = err instanceof Error && err.message === "timeout" ? "timed out" : "failed";
       return {
         found: false,
+        // The distinction this platform could not previously see: retrieval was
+        // unavailable, not empty. Recorded so an operator can notice an outage
+        // that otherwise looks exactly like "we have nothing on that".
+        outcome: "failed" as const,
         note: `Knowledge lookup ${reason}; a colleague can confirm this.`,
       };
     }

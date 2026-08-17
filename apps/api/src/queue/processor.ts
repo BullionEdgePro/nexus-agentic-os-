@@ -482,6 +482,25 @@ async function processSingleTextMessage(
       .map((call) => (typeof call.output === "string" ? call.output : JSON.stringify(call.output)))
       .join("\n\n");
 
+    // Did retrieval work, and can anyone tell?
+    //
+    // Read from the tool's own `outcome` field rather than by matching its note,
+    // so a reworded message never silently reclassifies an outage as a miss.
+    // Worst outcome wins across calls: one failed lookup means this reply was
+    // partly ungrounded, whatever the others returned.
+    const retrievalCalls = result.toolCalls.filter((call) => call.name === "search_knowledge");
+    const outcomes = retrievalCalls.map((call) => {
+      const output = call.output as { outcome?: string } | string | undefined;
+      return typeof output === "object" && output !== null ? output.outcome : undefined;
+    });
+    const retrievalOutcome = retrievalCalls.length === 0
+      ? null
+      : outcomes.includes("failed")
+        ? ("failed" as const)
+        : outcomes.includes("hit")
+          ? ("hit" as const)
+          : ("miss" as const);
+
     const evaluation = await evaluateOutgoingMessage({
       draftReply: result.text,
       conversationHistory: history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
@@ -605,6 +624,7 @@ async function processSingleTextMessage(
       // which tool fired. The stamp records what was APPLIED, which is the
       // thing the counters are meant to count.
       procedureId: procedure?.procedureId ?? null,
+      retrievalOutcome,
     });
   } catch (err) {
     logger.error({ conversationId, sentToCustomer, err }, "AI reply pipeline failed");

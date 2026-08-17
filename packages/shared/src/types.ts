@@ -158,6 +158,15 @@ export interface ConversationMetricInput {
    * unable to go down.
    */
   procedureId?: string | null;
+  /**
+   * Whether knowledge retrieval worked for this reply.
+   *
+   * Null when search_knowledge was never called — most replies. 'miss' means it
+   * ran and found nothing; 'failed' means it could not run at all. Keeping those
+   * two apart is the whole point: they are identical to a reader of the
+   * conversation, and only one of them is an outage.
+   */
+  retrievalOutcome?: "hit" | "miss" | "failed" | null;
 }
 
 /** Aggregated snapshot powering the command-deck overview. */
