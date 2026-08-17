@@ -28,6 +28,20 @@
 
 set -euo pipefail
 
+# Secrets come from a root-only file, not from the crontab.
+#
+# The obvious way to pass BACKUP_PASSPHRASE to a cron job is to put it on the
+# cron line. That writes the key to your customers' conversations into a file
+# listed by `crontab -l`, backed up by every root-level tool on the box, and
+# shoulder-surfable in any terminal someone is helping you in. This is read
+# first so the crontab stays exactly as it is — one path, no secrets.
+#
+# Absent, nothing happens and the script behaves as it always has. Sourced
+# rather than parsed so it can hold shell quoting for a passphrase with spaces.
+BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/nexus-backup.env}"
+# shellcheck source=/dev/null
+[ -r "$BACKUP_ENV_FILE" ] && . "$BACKUP_ENV_FILE"
+
 NEXUS_DIR="${NEXUS_DIR:-/opt/nexus}"
 BACKUP_DIR="${BACKUP_DIR:-$NEXUS_DIR/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
