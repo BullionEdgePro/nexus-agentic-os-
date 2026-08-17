@@ -537,14 +537,46 @@ in a transaction that rolled back, so nothing is live.
 **Nothing has changed for any customer.** Somebody at each firm has to read these and switch them
 on, which is the whole design.
 
+## Both law firms stay unstaffed — DECIDED 2026-08-17, not overlooked
+
+Asked to set up rotas for both firms and found there is nothing to attach one to: **neither firm
+has a single employee row**, active or otherwise. Only `zipicka` (1) and `juris-prime` (1) are
+staffed at all. Creating the records would have meant inventing solicitors and advocates for two
+real firms, and that is not a cosmetic objection — a fabricated active employee with hours makes
+`hasStaffOnShift` true, which flips the reply to `handing_over` ("I am passing this to one of our
+solicitors") **and** lets `flagHandoffBestEffort` pause the agent. Told help is coming, cut off from
+the only thing answering: the 1–11 August state, reintroduced on a criminal-defence line.
+
+**The owner's decision is to leave both unstaffed for now.** Recorded here so the next session does
+not read zero staff as an oversight and try to "fix" it.
+
+**What that costs today: nothing.** Both firms have **0 conversations and 0 inbound messages** —
+neither has ever had a customer. Checked, not assumed.
+
+**What it means when traffic arrives, and this is the part worth knowing.** Both firms are on the
+strict governance tier (not in `MEDIUM_RISK_TOLERANT`), so `shouldEscalateReply` returns true on a
+*medium* verdict, not just high. With an empty rota `canHandOver` is false, so the agent's actual
+grounded answer is discarded and the customer receives the `no_one_available` wording instead. For
+these two firms that phrase is therefore **not a rare fallback** — it is what they send whenever the
+judge is unsure. And when the judge cannot be reached at all, `evaluateHallucinationRisk` returns
+"medium" as the absence of a verdict, so *every* reply would be replaced (see the `judge-offline`
+operator, which exists for exactly this and calls no model so it works on the day models are what
+is broken).
+
+That raises the value of the four drafts rather than lowering it: for these firms the
+`no_one_available` sentence is close to the whole product until somebody is on a rota.
+
+Note the platform's last evaluation of any kind was **2026-08-08** (12, all Zipicka, all medium).
+There is no recent judge activity to draw a health conclusion from either way.
+
 ## The next task
 
-**Somebody has to approve the four drafts** — and for ABR, supply the office number. Until then both
-firms keep sending the platform's own sentence.
+**Somebody has to approve the four phrase drafts** — and for ABR, supply the office number, without
+which its `no_one_available` cannot be switched on by design.
 
-**A rota is the bigger unlock.** With zero active staff at either firm, escalation cannot promise
-anyone and the agent never pauses — so `handing_over`, the handover flag, and half of the
-escalation design are inert for both. See [[nexus-rota-editor]] for the surface that fills this in.
+**Staffing is the real unlock whenever the owner is ready.** One person with a rota at either firm
+turns `handing_over`, the handover flag, and the whole escalation path from inert to live. See
+[[nexus-rota-editor]] for the surface, and ask for names rather than inventing them.
 
 Also still open: **let a business take a catalogue update** (v1 → v2 currently means
 remove-and-reinstall).
