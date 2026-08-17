@@ -56,6 +56,17 @@ a WhatsApp message.
 `retrieval-check` costs one embedding call per probe (18 today), so it is the
 one to run deliberately rather than on every deploy.
 
+`retrieval-check --lexical` asks a different question and costs nothing: how much
+of the knowledge base is still reachable when the embedding provider is NOT. It
+runs the same probes through the keyword fallback (migration 047) and prints,
+for every miss, the wrong page it would have handed the agent. **It sets no exit
+code on purpose** — failing when keyword search misses would assert that the
+degraded path is as good as the real one, which is the opposite of what it is
+for. Measured 17 August in production: **13 of 18**, where semantic search finds
+all 18. Re-run it after any re-index rather than trusting that number; three
+places in the codebase cite it, and a ratio quoted in a comment stops being
+measured the moment it is written down.
+
 Between them these found: an audience count filtering on a column that does not
 exist, a broadcast insert whose parameter Postgres could not type (so no
 broadcast could ever be created), and an upsert that erased fields. **None was

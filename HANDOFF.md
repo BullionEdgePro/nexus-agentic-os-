@@ -13,13 +13,13 @@ dir `/opt/nexus`.
 | | |
 |---|---|
 | Deployed | VPS at `b93dafb`, 6/6 containers up, health 200 |
-| Migrations | through **046**, every one verified by its effect in the database, not by a log |
-| Tests | **726** passing, typecheck and `next build` clean |
+| Migrations | through **047**, every one verified by its effect in the database, not by a log |
+| Tests | **734** passing, typecheck and `next build` clean |
 | Operators | **13**, sweeping every 10 minutes, **0 standing findings** |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | all five re-run 17 Aug against `b93dafb`: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes |
+| Gates | all five re-run 17 Aug after 047 shipped: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes; 13/18 on the keyword fallback |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
@@ -900,6 +900,92 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## Retrieval survives the provider going down — BUILT, DEPLOYED, MEASURED
+
+Migration **047**, applied 17 August and verified by its effect: one check
+constraint on `conversation_metrics` (not two — the drop is by name, and a
+mistyped name would have left the old one silently rejecting every new row), a
+GIN index on `to_tsvector('english', content)`, and 038's failed-only partial
+index replaced by one covering both unhealthy states.
+
+**The problem was never that the outage was invisible.** 038 and
+`retrieval-unavailable` fixed that. It was that during an outage the knowledge
+base is sitting in `knowledge_chunks.content` as plain text, and nothing was
+willing to read it without a vector — so every customer was told a colleague
+would confirm, which sounds like a business with nothing on file. It has
+happened twice: a 503 run on 15 August, and the connect timeout that aborted
+`self-check`.
+
+**What it is worth, measured in production rather than argued:**
+
+```
+docker compose -f docker-compose.prod.yml exec -T worker   npx tsx apps/api/src/scripts/retrieval-check.ts --lexical
+```
+
+**13 of 18.** Semantic search finds the right page in the top 3 all 18 times.
+The comparison that matters is not 13 against 18 but **13 against zero**, which
+is what an outage gets otherwise. Re-run it rather than trusting this paragraph
+— three places in the codebase cite that ratio.
+
+**The five misses shaped the design more than the thirteen hits did.** "what
+happens to my property when I die, do I need a will?" returns real-estate law,
+because two areas of law share a noun. That is not a near miss, it is a
+confident and plausible wrong page, and it **outranks correct hits** — 0.125
+where a correct top hit scored 0.066. No score floor separates them, so there
+is no floor, and saying so is better than a threshold picked to look
+principled while separating nothing. The guard is that the excerpts reach the
+model labelled `match: "keyword"` with an instruction to use one only where it
+plainly answers the question and to defer otherwise. Judging that is the one
+part of this a model does better than the matcher.
+
+**Three fences, each against a way this could be worse than the outage:**
+
+* **It never runs after a miss**, only from the catch. A semantic miss is a
+  designed refusal — `DEFAULT_MIN_SCORE` exists so the agent is not handed
+  noise to paraphrase — and retrying it with a weaker matcher would turn "we
+  have nothing on that" into "here is a page sharing a noun with your
+  question". Asserted negatively in the tests, which is the only way to assert
+  it.
+* **It records `degraded`, never `hit`.** A degraded reply filed as a healthy
+  one hides the outage inside its own mitigation.
+* **`retrieval-unavailable` now sweeps `failed` OR `degraded`.** Without that,
+  this feature would have emptied the predicate the operator was built on and
+  switched off the alarm that argued for it. Urgent when anybody was actually
+  deflected; a warning — still raised — when they were merely answered by
+  keyword, because "it is coping" is the state most likely to be left running
+  for a week.
+
+**Both search paths interpolate one `VISIBILITY_SQL` constant.** A fallback with
+its own `where` clause would be a tenant-isolation hole reachable only during a
+provider outage, which is the least-tested moment this system has and the one
+where nobody is reading the SQL. The test counts the occurrences.
+
+Terms are OR-ed, built inside SQL from `to_tsvector`'s own lexemes with each one
+`quote_literal`'d, so no part of a customer's WhatsApp message ever reaches
+tsquery syntax. `websearch_to_tsquery` conjoins, and on real questions that
+returned nothing at all for 10 of the 18 probes.
+
+**Proven end to end in production, by manufacturing the outage.** Unit tests
+prove the branching and `--lexical` proves the query, but neither proves the
+join between them — that when `embedQuery` genuinely fails, the TOOL catches it,
+reaches the fallback and returns `degraded`. That part only ever runs during an
+outage, so one was made: a one-off process in the worker container with
+`GEMINI_EMBEDDING_MODEL` pointed at a model that does not exist, the running
+worker untouched and no customer message involved.
+
+```
+outcome: degraded          # not 'hit' — the outage stays on the record
+found: true                # 3 excerpts, all labelled match: "keyword"
+first source: https://www.abshlaw.com/criminal-law.html   # the right page
+relevance leaked? false    # no cosine-shaped number on a ts_rank_cd
+```
+
+The same probe with the provider working returns `outcome: hit`, five results,
+`relevance` present and no keyword label — so the healthy path is untouched.
+
+**What is still unexercised: a real customer.** Nobody has met the fallback in a
+live conversation, and nobody will until the provider next fails.
 
 ## The next task — the checklist form of this is now at the top of the file
 
