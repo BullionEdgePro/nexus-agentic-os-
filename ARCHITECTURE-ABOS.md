@@ -569,6 +569,29 @@ Grouped by *what unblocks it*, because the reason matters more than the item.
   manufacturer) and two people who said "Hi", were told a specialist would
   follow up, and had heard nothing for eleven days.
 
+  **Re-counted 2026-08-17: all four are STILL muted — sixteen days now**, and
+  one wrote again on 10 August into a paused conversation. Fixing the promise
+  did nothing for the conversations already in this state, and nothing watched
+  for new ones.
+
+  **`customer-waiting` was blind to it by construction, and worse than blind.**
+  That operator requires the customer to have spoken last — which is what makes
+  it "waiting" rather than "quiet" — but this state is created BY THE AGENT
+  SPEAKING: it promises a specialist, sets `is_human_handoff`, and stops. The
+  last message is outbound forever. It had raised *"khan has been waiting 261
+  hours for a reply"* on 2026-08-12 and then **retracted it**: that finding
+  reads resolved in `operator_findings` today while the customer has still never
+  been answered. Correct behaviour for its own question; exactly the wrong
+  impression.
+
+  **`handover-abandoned` (13th operator) now watches it.** The test is "did a
+  human EVER arrive", not "how long since a message" — a handover that was
+  honoured also ends outbound and goes quiet. Always urgent, because unlike a
+  slow reply this state does not resolve itself. Verified against production:
+  three conversations match the SQL, the `scoreLead` fallback correctly
+  suppresses the two cold pitches that predate lead scoring, and **one real
+  person surfaces** — someone who said "Hi", waiting 388 hours.
+
   The mechanism is a different bug from the promise, and worth separating.
   `ai_paused_until` is a person taking a conversation for a while and expires by
   itself. `is_human_handoff` is set on escalation and cleared only when a human

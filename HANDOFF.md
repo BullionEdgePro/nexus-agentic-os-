@@ -670,9 +670,44 @@ The selection is a pure exported function, `selectPooledGuidance`, tested with r
 than by matching source — wrong language, wrong intent, and an off-by-one on the floor would each
 produce a note that reads perfectly sensibly in front of a customer and is about something else.
 
+## Four customers have been silenced for sixteen days, and nothing was watching
+
+Looking for the next feature, §9 said to read the register of what was not done. It records that
+escalation used to promise a specialist who did not exist, that the promise was fixed, and that four
+conversations were already muted. **Re-counted in production today: all four are still muted.**
+Opened 1–3 August, still `is_human_handoff`, still open, never touched by a human. Sixteen days. One
+of them wrote again on 10 August, into a paused conversation.
+
+**Nothing was watching, and the reason is the interesting part.** `customer-waiting` requires the
+customer to have spoken last — that is what makes it *waiting* rather than *quiet*. But this state is
+created BY THE AGENT SPEAKING: it says "I'm looping in a specialist", sets `is_human_handoff`, and
+stops. The last message is outbound forever, so the operator can never see it.
+
+It did worse than not see it. It had raised *"khan has been waiting 261 hours for a reply"* on
+12 August and then **retracted it** — that finding reads resolved in `operator_findings` right now,
+while the customer has still never been answered. The alert cleared itself while the harm continued,
+which is this platform's signature failure wearing its most convincing disguise yet.
+
+**`handover-abandoned` — the 13th operator.** The test is **"did a human EVER arrive"**, not "how
+long since a message": a handover that was honoured also ends outbound and also goes quiet, so a
+timestamp cannot tell them apart. Always urgent — unlike a slow reply, this state never resolves
+itself.
+
+Verified against production rather than assumed: three conversations match the SQL, and the
+`scoreLead` fallback correctly suppresses the two cold pitches that predate lead scoring (a data
+broker and a pet-food manufacturer, neither carrying an assessment). **One real person surfaces** —
+someone who said "Hi", was promised a colleague, and has waited 388 hours.
+
 ## The next task
 
-**F5 is complete.** What remains for it is traffic, not code.
+**Somebody should answer Usman, or take that conversation off handover so the agent resumes.** The
+operator will report it on the next 10-minute sweep; it is one real customer of the one business
+with real customers.
+
+**F5 is complete.** What remains for it is traffic, not code. So is most of the rest: F9's rollups
+were measured today at **0.202 ms across 13 conversations and 60 messages** — building read models
+for that would add a second source of truth for numbers to save a fifth of a millisecond, which this
+codebase has been burned by before. Not next.
 
 **ABR's office number** — one value unblocks the last phrase draft.
 

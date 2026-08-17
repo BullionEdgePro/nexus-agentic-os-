@@ -830,8 +830,135 @@ const intentClassificationStopped: Operator = {
   },
 };
 
+/**
+ * A handover nobody ever came to, which no operator could see.
+ *
+ * FOUND IN PRODUCTION 2026-08-17 by reading `is_human_handoff` directly rather
+ * than trusting the finding list. Four Zipicka conversations opened 1–3 August
+ * are still paused, still open, and have never had a human message in them.
+ * Sixteen days. Two of them are people who said "Hi", were told a specialist
+ * would follow up, and heard nothing.
+ *
+ * ARCHITECTURE §9.5 records this state and says the promise was fixed. It was:
+ * escalation no longer promises staff who do not exist. What was never fixed is
+ * the conversations already in it — and, more importantly, nothing watches for
+ * new ones.
+ *
+ * WHY `customer-waiting` CANNOT SEE IT, which is the whole reason this exists.
+ * That operator requires `last.sender_type = 'contact'` — the customer must
+ * have spoken last, which is what makes it "waiting" rather than "quiet". But
+ * this state is created BY THE AGENT SPEAKING: it sends "I'm looping in a
+ * specialist", sets `is_human_handoff`, and stops. The last message is
+ * therefore outbound, forever, and the operator goes quiet.
+ *
+ * It did more than go quiet. It had raised "khan has been waiting 261 hours for
+ * a reply" on 2026-08-12 and then RETRACTED it — the finding reads resolved in
+ * `operator_findings` today while the customer has still never been answered.
+ * Retraction is correct behaviour for that operator's own question and produced
+ * exactly the wrong impression: a promise was made, the agent was switched off,
+ * and the alert cleared itself.
+ *
+ * THE TEST HERE IS "DID A HUMAN EVER ARRIVE", not "how long since a message".
+ * A conversation where somebody replied and the customer went away happy also
+ * has an outbound last message and an old timestamp. The distinguishing fact is
+ * that no `human_agent` message exists in it at all, which is precisely what
+ * was promised and never delivered.
+ *
+ * Calls no model, like every operator here.
+ */
+const ABANDONED_HANDOVER_HOURS = 12;
+
+const handoverAbandoned: Operator = {
+  slug: "handover-abandoned",
+  title: "A handover nobody came to",
+  description:
+    "The agent promised a colleague and paused itself, and no colleague has ever replied. The customer was told help was coming and then heard nothing, and because the agent spoke last this looks like an answered conversation to every other check.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{
+      conversation_id: string;
+      contact_name: string | null;
+      wa_id: string;
+      paused_hours: string;
+      last_body: string | null;
+      has_assessment: boolean;
+    }>(
+      `select c.id as conversation_id,
+              ct.display_name as contact_name,
+              ct.wa_id,
+              round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as paused_hours,
+              last_in.body as last_body,
+              exists (
+                select 1 from lead_assessments la where la.conversation_id = c.id
+              ) as has_assessment
+         from conversations c
+         join contacts ct on ct.id = c.contact_id
+         join lateral (
+           select created_at from messages m
+            where m.conversation_id = c.id
+            order by m.created_at desc limit 1
+         ) last on true
+         -- The customer's own last words, for the pitch check below. Separate
+         -- from the lateral above because by definition the agent spoke last
+         -- here. (No backticks in this comment: it lives inside a template
+         -- literal, and one would end the string.)
+         left join lateral (
+           select body from messages m
+            where m.conversation_id = c.id and m.sender_type = 'contact'
+            order by m.created_at desc limit 1
+         ) last_in on true
+        where c.organization_id = $1
+          and c.status in ('open', 'pending')
+          -- The agent is switched off for this conversation.
+          and c.is_human_handoff
+          -- And nobody ever arrived. This is the clause that separates an
+          -- abandoned promise from a handover that was honoured.
+          and not exists (
+            select 1 from messages m
+             where m.conversation_id = c.id and m.sender_type = 'human_agent'
+          )
+          and last.created_at < now() - ($2 || ' hours')::interval
+          -- Same suppression as customer-waiting, for the same reason: two of
+          -- the four found in production are cold pitches, and reporting a data
+          -- broker as an abandoned customer is the noise that teaches an
+          -- operator to stop reading the list.
+          and not exists (
+            select 1 from lead_assessments la
+             where la.conversation_id = c.id and la.category = 'inbound_pitch'
+          )`,
+      [organizationId, String(ABANDONED_HANDOVER_HOURS)]
+    );
+
+    return rows
+      .filter((row) => {
+        // And the same fallback, for the same reason: conversations predating
+        // lead scoring carry no assessment, and "no assessment" must not read
+        // as "not a pitch". Scored on the customer's last message, which is the
+        // one the promise was made about.
+        if (row.has_assessment || !row.last_body) return true;
+        return scoreLead({ text: row.last_body }).category !== "inbound_pitch";
+      })
+      .map((row) => {
+        const hours = Number(row.paused_hours);
+        const who = row.contact_name ?? `+${row.wa_id}`;
+        const days = Math.floor(hours / 24);
+        return {
+          fingerprint: row.conversation_id,
+          // Always urgent. There is no gentle version of a customer who was
+          // promised a person and then cut off from the only thing answering
+          // them — and unlike a slow reply, this state does not resolve itself.
+          severity: "urgent" as const,
+          title: `${who} was promised a colleague ${days >= 1 ? `${days} day${days === 1 ? "" : "s"}` : `${hours} hours`} ago and nobody came`,
+          detail: `The agent handed this conversation to a person and paused itself ${hours} hours ago. No colleague has ever replied in it, so the customer has heard nothing since being told help was coming — and because the agent spoke last, every other check reads this as answered. Either reply to them, or take the conversation off handover so the agent starts answering again.`,
+          subjectKind: "conversation",
+          subjectId: row.conversation_id,
+        } satisfies FindingInput;
+      });
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
+  handoverAbandoned,
   retrievalUnavailable,
   intentClassificationStopped,
   overdueFollowUp,

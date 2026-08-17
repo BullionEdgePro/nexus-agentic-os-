@@ -326,3 +326,55 @@ test("the brain screen leads with whether it can see, not with what it knows", (
   // And it must not imply the agent is already using any of this.
   assert.match(SECTION, /not yet reaching any reply/);
 });
+
+// ============================================================
+// The handover nobody came to
+// ============================================================
+
+test("an abandoned handover is watched, and customer-waiting cannot see it", () => {
+  // FOUND IN PRODUCTION 2026-08-17 by reading is_human_handoff directly rather
+  // than trusting the finding list. Four Zipicka conversations opened 1–3
+  // August, still paused, still open, never touched by a human. Sixteen days.
+  //
+  // customer-waiting is blind to it BY CONSTRUCTION: it requires the customer
+  // to have spoken last, and this state is created by the AGENT speaking — "I'm
+  // looping in a specialist", is_human_handoff, stop. The last message is
+  // outbound forever.
+  //
+  // Worse than blind. It had raised "khan has been waiting 261 hours" and then
+  // RETRACTED it: the finding reads resolved while the customer has still never
+  // been answered. Correct behaviour for its own question, exactly the wrong
+  // impression.
+  const OPERATORS = readFileSync(
+    join(here, "..", "src", "services", "operators.ts"),
+    "utf8"
+  );
+  assert.match(OPERATORS, /slug: "handover-abandoned"/);
+  assert.match(OPERATORS, /OPERATORS: Operator\[\] = \[[\s\S]*handoverAbandoned/);
+
+  const fn = OPERATORS.slice(OPERATORS.indexOf('slug: "handover-abandoned"'));
+  const body = fn.slice(0, fn.indexOf("\n};"));
+
+  // The distinguishing test is "did a human EVER arrive", not "how long since a
+  // message" — a handover that was honoured also ends outbound and goes quiet.
+  assert.match(body, /and c\.is_human_handoff/);
+  assert.match(body, /sender_type = 'human_agent'\s*\n?\s*\)/);
+  assert.ok(
+    !/last\.sender_type = 'contact'/.test(body),
+    "requiring the customer to have spoken last is the blindness this operator exists to fix"
+  );
+
+  // Always urgent: unlike a slow reply, this state never resolves itself.
+  assert.match(body, /severity: "urgent" as const/);
+  assert.ok(!/WAITING_WARN|"warn"/.test(body), "there is no gentle version of this");
+
+  // Same pitch suppression as customer-waiting, including the scoreLead
+  // fallback for conversations predating lead scoring — without it the two cold
+  // pitches among the four would be reported as abandoned customers, which is
+  // the noise that teaches somebody to stop reading the list.
+  assert.match(body, /category = 'inbound_pitch'/);
+  assert.match(body, /scoreLead\(\{ text: row\.last_body \}\)\.category !== "inbound_pitch"/);
+
+  // Calls no model.
+  assert.ok(!/anthropic|generateText|embed|gemini/i.test(body), "operators must not call a model");
+});
