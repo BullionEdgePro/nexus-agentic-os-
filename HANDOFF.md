@@ -316,3 +316,94 @@ interval.
 Beyond that, F5 is gated on the same thing, and every one of these gets better as intent coverage
 does, which makes the intent classifier the load-bearing part of the next three features rather than
 any one of them.
+
+
+---
+
+# Addendum — 15 August 2026, later session
+
+Everything below was measured on production over SSH, not inferred.
+
+## What shipped since the section above
+
+**F11 Predictive BI — deployed and verified.** It was built-but-unshipped and had never met the
+real database. Migration 037 applied, `schema-check` run FIRST as that section instructs, then the
+other four gates. All green. The forced INSERT mattered: the writer refuses on thin history, which
+every business has, so calling it naturally would have planned the reads, written nothing, reported
+success, and left the insert as unverified as before.
+
+**F8 Operators — COMPLETE, 11 of 11.** Five added this session, each watching a failure the newer
+features made possible:
+
+* `procedure-awaiting-review` — F10 proposes and never activates, so suggestions can pile up on a
+  screen nobody opens while the feature reports itself as working. Never urgent, deliberately.
+* `booking-unassigned` — a confirmed appointment with no employee attached. The one failure here a
+  customer experiences physically. Urgent inside 12 hours.
+* `template-rejected` — `syncAllTemplates` has always written Meta's status down and nothing read
+  it. A rejected template drafts fine and fails at send, in front of a customer.
+* `reengagement-candidate` — reports, never sends. Quiet 30 days, not opted out, not in cooldown.
+* `retrieval-unavailable` — see below; it needed a column that did not exist.
+
+**Migration 035 — re-engagement.** Cooldown is a gist exclusion constraint on
+`(contact_id, tstzrange(sent_at, cooldown_until))`, NOT an application check. Opt-out lives on the
+contact so it outlives any attempt row. Nothing sends yet.
+
+**Migration 038 — `conversation_metrics.retrieval_outcome`** (`hit` / `miss` / `failed`, nullable).
+The knowledge tool now returns `outcome` as a FIELD, so nobody classifies an outage by matching the
+wording of a customer-facing note.
+
+**Migration 039 — F13 marketplace.** Egress policy decided: **NOTHING LEAVES.** Install-only.
+`catalog_items` has no `organization_id` and **0 foreign keys to any tenant table** — verified —
+so there is nowhere to record one business's material. `catalog_installs` is tenant-scoped and
+RLS'd. Install is not activate; installed version is copied, not referenced.
+
+**Intent backfill.** 7 conversations had no `conversation_metrics` row at all (NOT null intent —
+there were none of those). 4 given rows, 3 left alone because their text classifies as `unknown`
+and a guess is worse than a gap. Result: `inbound_pitch` 8, `unknown` 6, `knowledge_lookup` 2 —
+**half of measured traffic is people selling TO the business**, which reframes the volume numbers.
+
+**Four deep links delivered** to the owner, paste-ready. The `#slug` tag is load-bearing.
+
+## State
+
+**9 of 15 complete.** 673 tests, typecheck clean, all five gates green under `strict`,
+11/11 operators reporting 0 standing across 5 businesses, 6/6 containers up.
+
+## The next task, precisely scoped
+
+**Build the F13 catalogue page and install action.** Schema, boundary and privileges are proven, so
+this is UI on solid ground. Six files: DB layer, API route, web client, the page, a nav entry, and
+the `TAB_API` mapping in `staff-see-only-their-business.test.mjs` — that test FAILS if a new tab is
+unclassified, which forces the question "may staff see this?" to be answered at build time.
+
+**Recommendation: make it operator-only.** Installing a pack changes what every customer of that
+business is told. That is an owner's decision, not a sales executive's.
+
+## Also outstanding
+
+* **No real customer message has ever met an active procedure**, because there are none. Activating
+  one is a live change to what customers are told and wants a person's decision, not a deploy step.
+* Business verification still in review at Meta.
+* `retrieval-unavailable` reported 0 after the Google embedding outage recovered — but embeddings
+  remain a single external dependency on the live reply path with no fallback. The reply path
+  degrades gracefully (the tool catches, the agent says a colleague will confirm, governance still
+  applies), so this is a resilience question, not an incident.
+
+## Lessons added this session
+
+**Verify privileges by reading them back.** Migration 039 granted only `select` on `catalog_items`
+and the database still gave `nexus_app` insert, update and delete — an earlier blanket grant had
+already placed them, and `grant select` does not remove what is present. Revoke first. Found via
+`information_schema.role_table_grants`, not by trusting the grant statement.
+
+**`timestamptz + interval` is STABLE, not IMMUTABLE**, so it cannot appear in an exclusion
+constraint. Store the window as a column and range over two columns instead. The first attempt
+failed AFTER creating the table, leaving it briefly without the cooldown that is its entire point.
+
+**Check the shape of a gap before building for its description.** The intent backfill was written
+for "rows with null intent" because that is how the gap was described. There were none; the rows
+were missing entirely. Defaulting the script to dry-run is what caught it.
+
+**Do not assert adjacency, and never claim a check you did not run.** `reengagement-candidate` read
+`conversations.updated_at`, which does not exist, and the commit message said every column had been
+verified. Two were; that one was not.
