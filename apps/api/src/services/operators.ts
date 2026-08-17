@@ -776,7 +776,7 @@ const retrievalUnavailable: Operator = {
  * Rising, it means the classifier stopped running, and that is a defect rather
  * than a quiet week."
  *
- * Nothing watched it. `getIntentCoverage` is read by `backfill-intents.ts` and
+ * Nothing watched it. `getIntentCoverage` is read by `backfill-intent.ts` and
  * by nothing else, so the number was only ever consulted by a person running a
  * script by hand — which is to say, after somebody already suspected a problem.
  *

@@ -20,7 +20,7 @@ import { isPatternIntent, type ProcedureStep } from "@nexus/shared";
  * does not exist yet at this point in the pipeline, because the agent has not
  * replied.
  *
- * So selection runs on TEXT ALONE, which is the same half `backfill-intents`
+ * So selection runs on TEXT ALONE, which is the same half `backfill-intent`
  * replays history through, and the same half that carries ~83% of this
  * platform's traffic anyway. The consequence is real and worth naming: a
  * message the text rules read as a purchase enquiry may be recorded minutes
