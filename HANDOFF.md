@@ -1,7 +1,44 @@
 # Nexus Agentic OS — Session Handoff
 
-**Written 13 August 2026.** Everything below was measured on the live system, not inferred.
-Production: `nexusagenticos.com`, VPS `srv1859576` (`200.141.5.204`), deploy dir `/opt/nexus`.
+**Started 13 August 2026, current as of 17 August 2026.** Everything below was measured on the live
+system, not inferred. Production: `nexusagenticos.com`, VPS `srv1859576` (`200.141.5.204`), deploy
+dir `/opt/nexus`.
+
+---
+
+## Current status — read this first
+
+**Nothing is pending on the platform. Three things are pending on a person, and none is code.**
+
+| | |
+|---|---|
+| Deployed | VPS at `b93dafb`, 6/6 containers up, health 200 |
+| Migrations | through **046**, every one verified by its effect in the database, not by a log |
+| Tests | **726** passing, typecheck and `next build` clean |
+| Operators | **13**, sweeping every 10 minutes, **0 standing findings** |
+| Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
+| Governance | evaluating 1:1 with every AI reply |
+| Backups | nightly, restore-verified, rotating — **still local-disk only** |
+| Gates | all five re-run 17 Aug against `b93dafb`: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes |
+| Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
+
+**What still needs running, in priority order:**
+
+1. **`rclone config` on the VPS.** The last real risk. Backups are verified restorable but sit on
+   the same disk as the database, so disk loss takes both. Everything around it is built, tested and
+   inert: `scripts/backup-db.sh` step 3, plus `/etc/nexus-backup.env` (mode 600) waiting for two
+   values. Needs a bucket and credentials, which is why it is not done.
+2. **Four website edits.** The only thing that moves the actual constraint. Not one of the five
+   businesses' sites points at the number the agent answers on — see the section below and the
+   deliverable at https://claude.ai/code/artifact/5e5abf8d-eb55-46ce-ac49-2ff3d0e0afa7
+3. **ABR's office number.** One value; its `no_one_available` phrase cannot go live while it still
+   contains `{{office_number}}`, by design.
+
+**Two standing decisions, working as intended and needing nothing:** both law firms stay
+deliberately unstaffed (see below for what that costs), and three cold-pitch conversations stay
+muted.
+
+The platform is fully deployed, self-monitoring and idle. It is waiting on customers, not on work.
 
 ---
 
@@ -75,12 +112,15 @@ cd /opt/nexus && docker compose -f docker-compose.prod.yml exec -T worker \
 | `rls-preflight` | Every path carries a tenant context; auth routes establish their own |
 | `retrieval-check` | 18 probes each find their page in the top 3 |
 
-Last full run (15 Aug 2026, after F10 was completed): **all five PASS**, 6/6 containers up, 638
-tests, typecheck clean. `schema-check` now also covers every F10 query, including the writes — inside a
+Last full run **17 August 2026, on the deployed `b93dafb`: all five PASS** — 18/18 retrieval probes
+found their page in the top 3, RLS still hiding other tenants while showing Zipicka its own 13
+contacts, and every previously-unrun query planning against the real schema. 6/6 containers up, 726
+tests locally, typecheck clean. (The previous run recorded here was 15 Aug, after F10, at 638
+tests.) `schema-check` now also covers every F10 query, including the writes — inside a
 transaction it rolls back, because `procedures` grants no DELETE and a probe row could never be
 cleaned up.
 
-**F11 has NOT been through these gates yet — it is built and unshipped.** Locally: typecheck clean,
+**F11 HAS since been through these gates — this paragraph is kept for the method, not the status.** It shipped on 15 August, `schema-check` first as instructed; the numbers below (673 tests) are that day's. Read it for why the check was written the way it was: Locally: typecheck clean,
 **673 tests pass / 0 fail** (35 new), `next build` clean. `schema-check` has been extended to cover
 every F11 query and has not been run, because it needs the real database. Run it first, before the
 migration is considered done: it is the only thing that has ever caught SQL that Postgres could not
@@ -97,9 +137,21 @@ than the index.
 
 ## 4. State of the system
 
-**Complete (8/15):** Employee Agent Layer · Knowledge Ingestion · Lead Intelligence · Security &
-Tenant Isolation · Campaign Engine · Appointment Booking · Shared Intelligence (F5) · **Procedural
-Memory (F10)**. **Built but not yet deployed: Predictive BI (F11)** — see below.
+**Corrected 17 August 2026. The count below was a second, informal tally, and it disagreed with the
+one per-feature table anybody maintains** — `ARCHITECTURE-ABOS.md` §6, which is the source of
+truth. Read that, not this line. It stands at **7 of 15**: five ✅ (Employee Agent Layer, Knowledge
+Ingestion, Lead Intelligence, Campaign Engine, Security) and two 🟢 (Neural Brain F5,
+Marketplace F13). The eight below counted Appointment Booking, which is not a row in that table, and
+Procedural Memory F10, which that table marks 🟡 for a reason worth keeping: the code is
+finished and **0 procedures exist**, so no customer message has ever met one. Two numbers for one
+fact is how a document starts lying without anybody editing it.
+
+**Predictive BI (F11) is deployed** — that happened hours after this line was written, and the
+line was never revisited. See the addendum.
+
+*Superseded, kept for the record:* Complete (8/15): Employee Agent Layer · Knowledge Ingestion ·
+Lead Intelligence · Security & Tenant Isolation · Campaign Engine · Appointment Booking · Shared
+Intelligence (F5) · Procedural Memory (F10).
 
 **F10 went live on 15 August 2026** — migrations 034 and 036 applied, all five gates green
 afterwards, `procedures` at 0 rows. The first scheduled inference runs **16 Aug 00:00 UTC**
@@ -274,7 +326,12 @@ operation — no error, no alert, dashboards green. The sign-in that had never w
 judge dead behind a defaulted setting, Lorem ipsum indexed as knowledge, a permission file that
 read correctly and parsed to nothing. All were found by verifying the produced result.
 
-## 6. Next session
+## 6. Next session — written 15 August, and everything in it has since happened
+
+Kept unedited below, because it is the clearest surviving record of what each feature was waiting
+for and why. Every item in it is now done: the writer ran, F11 shipped, the deep links were
+delivered to the owner. What is actually next is at the top of this file.
+
 
 **First, look at what the writer produced overnight** — `/deck/procedures`, one business at a time.
 On current traffic it will most likely have proposed nothing and said why, which is the designed
@@ -368,13 +425,17 @@ and a guess is worse than a gap. Result: `inbound_pitch` 8, `unknown` 6, `knowle
 
 ## State
 
-**9 of 15 complete.** 684 tests, typecheck clean, `next build` clean, all five gates green under
-`strict`, 11/11 operators reporting 0 standing across 5 businesses, 6/6 containers up. The 11 new
-tests are `marketplace-installs-only.test.mjs`, which asserts the egress boundary is still the
-shape of the tables rather than a rule — including that no later migration ever gives
-`catalog_items` an `organization_id` or a foreign key to a tenant table.
+**Superseded — see "Current status" at the top of this file, which was re-measured on 17 August.**
+This block said "9 of 15 complete, 684 tests, 11/11 operators" and was true when written. Left here
+rather than deleted because the drift is the point: this document's own opening line promises
+everything in it was measured rather than inferred, and a stale count is how that promise quietly
+stops being kept. Six documentation defects were found across this project on 17 August, every one
+of them prose that was accurate on the day it was written and never re-read against the machine.
 
-## The F13 catalogue page and install action — BUILT, NOT DEPLOYED
+## The F13 catalogue page and install action — BUILT AND DEPLOYED
+
+*(This heading read "NOT DEPLOYED" until 17 August. It shipped the same day, along with
+migrations 040-042; the rest of the section is accurate.)*
 
 Operator-only, at `/deck/catalogue` and `/api/catalog`. Mounted flat rather than under
 `/api/organizations/:slug` so `operatorOnly` can guard the whole prefix — and because the useful
@@ -827,10 +888,13 @@ correction inline and in the footer.
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
 
-## The next task
+## The next task — the checklist form of this is now at the top of the file
 
-**Two values and one `rclone install` turn the last real risk off.** Until then every backup is one
-disk failure from being no backup.
+Kept because the reasoning is still the reasoning; only the rclone line has moved on.
+
+**Two values turn the last real risk off** — rclone is now installed on the VPS; what is missing is
+`rclone config`, which needs a bucket and its credentials. Until then every backup is one disk
+failure from being no backup.
 
 **Four website edits are what actually move the traffic constraint**, and none of them is engineering
 work on this platform. See the section above.
