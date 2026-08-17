@@ -432,6 +432,134 @@ export async function activeProcedureFor(
   return rows[0] ?? null;
 }
 
+/**
+ * What a business's copy of an installed pack looks like now.
+ *
+ * `source` is the load-bearing field. Both `procedures` and `agent_phrases`
+ * flip it to 'operator' the moment somebody edits by hand — so a row still
+ * reading 'catalog' is one nobody has touched since it arrived, and that is
+ * exactly the question a catalogue update has to ask before overwriting
+ * anything.
+ */
+export interface LinkedMaterial {
+  id: string;
+  isActive: boolean;
+  source: string;
+}
+
+export async function findLinkedProcedure(installId: string): Promise<LinkedMaterial | null> {
+  const { rows } = await getPool().query<{ id: string; is_active: boolean; source: string }>(
+    `select id, is_active, source from procedures where catalog_install_id = $1`,
+    [installId]
+  );
+  return rows[0] ? { id: rows[0].id, isActive: rows[0].is_active, source: rows[0].source } : null;
+}
+
+export async function findLinkedPhrase(installId: string): Promise<LinkedMaterial | null> {
+  const { rows } = await getPool().query<{ id: string; is_active: boolean; source: string }>(
+    `select id, is_active, source from agent_phrases where catalog_install_id = $1`,
+    [installId]
+  );
+  return rows[0] ? { id: rows[0].id, isActive: rows[0].is_active, source: rows[0].source } : null;
+}
+
+/**
+ * Move a catalogue-installed procedure to the newer steps.
+ *
+ * AN ACTIVE ONE IS PROPOSED TO, NEVER EDITED — which is not a new rule invented
+ * here, it is F10's rule 2 applied to a second writer. The nightly inference
+ * writer is forbidden from editing an active procedure's steps for the reason
+ * that "a procedure somebody read and approved would silently become a different
+ * one", and a catalogue update is the same act by a different hand. So the newer
+ * steps land in `proposed_steps` and surface on "How we answer" as a suggestion
+ * to accept or dismiss — the review surface that already exists for exactly this
+ * decision, already shows both versions side by side, and already has the
+ * buttons.
+ *
+ * An inactive one is simply rewritten. Nothing is following it, so there is no
+ * approved version to preserve.
+ */
+export async function proposeOrReplaceProcedureSteps(
+  organizationId: string,
+  procedureId: string,
+  isActive: boolean,
+  steps: { text: string }[]
+): Promise<"proposed" | "replaced"> {
+  const json = JSON.stringify(steps);
+
+  if (isActive) {
+    await getPool().query(
+      `update procedures
+          set proposed_steps = $3::jsonb, proposed_at = now(), updated_at = now()
+        where organization_id = $1 and id = $2`,
+      [organizationId, procedureId, json]
+    );
+    return "proposed";
+  }
+
+  await getPool().query(
+    `update procedures
+        set steps = $3::jsonb,
+            -- Any outstanding proposal is dropped: it was a suggested revision
+            -- to text that no longer exists.
+            proposed_steps = null, proposed_at = null,
+            updated_at = now()
+      where organization_id = $1 and id = $2`,
+    [organizationId, procedureId, json]
+  );
+  return "replaced";
+}
+
+/**
+ * Move a catalogue-installed phrase to the newer wording.
+ *
+ * ONLY EVER CALLED ON AN INACTIVE PHRASE — the caller refuses a live one, and
+ * this function does not check because a silent no-op would be the worse
+ * failure. There is no `proposed_body` column to park a suggestion in the way a
+ * procedure can, and inventing one is a bigger change than this slice; so a live
+ * phrase is switched off by a person first, deliberately, rather than having the
+ * sentence its customers are reading replaced by one nobody has seen.
+ *
+ * `source` stays 'catalog'. This wording still came from the shelf, and calling
+ * it the business's own would misreport where a customer's sentence came from.
+ */
+export async function replaceCatalogPhraseBody(
+  organizationId: string,
+  phraseId: string,
+  body: string
+): Promise<void> {
+  await getPool().query(
+    `update agent_phrases
+        set body = $3, updated_at = now()
+      where organization_id = $1 and id = $2 and not is_active`,
+    [organizationId, phraseId, body]
+  );
+}
+
+/**
+ * Record that this business is now running the newer version.
+ *
+ * The last step of taking an update, and deliberately last: if anything above it
+ * failed, the row still says the version the business is actually running.
+ * Bumping first and reconciling after would leave "what is this agent doing"
+ * answered with a number that was true of nothing.
+ */
+export async function setInstalledVersion(
+  organizationId: string,
+  installId: string,
+  version: number
+): Promise<CatalogInstall | null> {
+  const { rows } = await getPool().query<{ id: string }>(
+    `update catalog_installs
+        set installed_version = $3
+      where id = $1 and organization_id = $2 and removed_at is null
+      returning id`,
+    [installId, organizationId, version]
+  );
+  if (!rows[0]) return null;
+  return getInstall(rows[0].id);
+}
+
 export interface CatalogCounts {
   /** Published items on the shelf. */
   published: number;

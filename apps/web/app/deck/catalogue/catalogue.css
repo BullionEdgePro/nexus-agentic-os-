@@ -285,3 +285,22 @@
   vertical-align: top;
 }
 .mk-table td em { font-style: normal; color: var(--warn); }
+
+/* The update note carries a button now, so it needs to be a block rather
+   than a bare paragraph. Still warn-coloured: an available update is
+   something to weigh, not something that has gone wrong. */
+.mk-behind p { margin: 0; }
+.mk-behind button {
+  margin-top: 9px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  border: 1px solid var(--warn);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--warn);
+  cursor: pointer;
+}
+.mk-behind button:disabled { opacity: .5; cursor: default; }

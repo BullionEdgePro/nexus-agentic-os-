@@ -578,8 +578,40 @@ which its `no_one_available` cannot be switched on by design.
 turns `handing_over`, the handover flag, and the whole escalation path from inert to live. See
 [[nexus-rota-editor]] for the surface, and ask for names rather than inventing them.
 
-Also still open: **let a business take a catalogue update** (v1 → v2 currently means
-remove-and-reinstall).
+## Taking a catalogue update — BUILT
+
+`POST /api/catalog/installs/:id/update`, and a **Take v2** button inside the version-drift note on
+the card rather than beside Install, because it is a different decision and the sentence above it is
+the reason to think twice. **No migration** — `procedures.proposed_steps` already existed and is
+exactly the right slot.
+
+**Only ever from a button.** 039's rule is that an installed business keeps what it installed until
+it *chooses* to take an update, so there is no sweep and no auto-upgrade; the test asserts that no
+`*-processor.ts` references it.
+
+**What happens depends on what the copy has since become, and the two refusals are the feature:**
+
+* **Somebody rewrote it here** → refused. Both `procedures` and `agent_phrases` flip `source` to
+  `'operator'` when a person edits by hand, so a row still reading `'catalog'` is untouched since it
+  arrived. Overwriting an `'operator'` row is the catalogue outranking the business about its own
+  material — the mirror of F10's rule 3, which has the inference writer defer to an operator
+  procedure.
+* **The wording is live** → refused, switch it off first. A phrase is sent verbatim and there is no
+  `proposed_body` column to park a suggestion in, so replacing a live sentence would change what
+  customers read with nobody having seen the new one.
+* **A live PROCEDURE needs no refusal**, because the slot exists: the newer steps land in
+  `proposed_steps` and surface on "How we answer" beside the version they would replace. That is
+  F10's rule 2 applied to a second writer — "a procedure somebody read and approved would silently
+  become a different one".
+* **Inactive** → rewritten outright; nothing is following it. **Never added** → only the recorded
+  number moves. **Knowledge pack** → re-ingested against the same `catalog:<slug>` uri, so chunks are
+  replaced rather than duplicated, and live immediately as ever.
+
+The recorded version moves **last**, and not at all when a re-index fails — bumping first would
+answer "what is this agent running" with a number true of nothing.
+
+Verified in production, both in rolled-back transactions: a live catalogue procedure keeps its v1
+steps and gains the v2 proposal, and an active phrase is untouched by the update statement.
 
 ## Also outstanding
 

@@ -7,6 +7,7 @@ import {
   installCatalogItem,
   removeCatalogInstall,
   activateCatalogInstall,
+  takeCatalogUpdate,
   readableError,
   type CatalogItem,
   type CatalogItemKind,
@@ -36,13 +37,18 @@ import "./catalogue.css";
  * different product, and the reason the boundary is a property of the schema
  * rather than a rule in this file.
  *
- * WHAT THIS SCREEN HONESTLY IS TODAY. Installing records a decision — which
- * business has taken which pack, at which version, switched off. It does not
- * yet put anything in front of a customer, because no catalogue payload has
- * been wired into the live agent. So there is no activation switch here. A
- * toggle that read "active" while changing nothing about what customers hear is
- * exactly the plausible-normal-state failure this platform keeps producing, and
- * the banner below says the quiet part out loud instead.
+ * THE THREE STEPS, WHICH ARE THREE DECISIONS AND NOT ONE FLOW. Installing
+ * records that a business has chosen a pack, at a version. Adding materialises
+ * it into that business — a procedure into "How we answer" SWITCHED OFF, wording
+ * into "What we say" switched off, a knowledge pack indexed and therefore live
+ * at once, which the banner says out loud. Switching on happens on those screens,
+ * never here: they show what else is already answering that situation, and a
+ * button on this page that reached past them into the live prompt is the one
+ * thing 039's design exists to prevent.
+ *
+ * Taking an update is the fourth, and the same rule again — a catalogue that
+ * upgraded itself inside a live agent would change what customers are told with
+ * nobody deciding to, so v1 stays v1 until somebody presses the button.
  *
  * OPERATOR-ONLY, unlike Knowledge and Procedures next door. Those are a
  * business's own material and the people doing the job are trusted with them.
@@ -199,6 +205,23 @@ export default function CataloguePage() {
           ? ` Something else is already switched on for this kind of enquiry, so you will have to turn that one off first.`
           : "";
       setSaid((current) => ({ ...current, [item.slug]: outcome.note + blocked }));
+      await load();
+    } catch (err) {
+      setError(readableError(err));
+    } finally {
+      setBusySlug(null);
+    }
+  }
+
+  async function update(item: CatalogItem, installId: string) {
+    setBusySlug(item.slug);
+    setError("");
+    try {
+      const { outcome } = await takeCatalogUpdate(business, installId);
+      // The server's sentence again. "Waiting on How we answer as a suggestion"
+      // and "the agent is answering from the newer text now" are very different
+      // outcomes of one button, and the page must not flatten them into "done".
+      setSaid((current) => ({ ...current, [item.slug]: outcome.note }));
       await load();
     } catch (err) {
       setError(readableError(err));
@@ -418,13 +441,21 @@ export default function CataloguePage() {
                           taking an update is a decision, because the pack this
                           business agreed to is the one it is running. */}
                       {behind ? (
-                        <p className="mk-behind">
-                          The catalogue has moved to v{item.version}. This business stays on v
-                          {here!.installedVersion} until somebody chooses otherwise — a catalogue
-                          that updated itself inside a live agent would change what customers are
-                          told with nobody deciding to. Taking an update is not built yet; remove
-                          and install again to move.
-                        </p>
+                        <div className="mk-behind">
+                          <p>
+                            The catalogue has moved to v{item.version}. This business stays on v
+                            {here!.installedVersion} until somebody chooses otherwise — a catalogue
+                            that updated itself inside a live agent would change what customers are
+                            told with nobody deciding to.
+                          </p>
+                          {/* The button sits inside the explanation rather than
+                              beside Install, because taking an update is a
+                              different decision from choosing the pack and the
+                              sentence above it is the reason to think twice. */}
+                          <button onClick={() => update(item, here!.id)} disabled={busy}>
+                            {busy ? "Taking…" : `Take v${item.version}`}
+                          </button>
+                        </div>
                       ) : null}
                     </article>
                   );

@@ -29,6 +29,22 @@ const PROCEDURES_PAGE = read("apps", "web", "app", "deck", "procedures", "page.t
 const code = (t) => t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 const sqlCode = (t) => t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
 
+/**
+ * One exported function's body, from its signature to the next export.
+ *
+ * There are two `catch (err)` blocks in the service now — one per entry point —
+ * so a test that sliced from the first one was reading activation's failure
+ * path when it meant the update's, and vice versa. Scoping to the function is
+ * the fix; searching for the nearest brace is how the earlier version of this
+ * assertion quietly changed meaning when a second function was added above it.
+ */
+function fnBody(source, name) {
+  const start = source.indexOf(`export async function ${name}`);
+  if (start === -1) return null;
+  const next = source.indexOf("\nexport ", start + 1);
+  return source.slice(start, next === -1 ? undefined : next);
+}
+
 // ============================================================
 // Nothing arrives live
 // ============================================================
@@ -125,7 +141,8 @@ test("the refusals are distinguishable by status, not collapsed", () => {
 test("a failed pack ingest leaves the install unactivated", () => {
   // Marking it done after a failed embed would report material the agent cannot
   // retrieve — the plausible-normal-state failure again.
-  const body = code(SERVICE);
+  const body = fnBody(code(SERVICE), "activateInstall");
+  assert.ok(body, "activateInstall is missing");
   const catchAt = body.indexOf("} catch (err) {");
   assert.ok(catchAt > 0, "the ingest failure path is missing");
   assert.ok(
@@ -184,4 +201,89 @@ test("which kinds can be activated is the server's answer, not the page's", () =
     "the page must not hardcode its own view of which kinds work"
   );
   console.log("PASS: activation materialises, never switches on; two refusals are structural");
+});
+
+// ============================================================
+// Taking an update — the fourth decision, and the same rule
+// ============================================================
+
+test("an update is only ever taken from a button", () => {
+  // 039: "an installed business keeps what it installed until it CHOOSES to
+  // take an update: a catalogue that edits itself inside somebody's live agent
+  // is a marketplace that changes what customers are told without anyone
+  // deciding to." So there must be no sweep, no cron, no auto-upgrade.
+  const service = code(SERVICE);
+  assert.match(service, /export async function takeInstallUpdate/);
+  assert.match(code(ROUTE), /catalogRoute\.post\("\/installs\/:id\/update"/);
+
+  // Every scheduled processor, not one named file — the nightly jobs each live
+  // in their own *-processor.ts, so checking a single worker would have proved
+  // nothing about the other seven.
+  const queueDir = join(root, "apps", "api", "src", "queue");
+  const scheduled = readdirSync(queueDir).filter((f) => f.endsWith("-processor.ts"));
+  assert.ok(scheduled.length >= 5, `expected the scheduled processors, found ${scheduled.length}`);
+  for (const file of scheduled) {
+    assert.ok(
+      !/takeInstallUpdate/.test(readFileSync(join(queueDir, file), "utf8")),
+      `${file} takes a catalogue update on a business's behalf`
+    );
+  }
+});
+
+test("an update never overwrites what somebody rewrote here", () => {
+  // Both procedures and agent_phrases flip `source` to 'operator' when a person
+  // edits by hand, so a row still reading 'catalog' is untouched since it
+  // arrived. Overwriting an 'operator' row would be the catalogue outranking
+  // the business about its own material — the mirror of F10's rule 3.
+  const service = code(SERVICE);
+  const matches = [...service.matchAll(/linked\.source !== "catalog"/g)];
+  assert.equal(matches.length, 2, "both the procedure and the phrase path must check it");
+  assert.match(service, /rewritten-here/);
+});
+
+test("a live procedure is proposed to, never edited", () => {
+  // F10 rule 2 applied to a second writer: "a procedure somebody read and
+  // approved would silently become a different one". The proposal surfaces on
+  // How we answer beside the version it would replace.
+  const db = code(CATALOG_DB);
+  const fn = db.slice(db.indexOf("export async function proposeOrReplaceProcedureSteps"));
+  assert.match(fn, /if \(isActive\)/);
+  assert.match(fn, /set proposed_steps = \$3::jsonb/);
+  // And the inactive branch replaces outright, because nothing is following it.
+  assert.match(fn, /set steps = \$3::jsonb/);
+});
+
+test("a live phrase is refused rather than swapped underneath a customer", () => {
+  // There is no proposed_body column to park a suggestion in, and a phrase is
+  // sent verbatim — so replacing a live one would change what customers read
+  // with nobody having seen the new sentence.
+  assert.match(code(SERVICE), /wording-is-live/);
+  const db = code(CATALOG_DB);
+  const fn = db.slice(db.indexOf("export async function replaceCatalogPhraseBody"));
+  // Belt and braces: the query itself will not touch an active row.
+  assert.match(fn, /and not is_active/);
+});
+
+test("the recorded version moves last, and not at all on failure", () => {
+  // Bumping first would leave "what is this agent running" answered with a
+  // number that was true of nothing.
+  const service = code(SERVICE);
+  const update = fnBody(service, "takeInstallUpdate");
+  assert.ok(update, "takeInstallUpdate is missing");
+  const knowledge = update.slice(update.indexOf("try {"));
+  const catchAt = knowledge.indexOf("} catch (err) {");
+  assert.ok(catchAt > 0, "the re-index failure path is missing");
+  assert.ok(
+    !/setInstalledVersion/.test(knowledge.slice(catchAt)),
+    "a failed re-index must leave the version where it was"
+  );
+  assert.match(service, /still recorded as running v/);
+});
+
+test("an install that was never added only moves its number", () => {
+  // No materialised copy to reconcile, so there is nothing that could change
+  // for a customer — and the note says exactly that rather than implying work.
+  const service = code(SERVICE);
+  assert.match(service, /if \(!install\.isActive\)/);
+  assert.match(service, /Nothing was added to this business, so nothing changed for customers/);
 });

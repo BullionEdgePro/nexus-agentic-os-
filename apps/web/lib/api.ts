@@ -763,6 +763,36 @@ export function installCatalogItem(
  * business's install — the route checks the two against each other rather than
  * trusting whichever id arrived.
  */
+/**
+ * What taking a catalogue update did.
+ *
+ * `kind` is null when the pack was installed but never added to the business —
+ * there was no copy to reconcile, so only the recorded version moved.
+ */
+export interface CatalogUpdateOutcome {
+  kind: CatalogItemKind | null;
+  from: number;
+  to: number;
+  note: string;
+}
+
+/**
+ * Move a business from the version it installed to the current one.
+ *
+ * Only ever from a button. A catalogue that upgraded itself inside a live agent
+ * would change what customers are told with nobody deciding to, which is the
+ * rule the whole install-version design exists to keep.
+ */
+export function takeCatalogUpdate(
+  organizationSlug: string,
+  installId: string
+): Promise<{ outcome: CatalogUpdateOutcome }> {
+  return request(
+    `/api/catalog/installs/${installId}/update?business=${encodeURIComponent(organizationSlug)}`,
+    { method: "POST" }
+  );
+}
+
 export function removeCatalogInstall(
   organizationSlug: string,
   installId: string

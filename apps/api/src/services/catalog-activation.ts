@@ -4,6 +4,11 @@ import {
   markInstallActivated,
   activeProcedureFor,
   findCatalogItemBySlug,
+  findLinkedProcedure,
+  findLinkedPhrase,
+  proposeOrReplaceProcedureSteps,
+  replaceCatalogPhraseBody,
+  setInstalledVersion,
   type CatalogInstall,
   type CatalogItem,
 } from "@nexus/db";
@@ -103,6 +108,231 @@ const GUIDANCE_REFUSAL =
   "questions, not answers. Indexing it would put nine questions into what the agent " +
   "answers from, and the knowledge base would look fuller than it is. Read it and fill " +
   "the gaps in Knowledge instead.";
+
+export type UpdateRefusal =
+  | "already-current"
+  | "rewritten-here"
+  | "wording-is-live"
+  | "unusable-payload"
+  | "embedding-unavailable";
+
+export type UpdateOutcome =
+  | {
+      ok: true;
+      /** Null when the pack was installed but never added to the business. */
+      kind: CatalogItem["kind"] | null;
+      from: number;
+      to: number;
+      note: string;
+    }
+  | { ok: false; refusal: UpdateRefusal; message: string };
+
+/**
+ * Take a catalogue update into a business.
+ *
+ * THE RULE 039 WROTE AND THIS FUNCTION KEEPS: "an installed business keeps what
+ * it installed until it CHOOSES to take an update: a catalogue that edits itself
+ * inside somebody's live agent is a marketplace that changes what customers are
+ * told without anyone deciding to." So this only ever runs from a button, never
+ * from a sweep, and it refuses in the two cases where taking the update would
+ * quietly discard something a person is responsible for.
+ *
+ * REFUSAL ONE — SOMEBODY REWROTE IT HERE. Both `procedures` and `agent_phrases`
+ * flip `source` to 'operator' the moment a person edits by hand. A row still
+ * reading 'catalog' is untouched since it arrived; one reading 'operator' is
+ * somebody's own work, and overwriting it with a newer generic version is the
+ * catalogue outranking the business about its own material. F10 makes the same
+ * call in the other direction — its rule 3 has the inference writer defer
+ * entirely to an operator-written procedure.
+ *
+ * REFUSAL TWO — THE WORDING IS LIVE. A phrase is sent verbatim, and there is no
+ * `proposed_body` slot to park a suggestion in the way a procedure has
+ * `proposed_steps`. Replacing a live sentence would change what customers read
+ * with nobody having seen the new one. So it says to switch it off first, which
+ * is one extra click and no surprise.
+ *
+ * A procedure needs no such refusal, because the slot exists: an ACTIVE one is
+ * proposed to rather than edited, and the suggestion appears on "How we answer"
+ * beside the version it would replace.
+ */
+export async function takeInstallUpdate(
+  organizationId: string,
+  install: CatalogInstall
+): Promise<UpdateOutcome> {
+  const item = await findCatalogItemBySlug(install.itemSlug);
+  if (!item) {
+    return { ok: false, refusal: "unusable-payload", message: "That catalogue item no longer exists." };
+  }
+
+  const from = install.installedVersion;
+  const to = item.version;
+  if (from >= to) {
+    return {
+      ok: false,
+      refusal: "already-current",
+      message: `This business is already running v${from}, which is the current version.`,
+    };
+  }
+
+  // Installed but never added to the business: there is no copy to reconcile,
+  // so taking the update is only a change of which version a later Add would
+  // write. Handled first, because every branch below assumes a linked row.
+  if (!install.isActive) {
+    await setInstalledVersion(organizationId, install.id, to);
+    return {
+      ok: true,
+      kind: null,
+      from,
+      to,
+      note: `Now recorded as v${to}. Nothing was added to this business, so nothing changed for customers — adding it will use the newer version.`,
+    };
+  }
+
+  if (item.kind === "procedure") {
+    const linked = await findLinkedProcedure(install.id);
+    if (!linked) {
+      return {
+        ok: false,
+        refusal: "unusable-payload",
+        message: "This install is marked as added, but no procedure is linked to it.",
+      };
+    }
+    if (linked.source !== "catalog") {
+      return {
+        ok: false,
+        refusal: "rewritten-here",
+        message:
+          "Somebody has rewritten this procedure since it arrived, so it is this business's own now. " +
+          "Taking the update would discard their version.",
+      };
+    }
+
+    const { intent, parsed } = procedurePayload(item);
+    if (!INTENT_CATEGORIES.includes(intent as (typeof INTENT_CATEGORIES)[number]) || !parsed.ok) {
+      return {
+        ok: false,
+        refusal: "unusable-payload",
+        message: parsed.ok ? `"${intent}" is not a kind of enquiry this platform classifies.` : parsed.error,
+      };
+    }
+
+    const effect = await proposeOrReplaceProcedureSteps(
+      organizationId,
+      linked.id,
+      linked.isActive,
+      parsed.steps
+    );
+    await setInstalledVersion(organizationId, install.id, to);
+    logger.info({ organizationId, item: item.slug, from, to, effect }, "Catalogue update taken");
+
+    return {
+      ok: true,
+      kind: "procedure",
+      from,
+      to,
+      note:
+        effect === "proposed"
+          ? `v${to} is waiting on How we answer as a suggested change. The live procedure is untouched until somebody accepts it — it was switched on, and a version nobody read must not replace one somebody approved.`
+          : `Updated to v${to} in How we answer. It was switched off, so nothing changed for customers.`,
+    };
+  }
+
+  if (item.kind === "template") {
+    const linked = await findLinkedPhrase(install.id);
+    if (!linked) {
+      return {
+        ok: false,
+        refusal: "unusable-payload",
+        message: "This install is marked as added, but no phrase is linked to it.",
+      };
+    }
+    if (linked.source !== "catalog") {
+      return {
+        ok: false,
+        refusal: "rewritten-here",
+        message:
+          "Somebody has rewritten this wording since it arrived, so it is this business's own now. " +
+          "Taking the update would discard their version.",
+      };
+    }
+    if (linked.isActive) {
+      return {
+        ok: false,
+        refusal: "wording-is-live",
+        message:
+          "This wording is being sent to customers right now, and there is nowhere to park a new " +
+          "version for review the way a procedure has. Switch it off in What we say, take the " +
+          "update, read it, then switch it back on.",
+      };
+    }
+
+    const checked = checkPhraseBody(item.payload?.body);
+    if (!checked.ok) return { ok: false, refusal: "unusable-payload", message: checked.error };
+
+    await replaceCatalogPhraseBody(organizationId, linked.id, checked.body);
+    await setInstalledVersion(organizationId, install.id, to);
+
+    const unfilled = unfilledPlaceholders(checked.body);
+    logger.info({ organizationId, item: item.slug, from, to, unfilled }, "Catalogue update taken");
+
+    return {
+      ok: true,
+      kind: "template",
+      from,
+      to,
+      note: unfilled.length
+        ? `Updated to v${to} in What we say, still switched off. The new wording has ${unfilled.join(" and ")} in it, so it cannot be switched on until that is filled in.`
+        : `Updated to v${to} in What we say, still switched off. Read it before switching it on — it is not the sentence you last approved.`,
+    };
+  }
+
+  // knowledge_pack — no active/inactive state and no approved version to
+  // preserve, so the update is simply a re-ingest. `ingestTextSource` is
+  // idempotent by content hash against the same `catalog:<slug>` uri, so this
+  // replaces the chunks rather than adding a second copy.
+  if (item.payload?.guidance_only === true) {
+    return { ok: false, refusal: "unusable-payload", message: GUIDANCE_REFUSAL };
+  }
+
+  const content = packContent(item);
+  if (!content) {
+    return { ok: false, refusal: "unusable-payload", message: "This pack has no documents with any content in them." };
+  }
+
+  try {
+    const result = await ingestTextSource({
+      organizationId,
+      title: item.title,
+      content,
+      kind: "faq",
+      uri: `catalog:${item.slug}`,
+    });
+    await setInstalledVersion(organizationId, install.id, to);
+    logger.info({ organizationId, item: item.slug, from, to, chunks: result.chunks }, "Catalogue update taken");
+
+    return {
+      ok: true,
+      kind: "knowledge_pack",
+      from,
+      to,
+      note: result.skipped
+        ? `Recorded as v${to}. The text was unchanged, so nothing was re-embedded.`
+        : `Re-indexed at v${to}. A chunk has no switched-off state, so the agent is answering from the newer text now.`,
+    };
+  } catch (err) {
+    // The version is NOT bumped on this path. Recording v2 while the agent is
+    // still answering from v1's chunks would make "what is this agent doing"
+    // answered with a number that is true of nothing.
+    logger.error({ organizationId, item: item.slug, err }, "Catalogue update failed to re-index");
+    return {
+      ok: false,
+      refusal: "embedding-unavailable",
+      message:
+        "Could not re-index this pack — the embedding service did not answer. Nothing changed, and " +
+        "this business is still recorded as running v" + from + ", which is what it is running.",
+    };
+  }
+}
 
 function procedurePayload(item: CatalogItem) {
   const payload = item.payload ?? {};

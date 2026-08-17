@@ -8,7 +8,7 @@ import {
   findCatalogInstall,
   findOrganizationBySlug,
 } from "@nexus/db";
-import { activateInstall } from "../services/catalog-activation.js";
+import { activateInstall, takeInstallUpdate } from "../services/catalog-activation.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -166,6 +166,47 @@ catalogRoute.post("/installs/:id/activate", async (c) => {
     logger.info(
       { business: organization.slug, item: install.itemSlug, refusal: outcome.refusal },
       "Catalogue activation refused"
+    );
+    return c.json({ error: outcome.message, refusal: outcome.refusal }, status);
+  }
+
+  return c.json({ outcome });
+});
+
+/**
+ * Take the newer version of a pack this business already has.
+ *
+ * Only ever from a button. 039's rule is that "an installed business keeps what
+ * it installed until it CHOOSES to take an update", so there is deliberately no
+ * sweep, no auto-upgrade, and nothing on a schedule that could reach this.
+ */
+catalogRoute.post("/installs/:id/update", async (c) => {
+  const organizationSlug = c.req.query("business") ?? "";
+  if (!organizationSlug) return c.json({ error: "Say which business." }, 400);
+
+  const organization = await findOrganizationBySlug(organizationSlug);
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const install = await findCatalogInstall(organization.id, c.req.param("id"));
+  if (!install) {
+    return c.json({ error: "That business has no live install with that id." }, 404);
+  }
+
+  const outcome = await takeInstallUpdate(organization.id, install);
+  if (!outcome.ok) {
+    // 409 for the two states the caller can see and resolve — somebody rewrote
+    // it, or the wording is live and wants switching off first. 503 for an
+    // embedding outage, which is worth retrying. 400 for a payload nobody can
+    // use, and for "already current", which is a stale page rather than a fault.
+    const status =
+      outcome.refusal === "rewritten-here" || outcome.refusal === "wording-is-live"
+        ? 409
+        : outcome.refusal === "embedding-unavailable"
+          ? 503
+          : 400;
+    logger.info(
+      { business: organization.slug, item: install.itemSlug, refusal: outcome.refusal },
+      "Catalogue update refused"
     );
     return c.json({ error: outcome.message, refusal: outcome.refusal }, status);
   }
