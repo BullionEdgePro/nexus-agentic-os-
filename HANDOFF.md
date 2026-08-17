@@ -569,10 +569,37 @@ That raises the value of the four drafts rather than lowering it: for these firm
 Note the platform's last evaluation of any kind was **2026-08-08** (12, all Zipicka, all medium).
 There is no recent judge activity to draw a health conclusion from either way.
 
+## Three of the four drafts approved 2026-08-17 — the fourth cannot be
+
+Approved on the owner's instruction, `reviewed_by = aiapps255@gmail.com`:
+
+| business | moment | live | why |
+|---|---|---|---|
+| juris-prime-legal | `no_one_available` | **yes** | the one their customers actually reach |
+| juris-prime-legal | `handing_over` | yes | inert until somebody is on a rota |
+| abr | `handing_over` | yes | inert until somebody is on a rota |
+| abr | `no_one_available` | **no** | still holds `{{office_number}}` |
+
+**ABR's out-of-hours wording is the one that matters most for that firm and is the one still off.**
+It tells a caller with a police station or a court date today not to wait on the chat and to ring
+the office — and it cannot go live until somebody supplies the number, because the sentence is sent
+verbatim and "call us on {{office_number}}" is worse than the platform default.
+
+**A note on how these were approved, because it bypassed a guard.** There is no operator session
+available from here, so the switch was thrown with `psql` rather than through
+`PATCH /api/organizations/:slug/phrases/:id` — which means the route's unfilled-placeholder check
+did not run. The guard was therefore written INTO the statement (`and body not like '%{{%'`) rather
+than trusted to memory, and it is what left ABR's row alone: the update reported `UPDATE 3` against
+four candidate rows. **Anyone approving by hand in future must carry that clause**, or the guard
+simply is not there.
+
+Verified as `nexus_app` under each firm's tenant context: Juris Prime Legal's `no_one_available`
+now resolves to its own sentence, ABR's still resolves to the platform default. Both firms still
+have **0 conversations**, so nothing has been sent to anybody.
+
 ## The next task
 
-**Somebody has to approve the four phrase drafts** — and for ABR, supply the office number, without
-which its `no_one_available` cannot be switched on by design.
+**ABR's office number** — one value unblocks the last draft.
 
 **Staffing is the real unlock whenever the owner is ready.** One person with a rota at either firm
 turns `handing_over`, the handover flag, and the whole escalation path from inert to live. See
