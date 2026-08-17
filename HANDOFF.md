@@ -501,13 +501,53 @@ it unchanged would have put an item on the shelf whose purpose was to reintroduc
 
 F13's template refusal is closed: `activatableKinds` is now all three.
 
+## Wording drafted for both law firms — FOUR DRAFTS, ALL SWITCHED OFF
+
+**Correcting the previous entry, which was wrong about which phrase matters.** It said
+`handing_over` was the one to write first for the two firms. Checking before writing:
+
+```
+abr                | 0 active staff | 0 with a rota
+juris-prime-legal  | 0 active staff | 0 with a rota
+```
+
+`hasStaffOnShift` is false for both, so **`handing_over` never fires for either firm**.
+`no_one_available` is the moment their customers actually reach. Writing only the requested one
+would have produced wording that is stored, visible, switched on and never sent — the exact failure
+`PHRASE_MOMENTS` was written to prevent, committed one day after writing the rule.
+
+So all four exist, as drafts (`is_active = false`, `reviewed_by` NULL, because nobody has reviewed
+them — a draft that claimed a reviewer would be the same lie as a procedure claiming evidence):
+
+* **`handing_over`** for both, live the moment either firm has one person on a rota. Neither says
+  "specialist": Juris Prime Legal passes to *a solicitor*, ABR to *an advocate*.
+* **`no_one_available`** for both — **the pair that is reachable today**. Neither promises anybody,
+  which is the rule this moment exists to keep.
+* Both firms' wording says in as many words that what the agent has said is **general information
+  rather than legal advice**. That is not decoration on a law firm's message.
+* **ABR's `no_one_available` deliberately carries `{{office_number}}`**, so it CANNOT be switched on
+  until somebody fills in the real number. It tells a caller with a police station or a court date
+  today not to wait on the chat, and a phrase that says "call us on" without a number would be
+  worse than the platform default. The placeholder guard is doing exactly what it was built for.
+
+Verified in production: all four read back inside the length bound, and as `nexus_app` under the
+serving tenant context an activated one is returned by the same query the reply path uses — checked
+in a transaction that rolled back, so nothing is live.
+
+**Nothing has changed for any customer.** Somebody at each firm has to read these and switch them
+on, which is the whole design.
+
 ## The next task
 
-**Let a business take a catalogue update.** An install records the version it took and the card
-names both numbers, but moving from v1 to v2 means remove-and-reinstall.
+**Somebody has to approve the four drafts** — and for ABR, supply the office number. Until then both
+firms keep sending the platform's own sentence.
 
-Or: **the `handing_over` phrase is the one worth writing first for the two law firms.** "A
-specialist from our team" is the platform's voice, not theirs, and it is going out today.
+**A rota is the bigger unlock.** With zero active staff at either firm, escalation cannot promise
+anyone and the agent never pauses — so `handing_over`, the handover flag, and half of the
+escalation design are inert for both. See [[nexus-rota-editor]] for the surface that fills this in.
+
+Also still open: **let a business take a catalogue update** (v1 → v2 currently means
+remove-and-reinstall).
 
 ## Also outstanding
 
