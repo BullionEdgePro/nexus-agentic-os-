@@ -556,6 +556,154 @@ const procedureAwaitingReview: Operator = {
   },
 };
 
+// An appointment tomorrow that belongs to nobody.
+//
+// The agent can now book for real, and a booking with no employee on it is the
+// one failure in this platform a customer experiences physically: they travel
+// somewhere and nobody is expecting them. The database prevents two bookings in
+// one slot; nothing prevents a slot belonging to no one.
+//
+// Deliberately only looks forward. A past unassigned booking is a record to
+// tidy; a future one is somebody's morning.
+const BOOKING_LOOKAHEAD_HOURS = 48;
+
+const bookingUnassigned: Operator = {
+  slug: "booking-unassigned",
+  title: "An appointment with nobody assigned",
+  description:
+    "A confirmed appointment is coming up and no member of staff is attached to it. The customer will arrive expecting someone.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{
+      id: string;
+      starts_at: string;
+      hours_away: string;
+      subject: string | null;
+    }>(
+      `select b.id,
+              to_char(b.starts_at, 'Dy DD Mon HH24:MI')                            as starts_at,
+              round(extract(epoch from (b.starts_at - now())) / 3600.0, 1)::text   as hours_away,
+              b.subject
+         from bookings b
+        where b.organization_id = $1
+          and b.status = 'confirmed'
+          and b.employee_id is null
+          and b.starts_at > now()
+          and b.starts_at < now() + ($2 || ' hours')::interval
+        order by b.starts_at`,
+      [organizationId, String(BOOKING_LOOKAHEAD_HOURS)]
+    );
+
+    // Keyed per booking, not per business: two unassigned appointments are two
+    // people to disappoint, and assigning one should retract only its own row.
+    return rows.map((row) => ({
+      fingerprint: `booking-unassigned:${row.id}`,
+      // Inside a working day it is urgent; beyond that there is time to roster.
+      severity: Number(row.hours_away) <= 12 ? ("urgent" as const) : ("warn" as const),
+      title: `${row.subject ?? "Appointment"} on ${row.starts_at} has nobody assigned`,
+      detail: `Confirmed, ${Math.round(Number(row.hours_away))} hours away, no member of staff attached. Assign someone or cancel it — a customer who arrives to an empty desk is the one mistake here that cannot be undone by a message.`,
+      subjectKind: "booking",
+      subjectId: row.id,
+    }));
+  },
+};
+
+// A template Meta has stopped accepting.
+//
+// Campaigns keep drafting against it perfectly well; the refusal only arrives at
+// send, in front of a customer, on the one path where the business speaks first.
+// `syncAllTemplates()` already writes the status down every time it runs, and
+// until now nothing read it.
+const templateRejected: Operator = {
+  slug: "template-rejected",
+  title: "A message template is no longer approved",
+  description:
+    "Meta has rejected or paused a template. Campaigns can still be drafted with it, and will fail when they are sent.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{ names: string; n: string }>(
+      `select string_agg(meta_template_name, ', ' order by meta_template_name) as names,
+              count(*)::text                                                   as n
+         from message_templates
+        where organization_id = $1
+          -- Read from the status Meta reported, not from is_approved: the two
+          -- are written by the same sync, and a template can be paused without
+          -- ever having been un-approved.
+          and status is not null
+          and lower(status) not in ('approved', 'active')`,
+      [organizationId]
+    );
+
+    const n = Number(rows[0]?.n ?? 0);
+    if (n === 0) return [];
+
+    return [
+      {
+        fingerprint: "template-not-approved",
+        severity: "warn" as const,
+        title: `${plural(n, "template")} not approved by Meta`,
+        detail: `${rows[0]?.names}. A campaign built on one of these drafts normally and fails at send. Fix the wording in WhatsApp Manager and resubmit, or stop using it.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
+// Somebody who spoke to this business once and has not been back.
+//
+// Reported rather than acted on, deliberately. The sender does not exist yet,
+// and this is the half worth having first: it makes the opportunity visible
+// while a person still decides whether reaching out is appropriate. Reversing
+// that order is how a platform starts messaging people on its own.
+const QUIET_DAYS = 30;
+
+const reengagementCandidate: Operator = {
+  slug: "reengagement-candidate",
+  title: "Customers who went quiet",
+  description:
+    "People who talked to this business and have not been back. Nothing is sent automatically — this is a list to decide about.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{ n: string }>(
+      `select count(*)::text as n
+         from contacts ct
+        where ct.organization_id = $1
+          and ct.reengagement_opted_out = false
+          -- Their last conversation ended a while ago.
+          and exists (
+            select 1 from conversations c
+             where c.contact_id = ct.id
+               and c.updated_at < now() - ($2 || ' days')::interval
+          )
+          and not exists (
+            select 1 from conversations c
+             where c.contact_id = ct.id
+               and c.updated_at >= now() - ($2 || ' days')::interval
+          )
+          -- Not already inside a cooldown from a previous attempt.
+          and not exists (
+            select 1 from reengagement_attempts ra
+             where ra.contact_id = ct.id
+               and ra.cooldown_until > now()
+          )`,
+      [organizationId, String(QUIET_DAYS)]
+    );
+
+    const n = Number(rows[0]?.n ?? 0);
+    // Below a handful this is not a list, it is a coincidence.
+    if (n < 3) return [];
+
+    return [
+      {
+        fingerprint: "reengagement-candidates",
+        severity: "warn" as const,
+        title: `${plural(n, "customer")} have not been back in ${QUIET_DAYS} days`,
+        detail: `${n} people spoke to this business and went quiet, none of them opted out or inside a cooldown. Reaching out uses an approved template and counts as a paid conversation — worth a decision, not an automation.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   overdueFollowUp,
@@ -564,6 +712,9 @@ export const OPERATORS: Operator[] = [
   thinKnowledge,
   judgeOffline,
   procedureAwaitingReview,
+  bookingUnassigned,
+  templateRejected,
+  reengagementCandidate,
 ];
 
 export interface OperatorRunSummary {
