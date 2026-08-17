@@ -108,6 +108,15 @@ create policy catalog_installs_tenant_isolation on catalog_installs
 -- nexus_app may read the catalogue and record installs. It may NOT write
 -- catalogue items: authoring is an operator action performed deliberately, not
 -- something the application can do while answering a customer.
+-- REVOKE FIRST, THEN GRANT.
+--
+-- Granting select alone does not remove what is already there. An earlier
+-- blanket grant left nexus_app holding insert, update and delete on every table
+-- in the schema, so this table arrived writable and the "application cannot
+-- author catalogue items" rule was true in the migration and false in the
+-- database — verified by reading role_table_grants after the first apply, not
+-- by trusting the grant statement below it.
+revoke all on catalog_items from nexus_app;
 grant select on catalog_items to nexus_app;
 grant select, insert, update on catalog_installs to nexus_app;
 
