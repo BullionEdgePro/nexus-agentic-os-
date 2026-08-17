@@ -491,6 +491,71 @@ const judgeOffline: Operator = {
   },
 };
 
+// A proposal nobody looks at is the same as no proposal.
+//
+// F10 deliberately never activates anything it infers: a procedure goes into
+// the prompt for every future customer of that business, so a person decides.
+// That restraint is correct, and it creates exactly one failure mode — the
+// inference runs nightly, proposals accumulate on a screen nobody opens, and
+// the feature reports itself as working while changing nothing.
+//
+// Nothing else would show it. There is no error, the queue succeeds, the rows
+// are written. The only symptom is a screen with a number on it that no one
+// has seen. That is the shape this platform keeps producing, so it gets an
+// operator like every other one.
+const PROCEDURE_REVIEW_DAYS = 7;
+
+const procedureAwaitingReview: Operator = {
+  slug: "procedure-awaiting-review",
+  title: "Suggested answers are waiting for a decision",
+  description:
+    "The platform noticed how this business answers a recurring question and wrote it down, but nobody has accepted or dismissed it. Until someone does, it changes nothing.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{ waiting: string; oldest_days: string }>(
+      `select count(*)::text                                                as waiting,
+              coalesce(max(extract(day from now() - created_at)), 0)::text  as oldest_days
+         from procedures
+        where organization_id = $1
+          and source = 'inferred'
+          and is_active = false
+          -- A dismissed suggestion is a decision that was made, not one that is
+          -- outstanding. Only rows nobody has ruled on count as waiting.
+          --
+          -- Both columns are checked on purpose. reviewed_at and dismissed_at
+          -- are separate columns, and relying on the UI to stamp both
+          -- would make this operator's correctness depend on a detail of a
+          -- screen it never sees: dismiss a suggestion, and it would keep
+          -- appearing here as outstanding work.
+          and reviewed_at is null
+          and dismissed_at is null`,
+      [organizationId]
+    );
+
+    const waiting = Number(rows[0]?.waiting ?? 0);
+    if (waiting === 0) return [];
+
+    const oldestDays = Number(rows[0]?.oldest_days ?? 0);
+
+    // Never urgent. Nothing is broken and no customer is affected — an
+    // unreviewed suggestion simply does not apply. Raising this to urgent would
+    // teach people that urgent means "someone has admin to catch up on", which
+    // is how the genuinely urgent findings stop being read.
+    return [
+      {
+        fingerprint: "procedures-awaiting-review",
+        severity: "warn" as const,
+        title: `${plural(waiting, "suggested answer")} waiting to be reviewed`,
+        detail:
+          oldestDays >= PROCEDURE_REVIEW_DAYS
+            ? `${waiting} waiting, the oldest for ${plural(Math.floor(oldestDays), "day")}. Accepting one makes the agent follow that order of questions; dismissing it stops the platform proposing it again until the evidence doubles.`
+            : `${waiting} waiting on the "How we answer" screen. Each was drawn from at least five conversations that ended without a human.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   overdueFollowUp,
@@ -498,6 +563,7 @@ export const OPERATORS: Operator[] = [
   brokenKnowledge,
   thinKnowledge,
   judgeOffline,
+  procedureAwaitingReview,
 ];
 
 export interface OperatorRunSummary {
