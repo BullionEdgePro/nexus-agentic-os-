@@ -719,10 +719,48 @@ pet-food manufacturer) and one contact named for a law firm — all cold pitches
 suppressed by the operator. Nobody needs to answer a data broker, and un-pausing them would only
 spend model calls on sales pitches.
 
+**The operator's full lifecycle is proven in production:** raised at 15:20, conversation un-paused at
+15:21, **retracted at 15:30**. And this retraction is correct — the harm is actually gone, which is
+exactly the distinction `customer-waiting` could not make when it cleared "khan has been waiting 261
+hours" while that customer was still abandoned.
+
+## Off-box backups — BUILT, INERT UNTIL YOU SUPPLY TWO VALUES
+
+The nightly backup dumps, restores into a scratch database, asserts tables and tenant rows came
+back, and rotates. All of it lands on **the same disk as the database**, and this box has no
+Hostinger snapshots. That covers somebody dropping a table; it covers nothing if the VPS goes.
+
+`scripts/backup-db.sh` now has a step 3 that applies the script's own rule one level up: **an upload
+that exited 0 is not a copy until it has been read back**, exactly as a dump that exists is not a
+backup until restored. Placed after verification, so the only dump that ever leaves is one just
+proved to restore.
+
+**Encryption is not optional once a remote is set.** These dumps hold real customers' WhatsApp
+conversations. `BACKUP_REMOTE` without `BACKUP_PASSPHRASE` fails rather than uploading plaintext.
+
+**To switch it on, set two values in the cron environment:**
+
+```
+BACKUP_REMOTE=b2:nexus-backups     # any rclone remote:path — S3, B2, R2, Drive, SFTP
+BACKUP_PASSPHRASE=<long secret>    # must NOT also live on this machine
+```
+
+...and install rclone (`curl https://rclone.org/install.sh | sudo bash`). The script refuses with
+that exact line if the remote is set and rclone is missing.
+
+**Verified before shipping**, six paths in a harness with a stub rclone: unset; rclone missing;
+passphrase missing; happy path; a truncated upload where `copy` exits 0 and the object is short
+(caught by the read-back); and decrypting the uploaded artefact back to the original bytes. Then run
+for real on production — 6.1M dumped, 30 tables and 6 organizations restored, and the summary line
+now reads `latest is NOT off-box — local disk only`.
+
 ## The next task
 
-**Nothing is queued.** Every remaining feature is blocked on traffic, an external integration, or an
-explicit "not asked for" — measured, not assumed, twice today.
+**Two values and one `rclone install` turn the last real risk off.** Until then every backup is one
+disk failure from being no backup.
+
+Nothing else is queued: every remaining feature is blocked on traffic, an external integration, or an
+explicit "not asked for" — measured rather than assumed, five candidate areas today.
 
 **F5 is complete.** What remains for it is traffic, not code. So is most of the rest: F9's rollups
 were measured today at **0.202 ms across 13 conversations and 60 messages** — building read models
