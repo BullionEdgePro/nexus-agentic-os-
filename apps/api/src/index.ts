@@ -19,6 +19,7 @@ import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
 import { proceduresRoute } from "./routes/procedures.js";
 import { catalogRoute } from "./routes/catalog.js";
+import { phrasesRoute } from "./routes/phrases.js";
 import { forecastsRoute } from "./routes/forecasts.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
@@ -115,6 +116,11 @@ app.route("/api/organizations", proceduresRoute);
 // tenant-scoped table with an RLS policy, and this mount is what gives it a
 // tenant context to enforce against. See routes/forecasts.ts.
 app.route("/api/organizations", forecastsRoute);
+// What this business says in its own words (045). Mounted here for the same
+// reason as knowledge and procedures — it is the business's own material, its
+// own staff are the people who know whether the wording fits, and the mount is
+// what gives `agent_phrases` a tenant context for RLS to enforce against.
+app.route("/api/organizations", phrasesRoute);
 app.route("/api/conversations", conversationsRoute);
 // Assignment and the personal-WhatsApp handoff hang off a conversation id,
 // so they compose onto the same /api/conversations router.

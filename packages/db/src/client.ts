@@ -46,6 +46,7 @@ const TENANT_SCOPED_TABLES = [
   "procedures",
   "reengagement_attempts",
   "catalog_installs",
+  "agent_phrases",
   "tasks",
   "operator_findings",
   "bookings",

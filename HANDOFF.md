@@ -462,13 +462,52 @@ procedure may be switched on and shaping replies, the knowledge may have been ed
 it back belongs to "How we answer" and "Knowledge", which own those decisions and can show what
 depends on them. Removing the *install* leaves the material in place, and the card says so.
 
+## Authored agent wording now has a home — BUILT
+
+**The finding first: the platform already had authored wording and nowhere to keep it.** Two string
+constants in the reply processor — `FALLBACK_REPLY` ("I'm looping in a specialist from our team")
+and `FALLBACK_REPLY_NO_STAFF` — are sent by **three call sites** (governance escalation, the
+AI-failure path, the handover flag), which makes them among the most-delivered sentences on the
+platform. They are **identical for a retailer and two law firms**, and changing either needed a
+deploy. That is what the F13 template refusal was really pointing at.
+
+**Migration 045 — `agent_phrases`.** Per business, per moment, one active each, arrives switched
+off. The vocabulary is exactly the two moments the reply path **already detects and already speaks
+at**; the rule for adding a third is that the detection is the work and the constant is the last
+line written, not the first. A moment nothing detects is wording that is stored, visible, switched
+on, and never sent. The triage menu is deliberately excluded — it goes out before the switchboard
+knows which business the customer wants, so there is no business whose wording it could use.
+
+**WHY THIS TABLE IS MORE DANGEROUS THAN `procedures`, and shaped for it.** A procedure is CONTEXT
+the model reads and can work around. A phrase **is the message** — sent verbatim, no model in
+between, at the exact moment the platform has already decided it cannot answer properly. Nothing
+downstream catches a mistake. So length is bounded in the database and not just the form, and:
+
+**The placeholder guard is the most important line in the feature.** Catalogue wording ships with
+`{{open_time}}` because the catalogue cannot know when a business opens. A phrase carrying an
+unfilled placeholder **cannot be switched on** — refused by name, so the fix is obvious. It is
+checked on the way ON only: refusing to switch one OFF would trap a business with `{{open_time}}`
+live and no way to stop it.
+
+**The reply path cannot be made worse by this.** Both constants stay and are the fallback for an
+empty result AND for any failure. `resolvePhrase` uses `withServingTenant` — read as the number's
+owner, RLS matches nothing and "this business wrote none" is indistinguishable from an outage,
+which is the mistake `hasStaffOnShift` already made for four of the five businesses.
+
+**Migration 046** rewrites the two catalogue templates to name their moment. The `no_one_available`
+one had to be reworded: its old body promised "someone will come back to you then" at precisely the
+moment there is nobody — the failure that left a conversation abandoned for eleven days. Shipping
+it unchanged would have put an item on the shelf whose purpose was to reintroduce an incident.
+
+F13's template refusal is closed: `activatableKinds` is now all three.
+
 ## The next task
 
-**Give authored agent wording a home**, which is what the template refusal above is really asking
-for. Today a business can be handed good phrasing and has nowhere to put it but a system prompt.
+**Let a business take a catalogue update.** An install records the version it took and the card
+names both numbers, but moving from v1 to v2 means remove-and-reinstall.
 
-Or, smaller: **let a business take a catalogue update.** An install records the version it took and
-the card names both numbers, but moving from v1 to v2 means remove-and-reinstall.
+Or: **the `handing_over` phrase is the one worth writing first for the two law firms.** "A
+specialist from our team" is the platform's voice, not theirs, and it is going out today.
 
 ## Also outstanding
 

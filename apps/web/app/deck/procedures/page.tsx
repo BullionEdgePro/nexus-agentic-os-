@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
+import { PhrasesSection } from "./phrases-section";
 import "../deck.css";
 import "../activity/activity.css";
 import "./procedures.css";
@@ -147,9 +148,10 @@ export default function ProceduresPage() {
         </header>
         <p className="act-lede">
           Knowledge is what a business knows. This is the order it works in — what to establish
-          first, then next, then what to offer. The platform proposes these from conversations its
-          agent handled without anyone stepping in; nothing here shapes a single reply until
-          somebody switches it on.
+          first, then next, then what to offer — and, further down, the words it uses when it stops
+          answering and hands over. The platform proposes the order from conversations its agent
+          handled without anyone stepping in; nothing here shapes a single reply until somebody
+          switches it on.
         </p>
 
         <div className="act-tabs">
@@ -440,6 +442,10 @@ export default function ProceduresPage() {
           until a person who knows the business decides otherwise. Nothing on this page deletes: a
           procedure that was once in use is the record of how this business answered for a while.
         </p>
+
+        {/* The order the agent works in, above; the words it uses when it stops
+            working, below. Same business, same question, so the same screen. */}
+        <PhrasesSection business={business} />
       </div>
     </div>
   );

@@ -25,8 +25,10 @@ import {
   listOpenTasksForContact,
   withTenant,
   withServingTenant,
+  getActivePhrase,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
+import type { PhraseMoment } from "@nexus/shared";
 import {
   routeToEmployeeTwin,
   loadRecentHistory,
@@ -48,6 +50,15 @@ import { publishInboxEvent } from "../lib/pubsub.js";
 import { hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
 
+/**
+ * THE PLATFORM DEFAULT, now that a business may write its own (migration 045).
+ *
+ * These two constants stay, and stay first, for a reason worth stating: they
+ * are what is sent when a business has written nothing, which is every business
+ * today. `resolvePhrase` falls back to them on an empty result AND on any
+ * failure, so the worst a broken phrase lookup can do is behave exactly as this
+ * file did before the table existed.
+ */
 const FALLBACK_REPLY =
   "Thanks for your message — I want to make sure you get an accurate answer, so I'm looping in a specialist from our team. They'll follow up shortly.";
 
@@ -72,6 +83,49 @@ const FALLBACK_REPLY =
  */
 const FALLBACK_REPLY_NO_STAFF =
   "Thanks for your message — I want to make sure I get this right. Could you tell me a little more about what you need, so I can point you to the right answer?";
+
+/**
+ * The sentence this business sends at one of the two authored moments.
+ *
+ * FOUR PROPERTIES, each of which is the reason a line below is written the way
+ * it is:
+ *
+ *   `withServingTenant`, not `withTenant`. All five businesses share one
+ *   number, so this transaction is scoped to the OWNER. Read as the owner, RLS
+ *   matches none of the serving business's phrases and the lookup returns
+ *   nothing — which is exactly what "this business has written none" looks
+ *   like. That precise mistake has already been made twice here, once in
+ *   `hasStaffOnShift` where it silently answered "you have no staff at all" for
+ *   four of the five businesses.
+ *
+ *   Falls back on failure, not just on absence. A phrase lookup that throws
+ *   must not cost a customer their reply — the default below is a good sentence
+ *   and always has been.
+ *
+ *   Active only, and that is enforced in the query rather than here. A draft is
+ *   wording nobody agreed to send.
+ *
+ *   Logged when a business's own wording is used, because otherwise "did our
+ *   phrase actually go out?" has no answer, and a phrase that silently never
+ *   fires is the failure this platform keeps producing in new clothes.
+ */
+async function resolvePhrase(
+  organizationId: string,
+  moment: PhraseMoment,
+  fallback: string
+): Promise<string> {
+  try {
+    const phrase = await withServingTenant(organizationId, () =>
+      getActivePhrase(organizationId, moment)
+    );
+    if (!phrase) return fallback;
+    logger.info({ organizationId, moment, phraseId: phrase.id }, "Sent this business's own wording");
+    return phrase.body;
+  } catch (err) {
+    logger.warn({ organizationId, moment, err }, "Phrase lookup failed — sending the platform default");
+    return fallback;
+  }
+}
 
 // How many times a customer may be handed the triage menu before a human takes
 // over. Bounded because the failure mode is a loop: if someone's messages never
@@ -546,10 +600,14 @@ async function processSingleTextMessage(
       ? await hasStaffOnShift(serving.id).catch(() => true)
       : false;
 
+    // The business's own wording for whichever of the two moments this is,
+    // falling back to the platform default. Resolved only when escalating, so
+    // the ordinary path — every reply the agent actually answers — costs
+    // nothing at all.
     const finalText = shouldEscalate
       ? canHandOver
-        ? FALLBACK_REPLY
-        : FALLBACK_REPLY_NO_STAFF
+        ? await resolvePhrase(serving.id, "handing_over", FALLBACK_REPLY)
+        : await resolvePhrase(serving.id, "no_one_available", FALLBACK_REPLY_NO_STAFF)
       : result.text;
 
     if (shouldEscalate && !canHandOver) {
@@ -938,7 +996,13 @@ async function sendFallbackBestEffort(
     // "there is somebody", preserving the previous behaviour rather than
     // silently weakening the reply on a transient error.
     const canHandOver = await hasStaffOnShift(organization.id).catch(() => true);
-    const text = canHandOver ? FALLBACK_REPLY : FALLBACK_REPLY_NO_STAFF;
+    // The AI-failure path, which is the one that matters most for this: it is
+    // reached when the model is unreachable or out of credit, so it can be
+    // EVERY reply for hours. That is precisely when a law firm's customers
+    // should not all be told a retailer's sentence.
+    const text = canHandOver
+      ? await resolvePhrase(organization.id, "handing_over", FALLBACK_REPLY)
+      : await resolvePhrase(organization.id, "no_one_available", FALLBACK_REPLY_NO_STAFF);
 
     await sendWhatsAppText(phoneNumberId, contactWaId, text);
     const outboundDto = await insertOutboundMessage({

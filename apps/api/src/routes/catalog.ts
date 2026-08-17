@@ -70,14 +70,15 @@ catalogRoute.get("/", async (c) => {
      * Which kinds can actually be activated, stated in the payload rather than
      * hardcoded in the page.
      *
-     * Two of the three can. `template` cannot, and that is a structural finding
-     * rather than unfinished work: `message_templates` mirrors Meta (017), and
-     * authored agent wording has no home in this platform at all. The page
-     * greys the button and shows the reason from the server, so the two
-     * applications cannot drift on which kinds work — the same failure the nav
-     * rail and the operator-only list already had once.
+     * All three, now that 045 has given authored wording a home. A template
+     * becomes an `agent_phrases` row rather than a `message_templates` row —
+     * that table mirrors Meta and always was the wrong place.
+     *
+     * Still served from here rather than hardcoded in the page: which kinds
+     * work is the server's answer, and two lists in two applications is how the
+     * nav rail and the operator-only guard drifted apart once already.
      */
-    activatableKinds: ["procedure", "knowledge_pack"],
+    activatableKinds: ["procedure", "template", "knowledge_pack"],
   });
 });
 
@@ -157,7 +158,7 @@ catalogRoute.post("/installs/:id/activate", async (c) => {
     // use. Collapsing these would make "try again later" indistinguishable from
     // "this will never work", which is the difference the operator needs.
     const status =
-      outcome.refusal === "template-has-no-home" || outcome.refusal === "guidance-only"
+      outcome.refusal === "guidance-only"
         ? 501
         : outcome.refusal === "embedding-unavailable"
           ? 503

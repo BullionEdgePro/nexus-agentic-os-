@@ -559,6 +559,78 @@ export function updateProcedure(
   });
 }
 
+// ============================================================
+// What we say — authored agent wording (045)
+// ============================================================
+
+export type PhraseMoment = "handing_over" | "no_one_available";
+
+export interface AgentPhrase {
+  id: string;
+  moment: PhraseMoment;
+  language: string;
+  /** Sent to the customer verbatim. Not a prompt hint. */
+  body: string;
+  source: "operator" | "catalog";
+  catalogInstallId: string | null;
+  isActive: boolean;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  updatedAt: string;
+}
+
+export interface PhraseMomentInfo {
+  moment: PhraseMoment;
+  label: string;
+  blurb: string;
+}
+
+/**
+ * The vocabulary comes back with the list.
+ *
+ * The page never holds its own copy of which moments exist — a form offering
+ * one the server would refuse is the same drift that put a dead tab in the nav
+ * rail.
+ */
+export function getPhrases(
+  orgSlug: BusinessSlug
+): Promise<{ phrases: AgentPhrase[]; moments: PhraseMomentInfo[] }> {
+  return request(`/api/organizations/${orgSlug}/phrases`);
+}
+
+export function createPhrase(
+  orgSlug: BusinessSlug,
+  input: { moment: PhraseMoment; body: string }
+): Promise<{ phrase: AgentPhrase }> {
+  return request(`/api/organizations/${orgSlug}/phrases`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Edit the wording, switch it on, or both.
+ *
+ * Switching on is refused while the body still holds an unfilled
+ * `{{placeholder}}` — that text reaches the customer exactly as written.
+ */
+export function updatePhrase(
+  orgSlug: BusinessSlug,
+  id: string,
+  input: { body?: string; isActive?: boolean }
+): Promise<{ phrase: AgentPhrase }> {
+  return request(`/api/organizations/${orgSlug}/phrases/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Mirrors `unfilledPlaceholders` in @nexus/shared — shown before the server refuses. */
+export function unfilledPlaceholders(body: string): string[] {
+  const found = body.match(/\{\{\s*[^}]+\s*\}\}/g) ?? [];
+  return [...new Set(found.map((match) => match.trim()))];
+}
+
 export interface BusinessLink {
   slug: string;
   name: string;

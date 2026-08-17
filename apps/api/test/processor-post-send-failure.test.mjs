@@ -38,6 +38,12 @@ mock.module("@nexus/db", {
     // quietly change what the agent was asked.
     listOpenTasksForContact: async () => [],
 
+    // No business has written its own wording, which is the state every
+    // business is actually in — so these tests exercise the platform defaults,
+    // which is what they were written to assert. A test that returned a phrase
+    // here would be asserting the override rather than the fallback.
+    getActivePhrase: async () => null,
+
     // Widens the owner-scoped transaction to a business on the same number.
     // Running the body is the honest stub: what is under test is the reply
     // pipeline, not the scoping, and swallowing the callback would skip it.

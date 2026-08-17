@@ -310,3 +310,142 @@
 .pr-new .act-sub-head { margin: 0; }
 .pr-new-note { margin-bottom: 14px; }
 .pr-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; max-width: 560px; }
+
+/* ============================================================
+   What we say — authored agent wording (045).
+
+   Deliberately plainer than the procedure cards above it. A
+   procedure is a method somebody reviews; a phrase is a sentence
+   that will be delivered verbatim to a customer, so the body is
+   shown as text and nothing decorates it into looking like a
+   preview of something else.
+   ============================================================ */
+
+.ph-root { margin-top: 44px; padding-top: 26px; border-top: 1px solid var(--line-strong); }
+
+/* The one warning on this screen that is about damage rather than accuracy. */
+.ph-warn {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(162, 59, 46, .34);
+  border-radius: var(--r-sm);
+  background: rgba(162, 59, 46, .05);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 74ch;
+}
+.ph-warn strong { color: var(--ink); }
+
+.ph-moment {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--vellum-card);
+  padding: 15px 17px;
+}
+
+.ph-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ph-head h3 { font-family: var(--display); font-size: 16px; letter-spacing: -0.01em; }
+
+.ph-blurb {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--graphite);
+  max-width: 76ch;
+}
+
+/* "Nothing written" is a state with a consequence, so it reads as one. */
+.ph-default {
+  margin-top: 11px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--graphite);
+  font-style: italic;
+}
+
+.ph-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+
+.ph-item {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--vellum);
+  padding: 12px 13px;
+}
+.ph-item.on { border-color: rgba(63, 107, 74, .45); background: rgba(63, 107, 74, .05); }
+
+/* Shown as the customer will read it: plain, unstyled, no ellipsis. */
+.ph-body { font-size: 13px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
+
+.ph-placeholder {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--crit);
+}
+
+.ph-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 11px;
+}
+.ph-meta > span { font-size: 11px; color: var(--pencil); }
+
+.ph-actions { display: flex; gap: 7px; }
+.ph-actions button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  border: 1px solid var(--blueprint);
+  border-radius: var(--r-sm);
+  background: var(--blueprint);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.ph-actions button:disabled { opacity: .5; cursor: default; }
+.ph-actions .ph-quiet { border-color: var(--line-strong); background: transparent; color: var(--graphite); }
+
+.ph-item textarea, .ph-new textarea {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--vellum-card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.ph-new { margin-top: 20px; display: flex; flex-direction: column; gap: 9px; max-width: 74ch; }
+.ph-new h3 { font-family: var(--display); font-size: 15px; }
+.ph-new select {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--vellum-card);
+  color: var(--ink);
+}
+.ph-new button {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 9px 13px;
+  border: 1px solid var(--blueprint);
+  border-radius: var(--r-sm);
+  background: var(--blueprint);
+  color: var(--vellum);
+  cursor: pointer;
+}
+.ph-new button:disabled { opacity: .5; cursor: default; }

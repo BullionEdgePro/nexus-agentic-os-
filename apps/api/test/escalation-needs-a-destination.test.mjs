@@ -54,7 +54,12 @@ test("both escalation paths are covered, not just the governance one", () => {
   const fallback = PROCESSOR.slice(PROCESSOR.indexOf("async function sendFallbackBestEffort"));
   const body = fallback.slice(0, fallback.indexOf("\n}"));
   assert.match(body, /hasStaffOnShift\(organization\.id\)/);
-  assert.match(body, /canHandOver \? FALLBACK_REPLY : FALLBACK_REPLY_NO_STAFF/);
+  // The two branches now resolve this business's own wording (045) and fall
+  // back to the same two constants. What must not change is that the choice is
+  // still made on `canHandOver`: this path must not promise a specialist when
+  // there is nobody, whichever sentence it ends up sending.
+  assert.match(body, /canHandOver\s*\r?\n?\s*\?\s*await resolvePhrase\(organization\.id, "handing_over", FALLBACK_REPLY\)/);
+  assert.match(body, /:\s*await resolvePhrase\(organization\.id, "no_one_available", FALLBACK_REPLY_NO_STAFF\)/);
 });
 
 // ============================================================

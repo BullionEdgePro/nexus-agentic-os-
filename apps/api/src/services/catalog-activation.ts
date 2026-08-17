@@ -1,5 +1,6 @@
 import {
   materialiseProcedure,
+  materialisePhrase,
   markInstallActivated,
   activeProcedureFor,
   findCatalogItemBySlug,
@@ -7,7 +8,13 @@ import {
   type CatalogItem,
 } from "@nexus/db";
 import { ingestTextSource } from "@nexus/knowledge";
-import { INTENT_CATEGORIES, parseProcedureSteps } from "@nexus/shared";
+import {
+  INTENT_CATEGORIES,
+  parseProcedureSteps,
+  checkPhraseBody,
+  isPhraseMoment,
+  unfilledPlaceholders,
+} from "@nexus/shared";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -35,7 +42,7 @@ import { logger } from "../lib/logger.js";
  */
 
 export type ActivationRefusal =
-  | "template-has-no-home"
+  | "no-moment"
   | "guidance-only"
   | "unusable-payload"
   | "embedding-unavailable";
@@ -53,6 +60,15 @@ export type ActivationOutcome =
     }
   | {
       ok: true;
+      kind: "template";
+      phraseId: string;
+      created: boolean;
+      /** Placeholders still to fill. Non-empty means it cannot be switched on yet. */
+      unfilled: string[];
+      note: string;
+    }
+  | {
+      ok: true;
       kind: "knowledge_pack";
       sourceId: string;
       chunks: number;
@@ -62,33 +78,25 @@ export type ActivationOutcome =
   | { ok: false; refusal: ActivationRefusal; message: string };
 
 /**
- * A catalogue "template" cannot be activated, and this is not a gap to fill in
- * later — it is a finding about where authored wording could go.
+ * Catalogue wording now has somewhere to go: `agent_phrases` (migration 045).
  *
- * `message_templates` is the obvious-looking home and is the wrong one.
- * Migration 017 rebuilt that table as A MIRROR OF META: `status` is Meta's own
- * verbatim answer, `is_approved` is derived from it, and the whole file exists
- * because a locally-typed approval "records what they believed rather than what
- * is true", producing "a bulk send that fails at the last hop, after the
- * broadcast row, the recipient rows and the queue jobs all exist". Writing a
- * catalogue template in there would recreate that failure deliberately.
+ * It is emphatically NOT `message_templates`. That table is a MIRROR OF META
+ * (017) — `status` is Meta's verbatim answer and the file exists because a
+ * locally-typed approval "records what they believed rather than what is true",
+ * producing "a bulk send that fails at the last hop, after the broadcast row,
+ * the recipient rows and the queue jobs all exist". These items were never
+ * Meta marketing templates; they are the sentences the platform sends when it
+ * sets the model aside, and 045 gave those a per-business home.
  *
- * And these are not Meta marketing templates anyway. "Out-of-hours reply" is
- * agent reply wording, and this platform has no table for that — the nearest
- * thing is appending prose to `agent_configs.system_prompt`, which is one
- * unstructured blob per business with no way to see what came from where or to
- * take it back out.
- *
- * So it refuses, and says which of those two things is missing. Inventing a
- * home for authored wording is a design decision about how phrasing enters the
- * reply path, and it deserves its own slice rather than being settled by
- * whichever table was closest to hand.
+ * A template must therefore name WHICH moment it is wording for. The catalogue
+ * payload carries `moment`, checked against the shared vocabulary — wording
+ * filed under a moment nothing detects is a phrase that is stored, visible,
+ * switched on, and never sent.
  */
-const TEMPLATE_REFUSAL =
-  "Message wording cannot be activated yet. It is not a WhatsApp template — " +
-  "message_templates mirrors what Meta has approved, and writing a local row there " +
-  "produces a send that fails at the last hop. Authored agent wording has no home in " +
-  "the platform yet, so this is a shelf item to copy from by hand for now.";
+const NO_MOMENT_REFUSAL =
+  "This wording does not say which moment it is for, so there is nowhere to file it. " +
+  "The platform speaks in its own words at two moments — handing over to a colleague, " +
+  "and having nobody to hand to — and a phrase has to name one of them.";
 
 const GUIDANCE_REFUSAL =
   "This pack is a checklist for a person, not material for the agent — its entries are " +
@@ -128,7 +136,50 @@ export async function activateInstall(
   }
 
   if (item.kind === "template") {
-    return { ok: false, refusal: "template-has-no-home", message: TEMPLATE_REFUSAL };
+    const payload = item.payload ?? {};
+    const moment = typeof payload.moment === "string" ? payload.moment : "";
+    if (!isPhraseMoment(moment)) {
+      return { ok: false, refusal: "no-moment", message: NO_MOMENT_REFUSAL };
+    }
+
+    const checked = checkPhraseBody(payload.body);
+    if (!checked.ok) return { ok: false, refusal: "unusable-payload", message: checked.error };
+
+    const written = await materialisePhrase({
+      organizationId,
+      installId: install.id,
+      moment,
+      language: item.language,
+      body: checked.body,
+    });
+
+    // Named on the way out, not discovered on the way in. Catalogue wording
+    // ships with `{{open_time}}` because the catalogue cannot know when a
+    // business opens, and this text is sent VERBATIM — so the person who just
+    // pressed Add is told, now, that there is a blank to fill before it can go
+    // live. Finding that out later by being refused at the switch would be a
+    // worse version of the same conversation.
+    const unfilled = unfilledPlaceholders(checked.body);
+
+    await markInstallActivated(organizationId, install.id);
+    logger.info(
+      { organizationId, item: item.slug, phraseId: written.phraseId, unfilled },
+      "Catalogue wording activated"
+    );
+
+    return {
+      ok: true,
+      kind: "template",
+      phraseId: written.phraseId,
+      created: written.created,
+      unfilled,
+      note: unfilled.length
+        ? `Added to What we say, switched off. It still has ${unfilled.join(" and ")} in it — ` +
+          `that goes to the customer exactly as written, so fill it in before switching it on.`
+        : written.created
+          ? "Added to What we say, switched off. Nothing changes until somebody turns it on there."
+          : "Already added to What we say. Nothing was written twice.",
+    };
   }
 
   if (item.kind === "procedure") {

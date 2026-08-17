@@ -19,5 +19,6 @@ export * from "./bookings.js";
 export * from "./operators.js";
 export * from "./procedures.js";
 export * from "./catalog.js";
+export * from "./phrases.js";
 export * from "./forecasts.js";
 export * from "./search.js";

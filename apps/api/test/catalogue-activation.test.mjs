@@ -76,18 +76,26 @@ test("activating twice cannot write two procedures", () => {
 // The two refusals, which are findings rather than gaps
 // ============================================================
 
-test("a message template is refused, and the reason names Meta", () => {
-  // message_templates is a MIRROR of Meta (017). A local row there is the
-  // failure 017 was written to prevent: a send that dies at the last hop after
-  // the broadcast, the recipients and the queue jobs all exist.
-  assert.match(code(SERVICE), /kind === "template"/);
-  assert.match(SERVICE, /message_templates mirrors what Meta has approved/);
-  // And nothing in this slice may write that table.
+test("a message template becomes a phrase, and never a Meta template row", () => {
+  // This USED to refuse, because authored wording had no home. 045 built one.
+  // What must not change is where it does NOT go: message_templates mirrors
+  // Meta (017), and a local row there is the failure that migration was written
+  // to prevent — a send that dies at the last hop after the broadcast, the
+  // recipients and the queue jobs all exist.
+  const body = code(SERVICE);
+  assert.match(body, /kind === "template"/);
+  assert.match(body, /materialisePhrase\(/);
   assert.ok(
-    !/message_templates/i.test(code(SERVICE).replace(/message_templates mirrors[^"]*/g, "")),
-    "activation must not write message_templates"
+    !/message_templates/i.test(body),
+    "catalogue wording must never be written to the Meta mirror"
   );
   assert.ok(!/insert into message_templates/i.test(code(CATALOG_DB)));
+
+  // Wording still has to name a moment the reply path actually speaks at.
+  assert.match(body, /isPhraseMoment\(moment\)/);
+  // And it arrives switched off, like everything else activation writes.
+  const PHRASES_DB = read("packages", "db", "src", "phrases.ts");
+  assert.match(code(PHRASES_DB), /'catalog', false, \$5/);
 });
 
 test("a pack of questions is refused rather than indexed as answers", () => {
@@ -168,7 +176,7 @@ test("the review screen never calls a catalogue procedure this business's own", 
 test("which kinds can be activated is the server's answer, not the page's", () => {
   // Two lists in two applications is how the nav rail and the operator-only
   // guard drifted. The page reads activatableKinds rather than deciding.
-  assert.match(code(ROUTE), /activatableKinds:\s*\["procedure", "knowledge_pack"\]/);
+  assert.match(code(ROUTE), /activatableKinds:\s*\["procedure", "template", "knowledge_pack"\]/);
   const CATALOGUE_PAGE = read("apps", "web", "app", "deck", "catalogue", "page.tsx");
   assert.match(code(CATALOGUE_PAGE), /activatableKinds\.includes\(item\.kind\)/);
   assert.ok(
