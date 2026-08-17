@@ -18,6 +18,18 @@ const BUSINESSES = [
   { id: "1", slug: "zipicka", name: "Zipicka", routingKeywords: ["order", "delivery", "product"] },
   { id: "2", slug: "abr", name: "ABR Advocates", routingKeywords: ["lawyer", "court", "case"] },
   { id: "3", slug: "juris-prime", name: "Juris Prime", routingKeywords: ["attestation", "certificate"] },
+  // PRESENT BECAUSE PRODUCTION HAS IT AND THIS FIXTURE DID NOT. `juris-prime`
+  // is a strict prefix of `juris-prime-legal`, and both are live on the same
+  // number. That is the one pair on this platform where a sloppy tag match
+  // sends a law firm's customers to the attestation business — silently, since
+  // a misroute produces a fluent reply from the wrong agent under the wrong
+  // governance tier.
+  {
+    id: "4",
+    slug: "juris-prime-legal",
+    name: "Juris Prime Legal",
+    routingKeywords: ["lawsuit", "litigation"],
+  },
 ];
 
 test("a tagged message routes to that business, with no menu", () => {
@@ -299,4 +311,25 @@ test("the QR is generated locally, not by a remote service", () => {
   );
   assert.match(LINKS_PAGE, /import QRCode from "qrcode"/);
   console.log("PASS: QR codes encode the real link, scan off a wall, and leak nothing");
+});
+
+// ============================================================
+// The prefix collision, and the link that is actually published
+// ============================================================
+
+test("a longer slug is not swallowed by the shorter one it starts with", () => {
+  // `#juris-prime-legal` must reach the law firm, not Juris Prime. The tag
+  // regex captures [a-z0-9-]{1,40} and the lookup is an exact slug match, so
+  // this works today — but nothing pinned it. Narrowing that pattern to word
+  // characters would capture "juris", match no business, fall through to
+  // keyword routing, and drop the law firm's customers into the triage menu
+  // these links exist to skip. Both businesses are live on one number.
+  const outcome = classifyBusiness("#juris-prime-legal Hello, I need help", BUSINESSES);
+  assert.equal(outcome.kind, "routed");
+  assert.equal(outcome.business.slug, "juris-prime-legal");
+
+  // And the shorter one still reaches its own business rather than the longer.
+  const shorter = classifyBusiness("#juris-prime Hello, I need help", BUSINESSES);
+  assert.equal(shorter.kind, "routed");
+  assert.equal(shorter.business.slug, "juris-prime");
 });
