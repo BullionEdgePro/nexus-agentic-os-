@@ -64,6 +64,37 @@ verify_db="nexus_verify_$timestamp"
 mkdir -p "$BACKUP_DIR"
 
 # ---------------------------------------------------------------
+# 0. Is there room to do this at all?
+# ---------------------------------------------------------------
+#
+# A backup that fills the disk takes down the database it is protecting, and it
+# does it at 03:15 while nobody is watching. Postgres, the dumps, the Docker
+# build cache and the images all live on one 96GB volume on this box, and the
+# build cache alone grew ten gigabytes in a single day of deploys — reclaimable,
+# but nothing reclaims it on a schedule.
+#
+# So this refuses BEFORE writing rather than failing part-way through. A dump
+# that runs out of space mid-write leaves a truncated file that the verify step
+# below would correctly reject — but only after the disk is already full, which
+# is the state that matters and the one nothing else would report.
+#
+# Refusing loses one night's backup. Proceeding can lose the database. The
+# threshold is generous on purpose: at 2GB free there is still room to log, to
+# rotate, and for somebody to run `docker builder prune` before anything breaks.
+MIN_FREE_MB="${MIN_FREE_MB:-2048}"
+free_mb="$(df -Pm "$BACKUP_DIR" | awk 'NR==2 {print $4}')"
+if [ -z "$free_mb" ]; then
+  # Not fatal: an unreadable df is not evidence of a full disk, and refusing to
+  # back up on the strength of a parsing failure would be the same mistake in
+  # the other direction.
+  log "WARNING: could not read free space for $BACKUP_DIR — proceeding"
+elif [ "$free_mb" -lt "$MIN_FREE_MB" ]; then
+  fail "only ${free_mb}MB free on $BACKUP_DIR, need ${MIN_FREE_MB}MB. Refusing to dump: filling this disk stops Postgres. Try: docker builder prune -f"
+else
+  log "Free space ${free_mb}MB (floor ${MIN_FREE_MB}MB)"
+fi
+
+# ---------------------------------------------------------------
 # 1. Dump
 # ---------------------------------------------------------------
 log "Dumping $DB_NAME -> $dump_file"

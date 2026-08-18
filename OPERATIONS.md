@@ -51,6 +51,25 @@ anything. Each of these runs the real code against the real database.
 | `shared-number-check` | Can a serving business be READ from the number owner's transaction? | After touching anything the reply path reads about the business that is answering |
 | `operator-fire-check` | Does each alarm actually produce a usable finding? | After adding or changing an operator |
 
+All seven in one command, in the order that makes their answers mean something:
+
+```bash
+cd /opt/nexus && ./scripts/verify-all.sh
+```
+
+`--fast` skips `retrieval-check`, the only slow one (an embedding request per
+probe), and says so in the summary rather than printing the same "all pass" a
+full run would.
+
+**The order is not alphabetical and is not a preference.** `schema-check` runs
+first because it is the only one that plans SQL which has never executed, so it
+fails on a migration written and not applied — and every gate after it would
+otherwise fail in a way that looks like a feature bug rather than a missing
+column. `shared-number-check` runs before the reply-path gates because when a
+serving business is unreadable from the owner's transaction the later gates
+still pass: they scope themselves to each business directly, which is the one
+context in which that defect is invisible.
+
 One query worth knowing about after migration 048, because no gate can answer
 it and only production can:
 
