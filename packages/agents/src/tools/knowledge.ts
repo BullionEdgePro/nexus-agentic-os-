@@ -80,6 +80,35 @@ export const searchKnowledgeTool: ToolDefinition = {
       return {
         found: true,
         outcome: "hit" as const,
+        // ADDED AFTER READING A REAL DRAFT (2026-08-18).
+        //
+        // Asked how long UK degree attestation takes, juris-prime's agent
+        // retrieved the right page — 0.78 similarity, the correct URL — and
+        // then wrote "5-10 working days". The page says "10 working days", with
+        // qualifications. The lower bound was invented, and the agent also
+        // added a UAE Embassy step the page does not list for UK certificates.
+        //
+        // Nothing was fabricated in the usual sense: every word came from a
+        // grounded reply about the right subject. What went wrong is narrower
+        // and more common — a figure was made MORE precise and more favourable
+        // than its source. For a law firm quoting a timeline that is the
+        // difference between an answer and a promise.
+        //
+        // The governance judge caught it (medium, which escalates on the strict
+        // tier), so no customer was misled. But an agent whose every grounded
+        // answer escalates is an agent that never answers, and the fix is
+        // upstream of the judge rather than a stricter judge.
+        //
+        // Platform-level on purpose. This is not a business decision about
+        // wording — no tenant's system prompt is edited — it is the rule that
+        // makes "answer only from the excerpts" mean what it says.
+        constraints:
+          "Quote figures exactly as the excerpt states them. Do not narrow a range, add a lower " +
+          "or upper bound, combine numbers from different excerpts, or convert one unit into " +
+          "another. If the excerpt qualifies a figure — 'usually', 'up to', 'depending on' — carry " +
+          "the qualification with it. If the customer asks for something these excerpts do not " +
+          "state, say so and offer to confirm rather than estimating: a number you supplied is " +
+          "read as a commitment by this business.",
         results: hits.map((hit) => ({
           excerpt: hit.content,
           source: hit.sourceTitle,
