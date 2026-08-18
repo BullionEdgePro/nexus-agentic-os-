@@ -42,7 +42,7 @@
  * what the live pipeline acts on.
  */
 import { pathToFileURL } from "node:url";
-import { withTenant, withAllTenants, findOrganizationBySlug, listOrganizations } from "@nexus/db";
+import { withTenant, withAllTenants, findOrganizationBySlug, findNumberOwner } from "@nexus/db";
 import { routeToDomainAgent } from "@nexus/agents";
 import { searchKnowledge } from "@nexus/knowledge";
 import { evaluateOutgoingMessage } from "@nexus/governance";
@@ -57,22 +57,6 @@ const QUESTIONS: Record<string, string> = {
   "sfs-international": "I am moving to Dubai next month and looking for a two bedroom apartment to rent. Can you help me?",
   zipicka: "I ordered something last week and want to return it. How long do I have?",
 };
-
-/**
- * Which business the WhatsApp number is registered to.
- *
- * Found rather than named. Hardcoding the owner would make this script quietly
- * wrong the day the number moves, and quietly wrong is the failure mode the
- * whole file exists to expose.
- */
-async function findOrganizationOwningNumber(phoneNumberId: string) {
-  if (!phoneNumberId) return null;
-  const all = await listOrganizations();
-  // The owner is the one the webhook resolves to, which is the first match on
-  // that phone_number_id — the same lookup `findOrganizationByPhoneNumberId`
-  // makes, reused here rather than re-queried so the two cannot disagree.
-  return all.find((organization) => organization.whatsappPhoneNumberId === phoneNumberId) ?? null;
-}
 
 async function main() {
   console.log("Dry run — what each agent would reply. Nothing is sent.\n");
@@ -95,8 +79,11 @@ async function main() {
       // question is asked of the business the switchboard would have routed to.
       // Falls back to the business itself when it owns its own number, which is
       // also what the pipeline does.
+      // `is_number_owner`, not "the first one on this number". The first
+      // version of this took the head of a name-ordered list and ran every dry
+      // run from ABR's transaction — the one direction production never takes.
       const owner = await withAllTenants("dry-run: number owner", () =>
-        findOrganizationOwningNumber(organization.whatsappPhoneNumberId)
+        findNumberOwner(organization.whatsappPhoneNumberId)
       );
       const scope = owner ?? organization;
       if (scope.id !== organization.id) {

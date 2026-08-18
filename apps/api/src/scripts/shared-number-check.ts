@@ -53,6 +53,7 @@ import {
   withTenant,
   withAllTenants,
   listOrganizations,
+  findNumberOwner,
   getPool,
   getActivePhrase,
   getActiveProcedure,
@@ -168,9 +169,16 @@ async function main() {
     listOrganizations()
   );
 
-  // The owner is whichever business the WhatsApp number is registered to, found
-  // rather than named: hardcoding "zipicka" would make this gate wrong the day
-  // the number moves, and wrong silently.
+  // The owner is whichever business the WhatsApp number is REGISTERED to, and
+  // that is a column rather than an ordering.
+  //
+  // This gate used to take the first entry of each group, and `listOrganizations`
+  // orders by NAME — so it called ABR the owner and said so in its own output,
+  // while all fourteen of the platform's conversations are filed under Zipicka.
+  // It still exercised the widening, because `withServingTenant` widens the same
+  // way between any two businesses on one number; what it did not exercise was
+  // the direction production actually takes, and it printed something untrue
+  // about the platform every time it ran.
   const byNumber = new Map<string, Organization[]>();
   for (const organization of organizations) {
     const number = organization.whatsappPhoneNumberId;
@@ -188,7 +196,14 @@ async function main() {
     // Every business on the number takes a turn as the owner's transaction,
     // because the pipeline's scope comes from `findOrganizationByPhoneNumberId`
     // and any of them could be what that returns.
-    const [owner, ...serving] = group;
+    const owner = await withAllTenants("shared-number-check: number owner", () =>
+      findNumberOwner(group[0].whatsappPhoneNumberId)
+    );
+    if (!owner) {
+      report(false, group[0].whatsappPhoneNumberId, "no business on this number is flagged is_number_owner");
+      continue;
+    }
+    const serving = group.filter((business) => business.id !== owner.id);
     console.log(`${owner.slug} owns the number; ${serving.length} businesses answer on it\n`);
 
     for (const business of serving) {

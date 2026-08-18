@@ -85,6 +85,38 @@ export async function listOrganizations(): Promise<Organization[]> {
 }
 
 /**
+ * Which business a shared number is registered to.
+ *
+ * `findOrganizationByPhoneNumberId` has always answered this correctly for the
+ * reply path — `order by is_number_owner desc` — but the flag was never exposed
+ * to anything else, so a caller that needed the owner had to guess. Two
+ * verification scripts written on 2026-08-18 guessed by taking the first result
+ * of `listOrganizations()`, which is ordered by NAME: they both concluded that
+ * "abr owns the number" and printed it, while every one of the platform's 14
+ * conversations is filed under Zipicka.
+ *
+ * The consequence was not a wrong pass. `withServingTenant` widens the same way
+ * between any two businesses on the number, so the checks still exercised the
+ * mechanism — but from ABR's transaction, which is the one direction production
+ * never takes, and they reported a fact about the platform that was untrue.
+ *
+ * Returns null when no business on that number claims ownership, which is a
+ * misconfiguration rather than an ordinary state: the reply path would still
+ * pick somebody by `created_at`, and nobody would be able to say who.
+ */
+export async function findNumberOwner(phoneNumberId: string): Promise<Organization | null> {
+  const { rows } = await getPool().query<OrganizationRow>(
+    `select id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id,
+            timezone, created_at
+     from organizations
+     where whatsapp_phone_number_id = $1 and is_active = true and is_number_owner
+     limit 1`,
+    [phoneNumberId]
+  );
+  return rows[0] ? toOrganization(rows[0]) : null;
+}
+
+/**
  * The dialable number for each business, for building customer-facing links.
  *
  * Deliberately its own query rather than a column on the shared organization
