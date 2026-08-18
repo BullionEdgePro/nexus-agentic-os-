@@ -13,13 +13,13 @@ dir `/opt/nexus`.
 | | |
 |---|---|
 | Deployed | VPS at `b93dafb`, 6/6 containers up, health 200 |
-| Migrations | through **047**, every one verified by its effect in the database, not by a log |
-| Tests | **734** passing, typecheck and `next build` clean |
-| Operators | **13**, sweeping every 10 minutes, **0 standing findings** |
+| Migrations | through **048**, every one verified by its effect in the database, not by a log |
+| Tests | **746** passing, typecheck and `next build` clean |
+| Operators | **14**, sweeping every 10 minutes, **0 standing findings** |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | all five re-run 17 Aug after 047 shipped: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes; 13/18 on the keyword fallback |
+| Gates | all five re-run 17 Aug on the 048 build: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes; 13/18 on the keyword fallback. 14 operators × 5 businesses in 205ms |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
@@ -900,6 +900,89 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## Delivery receipts — the platform now knows whether a reply arrived
+
+Migration **048**, applied 17 August and verified by effect: `delivery_error`
+and `delivery_updated_at` on `messages`, an index on `wa_message_id`, one for the
+operator to sweep, and **DELETE revoked** from `nexus_app`.
+
+**The finding, measured before anything was written:** 24 outbound rows in
+production, **every one `status = 'sent'`, and none with a `wa_message_id`.**
+Both facts had the same cause. `insertOutboundMessage` wrote the literal 'sent',
+and `sendWhatsAppText` discarded the response body — so Meta's receipt was
+never stored. The status webhook that would have corrected it arrives on the
+*same endpoint as every inbound message*, was counted in one log line, and was
+dropped.
+
+A 200 from the Graph API means **accepted**, not delivered. So a reply Meta
+accepted and then failed to deliver was indistinguishable — in the inbox, in
+the database, and in every rollup computed from them — from one the customer
+read. The business sees a sent message and a customer who never replied.
+
+**This is a live risk on this account, not a theoretical one.** Business
+verification is still in review, messaging limits apply, and §2.5 warns that
+quality-rating decay restricts numbers. The first symptom of a restricted number
+is sends being accepted and not delivered — the one state this schema could not
+represent.
+
+The vocabulary was always there: `messages_status_check` has allowed
+queued/sent/delivered/read/failed since the schema was written, and inbound rows
+carry their wamid. **Only the outbound half was never connected.**
+
+**Four things that were easy to get wrong and impossible to notice:**
+
+* **Meta does not promise order.** `sent`, `delivered` and `read` arrive on
+  separate webhook deliveries, each retryable, so a late `sent` overtaking an
+  early `read` is ordinary rather than exceptional. Applied blindly it walks a
+  message backwards and `delivery-failing` then reports one stuck that the
+  customer read an hour ago. The guard is in the WHERE clause rather than a
+  read-then-write that would race two webhooks. `failed` is terminal and off the
+  ladder entirely. The ladder is passed to Postgres **as a parameter** from
+  `@nexus/shared`, so there is one definition rather than a TypeScript one and a
+  SQL one that agree until somebody edits either.
+* **The receipt is applied as the number's OWNER** — the unusual answer in this
+  codebase, and the third face of the shared-number trap. Every outbound row
+  carries the owner's `organization_id` whichever business answered, so the
+  serving tenant's context would match nothing and silently discard every
+  receipt.
+* **A status never reaches the agent.** Its own function beside the message
+  loop; failures swallowed per receipt, because a receipt records something that
+  already happened and throwing would make BullMQ retry the whole webhook and
+  re-deliver the customer messages beside it.
+* **A status-only webhook now has an identity.** It fell through to `Date.now()`,
+  so two receipts in one millisecond collided on a jobId and BullMQ dropped the
+  second, while Meta redelivering the same receipt produced a fresh id and
+  processed it twice. Neither mattered while statuses were being ignored.
+
+**`delivery-failing` is the 14th operator, and the half worth having is not the
+failures.** It is `queued` past a 60-minute grace period: Meta accepted it and
+has since said nothing, so **there is no error to find** — the shape almost
+every defect on this platform has taken. Urgent only when a customer definitely
+missed a reply; a warning otherwise, because an operator that cried outage over
+a slow webhook would be switched off and take the real alarm with it.
+
+**What to expect on the next real message.** Outbound rows will now be written
+`queued` and move to `sent` → `delivered` → `read` as Meta reports. If they
+sit at `queued`, that is the finding, not a bug in this feature: it means the
+WhatsApp account is not subscribed to the `messages` webhook field, and the
+operator's own detail text says to check that before looking at delivery. **The
+24 historical rows stay at `sent` and are not backfilled** — there is no
+evidence to backfill them from, and inventing one would be the exact thing this
+migration exists to stop.
+
+**Meta is already sending the receipts — verified, not assumed.** Two things
+were checked rather than hoped for. `subscribed_apps` on WABA `1555307469433965`
+returns this app, so the subscription is live. And the journal since journald
+logging was added on 17 August holds five accepted webhook deliveries, of which
+**two carried `statuses: 1`** — delivery receipts that arrived at this endpoint,
+were counted in that very log line, and were thrown away. The payload the new
+code reads is not a payload we are waiting for; it has been arriving all along.
+
+`schema-check` plans `recordDeliveryStatus` for real inside the rolled-back
+transaction — forced by 048's own revoke, and worth it because every unit test
+around that SQL only reads the source. It asserts the backwards move is refused
+and that nothing moves a message off `failed`.
 
 ## Retrieval survives the provider going down — BUILT, DEPLOYED, MEASURED
 

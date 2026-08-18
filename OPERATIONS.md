@@ -49,6 +49,22 @@ anything. Each of these runs the real code against the real database.
 | `rls-verify` | Do the policies *enforce*, or merely exist? | After applying them, and after adding a tenant |
 | `retrieval-check` | Does each business's agent find the RIGHT page? | After re-indexing a site, and after changing a source list |
 
+One query worth knowing about after migration 048, because no gate can answer
+it and only production can:
+
+```sql
+select status, count(*), count(delivery_error) as with_reason
+  from messages where direction = 'outbound'
+   and created_at > now() - interval '24 hours'
+ group by 1 order by 1;
+```
+
+Outbound messages are written `queued` and move to `sent` → `delivered` → `read`
+as Meta reports. **If they all sit at `queued`, the account is not subscribed to
+the `messages` webhook field** — check that before concluding that messages are
+not reaching customers. The `delivery-failing` operator says the same thing in
+its own detail text, and this is the query behind it.
+
 `schema-check` writes to a probe contact and deletes it, and stops before
 enqueueing anything — proving the bulk-send path works must not cost a customer
 a WhatsApp message.
