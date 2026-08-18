@@ -1,4 +1,4 @@
-import { getPool } from "@nexus/db";
+import { getPool, withServingTenant } from "@nexus/db";
 import { embedQuery } from "./embed.js";
 
 export interface KnowledgeHit {
@@ -91,7 +91,33 @@ const VISIBILITY_SQL = `
  * denormalized onto the chunk precisely so this filter never depends on a join
  * being written correctly.
  */
+/**
+ * FIFTH INSTANCE OF THE SHARED-NUMBER TRAP, and the one that would have made the
+ * fourth fix look like a regression.
+ *
+ * `knowledge_chunks` is under RLS. Every reply on this number runs inside a
+ * transaction scoped to the OWNER, and the agent tool passes the SERVING
+ * business's id — so this read matched nothing for four of the five businesses.
+ * Measured 2026-08-18: juris-prime's 91 chunks, read as Zipicka, come back as 0.
+ *
+ * It was invisible until this morning because a worse bug hid it. Routed
+ * customers got no reply at all (no agent config, same cause), so nobody ever
+ * reached the retrieval. Fixing that alone would have shipped a reply that
+ * arrives and says "I'll check with a colleague" to every question — grounded in
+ * nothing, exactly as the tool description instructs when nothing comes back.
+ *
+ * Scoped HERE rather than at the two call sites in the tool, for the reason the
+ * agent-config fix gives: a rule every caller has to remember is a rule the
+ * fourth caller will not. `withServingTenant` is a safe drop-in — no ambient
+ * transaction degrades to `withTenant`, the same organization is a no-op, and an
+ * unrelated business throws rather than widening, which is the case that should
+ * never be silent.
+ */
 export async function searchKnowledge(input: SearchKnowledgeInput): Promise<KnowledgeHit[]> {
+  return withServingTenant(input.organizationId, () => searchKnowledgeScoped(input));
+}
+
+async function searchKnowledgeScoped(input: SearchKnowledgeInput): Promise<KnowledgeHit[]> {
   const limit = input.limit ?? DEFAULT_LIMIT;
   const minScore = input.minScore ?? DEFAULT_MIN_SCORE;
 
@@ -168,6 +194,15 @@ export async function searchKnowledge(input: SearchKnowledgeInput): Promise<Know
  * syntax.
  */
 export async function searchKnowledgeLexical(
+  input: SearchKnowledgeInput
+): Promise<KnowledgeHit[]> {
+  // Same scoping as the semantic path, and it matters more here rather than
+  // less: this one only ever runs during a provider outage, which is the
+  // moment nobody is reading the SQL.
+  return withServingTenant(input.organizationId, () => searchKnowledgeLexicalScoped(input));
+}
+
+async function searchKnowledgeLexicalScoped(
   input: SearchKnowledgeInput
 ): Promise<KnowledgeHit[]> {
   const limit = input.limit ?? DEFAULT_LEXICAL_LIMIT;
