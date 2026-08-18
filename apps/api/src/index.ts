@@ -120,6 +120,19 @@ app.get("/health", (c) => c.json({ status: "ok" }));
  * fact. A monitor reads `ok`, and nothing that treats a non-2xx as "restart
  * this" is handed a reason to.
  */
+/**
+ * Did the most recent attempt fail?
+ *
+ * Null error means it never has. An error with no successful finish after it
+ * means the last attempt is the one that failed. A success recorded after the
+ * error means it has recovered since.
+ */
+function lastRunFailed(lastErrorAt: string | null, lastFinishedAt: string | null): boolean {
+  if (!lastErrorAt) return false;
+  if (!lastFinishedAt) return true;
+  return Date.parse(lastErrorAt) > Date.parse(lastFinishedAt);
+}
+
 app.get("/health/jobs", async (c) => {
   const now = new Date();
   // The API process, not the worker's — they are separate containers, and this
@@ -129,10 +142,41 @@ app.get("/health/jobs", async (c) => {
 
   try {
     const beats = await listJobHeartbeats();
+    // NO `lastError` HERE. IT IS THE ONE FIELD THAT CARRIES FREE TEXT.
+    //
+    // This route is unauthenticated on purpose — an uptime check that needs a
+    // session is one nobody wires up — and it shipped returning the raw
+    // `Error.message` of whatever each background job last threw. A security
+    // review of the same day's work flagged it, and production was at that
+    // moment handing any anonymous caller the platform's tenant-isolation
+    // mechanism by name:
+    //
+    //   "Query touched tenant-scoped table \"knowledge_sources\" with no tenant
+    //    context. Wrap it in withTenant(organizationId, ...) — or, if it is
+    //    deliberately cross-tenant, in withAllTenants(\"why\", ...)"
+    //
+    // The set of strings reachable there is unbounded: six scheduled jobs talk
+    // to Postgres, Redis, Google, Meta and arbitrary customer websites, and
+    // driver errors routinely carry host names, database and role names, SQL
+    // fragments and upstream URLs. Truncating at 500 characters bounded the
+    // length and nothing else.
+    //
+    // A BOOLEAN ANSWERS THE MONITOR'S QUESTION. What an uptime check needs is
+    // whether the last run failed, and `lastRunFailed` says exactly that. The
+    // message itself is not lost: `schedule-stalled` puts it in its finding
+    // detail, which the operators deck shows behind a session — so the people
+    // who act on it still read it, and only the anonymous caller stops.
     const jobs = beats.map((beat) => ({
       job: beat.job,
       lastFinishedAt: beat.lastFinishedAt,
-      lastError: beat.lastError,
+      // COMPARED, NOT COERCED. `lastError` is deliberately never cleared by a
+      // later success — that is what stops a job failing every other run from
+      // looking green half the time — so `lastError !== null` means "has ever
+      // failed", and calling that `lastRunFailed` would be a field whose name
+      // does not match its meaning. The honest test is whether the last error
+      // is newer than the last successful finish, which is the same comparison
+      // `succeededSince` makes for the queues.
+      lastRunFailed: lastRunFailed(beat.lastErrorAt, beat.lastFinishedAt),
       runs: beat.runs,
       failures: beat.failures,
       stalled: isJobStalled(

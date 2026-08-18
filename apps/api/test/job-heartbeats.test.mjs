@@ -179,6 +179,38 @@ test("the check that comes from outside is a different route from the liveness p
   );
 });
 
+test("the unauthenticated endpoint carries no free text", () => {
+  // It shipped returning the raw Error.message of whatever each background job
+  // last threw, to any anonymous caller — and production was at that moment
+  // handing out the platform's tenant-isolation mechanism by name. Flagged by a
+  // security review of the same day's work.
+  //
+  // The set of strings reachable there is unbounded: six jobs talk to Postgres,
+  // Redis, Google, Meta and arbitrary customer websites, and driver errors carry
+  // host names, database and role names, SQL fragments and upstream URLs.
+  // Truncating at 500 characters bounded the length and nothing else.
+  const route = INDEX.slice(INDEX.indexOf('app.get("/health/jobs"'));
+  const returned = route.slice(0, route.indexOf("readQueueHealth"));
+  assert.ok(
+    !/lastError: beat\.lastError/.test(returned),
+    "the raw error message must not be returned to an unauthenticated caller"
+  );
+  assert.match(returned, /lastRunFailed: lastRunFailed\(beat\.lastErrorAt, beat\.lastFinishedAt\)/);
+
+  // The message is not lost: `schedule-stalled` puts it in a finding detail,
+  // which the operators deck shows behind a session.
+  assert.match(OPERATORS, /beat\.lastError/);
+});
+
+test("the boolean means what its name says", () => {
+  // `lastError` is deliberately never cleared by a later success, so
+  // `lastError !== null` means "has EVER failed". Calling that lastRunFailed
+  // would be a field whose name does not match its meaning — the exact class of
+  // defect this session spent its time removing.
+  assert.match(INDEX, /function lastRunFailed\(lastErrorAt: string \| null, lastFinishedAt: string \| null\)/);
+  assert.match(INDEX, /return Date\.parse\(lastErrorAt\) > Date\.parse\(lastFinishedAt\);/);
+});
+
 test("these rows belong to no tenant, and every read says so", () => {
   // job_heartbeats has no organization_id and no RLS — the jobs run across every
   // business at once. `withAllTenants` demands a reason, which is what makes an
