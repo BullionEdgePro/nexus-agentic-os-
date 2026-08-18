@@ -29,17 +29,22 @@
  * WHAT IT DOES NOT COVER, SAID OUT LOUD
  * ============================================================
  *
- * A gate covering five of sixteen while reading as complete is the failure this
+ * A gate covering part of the list while reading as complete is the failure this
  * codebase keeps meeting in new clothes, so the uncovered ones are listed at the
- * end of every run with the reason. Three shapes of reason:
+ * end of every run with the reason, and the run FAILS if an operator is neither
+ * covered nor listed. Three shapes of reason survive:
  *
- *   - already fires in production, so it needs no synthetic proof;
- *   - needs rows this script would have to fabricate across several tables
- *     (an appointment, a rejected template, an indexed source);
+ *   - already fires in production, so a synthetic proof adds nothing;
  *   - cannot be seeded from inside a transaction at all — `schedule-stalled`
  *     reads `job_heartbeats` through `withAllTenants`, which opens its OWN
- *     connection, so an uncommitted seed is invisible to it. Naming that is
- *     more useful than a version of this file that quietly skips it.
+ *     connection, so an uncommitted seed is invisible to it;
+ *   - CAN be seeded, and the seed would assert the wrong thing. `unowned-followup`
+ *     is suppressed by design for a business with no staff, so seeding it against
+ *     an empty roster would pin the opposite behaviour to the one intended; and
+ *     `thin-knowledge` counts chunks against a floor that the probe source seeded
+ *     for `broken-knowledge` would move, so the two would test each other rather
+ *     than themselves. Those are reasons not to write a check, which is different
+ *     from not having got round to it.
  */
 import { pathToFileURL } from "node:url";
 import {
@@ -48,8 +53,13 @@ import {
   listOrganizations,
   getPool,
   insertOutboundMessage,
+  insertEvaluation,
   recordConversationMetric,
+  createTask,
+  createBooking,
+  upsertInferredProcedure,
 } from "@nexus/db";
+import { JUDGE_UNAVAILABLE } from "@nexus/governance";
 import { OPERATORS } from "../services/operators.js";
 import type { FindingInput } from "@nexus/db";
 
@@ -165,23 +175,110 @@ const CASES: Case[] = [
       }
     },
   },
+  {
+    slug: "judge-offline",
+    // The governance judge failing is stored as risk "medium" with a marker in
+    // the notes, because a verdict that could not be reached must not read as a
+    // verdict. This operator is the only thing that tells the two apart.
+    seed: async (organizationId, conversationId, contactId) => {
+      const message = await insertOutboundMessage({
+        organizationId,
+        conversationId,
+        contactId,
+        senderType: "ai_agent",
+        body: "Operator fire check — not a real reply.",
+      });
+      await insertEvaluation(organizationId, message.id, {
+        piiFlagged: false,
+        hallucinationRisk: "medium",
+        notes: `${JUDGE_UNAVAILABLE} (fire check)`,
+      });
+    },
+  },
+  {
+    slug: "broken-knowledge",
+    seed: async (organizationId) => {
+      await getPool().query(
+        `insert into knowledge_sources (organization_id, title, uri, source_type, status, error)
+         values ($1, 'Fire check source', 'https://example.invalid/fire-check', 'url', 'failed',
+                 'fire check: not a real failure')`,
+        [organizationId]
+      );
+    },
+  },
+  {
+    slug: "procedure-awaiting-review",
+    seed: async (organizationId) => {
+      await upsertInferredProcedure({
+        organizationId,
+        intentCategory: "fire_check_probe",
+        language: "en",
+        steps: [{ text: "Operator fire check — not a real procedure." }],
+        derivedFromCount: 5,
+      });
+    },
+  },
+  {
+    slug: "booking-unassigned",
+    // Inside twelve hours, which is the branch that turns urgent — the one a
+    // customer physically experiences by arriving to nobody.
+    seed: async (organizationId, conversationId, contactId) => {
+      const start = new Date(Date.now() + 3 * 3600_000).toISOString();
+      const end = new Date(Date.now() + 4 * 3600_000).toISOString();
+      await createBooking({
+        organizationId,
+        conversationId,
+        contactId,
+        employeeId: null,
+        startsAt: start,
+        endsAt: end,
+        subject: "Operator fire check — not a real appointment",
+      });
+    },
+    expect: (finding) =>
+      finding.severity === "urgent"
+        ? null
+        : `an appointment three hours away with nobody attached should be urgent, got ${finding.severity}`,
+  },
+  {
+    slug: "template-rejected",
+    seed: async (organizationId) => {
+      await getPool().query(
+        `insert into message_templates
+           (organization_id, meta_template_name, language, category, body, status, is_approved)
+         values ($1, 'fire_check_probe', 'en', 'UTILITY', 'Fire check body.', 'REJECTED', false)`,
+        [organizationId]
+      );
+    },
+  },
+  {
+    slug: "overdue-followup",
+    seed: async (organizationId, conversationId, contactId) => {
+      await createTask({
+        organizationId,
+        conversationId,
+        contactId,
+        title: "Operator fire check — not a real follow-up",
+        dueAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      });
+    },
+  },
 ];
 
 /** Operators this file does not seed, and why. Printed on every run. */
 const UNCOVERED: Record<string, string> = {
-  "customer-waiting": "fires in production — 3 findings, most recently today",
+  "customer-waiting": "fires in production — findings on record, most recently today",
   "handover-abandoned": "fires in production",
-  "overdue-followup": "fires in production",
   "schedule-stalled":
     "CANNOT be seeded here — it reads job_heartbeats through withAllTenants, which opens its own connection, so an uncommitted seed is invisible to it",
-  "unowned-followup": "needs a task plus an employee roster to be meaningful",
-  "broken-knowledge": "needs a knowledge_source row in a failed state",
-  "thin-knowledge": "needs a source and chunk counts",
-  "judge-offline": "needs an evaluation row carrying the JUDGE_UNAVAILABLE marker",
-  "procedure-awaiting-review": "needs a proposed procedure; schema-check already writes one",
-  "booking-unassigned": "needs a confirmed appointment with no employee",
-  "template-rejected": "needs a broadcast template in a rejected state",
-  "reengagement-candidate": "needs a contact quiet for 30 days",
+  // The two below are seedable in principle and are not seeded, for reasons
+  // that are about the SEED being honest rather than about effort.
+  "unowned-followup":
+    "suppressed by design for a business with no staff, so seeding it against a business whose roster is empty would assert the wrong behaviour",
+  "thin-knowledge":
+    "counts chunks against a floor, and the probe source seeded for broken-knowledge would move that count — the two would test each other rather than themselves",
+  "reengagement-candidate":
+    "needs a contact quiet for 30 days, which cannot be produced without back-dating a real contact's last_message_at",
 };
 
 let failures = 0;
