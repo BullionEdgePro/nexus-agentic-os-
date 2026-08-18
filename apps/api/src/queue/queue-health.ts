@@ -90,7 +90,24 @@ export interface QueueHealth {
   backedUp: boolean;
 }
 
-export async function readQueueHealth(): Promise<QueueHealth[]> {
+/**
+ * A SUCCESS AFTER THE FAILURE MEANS THE PROBLEM IS OVER.
+ *
+ * Without this, a fixed outage leaves a red light for the whole window and
+ * people learn to ignore it — which is the exact failure the window was added
+ * to avoid, one step further on. It happened immediately: the re-index failed
+ * at 12:07, was fixed, succeeded at 12:09, and the endpoint went on reporting
+ * `ok: false` for a job that was demonstrably working.
+ *
+ * The six scheduled queues share their names with their heartbeat jobs, so the
+ * lookup needs no mapping table to drift out of date. The inbound and broadcast
+ * queues have no heartbeat — nothing writes one for work that is not scheduled —
+ * and for those a recent failure stands on its own, which is the right reading:
+ * there is no later success to weigh it against.
+ */
+export async function readQueueHealth(
+  lastFinishedByJob: Record<string, string | null> = {}
+): Promise<QueueHealth[]> {
   const connection = getRedisConnection();
   const now = Date.now();
 
@@ -121,7 +138,10 @@ export async function readQueueHealth(): Promise<QueueHealth[]> {
           failed,
           delayed: counts.delayed ?? 0,
           lastFailureAgeMs: lastFailureAt === null ? null : now - lastFailureAt,
-          failing: lastFailureAt !== null && now - lastFailureAt < FAILING_WINDOW_MS,
+          failing:
+            lastFailureAt !== null &&
+            now - lastFailureAt < FAILING_WINDOW_MS &&
+            !succeededSince(lastFinishedByJob[name], lastFailureAt),
           // Both conditions, not either. A deep queue with workers on it is a
           // busy platform; a deep queue with none is a stopped one.
           backedUp: waiting >= BACKLOG_THRESHOLD && active === 0,
@@ -133,4 +153,11 @@ export async function readQueueHealth(): Promise<QueueHealth[]> {
       }
     })
   );
+}
+
+/** Did this job complete successfully after the failure being weighed? */
+function succeededSince(lastFinishedAt: string | null | undefined, failedAt: number): boolean {
+  if (!lastFinishedAt) return false;
+  const finished = Date.parse(lastFinishedAt);
+  return Number.isFinite(finished) && finished > failedAt;
 }

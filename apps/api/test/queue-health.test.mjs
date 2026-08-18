@@ -62,6 +62,21 @@ test("a count alone cannot say whether something is wrong NOW", () => {
   );
 });
 
+test("a later success clears the flag, or every fixed outage stays red", () => {
+  // This one bit immediately: the re-index failed at 12:07, was fixed, succeeded
+  // at 12:09, and the endpoint went on reporting ok:false for a job that was
+  // demonstrably working. A red light that survives the fix is the same failure
+  // the window was added to prevent, one step further on.
+  assert.match(HEALTH, /!succeededSince\(lastFinishedByJob\[name\], lastFailureAt\)/);
+  assert.match(HEALTH, /function succeededSince/);
+
+  // The six scheduled queues share their names with their heartbeat jobs, so
+  // there is no mapping table to drift. The two that are not scheduled have no
+  // heartbeat, and for those a recent failure stands on its own — there is no
+  // later success to weigh it against.
+  assert.match(INDEX, /Object\.fromEntries\(beats\.map\(\(beat\) => \[beat\.job, beat\.lastFinishedAt\]\)\)/);
+});
+
 test("backed up means depth AND no worker, not depth alone", () => {
   // Waiting is normal for a moment. A deep queue with workers on it is a busy
   // platform; a deep queue with none is a stopped one, and only the second is

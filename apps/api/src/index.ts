@@ -146,7 +146,9 @@ app.get("/health/jobs", async (c) => {
     // that STARTED; this records work sitting unprocessed or set aside after
     // every retry. `bull:knowledge-reindex:failed` held twenty such jobs on 18
     // August and nothing had ever looked at it.
-    const queues = await readQueueHealth().catch(() => []);
+    const queues = await readQueueHealth(
+      Object.fromEntries(beats.map((beat) => [beat.job, beat.lastFinishedAt]))
+    ).catch(() => []);
     const failing = queues.filter((q) => q.failing).map((q) => q.queue);
     const backedUp = queues.filter((q) => q.backedUp).map((q) => q.queue);
 
