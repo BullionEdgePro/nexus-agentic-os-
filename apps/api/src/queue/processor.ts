@@ -20,6 +20,7 @@ import {
   recordInboundMessage,
   insertOutboundMessage,
   recordDeliveryStatus,
+  recordBroadcastDelivery,
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
@@ -296,13 +297,29 @@ async function processDeliveryStatuses(
   for (const status of statuses) {
     try {
       const errorText = describeStatusError(status);
-      const moved = await withTenant(organization.id, () =>
-        recordDeliveryStatus({
-          waMessageId: status.id,
-          status: status.status,
-          errorText,
-        })
+      // BOTH TABLES, because a wamid belongs to exactly one of them and this
+      // handler cannot tell which without asking. A reply lands in `messages`;
+      // a campaign send lands in `broadcast_recipients` and has no message row
+      // at all. Trying only the first would have receipts for every campaign
+      // silently matching nothing — which is what happened until migration 051,
+      // and would have gone on happening because "0 rows updated" is the same
+      // answer a duplicate webhook gives.
+      const [movedMessage, movedRecipient] = await withTenant(organization.id, () =>
+        Promise.all([
+          recordDeliveryStatus({ waMessageId: status.id, status: status.status, errorText }),
+          // Narrowed rather than cast. `MessageStatus` includes 'queued', which
+          // Meta never reports and this table has no room for; a cast would
+          // have compiled and produced an UPDATE that matches nothing.
+          status.status === "queued"
+            ? Promise.resolve(false)
+            : recordBroadcastDelivery({
+                waMessageId: status.id,
+                status: status.status,
+                errorText,
+              }),
+        ])
       );
+      const moved = movedMessage || movedRecipient;
 
       // Loud only for failures, and only for ones that landed. A customer did
       // not receive something this business believes it said, which is worth a

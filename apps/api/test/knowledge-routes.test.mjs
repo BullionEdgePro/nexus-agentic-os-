@@ -19,6 +19,12 @@ mock.module("@nexus/db", {
     // Returns false: none of these fixtures involves a status webhook, and
     // "nothing moved" is the honest answer for a receipt that never arrived.
     recordDeliveryStatus: async () => false,
+    // Added with migration 051. Every delivery receipt is now tried against
+    // broadcast_recipients as well as messages, because a wamid belongs to one
+    // table or the other and the handler cannot tell which without asking.
+    // These mocks stub @nexus/db by ENUMERATION, so a missing export is a
+    // module-load failure rather than a wrong answer.
+    recordBroadcastDelivery: async () => false,
     findOrganizationBySlug: async (slug) =>
       slug === "zipicka" ? { id: "org-1", slug: "zipicka", name: "Zipicka" } : null,
     getPool: () => ({ query: async () => ({ rows: [], rowCount: 0 }) }),

@@ -21,8 +21,19 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
   await withAllTenants(`broadcast delivery: recipient ${recipientId}`, async () => {
 
   try {
-    await sendWhatsAppTemplate(phoneNumberId, contactWaId, templateName, templateLanguage, templateParams ?? []);
-    await updateBroadcastRecipientStatus(recipientId, "sent");
+    // The receipt was already being returned and thrown away: the reply path was
+    // wired to it on 17 August and this one was not. Without it 'sent' here can
+    // only ever mean "Meta accepted", which on a campaign — sent by definition
+    // to people who have NOT written in 24 hours — is the least trustworthy
+    // moment to stop asking.
+    const waMessageId = await sendWhatsAppTemplate(
+      phoneNumberId,
+      contactWaId,
+      templateName,
+      templateLanguage,
+      templateParams ?? []
+    );
+    await updateBroadcastRecipientStatus(recipientId, "sent", waMessageId);
   } catch (err) {
     logger.error({ broadcastId, recipientId, err }, "Broadcast send failed for recipient");
     await updateBroadcastRecipientStatus(recipientId, "failed");

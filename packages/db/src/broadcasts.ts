@@ -113,14 +113,76 @@ export async function updateBroadcastStatus(broadcastId: string, status: Broadca
 export async function updateBroadcastRecipientStatus(
   recipientId: string,
   status: "sent" | "failed",
+  waMessageId?: string | null
 ): Promise<void> {
   await getPool().query(
     `update broadcast_recipients
-     set status = $2, sent_at = case when $2 = 'sent' then now() else sent_at end
+     set status = $2,
+         sent_at = case when $2 = 'sent' then now() else sent_at end,
+         -- Migration 051. Kept even on the failed path, where it is null: the
+         -- column exists so a receipt can find this row later, and a send that
+         -- never reached Meta has no receipt to wait for.
+         wa_message_id = coalesce($3, wa_message_id)
      where id = $1`,
-    [recipientId, status]
+    [recipientId, status, waMessageId ?? null]
   );
 }
+
+/**
+ * A delivery receipt from Meta, applied to the campaign recipient it names.
+ *
+ * The counterpart of `recordDeliveryStatus` for `messages`, and deliberately a
+ * separate function rather than a shared one: the two tables have different
+ * vocabularies, and papering over that with a generic updater is how one of them
+ * would quietly acquire a status its own check constraint rejects.
+ *
+ * THE MAPPING IS THE INTERESTING PART. `broadcast_recipients.status` allows
+ * pending / sent / delivered / failed. Meta reports sent / delivered / read /
+ * failed. There is no 'read' here and inventing one would mean a migration on
+ * every consumer of this column, so a read receipt is recorded as 'delivered' —
+ * which is not a fudge: being read is proof of delivery, and this table's
+ * question is whether the campaign arrived, not whether it was opened.
+ *
+ * Monotonic for the same reason `messages` is: Meta does not promise order, so
+ * a late 'sent' must not walk a delivered recipient backwards. 'failed' is
+ * terminal and reachable from anywhere.
+ *
+ * Returns whether anything moved. False is normal — most wamids belong to
+ * replies rather than campaigns.
+ */
+export async function recordBroadcastDelivery(input: {
+  waMessageId: string;
+  status: "sent" | "delivered" | "read" | "failed";
+  errorText?: string | null;
+}): Promise<boolean> {
+  const mapped = input.status === "read" ? "delivered" : input.status;
+  const { rowCount } = await getPool().query(
+    `update broadcast_recipients
+        set status = $2,
+            delivery_error = coalesce($3, delivery_error)
+      where wa_message_id = $1
+        and (
+              ($2 = 'failed' and status <> 'failed')
+              or (
+                status <> 'failed'
+                and coalesce(array_position($4::text[], $2), 0)
+                  > coalesce(array_position($4::text[], status), 0)
+              )
+            )`,
+    [input.waMessageId, mapped, input.errorText ?? null, [...BROADCAST_STATUS_LADDER]]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * The order a campaign recipient moves through.
+ *
+ * Not `DELIVERY_STATUS_LADDER` from @nexus/shared, which starts at 'queued' and
+ * ends at 'read' — this table has neither. Sharing the constant would let a
+ * value through that this table's own check constraint rejects, and the failure
+ * would be an UPDATE that silently matches nothing.
+ */
+const BROADCAST_STATUS_LADDER = ["pending", "sent", "delivered"] as const;
 
 /**
  * True once every recipient has moved off 'pending' — used by the broadcast
