@@ -99,16 +99,26 @@ export const searchKnowledgeTool: ToolDefinition = {
         // answer escalates is an agent that never answers, and the fix is
         // upstream of the judge rather than a stricter judge.
         //
+        // BROADENED THE SAME DAY, AFTER MEASURING. A first version of this
+        // named only figures. Re-running the dry run, juris-prime scored medium
+        // again — for invented DOCUMENT REQUIREMENTS and a five-step process
+        // instead of an invented number. The rule had not failed; it had been
+        // written too narrowly, and the model simply invented in the nearest
+        // uncovered category. So it now covers every particular a customer
+        // could act on, not just the numeric ones.
+        //
         // Platform-level on purpose. This is not a business decision about
         // wording — no tenant's system prompt is edited — it is the rule that
         // makes "answer only from the excerpts" mean what it says.
         constraints:
-          "Quote figures exactly as the excerpt states them. Do not narrow a range, add a lower " +
-          "or upper bound, combine numbers from different excerpts, or convert one unit into " +
-          "another. If the excerpt qualifies a figure — 'usually', 'up to', 'depending on' — carry " +
-          "the qualification with it. If the customer asks for something these excerpts do not " +
-          "state, say so and offer to confirm rather than estimating: a number you supplied is " +
-          "read as a commitment by this business.",
+          "Every specific in your reply must appear in these excerpts: figures, prices, " +
+          "timelines, reference numbers, document requirements, and the steps of a process. " +
+          "Quote them as stated — do not narrow a range, add a bound, combine values from " +
+          "different excerpts, convert units, or fill in the plausible next item of a list. " +
+          "If an excerpt qualifies something ('usually', 'up to', 'depending on'), carry the " +
+          "qualification with it. Where the excerpts do not cover what was asked, say so and " +
+          "offer to confirm rather than estimating. A particular you supplied is read as a " +
+          "commitment by this business, whether it is a price, a deadline or a document list.",
         results: hits.map((hit) => ({
           excerpt: hit.content,
           source: hit.sourceTitle,

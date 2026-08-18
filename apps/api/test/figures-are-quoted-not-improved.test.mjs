@@ -33,18 +33,22 @@ test("a grounded result carries the rule that makes it grounded", () => {
   // still improved a number. The constraint has to say what obeying means for
   // figures specifically.
   assert.match(TOOL, /constraints:/);
-  assert.match(TOOL, /Quote figures exactly as the excerpt states them/);
+  assert.match(TOOL, /Every specific in your reply must appear in these excerpts/);
 
-  // The four ways the observed failure could have happened, named individually
-  // rather than as "do not make things up" — which the model was already
-  // following.
-  for (const rule of [/narrow a range/, /add a lower/, /combine numbers/, /convert one unit/]) {
+  // The categories are named individually rather than as "do not make things
+  // up", which the model was already following. The first version of this rule
+  // listed only the numeric ones; re-measuring showed the model then invented a
+  // document list instead, so every particular a customer could act on is named.
+  for (const kind of [/reference numbers/, /document requirements/, /steps of a process/, /prices/]) {
+    assert.match(TOOL, kind);
+  }
+  for (const rule of [/narrow a range/, /add a bound/, /combine values/, /convert units/, /fill in the plausible next item/]) {
     assert.match(TOOL, rule);
   }
 
-  // A qualification is part of the figure. "10 working days, depending on the
+  // A qualification is part of the value. "10 working days, depending on the
   // issuing authority" becomes a promise the moment the tail is dropped.
-  assert.match(TOOL, /carry\s*"?\s*\+?\s*"?the qualification with it/);
+  assert.match(TOOL, /carry the\s*"?\s*\+?\s*"?\s*qualification with it/);
 });
 
 test("the constraint rides on the hit, not on the tool description", () => {
