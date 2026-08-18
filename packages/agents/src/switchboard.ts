@@ -1,4 +1,4 @@
-import { getPool } from "@nexus/db";
+import { getPool, withServingTenant } from "@nexus/db";
 import type { AgentConfig, Employee, InboundMessageEvent, Organization } from "@nexus/shared";
 import { composeTwinSystemPrompt } from "@nexus/employees";
 // THE CUSTOMER REPLY PATH RUNS ON ANTHROPIC.
@@ -94,16 +94,44 @@ export async function routeToEmployeeTwin(
   return new AnthropicDomainAgent(twinConfig, tenant.slug, employee.id);
 }
 
+/**
+ * THE SHARED-NUMBER TRAP, FOURTH INSTANCE — AND THE ONE THAT COST A CUSTOMER.
+ *
+ * `agent_configs` is under RLS. All five businesses answer on Zipicka's number,
+ * so the reply path's transaction is scoped to the OWNER, and a plain read here
+ * for a SERVING business matched nothing: not an error, zero rows, which the
+ * caller correctly reads as "this business has no agent" and returns on.
+ *
+ * The consequence was silence. Found in production on 2026-08-18 by
+ * `customer-waiting`: somebody picked option 2 from the triage menu at 17:27 on
+ * 17 August, was routed to `juris-prime` — the log says so — and received
+ * nothing at all for seventeen hours. `juris-prime` has an active agent the
+ * whole time; it was simply invisible from inside Zipicka's transaction.
+ * Verified afterwards by reading it as `nexus_app` with `app.current_org` set to
+ * Zipicka: 0 rows.
+ *
+ * That means EVERY customer the switchboard routed away from the number's owner
+ * got no reply, which is four of the five businesses.
+ *
+ * The same mistake has now been made in `hasStaffOnShift` ("you have no staff at
+ * all"), in the phrase lookup, and in the stale-handoff release. Each time it
+ * fails toward silence, and each time it looks exactly like a business with
+ * nothing configured. `withServingTenant` is the fix and is a safe drop-in: with
+ * no ambient transaction it degrades to `withTenant`, so callers outside the
+ * message pipeline behave as before.
+ */
 async function loadActiveAgentConfig(organizationId: string): Promise<AgentConfig | null> {
-  const { rows } = await getPool().query<AgentConfigRow>(
-    `select id, organization_id, name, system_prompt, model, tools, rag_collection, is_active
-     from agent_configs
-     where organization_id = $1 and is_active = true
-     order by created_at asc
-     limit 1`,
-    [organizationId]
-  );
-  return rows[0] ? toAgentConfig(rows[0]) : null;
+  return withServingTenant(organizationId, async () => {
+    const { rows } = await getPool().query<AgentConfigRow>(
+      `select id, organization_id, name, system_prompt, model, tools, rag_collection, is_active
+       from agent_configs
+       where organization_id = $1 and is_active = true
+       order by created_at asc
+       limit 1`,
+      [organizationId]
+    );
+    return rows[0] ? toAgentConfig(rows[0]) : null;
+  });
 }
 
 export async function loadRecentHistory(

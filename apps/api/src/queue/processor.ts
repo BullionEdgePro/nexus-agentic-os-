@@ -536,7 +536,42 @@ async function processSingleTextMessage(
 
   const agent = await routeToEmployeeTwin(serving, employee);
   if (!agent) {
+    // A BARE `return` HERE WAS SEVENTEEN HOURS OF SILENCE.
+    //
+    // This branch used to log a warning and stop: no reply, no fallback, no
+    // handoff flag, and — because it returns before the metric write — no row
+    // in `conversation_metrics` either. The conversation then looked identical
+    // to one nobody had messaged.
+    //
+    // It fired for real. On 17 August a customer chose option 2 from the triage
+    // menu, was routed to `juris-prime`, and got nothing; `customer-waiting`
+    // reported them the next morning, which is the only reason anybody knows.
+    // The cause was the RLS trap now fixed in `loadActiveAgentConfig`, but the
+    // shape of this branch is what turned a lookup returning zero rows into a
+    // customer being ignored.
+    //
+    // So it now does what every other failure on this path does: says something,
+    // gets a person involved, and writes down what happened. A business with
+    // genuinely no agent configured is a real state — and the honest response to
+    // it is the fallback, not silence.
     logger.warn({ organizationId: serving.id }, "No active agent configured for organization");
+    const reached = await sendFallbackBestEffort(
+      organization,
+      phoneNumberId,
+      message.from,
+      conversationId,
+      contactId
+    );
+    await recordMetricBestEffort({
+      organizationId: organization.id,
+      conversationId,
+      intent: classifyIntent({ text: message.text?.body }).intent,
+      resolvedBy: "unresolved",
+      inputTokens: 0,
+      outputTokens: 0,
+      firstResponseMs: firstResponseMsFrom(message.timestamp),
+      replyOutcome: reached ? ("fallback" as const) : ("none" as const),
+    });
     return;
   }
 

@@ -13,9 +13,9 @@ dir `/opt/nexus`.
 | | |
 |---|---|
 | Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
-| Migrations | through **049**, every one verified by its effect in the database, not by a log |
-| Tests | **755** passing, typecheck and `next build` clean |
-| Operators | **15**, sweeping every 10 minutes, **0 standing findings** |
+| Migrations | through **050**, every one verified by its effect in the database, not by a log |
+| Tests | **764** passing, typecheck and `next build` clean |
+| Operators | **16**, sweeping every 10 minutes, **0 standing findings** — and since 050 that phrase finally means something: `GET /health/jobs` says whether the sweep ran |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
@@ -900,6 +900,75 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## Nothing watched the watchers — BUILT, DEPLOYED
+
+Migration **050**: `job_heartbeats`, one row per scheduled job, updated in place.
+
+**The gap.** Six things are scheduled at worker boot — operators (10m), quality
+rollup (hourly), template sync (30m), knowledge re-index (6h), procedure
+inference and forecast cycle (daily) — and every one is scheduled
+**best-effort**, with a `.catch()` that logs a warning. That shape is right: a
+scheduling failure must not stop customer messages being answered. It also means
+any of the six can fail to register, or stop repeating, while the platform looks
+entirely healthy.
+
+**The worst to lose is the operator sweep, because it is the alarm system.** If
+it stops, all sixteen operators go quiet, `operator_findings` stops changing, and
+the deck reports **0 standing findings** — which is exactly what a platform with
+nothing wrong looks like. Every silent failure found this session would be
+invisible again, and the thing meant to catch them would be reporting good news.
+The others fail more slowly and just as quietly: knowledge stops being
+re-indexed, template approvals never arrive, the rollups freeze at their last
+value and read as a quiet week.
+
+And `/health` returns `{"status":"ok"}` unconditionally — it touches no
+database, no queue and no schedule. It answers "is this process accepting HTTP"
+and has been read as "is the platform working".
+
+**Four things worth the care they got:**
+
+* **The wrapper takes the body** rather than sitting beside the call. The state
+  this table exists to detect — started, never finished, meaning the job is
+  *hanging* rather than dead — is one you would otherwise produce by accident
+  the first time somebody added an early return.
+* **A later success does not erase the last failure.** A job failing every other
+  run is broken; a field showing only the most recent outcome would read green
+  half the time.
+* **A job that never registered has no row**, and that is the case that matters
+  most — so the known job list is the LEFT side of the join. Reading only what
+  exists would report five healthy jobs and no sign of the sixth.
+* **Lateness is judged from process start.** A worker up ninety seconds has not
+  failed to run its daily inference; a finding on every deploy is the fastest way
+  to teach somebody to ignore an operator.
+
+**`schedule-stalled` is the 16th operator and it watches five of the six.** It
+runs *inside* the sweep, so it cannot testify to the sweep's own liveness —
+that check would pass in every case where it could conceivably be needed. It is
+excluded explicitly rather than quietly un-watched, and every finding it raises
+names what it cannot tell you.
+
+**The sixth is covered from outside, by `GET /health/jobs`.**
+
+```bash
+curl -s https://api.nexusagenticos.com/health/jobs
+```
+
+`/health` is unchanged and stays cheap and unconditional — it is what a
+container healthcheck reads, and a liveness probe failing because a daily job is
+late would restart a healthy container. The new route is unauthenticated (an
+uptime check that needs a session is one nobody wires up), exposes six job names,
+timestamps and an error string — no tenant data — and **always returns 200**
+with the verdict in the body, so nothing that treats a non-2xx as "restart this"
+is given a reason to. **`ok: false` with a `stalled` list is the thing to alert
+on.**
+
+Also fixed a real bug in `marketplace-installs-only.test.mjs`'s comment
+stripper, which a doc comment exposed rather than caused: it matched `/*...*/`
+anywhere, **including inside the string literal in `app.use("/api/*", ...)`**, so
+that `/*` opened a "comment" running to the end of the next real one and deleted
+whatever routes sat between them. The assertion then failed with the line it
+wanted missing from its input, pointing at a routing change nobody had made.
 
 ## The AI resolution rate was 100%, and it was 100% by construction
 
