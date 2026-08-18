@@ -198,9 +198,12 @@ const CASES: Case[] = [
   {
     slug: "broken-knowledge",
     seed: async (organizationId) => {
+      // `kind`, not `source_type` — the first version of this seed guessed the
+      // column name and the gate reported FAIL rather than passing quietly,
+      // which is the gate doing its job on its own author.
       await getPool().query(
-        `insert into knowledge_sources (organization_id, title, uri, source_type, status, error)
-         values ($1, 'Fire check source', 'https://example.invalid/fire-check', 'url', 'failed',
+        `insert into knowledge_sources (organization_id, kind, title, uri, status, error)
+         values ($1, 'url', 'Fire check source', 'https://example.invalid/fire-check', 'failed',
                  'fire check: not a real failure')`,
         [organizationId]
       );
@@ -243,10 +246,13 @@ const CASES: Case[] = [
   {
     slug: "template-rejected",
     seed: async (organizationId) => {
+      // No `body` column: this table is a MIRROR of what Meta holds, not a copy
+      // of the template text — `is_approved` is Meta's answer and the body lives
+      // there. Guessing otherwise is what the first version of this seed did.
       await getPool().query(
         `insert into message_templates
-           (organization_id, meta_template_name, language, category, body, status, is_approved)
-         values ($1, 'fire_check_probe', 'en', 'UTILITY', 'Fire check body.', 'REJECTED', false)`,
+           (organization_id, meta_template_name, language, category, status, is_approved)
+         values ($1, 'fire_check_probe', 'en', 'UTILITY', 'REJECTED', false)`,
         [organizationId]
       );
     },
