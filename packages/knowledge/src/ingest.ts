@@ -126,6 +126,29 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   const contentHash = hashContent(input.content);
   const kind = input.kind ?? "text";
 
+  /**
+   * Every database step here, scoped to the business whose source this is.
+   *
+   * WHY IT IS PER-STEP RATHER THAN ONE WRAPPER ROUND THE FUNCTION. The write
+   * phase below deliberately begins AFTER `embedTexts`, so that a slow network
+   * call is never made with a database connection pinned open — wrapping the
+   * whole function would undo that on purpose-built reasoning, and roll the
+   * whole ingest back on any embedding hiccup.
+   *
+   * WHY IT IS NEEDED AT ALL. Every one of these touches `knowledge_sources`,
+   * which is tenant-scoped, and they all ran with no context. Under
+   * DB_TENANT_ASSERT=strict that throws, which is how the scheduled re-index
+   * failed on all twenty sources for as long as strict has been set — and
+   * because ingest is also reached from the manual path inside an already-open
+   * context, it worked whenever a person did it by hand. That difference is
+   * exactly why the failure took a heartbeat table to find.
+   *
+   * The cost is one connection checkout per step on a job that handles twenty
+   * sources every six hours, which is not a cost.
+   */
+  const scoped = <T>(fn: () => Promise<T>): Promise<T> =>
+    withTenant(input.organizationId, fn);
+
   // Identify an existing source by URI when there is one, falling back to
   // title only for inline text that has no origin.
   //
@@ -133,7 +156,7 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   // changes between crawls (a promo banner, a renamed section) would fail to
   // match its own row and silently create a duplicate source, so the knowledge
   // base would then hold and cite BOTH the old and new copies of that page.
-  const { rows: existing } = input.uri
+  const { rows: existing } = await scoped(async () => input.uri
     ? await pool.query<{ id: string; content_hash: string | null }>(
         `select id, content_hash from knowledge_sources
          where organization_id = $1 and uri = $2
@@ -145,7 +168,7 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
          where organization_id = $1 and title = $2 and uri is null
            and employee_id is not distinct from $3`,
         [input.organizationId, input.title, input.employeeId ?? null]
-      );
+      ));
 
   // A KNOWN LIMIT OF EVERY CONTENT FILTER BELOW THIS LINE.
   //
@@ -162,15 +185,19 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   //
   //   update knowledge_sources set content_hash = null where <affected>;
   if (existing[0] && existing[0].content_hash === contentHash) {
-    await pool.query(`update knowledge_sources set last_checked_at = now() where id = $1`, [
-      existing[0].id,
-    ]);
+    await scoped(() =>
+      pool.query(`update knowledge_sources set last_checked_at = now() where id = $1`, [
+        existing[0].id,
+      ])
+    );
     return { sourceId: existing[0].id, chunks: 0, skipped: true };
   }
 
-  const sourceId = existing[0]?.id
-    ? await updateSource(existing[0].id, contentHash, input.title)
-    : await insertSource(input, kind, contentHash);
+  const sourceId = await scoped(() =>
+    existing[0]?.id
+      ? updateSource(existing[0].id, contentHash, input.title)
+      : insertSource(input, kind, contentHash)
+  );
 
   try {
     // Placeholder filler is removed before embedding, not after. Embedding it
@@ -189,16 +216,18 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
     // anybody counting rows.
     if (split.length > 0 && chunks.length === 0) {
       const message = "Every passage on this page is placeholder text (Lorem ipsum), so nothing was indexed. The page most likely still carries its website theme's sample content.";
-      await getPool().query(
-        `update knowledge_sources set status = 'failed', error = $2, last_checked_at = now()
-         where id = $1`,
-        [sourceId, message]
+      await scoped(() =>
+        getPool().query(
+          `update knowledge_sources set status = 'failed', error = $2, last_checked_at = now()
+           where id = $1`,
+          [sourceId, message]
+        )
       );
       return { sourceId, chunks: 0, skipped: false };
     }
 
     if (chunks.length === 0) {
-      await markIndexed(sourceId);
+      await scoped(() => markIndexed(sourceId));
       return { sourceId, chunks: 0, skipped: false };
     }
 
@@ -247,10 +276,15 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
     // Record why indexing failed on the row itself. A source stuck in 'failed'
     // with its error is diagnosable; one that silently returns nothing at query
     // time is not.
-    await pool.query(
-      `update knowledge_sources set status = 'failed', error = $2, last_checked_at = now()
-       where id = $1`,
-      [sourceId, err instanceof Error ? err.message : String(err)]
+    // Scoped like the rest, and it matters most here: this is the write that
+    // makes a failure DIAGNOSABLE, so a version of it that throws on the
+    // tenant assert would replace a recorded reason with a second exception.
+    await scoped(() =>
+      pool.query(
+        `update knowledge_sources set status = 'failed', error = $2, last_checked_at = now()
+         where id = $1`,
+        [sourceId, err instanceof Error ? err.message : String(err)]
+      )
     );
     throw err;
   }
