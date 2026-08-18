@@ -963,8 +963,10 @@ Exit 1, and **no dump file was written** — the newest is still 03:15's. Actual
 free space is 85GB against the 2GB floor, so the guard is inert in normal
 operation, which is what it should be.
 
-**Worth doing by hand occasionally:** `docker builder prune -f` on the VPS. Ten
-gigabytes of the disk is reclaimable build cache today.
+**Done 18 August:** `docker builder prune -f` took the VPS from **13G used to
+3.9G** (14% → 5%), build cache 9.98GB → 225MB. Worth repeating after a run of
+deploys — nothing reclaims it on a schedule, and the backup floor above is what
+stands between an unreclaimed disk and a stopped database.
 
 **First full run through the runner**, on the deployed revision:
 
@@ -1019,13 +1021,39 @@ The `degraded` case is the one worth having: it must **warn** rather than stay
 silent, because that is the branch migration 047 added and its failure would
 switch off the alarm the keyword fallback was written for.
 
-**It covers five cases across four operators and prints the eleven it does not
-cover, with the reason** — a gate covering five of sixteen while reading as
-complete is this project's signature failure. One reason is a real limit rather
-than laziness: `schedule-stalled` reads `job_heartbeats` through
-`withAllTenants`, which opens its own connection, so an uncommitted seed is
-invisible to it. The gate also **fails if an operator is neither covered nor
-listed**, so the next one added cannot slip through unnoticed.
+**It now covers ELEVEN cases across ten operators.** Extended 18 August to close
+the gap it had been printing at the bottom of its own output:
+
+```
+ok  judge-offline               "Governance did not examine 1 reply"                 (urgent)
+ok  broken-knowledge            "Cannot index \"Fire check source\""                   (warn)
+ok  procedure-awaiting-review   "1 suggested answer waiting to be reviewed"          (warn)
+ok  booking-unassigned          "… on Tue 18 Aug 14:46 has nobody assigned"          (urgent)
+ok  template-rejected           "1 template not approved by Meta"                    (warn)
+ok  overdue-followup            "Operator fire check — not a real follow-up"          (warn)
+```
+
+**Three of the six new seeds were wrong on the first run and the gate said so** —
+`knowledge_sources.source_type` does not exist (it is `kind`) and
+`message_templates` has no `body` column at all, because that table is a mirror
+of what Meta holds rather than a copy of the text. Both were reported FAIL rather
+than passing quietly, by the gate on its own author, on its first run. A seed
+that throws is indistinguishable from an alarm that cannot fire unless the check
+says which it was.
+
+**What is left uncovered is now three different KINDS of reason**, which matters
+more than the count:
+
+| operator | why not |
+|---|---|
+| `customer-waiting`, `handover-abandoned` | fire in production; a synthetic proof adds nothing |
+| `schedule-stalled` | **cannot** be seeded here — it reads `job_heartbeats` through `withAllTenants`, which opens its own connection, so an uncommitted seed is invisible |
+| `unowned-followup`, `thin-knowledge` | **can** be seeded, and the seed would assert the wrong thing — the first is suppressed by design for a business with no staff, so an empty roster pins the opposite behaviour; the second counts chunks against a floor the `broken-knowledge` probe source would move, so the two would test each other |
+| `reengagement-candidate` | needs a contact quiet 30 days, i.e. back-dating a real one |
+
+Those are reasons **not to write a check**, which is different from not having
+got round to it. The gate still **fails if an operator is neither covered nor
+listed**, so the next one added cannot slip through.
 
 ## Juris Prime's agent escalates every time, and the prompt is not why
 
