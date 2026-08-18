@@ -8,18 +8,18 @@ dir `/opt/nexus`.
 
 ## Current status — read this first
 
-**Three things are pending on a person, and one customer is owed a reply.**
+**Five things are pending on a person, and one customer is owed a reply. Nothing is pending on the code.**
 
 | | |
 |---|---|
 | Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
-| Migrations | through **050**, every one verified by its effect in the database, not by a log |
-| Tests | **787** passing, typecheck and `next build` clean |
+| Migrations | through **051**, every one verified by its effect in the database, not by a log |
+| Tests | **820** passing, typecheck and `next build` clean |
 | Operators | **16**, sweeping every 10 minutes. **1 standing finding**, and it is a real one — `customer-waiting` on a contact ignored since 17 Aug (see below). Since 050, "0 findings" finally means something: `GET /health/jobs` says whether the sweep ran |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | **seven**, all run 18 Aug in one command via `./scripts/verify-all.sh` — **all PASS**. Previously after the shared-number fixes: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` (18/18), and the new `shared-number-check` — **all PASS**. 13/18 on the keyword fallback |
+| Gates | **seven**, run 18 Aug in one command via `./scripts/verify-all.sh` — **all PASS**: `schema-check`, `shared-number-check`, `rls-preflight`, `rls-verify`, `operator-fire-check`, `self-check`, `retrieval-check` (18/18; 13/18 on the keyword fallback). The order in that script is deliberate — see OPERATIONS |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
@@ -33,6 +33,14 @@ dir `/opt/nexus`.
    deliverable at https://claude.ai/code/artifact/5e5abf8d-eb55-46ce-ac49-2ff3d0e0afa7
 3. **ABR's office number.** One value; its `no_one_available` phrase cannot go live while it still
    contains `{{office_number}}`, by design.
+
+5. **A product decision, not a task:** should a campaign open a conversation for
+   every recipient? A campaign send writes no `messages` row, so it never
+   reaches the inbox and the agent's history cannot see it — **a customer
+   replying to a campaign gets an agent with no idea what they are replying
+   to.** Opening one per recipient fixes that and fills the inbox with
+   one-message threads. Whoever owns the product picks; the code is a morning's
+   work either way.
 
 4. **One page edit at Juris Prime.** `/how-to-attest-educational-certificates-for-uae-jobs/`
    does not list the documents a customer must provide and qualifies its
@@ -1330,6 +1338,36 @@ passing check that proved nothing:**
 **Current state: PASS**, and it is a real pass rather than an empty one — agent
 config, knowledge retrieval and staff-on-shift all return the same non-zero
 counts from both sides.
+
+## What the 18 August sweep found, in one place
+
+Six audits, each of the same question asked of a different surface: **is this
+number measured, or asserted?** They are written up individually below; this is
+the index, because eight separate sections is not a thing anybody reads twice.
+
+| surface | what it was claiming |
+|---|---|
+| `/deck/operators` empty state | "Checked within the last ten minutes" — hardcoded prose, and a test asserted the literal sentence, so both would have gone on passing while the sweep sat dead for a week |
+| Campaigns table | a column headed **Delivered** whose number counted recipients marked `sent`, which is set on a 2xx from Meta. Nothing had ever written `'delivered'` |
+| The owner's dashboard (`/`) | **six invented figures** — "128 active conversations", "87% AI resolution", "$5.10 est." — shown whenever there was no traffic **or the API was unreachable** |
+| Ten deck pages | a failed reload left the **previous business's** numbers on screen under the new one's name |
+| The inbox | a failed load rendered "No conversations yet for this business"; a failed send said **nothing at all** |
+| `/health/jobs` | returned the raw `Error.message` of every background job to **unauthenticated** callers |
+
+**Two audits came back clean and are recorded so nobody repeats them.** The API
+routes: every mount is under `requireTenantScope`, or `operatorOnly`, or scopes
+per role in the handler with a fail-closed default — and the two that take a
+business from the request *body* are both operator-only. The public `/links`
+route takes no input and returns numbers whose entire purpose is to be published.
+Onboarding is a CLI script with no HTTP surface, two-step by design.
+
+**The one security finding was mine, made the same day.** `/health/jobs` shipped
+returning raw exception text to anonymous callers — production was handing out
+the platform's tenant-isolation mechanism by name. It now returns a boolean;
+`schedule-stalled` still carries the message to the operators deck, behind a
+session. The login throttle added alongside it is asserted against the Caddyfile,
+because it rests on Caddy replacing `X-Forwarded-For` and `trusted_proxies`
+would silently make that client-controlled.
 
 ## Seventeen hours of silence — FOUND AND FIXED 18 AUGUST
 
