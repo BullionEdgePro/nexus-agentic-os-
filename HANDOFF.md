@@ -907,6 +907,42 @@ correction inline and in the footer.
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
 
+## The first proof that a routed business can actually answer
+
+`shared-number-check` proves each READ survives the owner's scoping. This is the
+whole chain, in the only currency that matters — the words a customer would
+receive.
+
+`dry-run-reply` used to open `withTenant(organization.id)`, scoped to the
+business being asked, which is the one context in which today's defects are
+invisible. **It would have printed a perfectly good reply for `juris-prime` on
+the very day a real `juris-prime` customer received nothing at all.** It was
+reassurance about a path nobody is on. It now resolves the number's owner and
+runs inside its transaction, exactly as the worker does.
+
+Run from inside **abr's** transaction (abr owns the number), 18 August:
+
+| business | grounded in | governance |
+|---|---|---|
+| juris-prime | `/how-to-attest-educational-certificates-for-uae-jobs/` (0.78) | **medium** — see below |
+| juris-prime-legal | `/evict-a-non-paying-tenant-in-dubai/` (0.71) | low |
+| abr | `/criminal-law.html` (0.76) | low |
+| sfs-international | home page (0.65) | low |
+| zipicka | `/policies/refund-policy` (0.64) | low |
+
+**Every one of the four routed businesses now retrieves its own pages and
+answers from them.** This morning the first two would have produced no reply at
+all, and after the agent fix alone they would have produced a reply grounded in
+nothing.
+
+**One finding worth keeping.** `juris-prime`'s draft scored **medium** because it
+asserted a 5–10 working day timeline and a UAE Embassy attestation step that
+the retrieved context does not clearly support. `juris-prime` is on the strict
+governance tier, so medium escalates — and it has staff on shift, so a real
+customer would get the handover phrase rather than that answer. That is the
+governance layer doing exactly what it is for, on the first grounded reply this
+business has ever been observed to produce.
+
 ## The fifth instance, and a gate that would have caught all five
 
 Fixing the agent-config bug uncovered the next one immediately, and it is the

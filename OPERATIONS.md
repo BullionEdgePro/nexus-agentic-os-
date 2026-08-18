@@ -86,6 +86,13 @@ its own detail text, and this is the query behind it.
 enqueueing anything — proving the bulk-send path works must not cost a customer
 a WhatsApp message.
 
+`dry-run-reply` is not a gate and prints prose a person has to read, but since
+2026-08-18 it runs **inside the number owner's transaction**, exactly as the
+worker does. That change matters more than it sounds: scoped to the business
+being asked — which is what it did before — it would have printed a perfectly
+good reply for `juris-prime` on the very day a real customer of `juris-prime`
+received nothing at all. It was reassurance about a path nobody is on.
+
 `retrieval-check` costs one embedding call per probe (18 today), so it is the
 one to run deliberately rather than on every deploy.
 
