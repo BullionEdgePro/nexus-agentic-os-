@@ -98,10 +98,23 @@ const PROBES: Probe[] = [
     //
     // Lexical rather than semantic because it costs no embedding request and
     // cannot fail on a provider outage, while running the identical
-    // VISIBILITY_SQL under the identical scoping. A word every business's
-    // corpus contains keeps it about visibility rather than relevance.
+    // VISIBILITY_SQL under the identical scoping.
+    //
+    // THE QUERY IS A BAG OF CONTENT WORDS, and the first attempt was "the",
+    // which returned nothing for every business — `to_tsvector('english', …)`
+    // drops stopwords, so the query became empty and matched no row anywhere.
+    // The gate passed and reported "0 either way — proves nothing yet" on the
+    // one probe it most needed to prove, which is a check that cannot fail
+    // wearing the word ok. Terms are OR-ed, so any corpus here matches at least
+    // one of these, and matching is all this asks about.
     count: async (serving) =>
-      (await searchKnowledgeLexical({ organizationId: serving.id, query: "the", limit: 5 })).length,
+      (
+        await searchKnowledgeLexical({
+          organizationId: serving.id,
+          query: "service contact price document property delivery legal",
+          limit: 5,
+        })
+      ).length,
   },
   {
     name: "staff on shift",
