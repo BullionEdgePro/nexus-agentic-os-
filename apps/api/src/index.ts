@@ -33,6 +33,7 @@ import {
 import { logger } from "./lib/logger.js";
 import { listJobHeartbeats } from "@nexus/db";
 import { isJobStalled, type ScheduledJob } from "@nexus/shared";
+import { readQueueHealth } from "./queue/queue-health.js";
 import { tenantContext, webhookContext } from "./middleware/tenant-context.js";
 
 const app = new Hono();
@@ -141,13 +142,28 @@ app.get("/health/jobs", async (c) => {
         bootedAt
       ),
     }));
+    // The other half of the background system. `job_heartbeats` records jobs
+    // that STARTED; this records work sitting unprocessed or set aside after
+    // every retry. `bull:knowledge-reindex:failed` held twenty such jobs on 18
+    // August and nothing had ever looked at it.
+    const queues = await readQueueHealth().catch(() => []);
+    const failing = queues.filter((q) => q.failing).map((q) => q.queue);
+    const backedUp = queues.filter((q) => q.backedUp).map((q) => q.queue);
+
     const stalled = jobs.filter((job) => job.stalled).map((job) => job.job);
-    return c.json({ ok: stalled.length === 0, stalled, jobs });
+    return c.json({
+      ok: stalled.length === 0 && failing.length === 0 && backedUp.length === 0,
+      stalled,
+      failing,
+      backedUp,
+      jobs,
+      queues,
+    });
   } catch (err) {
     // A failure here is itself worth reporting rather than hiding behind a 500
     // that a monitor would read as "the API is down" — the API is up; the thing
     // it cannot do is tell you whether the schedule is.
-    return c.json({ ok: false, error: "could not read job heartbeats", jobs: [] });
+    return c.json({ ok: false, error: "could not read job heartbeats", jobs: [], queues: [] });
   }
 });
 app.use("/webhooks/whatsapp", webhookContext);
