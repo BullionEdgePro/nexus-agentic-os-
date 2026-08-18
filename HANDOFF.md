@@ -19,7 +19,7 @@ dir `/opt/nexus`.
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | **six** — `shared-number-check` joined on 18 Aug and passes; the other five last ran green on the 049 build (18/18 retrieval probes, 13/18 on the keyword fallback). **Re-run all six after the shared-number fixes** before trusting this row |
+| Gates | **six**, all re-run 18 Aug after the shared-number fixes: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` (18/18), and the new `shared-number-check` — **all PASS**. 13/18 on the keyword fallback |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
