@@ -19,7 +19,7 @@ dir `/opt/nexus`.
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | **seven**, `operator-fire-check` joined 18 Aug and passes; the other six re-run 18 Aug after the shared-number fixes: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` (18/18), and the new `shared-number-check` — **all PASS**. 13/18 on the keyword fallback |
+| Gates | **seven**, all run 18 Aug in one command via `./scripts/verify-all.sh` — **all PASS**. Previously after the shared-number fixes: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` (18/18), and the new `shared-number-check` — **all PASS**. 13/18 on the keyword fallback |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
@@ -911,6 +911,72 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## One command for all seven gates, and a floor under the backups
+
+```bash
+cd /opt/nexus && ./scripts/verify-all.sh          # --fast skips retrieval-check
+```
+
+Seven gates had seven separate commands and the order lived only in prose.
+Verification that costs seven copy-pastes happens on the days somebody has time,
+which are not the days it matters — and every one of these has caught something
+no unit test could.
+
+**The order is encoded because it changes what the answers mean.**
+`schema-check` first, always: it is the only gate that plans SQL which has never
+executed, so it is the one that fails on a migration written and not applied, and
+every gate after it would otherwise fail in a way that looks like a feature bug
+rather than a missing column. `shared-number-check` before the reply-path gates,
+because when a serving business is unreadable from the owner's transaction those
+gates **still pass** — they scope themselves to each business directly, which is
+the one context in which that defect is invisible. `retrieval-check` last,
+because it is slow and because a provider outage makes it fail for a reason
+unrelated to the deploy.
+
+Exit codes are read directly, never through a pipe: `... | tail -3; echo $?`
+reports *tail's* code, so a failing gate prints 0 — a mistake this project
+already made once with a migration. And `--fast` says in its summary that
+retrieval quality is unverified, because a fast run printing the same "all pass"
+as a full one is a summary that lies by omission.
+
+### A floor under the nightly backup
+
+Postgres, the dumps, the images and the Docker build cache share one 96GB volume.
+The build cache grew **ten gigabytes in a single day of deploys**, reclaimable but
+with nothing reclaiming it on a schedule. **A backup that fills that disk takes
+down the database it is protecting** — at 03:15, with nobody watching.
+
+`backup-db.sh` now checks free space **before** dumping and refuses below 2GB
+rather than truncating part-way through. Refusing loses one night's backup;
+proceeding can lose the database. An unreadable `df` warns and proceeds, because
+a parsing failure is not evidence of a full disk.
+
+Proven by forcing it (`MIN_FREE_MB=999999999`):
+
+```
+FAILED: only 85013MB free on /opt/nexus/backups, need 999999999MB.
+        Refusing to dump: filling this disk stops Postgres. Try: docker builder prune -f
+```
+
+Exit 1, and **no dump file was written** — the newest is still 03:15's. Actual
+free space is 85GB against the 2GB floor, so the guard is inert in normal
+operation, which is what it should be.
+
+**Worth doing by hand occasionally:** `docker builder prune -f` on the VPS. Ten
+gigabytes of the disk is reclaimable build cache today.
+
+**First full run through the runner**, on the deployed revision:
+
+```
+schema-check           PASS
+shared-number-check    PASS
+rls-preflight          PASS
+rls-verify             PASS
+operator-fire-check    PASS
+self-check             PASS
+retrieval-check        PASS
+```
 
 ## Thirteen of sixteen alarms had never once gone off
 
