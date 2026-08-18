@@ -14,7 +14,7 @@ dir `/opt/nexus`.
 |---|---|
 | Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
 | Migrations | through **050**, every one verified by its effect in the database, not by a log |
-| Tests | **767** passing, typecheck and `next build` clean |
+| Tests | **772** passing, typecheck and `next build` clean |
 | Operators | **16**, sweeping every 10 minutes. **1 standing finding**, and it is a real one — `customer-waiting` on a contact ignored since 17 Aug (see below). Since 050, "0 findings" finally means something: `GET /health/jobs` says whether the sweep ran |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
@@ -906,6 +906,46 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## The panel that said it had been checked was not checking
+
+The operators deck's empty state read:
+
+> **Nothing needs attention.** No customer is waiting, nothing promised is
+> overdue, and every knowledge source is indexing. *Checked within the last ten
+> minutes.*
+
+That last sentence was **hardcoded prose**, and a test asserted the literal
+string — so the suite was pinning a claim rather than a fact. Both would have
+gone on passing while the sweep sat dead for a week and the panel reassured
+whoever opened it. Migration 050's failure mode, rendered as good news, on the
+one screen whose entire job is to say what needs attention.
+
+`lastSeenAt` per operator could not have fixed it: that value comes from
+findings, so an operator that has never found anything is null forever whether or
+not it ran. **Only the heartbeat records that the sweep happened.**
+
+`/api/operators` now returns `lastSweptAt` and `sweepStalled` from
+`job_heartbeats`, and the page reports the real number — or, when the sweep is
+overdue, says the list is empty **because nothing is being checked**, not because
+nothing is wrong. Never having run is stated bluntly ("The sweep has not
+completed once since the worker started"), because every gentler wording reads as
+a note about a quiet period.
+
+The tolerance stays in `@nexus/shared` beside the schedule it judges; the page is
+*told* whether the sweep is stale rather than working it out, so there is no
+second copy to forget when the interval changes. The heartbeat read fails soft —
+the findings page is useful with or without it.
+
+**Verified on the deployed build:** `lastSweptAt 2026-08-18T11:10:00Z`,
+`sweepStalled false`, `runs 6, failures 0` — the ten-minute cadence confirmed
+from the heartbeat rather than from the schedule that registered it. Read
+server-side through the same shared function the route uses; the HTTP response
+itself was not fetched, because that needs an operator session.
+
+**One caveat worth knowing:** this panel only renders when there are **no**
+findings, and there is currently one standing. So the new wording is not visible
+on the deck today — it is what appears the moment the list clears.
 
 ## The first proof that a routed business can actually answer
 
