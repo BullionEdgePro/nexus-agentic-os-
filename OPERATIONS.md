@@ -48,6 +48,7 @@ anything. Each of these runs the real code against the real database.
 | `rls-preflight` | Does every path carry a tenant context, and is the guard live? | Before applying RLS policies |
 | `rls-verify` | Do the policies *enforce*, or merely exist? | After applying them, and after adding a tenant |
 | `retrieval-check` | Does each business's agent find the RIGHT page? | After re-indexing a site, and after changing a source list |
+| `shared-number-check` | Can a serving business be READ from the number owner's transaction? | After touching anything the reply path reads about the business that is answering |
 
 One query worth knowing about after migration 048, because no gate can answer
 it and only production can:

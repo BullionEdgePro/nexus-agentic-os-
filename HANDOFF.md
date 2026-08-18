@@ -19,7 +19,7 @@ dir `/opt/nexus`.
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | all five re-run 17 Aug on the 049 build: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes; 13/18 on the keyword fallback. 15 operators × 5 businesses in 232ms |
+| Gates | **six** — `shared-number-check` joined on 18 Aug and passes; the other five last ran green on the 049 build (18/18 retrieval probes, 13/18 on the keyword fallback). **Re-run all six after the shared-number fixes** before trusting this row |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
@@ -906,6 +906,62 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## The fifth instance, and a gate that would have caught all five
+
+Fixing the agent-config bug uncovered the next one immediately, and it is the
+one that would have made the fix look like a regression.
+
+**`searchKnowledge` read `knowledge_chunks` for the SERVING business from inside
+the OWNER's transaction.** Under RLS that is zero rows, so a routed customer's
+every question would have been answered "I'll check with a colleague" —
+grounded in nothing, exactly as the tool description instructs when nothing comes
+back. Measured: juris-prime's 91 chunks, read as the owner, come back as **0**.
+
+It was invisible until 18 August because **a worse bug hid it**: routed customers
+got no reply at all, so nobody ever reached the retrieval. Shipping the agent fix
+alone would have turned silence into a reply that says nothing — and that would
+have read as the new behaviour working.
+
+### `shared-number-check` — the sixth gate
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T worker   npx tsx apps/api/src/scripts/shared-number-check.ts
+```
+
+**Nothing existing could catch this class.** `rls-verify` proves a tenant cannot
+see another tenant's rows — which is this property working *as designed*.
+`retrieval-check` and `self-check` scope themselves to each business directly,
+which is the one context in which the bug is invisible.
+
+So every probe runs **twice**: once scoped to the business (the truth), once
+through the reply path's real shape — the owner's transaction, the serving
+business's data — and it fails when the second is emptier than the first.
+Comparing the two is the whole design: an absolute assertion would fail for a
+business that genuinely has no knowledge and pass for one whose data is real but
+unreachable. It also says so out loud when both reads are 0, because equal counts
+with nothing to see prove nothing.
+
+**Two mistakes in the gate itself, both worth recording because both produced a
+passing check that proved nothing:**
+
+* **The first probes used hand-written SQL.** They failed for all four businesses
+  after the bugs were already fixed — a raw read is not the application's read,
+  and all it measured was that RLS is switched on. A probe has to call the
+  function the reply path calls. That change then exposed the deeper problem:
+  three of those readers were only correct because the *processor* wrapped them,
+  which is exactly the arrangement that failed twice today. `getActivePhrase`,
+  `listOpenTasksForContact` and `getActiveProcedure` now **scope themselves**, so
+  the guarantee travels with the function rather than with whoever calls it.
+* **The knowledge probe queried `"the"`.** A stopword — `to_tsvector` drops it,
+  the tsquery came out empty, and the probe matched nothing anywhere while
+  reporting `ok`. It now uses a bag of content words. Current output: **5 visible
+  either way** for all four businesses, where before the fix it would have read
+  `0 from the owner's transaction, 5 exist`.
+
+**Current state: PASS**, and it is a real pass rather than an empty one — agent
+config, knowledge retrieval and staff-on-shift all return the same non-zero
+counts from both sides.
 
 ## Seventeen hours of silence — FOUND AND FIXED 18 AUGUST
 
