@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { findAdminByEmail, recordAdminLogin, hasWorkingAdminAccount } from "@nexus/db";
 import { verifySecret } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
+import { clientKey, loginBlocked, recordLoginFailure, clearLoginFailures } from "../lib/login-throttle.js";
 
 /**
  * Admin sign-in.
@@ -53,6 +54,18 @@ adminAuthRoute.get("/admin/bootstrap", async (c) => {
 });
 
 adminAuthRoute.post("/admin", async (c) => {
+  // Throttled before the credential is even looked up, so a refused source
+  // costs one Redis read rather than an scrypt verification. See login-throttle:
+  // this counts per SOURCE and never per account, because locking an identifier
+  // would let anybody lock the owner out by mistyping their email ten times.
+  const source = clientKey(c.req.raw.headers);
+  if (await loginBlocked(source)) {
+    return c.json(
+      { error: "Too many sign-in attempts. Wait a few minutes and try again." },
+      429
+    );
+  }
+
   let body: { email?: unknown; password?: unknown };
   try {
     body = await c.req.json();
@@ -75,13 +88,19 @@ adminAuthRoute.post("/admin", async (c) => {
 
   if (!admin) {
     logger.warn({ email }, "Admin sign-in failed — no active account");
+    await recordLoginFailure(source, email);
     return c.json(denied, 401);
   }
 
   if (!verifySecret(password, admin.passwordHash)) {
     logger.warn({ adminId: admin.id }, "Admin sign-in failed — password did not verify");
+    await recordLoginFailure(source, email);
     return c.json(denied, 401);
   }
+
+  // Cleared on success, so somebody who mistypes nine times and then gets it
+  // right is not one typo from a lockout for the rest of the window.
+  await clearLoginFailures(source);
 
   // Best-effort: a failed bookkeeping write must not deny a valid sign-in.
   try {

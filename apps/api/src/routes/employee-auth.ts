@@ -2,6 +2,12 @@ import { Hono } from "hono";
 import { findEmployeeForLogin, recordEmployeeLogin } from "@nexus/db";
 import { verifyAccessCode } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
+import {
+  clientKey,
+  loginBlocked,
+  recordLoginFailure,
+  clearLoginFailures,
+} from "../lib/login-throttle.js";
 
 /**
  * Employee sign-in.
@@ -20,6 +26,18 @@ import { logger } from "../lib/logger.js";
 export const employeeAuthRoute = new Hono();
 
 employeeAuthRoute.post("/employee", async (c) => {
+  // Throttled before the credential is even looked up, so a refused source
+  // costs one Redis read rather than an scrypt verification. See login-throttle:
+  // this counts per SOURCE and never per account, because locking an identifier
+  // would let anybody lock the owner out by mistyping their email ten times.
+  const source = clientKey(c.req.raw.headers);
+  if (await loginBlocked(source)) {
+    return c.json(
+      { error: "Too many sign-in attempts. Wait a few minutes and try again." },
+      429
+    );
+  }
+
   let body: { identifier?: unknown; accessCode?: unknown };
   try {
     body = await c.req.json();
@@ -42,6 +60,7 @@ employeeAuthRoute.post("/employee", async (c) => {
 
   if (!candidate) {
     logger.warn({ identifier }, "Employee sign-in failed — no unique active match");
+    await recordLoginFailure(source, identifier);
     return c.json(denied, 401);
   }
 
@@ -50,8 +69,13 @@ employeeAuthRoute.post("/employee", async (c) => {
       { employeeId: candidate.id, organizationSlug: candidate.organizationSlug },
       "Employee sign-in failed — access code did not verify"
     );
+    await recordLoginFailure(source, identifier);
     return c.json(denied, 401);
   }
+
+  // Cleared on success, for the same reason as the admin path: the person this
+  // throttle is not aimed at is the one who mistypes and then gets it right.
+  await clearLoginFailures(source);
 
   // Best-effort: a failed bookkeeping write must not deny a valid sign-in.
   try {
