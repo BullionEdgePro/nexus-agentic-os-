@@ -55,9 +55,11 @@ import {
   listOrganizations,
   getPool,
   getActivePhrase,
+  getActiveProcedure,
   listOpenTasksForContact,
 } from "@nexus/db";
 import { routeToEmployeeTwin } from "@nexus/agents";
+import { searchKnowledgeLexical } from "@nexus/knowledge";
 import { hasStaffOnShift } from "../services/availability.js";
 import type { Organization } from "@nexus/shared";
 
@@ -82,18 +84,24 @@ const PROBES: Probe[] = [
     count: async (serving) => ((await routeToEmployeeTwin(serving, null)) ? 1 : 0),
   },
   {
-    name: "knowledge chunks",
+    name: "knowledge retrieval",
     consequence: "every answer becomes 'I'll check with a colleague'",
-    // Counted directly rather than through searchKnowledge, deliberately: that
-    // call spends an embedding request per business and can fail for reasons
-    // that have nothing to do with scope. What is under test is visibility.
-    count: async (serving) => {
-      const { rows } = await getPool().query<{ n: string }>(
-        `select count(*)::text as n from knowledge_chunks where organization_id = $1`,
-        [serving.id]
-      );
-      return Number(rows[0]?.n ?? 0);
-    },
+    // Through the LEXICAL search rather than a hand-written count.
+    //
+    // That distinction is the difference between this gate working and this
+    // gate being theatre. The first version of this probe counted
+    // `knowledge_chunks` with a raw query, and it failed for all four
+    // businesses even after the bug was fixed — because a raw read is not the
+    // application's read, and all it measured was that RLS is switched on,
+    // which is by design. A probe has to call the function the reply path calls,
+    // or it can only ever re-measure the policy.
+    //
+    // Lexical rather than semantic because it costs no embedding request and
+    // cannot fail on a provider outage, while running the identical
+    // VISIBILITY_SQL under the identical scoping. A word every business's
+    // corpus contains keeps it about visibility rather than relevance.
+    count: async (serving) =>
+      (await searchKnowledgeLexical({ organizationId: serving.id, query: "the", limit: 5 })).length,
   },
   {
     name: "staff on shift",
@@ -108,28 +116,30 @@ const PROBES: Probe[] = [
   {
     name: "open follow-ups",
     consequence: "a promise made to this customer never reaches the agent",
-    // Contact-scoped in the reply path; a tenant-wide count answers the same
-    // visibility question without needing a real customer.
-    count: async (serving) => {
-      const { rows } = await getPool().query<{ n: string }>(
-        `select count(*)::text as n from tasks where organization_id = $1 and status = 'open'`,
-        [serving.id]
-      );
-      return Number(rows[0]?.n ?? 0);
-    },
+    // Through the reply path's own reader, against a contact id that cannot
+    // exist. What is being measured is whether the QUERY runs in the right
+    // scope, and an empty result from a real contact would be
+    // indistinguishable from an empty result from the wrong tenant.
+    count: async (serving) =>
+      (await listOpenTasksForContact(serving.id, ABSENT_CONTACT)).length,
   },
   {
     name: "active procedures",
     consequence: "the business's own method never shapes a reply",
-    count: async (serving) => {
-      const { rows } = await getPool().query<{ n: string }>(
-        `select count(*)::text as n from procedures where organization_id = $1 and is_active`,
-        [serving.id]
-      );
-      return Number(rows[0]?.n ?? 0);
-    },
+    count: async (serving) =>
+      (await getActiveProcedure(serving.id, "knowledge_lookup")) ? 1 : 0,
   },
 ];
+
+/**
+ * A contact id belonging to nobody.
+ *
+ * `listOpenTasksForContact` needs one, and using a real customer's would make
+ * this gate depend on that customer still existing. All zeroes is a valid uuid
+ * and matches nothing, so both reads return an empty list — which is the
+ * correct outcome, and the probe is still exercising the scope that read ran in.
+ */
+const ABSENT_CONTACT = "00000000-0000-0000-0000-000000000000";
 
 let failures = 0;
 

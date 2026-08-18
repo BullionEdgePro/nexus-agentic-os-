@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { withServingTenant, getPool } from "./client.js";
 
 /**
  * Follow-ups, attached to the conversation they came from.
@@ -214,7 +214,33 @@ export async function listTasksForConversation(conversationId: string): Promise<
  * last month in a thread that has since gone quiet. Owing someone a callback
  * does not expire because they started a new conversation.
  */
+/**
+ * SELF-SCOPING, because the caller forgetting is how this went wrong five times.
+ *
+ * All five businesses answer on one WhatsApp number, so the reply path runs
+ * inside a transaction scoped to the number's OWNER while asking about the
+ * SERVING business. Under RLS that is zero rows rather than an error, and every
+ * caller reads it as "this business has nothing configured".
+ *
+ * The processor already wrapped this call correctly. That is exactly the
+ * arrangement that failed for `loadActiveAgentConfig` and `searchKnowledge`: a
+ * rule every call site has to remember is a rule the next call site will not.
+ * Wrapped here, the guarantee travels with the function, and
+ * `shared-number-check` can prove it by calling this rather than a hand-written
+ * query that would only re-measure RLS.
+ *
+ * `withServingTenant` is a safe drop-in: no ambient transaction degrades to
+ * `withTenant`, the same organization is a no-op, and an unrelated business
+ * throws instead of widening.
+ */
 export async function listOpenTasksForContact(
+  organizationId: string,
+  contactId: string
+): Promise<TaskRecord[]> {
+  return withServingTenant(organizationId, () => listOpenTasksForContactScoped(organizationId, contactId));
+}
+
+async function listOpenTasksForContactScoped(
   organizationId: string,
   contactId: string
 ): Promise<TaskRecord[]> {
