@@ -12,14 +12,14 @@ dir `/opt/nexus`.
 
 | | |
 |---|---|
-| Deployed | VPS at `b93dafb`, 6/6 containers up, health 200 |
-| Migrations | through **048**, every one verified by its effect in the database, not by a log |
-| Tests | **746** passing, typecheck and `next build` clean |
-| Operators | **14**, sweeping every 10 minutes, **0 standing findings** |
+| Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
+| Migrations | through **049**, every one verified by its effect in the database, not by a log |
+| Tests | **755** passing, typecheck and `next build` clean |
+| Operators | **15**, sweeping every 10 minutes, **0 standing findings** |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | all five re-run 17 Aug on the 048 build: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes; 13/18 on the keyword fallback. 14 operators × 5 businesses in 205ms |
+| Gates | all five re-run 17 Aug on the 049 build: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` — **PASS**, 18/18 probes; 13/18 on the keyword fallback. 15 operators × 5 businesses in 232ms |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
@@ -900,6 +900,78 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## The AI resolution rate was 100%, and it was 100% by construction
+
+Migration **049**, applied 17 August and verified by effect: `reply_outcome` on
+`conversation_metrics` with a four-value check constraint, and a partial index on
+the two states worth waking up for.
+
+**The measurement.** `conversation_metrics` held **12 rows, every one
+`resolved_by = 'ai_agent'`**. Beside them sat **4 outbound messages carrying the
+"looping in a specialist" fallback**, sent 2026-08-01 across four conversations,
+**with no metric row at all**.
+
+The cause is structural, not an oversight: `recordMetricBestEffort` is called
+near the end of the reply pipeline's `try`, so a model that throws jumps straight
+past it to the `catch` that sends the fallback. Only replies the model managed to
+produce were ever counted — and a rate over a denominator that excludes every
+failure can only come out at 100%.
+
+Same family as migration 019's warning about what gets left out of the bottom of
+a fraction, and F11 refusing to average error across horizons. **Worse here,
+because the failure it hides is one this platform has had twice:**
+`gemini-2.5-flash` returning 404 for newly-created keys while `models.list` still
+advertised it, and an Anthropic key with no credit. Both times every customer
+received the fallback while every container reported healthy, and no counter
+anywhere could move.
+
+**Four values, because four different things happen to a customer and three of
+them left the same trace — none:**
+
+| value | what the customer got |
+|---|---|
+| `agent` | a model reply; this row's tokens are that reply's |
+| `fallback` | the platform's sentence instead. Tokens are 0 and **0 is the true value** |
+| `none` | **nothing at all** — the fallback failed too |
+| `agent_unrecorded` | a real reply, and the bookkeeping after it threw. The row keeps the conversation in the denominator; this value is what says its zeros are not a measurement |
+
+`none` is only reachable because `sendFallbackBestEffort` now reports back rather
+than only logging — the worst state this platform reaches used to exist solely
+as a log line, on a box whose logs were erased on every deploy.
+
+`resolved_by` is **`'unresolved'`** on the failure rows: a value the vocabulary
+has carried since the schema was written and **nothing had ever written**. A
+fallback is the agent saying it cannot answer, and filing that as an AI
+resolution is the same lie the missing row told, in a row that exists.
+
+**The intent still classifies, from the text alone.** Not incidental — intent
+coverage is the load-bearing input to F5, F10 and F11, so an outage used to
+quietly starve the three features that grow with it.
+
+**Not backfilled, deliberately.** The 12 existing rows were all agent replies and
+could safely be labelled; the 4 fallbacks cannot be reconstructed as rows at all.
+A column complete for the successes and empty for the failures is more dangerous
+than one honestly unknown for both. Expect `reply_outcome` to be null for
+everything before today and populated from the next message onward.
+
+**`agent-unavailable` is the 15th operator, and the one that was missing both
+times this happened for real.** `preflightModels()` catches a broken model at
+worker *boot*, which is the wrong moment: both outages began while the worker was
+already running and neither would have restarted it. Any `none` is urgent — a
+customer received nothing. One `fallback` is a blip (a timeout, a rate limit);
+**three in six hours is a provider**.
+
+**Expect the resolution rate to fall, and the fall is the correction.** Nothing
+was changed about how the rate is computed; failures simply enter the
+denominator now, where they always belonged.
+
+`processor-ai-failure` asserts the row **behaviourally** rather than by reading
+source — an assertion that would have failed for the entire life of this
+platform until today. `schema-check` plans all three new values, because the
+check constraint lives in Postgres and a value the application writes and the
+database refuses would surface as a metric row silently missing: this migration's
+own defect, one layer down.
 
 ## Delivery receipts — the platform now knows whether a reply arrived
 

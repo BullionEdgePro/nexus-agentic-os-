@@ -59,6 +59,22 @@ select status, count(*), count(delivery_error) as with_reason
  group by 1 order by 1;
 ```
 
+The companion query after migration 049, and the one that says whether the agent
+is actually answering:
+
+```sql
+select reply_outcome, count(*)
+  from conversation_metrics
+ where recorded_at > now() - interval '24 hours'
+ group by 1 order by 1;
+```
+
+`agent` is a real reply. `fallback` means the model produced nothing and the
+platform's sentence went out instead; `none` means even that failed and the
+customer got nothing. **Rows before 2026-08-17 are null and are not backfilled** —
+a failed reply used to leave no row at all, which is why the AI resolution rate
+read 100% over 12 rows while four fallbacks sat unrecorded beside them.
+
 Outbound messages are written `queued` and move to `sent` → `delivered` → `read`
 as Meta reports. **If they all sit at `queued`, the account is not subscribed to
 the `messages` webhook field** — check that before concluding that messages are
