@@ -30,6 +30,7 @@ import {
   listOrganizations,
   insertOutboundMessage,
   recordDeliveryStatus,
+  recordBroadcastDelivery,
   withTenant,
   withAllTenants,
   getPool,
@@ -635,9 +636,36 @@ async function main(): Promise<void> {
                 createBroadcastRecipients(bid, [contacts[0].id])
               );
               if (recipients?.[0]) {
-                await step("mark recipient sent", () =>
-                  updateBroadcastRecipientStatus(recipients[0].id, "sent")
+                // The wamid goes on here now (migration 051) — the send path
+                // was discarding Meta's receipt, so 'sent' could only ever mean
+                // "accepted" on the one path where acceptance is least
+                // predictive: a campaign goes to people who have not written in
+                // 24 hours.
+                const probeWamid = `wamid.schema-check-broadcast-${org.id}`;
+                await step("mark recipient sent, with the receipt", () =>
+                  updateBroadcastRecipientStatus(recipients[0].id, "sent", probeWamid)
                 );
+
+                // The guarded UPDATE that nothing else executes. Its whole
+                // defence — the monotonic ladder — lives in a WHERE clause, so
+                // reading the source proves nothing and only Postgres can say
+                // whether it works.
+                await step("a receipt reaches the recipient it names", async () => {
+                  if (!(await recordBroadcastDelivery({ waMessageId: probeWamid, status: "delivered" }))) {
+                    throw new Error("a delivery receipt did not reach its campaign recipient");
+                  }
+                  // 'read' maps to 'delivered' here, so a read receipt after a
+                  // delivered one must move nothing rather than error.
+                  if (await recordBroadcastDelivery({ waMessageId: probeWamid, status: "read" })) {
+                    throw new Error("a read receipt moved a recipient that was already delivered");
+                  }
+                  // And a stale 'sent' must not walk it backwards.
+                  if (await recordBroadcastDelivery({ waMessageId: probeWamid, status: "sent" })) {
+                    throw new Error("a stale receipt moved a campaign recipient BACKWARDS");
+                  }
+                  return true;
+                });
+
                 await step("check completion", () => isBroadcastFullyProcessed(bid));
               }
             } else {
