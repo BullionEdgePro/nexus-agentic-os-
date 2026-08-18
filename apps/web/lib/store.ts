@@ -9,6 +9,25 @@ interface InboxState {
   messagesByConversation: Record<string, MessageDto[]>;
   isLoadingConversations: boolean;
   isLoadingMessages: boolean;
+  /**
+   * A LOAD THAT FAILED, WHICH THIS STORE USED TO SWALLOW ENTIRELY.
+   *
+   * `loadConversations` had `try/finally` and no catch, so a failed request
+   * rejected into an effect nobody was listening to and the list stayed empty.
+   * On this screen that renders as "No conversations yet for this business" —
+   * which is exactly what a quiet day looks like, on the one page a person opens
+   * to find out whether any customer is waiting for them.
+   *
+   * That is the same failure as the operator sweep going silent, in the surface
+   * a human actually uses.
+   */
+  loadError: string;
+  /**
+   * A SEND that failed. Kept separate because the consequence is different: the
+   * thread on screen is still correct, and what needs saying is that the words
+   * in the box did not reach anybody.
+   */
+  sendError: string;
 
   setSelectedOrg: (org: BusinessSlug) => void;
   selectConversation: (conversationId: string) => void;
@@ -27,9 +46,11 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   messagesByConversation: {},
   isLoadingConversations: false,
   isLoadingMessages: false,
+  loadError: "",
+  sendError: "",
 
   setSelectedOrg: (org) => {
-    set({ selectedOrg: org, selectedConversationId: null, conversations: [] });
+    set({ selectedOrg: org, selectedConversationId: null, conversations: [], loadError: "", sendError: "" });
     get().loadConversations();
   },
 
@@ -39,22 +60,34 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   },
 
   loadConversations: async () => {
-    set({ isLoadingConversations: true });
+    set({ isLoadingConversations: true, loadError: "" });
     try {
       const { conversations } = await api.getConversations(get().selectedOrg);
       set({ conversations });
+    } catch (err) {
+      // Recorded rather than thrown into an effect nobody listens to. The list
+      // is left as it is and the page refuses to draw it — emptying it here
+      // would produce "No conversations yet", which is the answer this failure
+      // must not be mistaken for.
+      set({ loadError: err instanceof Error ? err.message : "Could not load conversations." });
     } finally {
       set({ isLoadingConversations: false });
     }
   },
 
   loadMessages: async (conversationId) => {
-    set({ isLoadingMessages: true });
+    set({ isLoadingMessages: true, loadError: "" });
     try {
       const { messages } = await api.getMessages(conversationId);
       set((state) => ({
         messagesByConversation: { ...state.messagesByConversation, [conversationId]: messages },
       }));
+    } catch (err) {
+      // A thread that fails to load shows nothing rather than the previous
+      // conversation's messages, which is what an unhandled rejection left on
+      // screen: somebody else's customer under this customer's name, one click
+      // away from a reply.
+      set({ loadError: err instanceof Error ? err.message : "Could not load this conversation." });
     } finally {
       set({ isLoadingMessages: false });
     }
@@ -86,7 +119,19 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   },
 
   sendMessage: async (conversationId, text) => {
-    const { message } = await api.sendMessage(conversationId, text);
+    set({ sendError: "" });
+    let message;
+    try {
+      ({ message } = await api.sendMessage(conversationId, text));
+    } catch (err) {
+      // THE PERSON MUST BE TOLD. Before this, a rejected send — Meta refusing a
+      // message outside the 24-hour window is the common one — stopped the
+      // spinner, left the draft in the box and said nothing. Whoever typed it
+      // has no way to tell that from a send that worked, and the customer is
+      // waiting on a reply that does not exist.
+      set({ sendError: err instanceof Error ? err.message : "The message was not sent." });
+      throw err;
+    }
     get().appendMessage(conversationId, message);
     get().applyHandoffChange(conversationId, true);
   },

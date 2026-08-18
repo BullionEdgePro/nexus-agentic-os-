@@ -250,3 +250,27 @@
 
   .ibx-thread { height: auto; min-height: 60vh; }
 }
+
+/*
+ * A load that failed, and a send that failed.
+ *
+ * Both are warnings rather than errors in colour: the page is working, and what
+ * is wrong is the thing it was asked to do. Red on the whole panel would say the
+ * inbox is broken, which is a different and less useful claim.
+ */
+.ibx-empty.ibx-failed {
+  color: var(--warn-fg, #8a6d00);
+  background: var(--warn-bg, rgba(184, 134, 11, 0.08));
+  border-radius: 8px;
+  padding: 12px;
+  line-height: 1.5;
+}
+
+.ibx-send-failed {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--warn-fg, #8a6d00);
+  background: var(--warn-bg, rgba(184, 134, 11, 0.08));
+  line-height: 1.5;
+}

@@ -19,6 +19,8 @@ export default function InboxPage() {
   const sendMessage = useInboxStore((s) => s.sendMessage);
   const messagesByConversation = useInboxStore((s) => s.messagesByConversation);
   const loadConversations = useInboxStore((s) => s.loadConversations);
+  const loadError = useInboxStore((s) => s.loadError);
+  const sendError = useInboxStore((s) => s.sendError);
 
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -37,6 +39,11 @@ export default function InboxPage() {
     try {
       await sendMessage(selectedConversationId, draft.trim());
       setDraft("");
+    } catch {
+      // The store has already recorded why, and it is rendered beside the box.
+      // Swallowed here so a failed send does not become an unhandled rejection
+      // — the draft stays exactly where it was typed, which is the only copy of
+      // it that exists.
     } finally {
       setIsSending(false);
     }
@@ -65,6 +72,24 @@ export default function InboxPage() {
         <h2 className="ibx-head">Conversations</h2>
         {isLoadingConversations ? (
           <p className="ibx-empty">Loading…</p>
+        ) : loadError ? (
+          /*
+           * NOT "No conversations yet".
+           *
+           * A failed load used to render the empty state, which on this screen
+           * reads as "nobody needs you" — on the one page a person opens to
+           * find out whether a customer is waiting. The list is left untouched
+           * rather than cleared, and simply not drawn: an emptied list would
+           * produce the same sentence by a different route.
+           */
+          <p className="ibx-empty ibx-failed">
+            <strong>Could not load conversations.</strong>
+            <br />
+            {loadError}
+            <br />
+            This is not the same as having none — nothing was read, so nothing can be said
+            about who is waiting.
+          </p>
         ) : conversations.length === 0 ? (
           <p className="ibx-empty">No conversations yet for this business.</p>
         ) : (
@@ -129,6 +154,20 @@ export default function InboxPage() {
                 </div>
               ))}
             </div>
+            {sendError ? (
+              /*
+               * A SEND THAT FAILED SAID NOTHING AT ALL.
+               *
+               * The spinner stopped, the draft stayed in the box, and there was
+               * no way to tell that from a send that worked. Meta refusing a
+               * message outside the 24-hour session window is the common one,
+               * and it happens precisely when somebody is replying to a customer
+               * who has been waiting — the case where believing it went is worst.
+               */
+              <p className="ibx-send-failed">
+                <strong>Not sent.</strong> {sendError} Your message is still in the box below.
+              </p>
+            ) : null}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
