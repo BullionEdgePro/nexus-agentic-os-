@@ -83,6 +83,23 @@ test("a success clears the count", () => {
   }
 });
 
+test("the Caddyfile does not turn the forwarded address into a client-controlled one", () => {
+  // The whole throttle rests on Caddy REPLACING X-Forwarded-For, which it does
+  // for untrusted clients by default — verified in production by sending three
+  // forged values from one machine and watching all three stay refused.
+  //
+  // Adding `trusted_proxies` makes Caddy APPEND instead, the first entry becomes
+  // whatever the client sent, and the throttle is bypassed by rotating one
+  // header: no error, no failing test, nothing changed on this side. The
+  // Caddyfile is a different file in a different language with no reference to
+  // this code, so the connection is asserted here or nowhere.
+  const caddy = read("Caddyfile");
+  assert.ok(
+    !/trusted_proxies/.test(caddy),
+    "trusted_proxies makes X-Forwarded-For client-controlled — the throttle must be re-checked before adding it"
+  );
+});
+
 test("the client is the FIRST forwarded address, not the last", () => {
   // x-forwarded-for is a list: client first, proxies after. Taking the last
   // counts every attempt against Caddy's own address and throttles the entire

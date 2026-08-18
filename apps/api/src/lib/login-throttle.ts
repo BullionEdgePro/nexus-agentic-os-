@@ -61,6 +61,19 @@ const WINDOW_SECONDS = 15 * 60;
  * A missing header means the request did not come through the proxy, which in
  * this deployment means it came from inside the compose network. Those share one
  * bucket under a name that says so rather than being exempted.
+ *
+ * THIS IS ONLY SAFE BECAUSE CADDY REPLACES THE HEADER. Caddy v2 overwrites an
+ * incoming `X-Forwarded-For` from an untrusted client, so the first entry is
+ * Caddy's own reading of the socket and cannot be forged. Verified against
+ * production on 2026-08-18 by sending three different forged values from one
+ * machine and watching all three stay refused.
+ *
+ * ADDING `trusted_proxies` TO THE CADDYFILE WOULD SILENTLY BREAK THAT. Caddy
+ * then APPENDS instead of replacing, the first entry becomes whatever the
+ * client sent, and this throttle is bypassed by rotating one header — with no
+ * error, no test failure, and nothing on this side changed. The Caddyfile is a
+ * different file in a different language with no reference to this one, which is
+ * why `login-can-be-guessed-forever.test.mjs` asserts the directive is absent.
  */
 export function clientKey(headers: { get(name: string): string | null }): string {
   const forwarded = headers.get("x-forwarded-for");
