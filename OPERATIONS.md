@@ -51,6 +51,26 @@ anything. Each of these runs the real code against the real database.
 | `shared-number-check` | Can a serving business be READ from the number owner's transaction? | After touching anything the reply path reads about the business that is answering |
 | `operator-fire-check` | Does each alarm actually produce a usable finding? | After adding or changing an operator |
 
+Before committing, install the hook once from the monorepo root:
+
+```bash
+git config core.hooksPath nexus-agentic-os/scripts/githooks
+```
+
+It refuses a commit whose staged changes include this project's code while
+typecheck or the test suite is failing, and does nothing at all for a
+documentation-only commit — a hook that spends a minute on a one-line prose edit
+is a hook people disable. It also skips itself where there is no `node_modules`,
+which is the deployment mirror.
+
+**Why it exists rather than a note asking for care:** on 18 August a commit went
+out with three failing tests because the command was
+`npm test 2>&1 | grep … && git commit …`, and `grep` succeeded by FINDING the
+failure lines. That is the same pipe-swallows-the-exit-code mistake `verify-all.sh`
+was written to avoid, made three times in one day by somebody who had written
+both warnings. Three repetitions in a day is a process failure, and the fix
+belongs in the repository rather than in anybody's discipline.
+
 All seven in one command, in the order that makes their answers mean something:
 
 ```bash

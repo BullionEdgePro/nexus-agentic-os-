@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Git requires the hook at a fixed name; the logic lives beside the other
+# scripts so it is findable and reviewable rather than buried in a hooks
+# directory nobody opens.
+exec "$(git rev-parse --show-toplevel)/nexus-agentic-os/scripts/pre-commit.sh" "$@"
