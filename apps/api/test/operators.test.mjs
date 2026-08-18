@@ -265,6 +265,27 @@ test("a truncated findings list says so", () => {
   assert.match(PAGE, /Showing the \{findings\.length\} most serious of \{total\}/);
 });
 
+test("the promise is caught at least as fast as the silence", () => {
+  // handover-abandoned sat at twelve hours while customer-waiting warned at two,
+  // and the operator's own severity comment says there is no gentle version of
+  // this state. Those two positions disagreed in the same file: a business being
+  // slow was caught in two hours, a business having PROMISED in twelve.
+  //
+  // It cannot be noisy the way a two-hour threshold usually is — the condition
+  // is not "quiet for two hours" but handover flagged AND no human_agent message
+  // has ever existed in the conversation AND it is not a cold pitch.
+  assert.match(OPERATORS, /const ABANDONED_HANDOVER_HOURS = 2;/);
+  assert.match(OPERATORS, /const WAITING_WARN_HOURS = 2;/);
+
+  // Still urgent at any age: unlike a slow reply, this state does not resolve
+  // itself.
+  const operator = OPERATORS.slice(
+    OPERATORS.indexOf("const handoverAbandoned"),
+    OPERATORS.indexOf("const deliveryFailing")
+  );
+  assert.match(operator, /severity: "urgent" as const/);
+});
+
 test("an empty result is written as a result, and says when it was checked", () => {
   // A blank panel after a successful check reads as "not loaded", which is the
   // opposite of what happened.

@@ -897,7 +897,34 @@ const intentClassificationStopped: Operator = {
  *
  * Calls no model, like every operator here.
  */
-const ABANDONED_HANDOVER_HOURS = 12;
+/**
+ * TWELVE HOURS WAS NEVER ARGUED, AND THE OPERATOR'S OWN REASONING CONTRADICTS IT.
+ *
+ * The severity below says "always urgent — there is no gentle version of a
+ * customer who was promised a person and then cut off from the only thing
+ * answering them". That is a good argument, and it is an argument for saying so
+ * SOONER. Staying silent for half a day about a state described as having no
+ * gentle version is the two positions disagreeing in the same file.
+ *
+ * Set to match `customer-waiting`'s warn threshold, because a handover is the
+ * stronger fact of the two: an unanswered message is a business being slow, and
+ * this is a business having PROMISED. Catching the weaker one in two hours and
+ * the stronger one in twelve is the wrong way round.
+ *
+ * It cannot be noisy in the way a two-hour threshold usually is. The condition
+ * is not "quiet for two hours" — it is handover flagged, AND no `human_agent`
+ * message has ever existed in the conversation, AND it is not a cold pitch. A
+ * business whose staff answer within the hour never sees it, and one whose staff
+ * never answer at all should be seeing it.
+ *
+ * The concrete reason it changed today: the customer answered on 18 August was
+ * ignored for twenty-two hours, and the state that ignored them is the one this
+ * operator watches. Their next message is likely to escalate again — Juris Prime
+ * is on the strict governance tier and its agent scored medium on exactly this
+ * kind of question three times in a row — so the same twelve-hour silence was
+ * about to be available for the same customer.
+ */
+const ABANDONED_HANDOVER_HOURS = 2;
 
 const handoverAbandoned: Operator = {
   slug: "handover-abandoned",
