@@ -8,14 +8,14 @@ dir `/opt/nexus`.
 
 ## Current status — read this first
 
-**Nothing is pending on the platform. Three things are pending on a person, and none is code.**
+**Three things are pending on a person, and one customer is owed a reply.**
 
 | | |
 |---|---|
 | Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
 | Migrations | through **050**, every one verified by its effect in the database, not by a log |
-| Tests | **764** passing, typecheck and `next build` clean |
-| Operators | **16**, sweeping every 10 minutes, **0 standing findings** — and since 050 that phrase finally means something: `GET /health/jobs` says whether the sweep ran |
+| Tests | **767** passing, typecheck and `next build` clean |
+| Operators | **16**, sweeping every 10 minutes. **1 standing finding**, and it is a real one — `customer-waiting` on a contact ignored since 17 Aug (see below). Since 050, "0 findings" finally means something: `GET /health/jobs` says whether the sweep ran |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
@@ -34,11 +34,17 @@ dir `/opt/nexus`.
 3. **ABR's office number.** One value; its `no_one_available` phrase cannot go live while it still
    contains `{{office_number}}`, by design.
 
+**And one thing that is not a task so much as a debt:** the contact who chose
+option 2 on 17 August has never been answered. The bug that ignored them is
+fixed; they are not. Somebody should reply from the inbox.
+
 **Two standing decisions, working as intended and needing nothing:** both law firms stay
 deliberately unstaffed (see below for what that costs), and three cold-pitch conversations stay
 muted.
 
-The platform is fully deployed, self-monitoring and idle. It is waiting on customers, not on work.
+The platform is fully deployed and self-monitoring. It was also, until 18 August, silently ignoring every
+customer routed to four of its five businesses — which is worth remembering the next time this
+section reads as calm.
 
 ---
 
@@ -901,6 +907,73 @@ correction inline and in the footer.
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
 
+## Seventeen hours of silence — FOUND AND FIXED 18 AUGUST
+
+**The most serious defect found in this project, and the operator sweep found
+it, not a person.**
+
+At **17:27 on 17 August** a customer picked option 2 from the triage menu. The
+worker log records both halves of what happened next:
+
+```
+{"routedTo":"juris-prime","matched":["triage reply"],"msg":"Conversation routed to business"}
+{"organizationId":"c4b232dc-…","msg":"No active agent configured for organization"}
+```
+
+**`juris-prime` had an active agent the whole time.** `agent_configs` is under
+RLS, all five businesses answer on Zipicka's number, and the reply path's
+transaction is scoped to the OWNER — so `loadActiveAgentConfig`'s read for the
+SERVING business matched nothing. Not an error: **zero rows**, which the caller
+correctly read as "this business has no agent" and returned on. Confirmed
+afterwards by reading it as `nexus_app` with `app.current_org` set to Zipicka:
+**0 rows**.
+
+**The blast radius is every customer the switchboard routes away from the
+number's owner — four of the five businesses.** It also adds a reason to "why
+businesses 2–5 have no customers" that is not the four website edits.
+
+**The same mistake, for the fourth time.** `hasStaffOnShift` answered "you have
+no staff at all" for four of five businesses; the phrase lookup returned the
+platform default instead of a business's own wording; the stale-handoff release
+could never fire on a shared number; now this. Every instance **fails toward
+silence**, and every instance looks like a business with nothing configured
+rather than a bug. `withServingTenant` is the fix in all four and is a safe
+drop-in — with no ambient transaction it degrades to `withTenant`.
+
+**The second half of the fix is the branch shape**, which is what turned a query
+returning zero rows into a customer being ignored:
+
+```ts
+if (!agent) {
+  logger.warn(...);
+  return;          // no reply, no fallback, no handoff, and no metric row
+}                  // — it returns before the write
+```
+
+The conversation then looked identical to one nobody had messaged. It now sends
+the fallback, flags a handover, and records `reply_outcome` as `fallback` or
+`none` per 049. A business with genuinely no agent configured is a real state;
+the honest response to it is a sentence, not silence.
+
+**Verified after deploy**, by running the reply path's exact shape — a
+transaction scoped to the number's owner, asking for each serving business's
+agent:
+
+```
+juris-prime          agent found
+juris-prime-legal    agent found
+abr                  agent found
+sfs-international    agent found
+zipicka              agent found
+```
+
+Before the fix, four of those five said no.
+
+**One thing is still outstanding and it belongs to a person: that customer has
+still not been answered.** Nothing was sent to them — the fix governs the next
+message, not the one already ignored. The conversation is open in the inbox and
+`customer-waiting` is standing on it.
+
 ## Nothing watched the watchers — BUILT, DEPLOYED
 
 Migration **050**: `job_heartbeats`, one row per scheduled job, updated in place.
@@ -947,6 +1020,13 @@ runs *inside* the sweep, so it cannot testify to the sweep's own liveness —
 that check would pass in every case where it could conceivably be needed. It is
 excluded explicitly rather than quietly un-watched, and every finding it raises
 names what it cannot tell you.
+
+**Proven on the real schedule, not just by hand.** The 10:30 sweep on 18 August
+wrote its own heartbeat without anybody invoking it:
+
+```
+{"job":"operators","lastFinishedAt":"2026-08-18T10:30:00.394Z","runs":…,"stalled":false}
+```
 
 **The sixth is covered from outside, by `GET /health/jobs`.**
 
