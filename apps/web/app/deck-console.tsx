@@ -12,14 +12,42 @@ import "./deck/deck.css";
 
 /* ---------------- static presentation data ---------------- */
 type Stat = { k: string; v: string; unit?: string; d: string; cls: "up" | "flat"; spark: number[]; hi?: boolean };
-const STATS: Stat[] = [
-  { k: "Active conversations", v: "128", d: "+12 vs 1h", cls: "up", spark: [8, 10, 9, 13, 12, 16, 15, 19], hi: true },
-  { k: "AI resolution", v: "87", unit: "%", d: "+3.1 pts", cls: "up", spark: [70, 74, 72, 78, 80, 83, 85, 87] },
-  { k: "Messages today", v: "1,402", d: "+18% vs avg", cls: "up", spark: [40, 55, 50, 70, 66, 82, 95, 110] },
-  { k: "Avg first response", v: "2.4", unit: "s", d: "−0.6s faster", cls: "up", spark: [5, 4.4, 4, 3.6, 3.1, 2.9, 2.6, 2.4] },
-  { k: "Governance holds", v: "6", d: "3 PII · 3 risk", cls: "flat", spark: [2, 4, 3, 5, 4, 6, 5, 6] },
-  { k: "Tokens used", v: "214", unit: "k", d: "$5.10 est.", cls: "flat", spark: [120, 150, 140, 175, 190, 200, 208, 214] },
+/**
+ * THE SHAPE OF THE DASHBOARD WITH NOTHING IN IT.
+ *
+ * These six cards used to carry invented figures — "128 active conversations",
+ * "87% AI resolution", "1,402 messages today", "$5.10 est." — shown whenever
+ * the platform had no traffic OR the API could not be reached. This page is
+ * behind the login: it is the owner's own dashboard, and those numbers were
+ * presented to them as their business's.
+ *
+ * Somebody had already noticed half of it. The activity feed below carries the
+ * comment "Empty on purpose. This used to hold five invented conversations",
+ * and the fabricated conversations were removed while the fabricated statistics
+ * above them were left.
+ *
+ * The same fix has been applied to /deck/quality once already, for the same
+ * reason: it drew zeros on a fetch failure until it was changed to refuse to
+ * draw any number it did not receive. An outage that renders as a healthy
+ * dashboard is the single failure mode this platform keeps finding in new
+ * clothes.
+ *
+ * So: the labels stay, because an empty dashboard should still say what it
+ * would show. The values are an em dash and the sparklines are empty, and the
+ * caption below each one says which of the two silences this is — nothing has
+ * happened yet, or nobody could ask.
+ */
+const NO_DATA: Stat[] = [
+  { k: "Active conversations", v: "—", d: "", cls: "flat", spark: [], hi: true },
+  { k: "AI resolution", v: "—", unit: "%", d: "", cls: "flat", spark: [] },
+  { k: "Messages today", v: "—", d: "", cls: "flat", spark: [] },
+  { k: "Avg first response", v: "—", unit: "s", d: "", cls: "flat", spark: [] },
+  { k: "Governance holds", v: "—", d: "", cls: "flat", spark: [] },
+  { k: "Tokens used", v: "—", d: "", cls: "flat", spark: [] },
 ];
+
+/** The caption under every card, which is the only place the reason fits. */
+const emptyStats = (reason: string): Stat[] => NO_DATA.map((stat) => ({ ...stat, d: reason }));
 
 type TenantMeta = { slug: string; ref: string; nm: string; rl: string; st: "live" | "warn"; msg: string; ang: number };
 // Derived from the one shared list. `msg` is only what shows before the API
@@ -36,13 +64,15 @@ const TENANT_META: TenantMeta[] = TENANTS.map((t) => ({
   ang: t.angle,
 }));
 
-const INTENTS = [
-  { n: "Inventory inquiry", v: 38 },
-  { n: "Appointment booking", v: 27 },
-  { n: "Order status", v: 18 },
-  { n: "General question", v: 12 },
-  { n: "Escalation", v: 5 },
-];
+/**
+ * Empty for the same reason the feed is.
+ *
+ * This held a plausible-looking intent mix — inventory 38, bookings 27, order
+ * status 18 — for a platform whose real distribution is roughly half people
+ * selling TO the businesses. A shape that looks like a healthy retail funnel is
+ * a worse kind of wrong than a blank panel, because nobody questions it.
+ */
+const INTENTS: { n: string; v: number }[] = [];
 
 // Empty on purpose. This used to hold five invented conversations shown under
 // a "Live feed" heading whenever the API had not answered — fabricated customer
@@ -158,6 +188,8 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
 
   const [tenants, setTenants] = useState<TenantMeta[]>(TENANT_META);
   const [overview, setOverview] = useState<OverviewMetrics | null>(null);
+  // Distinguishes "the API said there is nothing" from "the API did not answer".
+  const [unreachable, setUnreachable] = useState(false);
   const [nodes, setNodes] = useState<{ meta: TenantMeta; x: number; y: number }[]>([]);
   const [links, setLinks] = useState<{ x1: number; y1: number; x2: number; y2: number; dur: number }[]>([]);
   const [grown, setGrown] = useState(false);
@@ -181,12 +213,25 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
         );
       })
       .catch(() => {
-        /* API unreachable — keep the static sample */
+        // RECORDED, NOT SWALLOWED. This used to keep the static sample on any
+        // error, so an unreachable API rendered as a busy, healthy business.
+        // The two silences have to be told apart: "nothing has happened yet" is
+        // news about the platform, "nobody could ask" is news about this page.
+        setUnreachable(true);
       });
   }, []);
 
   const live = overview?.hasData ?? false;
-  const displayStats = live && overview ? liveStats(overview) : STATS;
+  const displayStats =
+    live && overview
+      ? liveStats(overview)
+      : emptyStats(
+          unreachable
+            ? "could not reach the API"
+            : overview
+              ? "no traffic yet"
+              : "loading…"
+        );
   const displayIntents = live && overview && overview.intents.length ? liveIntents(overview) : INTENTS;
   const displayFeed = live && overview && overview.feed.length ? liveFeed(overview) : FEED;
 
