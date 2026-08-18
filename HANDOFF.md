@@ -19,7 +19,7 @@ dir `/opt/nexus`.
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | **six**, all re-run 18 Aug after the shared-number fixes: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` (18/18), and the new `shared-number-check` — **all PASS**. 13/18 on the keyword fallback |
+| Gates | **seven**, `operator-fire-check` joined 18 Aug and passes; the other six re-run 18 Aug after the shared-number fixes: `self-check`, `schema-check`, `rls-verify`, `rls-preflight`, `retrieval-check` (18/18), and the new `shared-number-check` — **all PASS**. 13/18 on the keyword fallback |
 | Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
 
 **What still needs running, in priority order:**
@@ -911,6 +911,55 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## Thirteen of sixteen alarms had never once gone off
+
+Measured on production: `operator_findings` holds findings from exactly **three**
+operators — `customer-waiting`, `handover-abandoned`, `overdue-followup`. The
+other thirteen have run thousands of times and returned an empty array every
+time. That is good news about the platform and **no news at all about them**.
+
+`schema-check` runs every operator, so their queries are known to plan. What had
+never executed is the branch that BUILDS a finding: the title with the count
+interpolated, the severity ternary, the detail sentence, the fingerprint. That
+code sits on the alarm path and would first run **during the outage it exists to
+report**. A `${undefined} of ${NaN}` in a title, or a fingerprint that varies
+between passes and therefore can never be retracted, would surface at the worst
+possible moment and look like part of the outage.
+
+### `operator-fire-check` — the seventh gate
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T worker   npx tsx apps/api/src/scripts/operator-fire-check.ts
+```
+
+It seeds each condition inside a rolled-back transaction and asserts the finding
+is *usable*: fingerprint present, title non-empty, severity in the allowed set, a
+subject, and no unrendered `undefined` / `NaN` / `[object` in the text. Where
+severity is a judgement it asserts which branch fired.
+
+**First run against production, all passing:**
+
+```
+ok  agent-unavailable              "3 of 3 replies were the fallback, not an answer"  (urgent)
+ok  retrieval-unavailable          "1 of 1 knowledge lookups failed"                  (urgent)
+ok  retrieval-unavailable/degraded "1 of 1 replies answered on keyword search"        (warn)
+ok  delivery-failing               "1 of 1 replies were rejected by WhatsApp"         (urgent)
+ok  intent-unclassified            "5 of 5 conversations recorded without an intent"  (urgent)
+ok  rollback                       no probe rows survived
+```
+
+The `degraded` case is the one worth having: it must **warn** rather than stay
+silent, because that is the branch migration 047 added and its failure would
+switch off the alarm the keyword fallback was written for.
+
+**It covers five cases across four operators and prints the eleven it does not
+cover, with the reason** — a gate covering five of sixteen while reading as
+complete is this project's signature failure. One reason is a real limit rather
+than laziness: `schedule-stalled` reads `job_heartbeats` through
+`withAllTenants`, which opens its own connection, so an uncommitted seed is
+invisible to it. The gate also **fails if an operator is neither covered nor
+listed**, so the next one added cannot slip through unnoticed.
 
 ## Juris Prime's agent escalates every time, and the prompt is not why
 
