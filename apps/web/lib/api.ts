@@ -321,7 +321,10 @@ export interface BroadcastSummary {
   templateName: string;
   status: "draft" | "scheduled" | "sending" | "completed" | "failed";
   recipients: number;
+  /** Accepted by Meta. A 2xx means it took the message, not that anybody got it. */
   sent: number;
+  /** Confirmed delivered by a receipt. Unknown rather than zero before migration 051. */
+  delivered: number;
   failed: number;
   scheduledAt: string | null;
   createdAt: string;

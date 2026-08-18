@@ -253,7 +253,24 @@ export async function listBroadcastTemplates(organizationId: string): Promise<Te
 export interface BroadcastSummary extends BroadcastRow {
   templateName: string;
   recipients: number;
+  /**
+   * Accepted by Meta. NOT delivered, and the deck said otherwise until 051.
+   *
+   * This number counts `sent` and `delivered` together because a delivered
+   * message was necessarily accepted first. It is the honest ceiling on what a
+   * campaign achieved, and on its own it is what a 2xx from the Graph API means:
+   * Meta took the message. Whether anybody received it is `delivered`.
+   */
   sent: number;
+  /**
+   * Confirmed delivered by a receipt from Meta.
+   *
+   * Zero for every campaign sent before migration 051, and that is not a
+   * measurement — nothing wrote this state, so the honest reading of a zero on
+   * an old campaign is "unknown", which is why the screen says so rather than
+   * printing a bare 0.
+   */
+  delivered: number;
   failed: number;
 }
 
@@ -269,6 +286,7 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     template_name: string;
     recipients: string;
     sent: string;
+    delivered: string;
     failed: string;
   }>(
     `select b.id, b.organization_id, b.template_id, b.status, b.audience_filter,
@@ -276,6 +294,7 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
             t.meta_template_name                              as template_name,
             count(r.id)::text                                 as recipients,
             count(r.id) filter (where r.status in ('sent', 'delivered'))::text as sent,
+            count(r.id) filter (where r.status = 'delivered')::text          as delivered,
             count(r.id) filter (where r.status = 'failed')::text as failed
        from broadcasts b
        join message_templates t on t.id = b.template_id
@@ -297,6 +316,7 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     templateName: row.template_name,
     recipients: Number(row.recipients),
     sent: Number(row.sent),
+    delivered: Number(row.delivered),
     failed: Number(row.failed),
   }));
 }

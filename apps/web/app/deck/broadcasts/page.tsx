@@ -263,9 +263,18 @@ export default function BroadcastsPage() {
                       <th>Template</th>
                       <th>Status</th>
                       <th>Recipients</th>
+                      {/* ACCEPTED AND DELIVERED ARE TWO COLUMNS BECAUSE THEY ARE
+                          TWO FACTS. This table had one, headed "Delivered", and
+                          the number under it counted recipients marked 'sent' —
+                          which is set the moment the Graph API returns 2xx, and
+                          2xx means Meta took the message. Nothing had ever
+                          written 'delivered' at all until migration 051, so the
+                          column was a claim about receipt built entirely from
+                          evidence of acceptance. */}
+                      <th>Accepted</th>
                       <th>Delivered</th>
                       <th>Failed</th>
-                      <th>Sent</th>
+                      <th>Sent on</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -279,6 +288,14 @@ export default function BroadcastsPage() {
                         </td>
                         <td>{broadcast.recipients}</td>
                         <td>{broadcast.sent}</td>
+                        {/* An em dash rather than 0 where no receipt could have
+                            been recorded. A campaign sent before 051 has a
+                            genuine zero in the column and an unknown in
+                            reality, and printing the zero would turn a gap in
+                            the record into a statement that nobody received it. */}
+                        <td className={broadcast.delivered ? "" : "act-zero"}>
+                          {broadcast.sent > 0 && broadcast.delivered === 0 ? "—" : broadcast.delivered}
+                        </td>
                         <td className={broadcast.failed ? "" : "act-zero"}>{broadcast.failed}</td>
                         <td>{new Date(broadcast.createdAt).toLocaleDateString()}</td>
                       </tr>
