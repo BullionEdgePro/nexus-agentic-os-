@@ -912,6 +912,45 @@ correction inline and in the footer.
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
 
+## The daily jobs do fire. I was wrong about that.
+
+I flagged `procedure-inference` and `forecast-cycle` showing `runs=0, never` as
+evidence that a daily job might never fire on a box that redeploys several times
+a day. **It is not.** Checked in Redis rather than reasoned about:
+
+```
+procedure-inference completed  Sun 16 Aug 00:00:00 UTC
+                               Mon 17 Aug 00:00:00 UTC
+                               Tue 18 Aug 00:00:00 UTC
+forecast-cycle      completed  Tue 18 Aug 00:00:00 UTC
+both dailies next              Wed 19 Aug 00:00:00 UTC
+```
+
+**BullMQ's `every` is epoch-aligned, not relative to registration.** The next run
+is `ceil(now / every) * every`, so re-registering the repeat on every boot cannot
+push the schedule out. Every next-run time confirms it — operators 12:20,
+quality-rollup 13:00, knowledge-reindex 18:00, both dailies 00:00.
+
+**`runs=0` meant something much duller:** `job_heartbeats` was created at about
+11:30 UTC today and the dailies last fired at 00:00, before the table existed.
+They will show `runs=1` after midnight. Worth knowing for the next reader,
+because a fresh heartbeat table makes every job look like it has never run —
+`isJobStalled` handles it by judging from process start, and the 30-hour
+tolerance on the dailies is what stops that reading as an alarm.
+
+**And 0 procedures / 0 forecasts is not evidence of a job not running.** Both
+features are built to refuse: the inference writer needs five well-handled
+conversations of one intent and Zipicka has one candidate; F11 needs four weeks
+of history. `agent_quality_daily` holds **190 rows**, so the hourly rollup those
+depend on is working. The dailies have been running for days and correctly
+producing nothing.
+
+**One real finding did come out of the check:** `bull:knowledge-reindex:failed`
+holds **20 failed jobs**. BullMQ had been recording every one of those throws all
+along, in Redis, where nothing looked. That is the same evidence the heartbeat
+surfaced this morning — the difference is only that one of them is somewhere a
+person reads.
+
 ## The knowledge base had never been re-indexed — found by the heartbeat, six hours old
 
 Migration 050 earned itself on its first day. `/health/jobs` showed:
