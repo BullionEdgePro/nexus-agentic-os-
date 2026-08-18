@@ -17,6 +17,23 @@
  * script must never do is cost a real person a message, so the send is not
  * merely skipped, it is absent: this file does not import the WhatsApp client.
  *
+ * IT RUNS IN THE NUMBER OWNER'S TRANSACTION, which is the only shape a customer
+ * ever experiences and was not the shape this script used until 2026-08-18.
+ *
+ * It used to open `withTenant(organization.id)` — scoped to the business being
+ * asked. That is the one context in which the defect found that day is
+ * invisible. All five businesses answer on one number, so the live pipeline
+ * scopes its transaction to the number's OWNER and then asks about the SERVING
+ * business; under RLS the difference is not an error, it is zero rows. On 17
+ * August a customer picked a business from the triage menu and received nothing
+ * at all for seventeen hours, and this script would have printed a perfectly
+ * good reply for that same business on that same day.
+ *
+ * So it now resolves the owner from the phone number and runs inside its
+ * transaction, exactly as the worker does. `shared-number-check` proves each
+ * READ survives that scoping; this proves the whole chain does, in the only
+ * currency that matters — the words a customer would receive.
+ *
  * NOT A GATE, AND DELIBERATELY NOT ONE. It costs a model call per question and
  * its output is prose, which a person has to read. Wiring prose into a
  * pass/fail check means inventing a rubric, and a rubric that can be satisfied
@@ -25,7 +42,7 @@
  * what the live pipeline acts on.
  */
 import { pathToFileURL } from "node:url";
-import { withTenant, withAllTenants, findOrganizationBySlug } from "@nexus/db";
+import { withTenant, withAllTenants, findOrganizationBySlug, listOrganizations } from "@nexus/db";
 import { routeToDomainAgent } from "@nexus/agents";
 import { searchKnowledge } from "@nexus/knowledge";
 import { evaluateOutgoingMessage } from "@nexus/governance";
@@ -40,6 +57,22 @@ const QUESTIONS: Record<string, string> = {
   "sfs-international": "I am moving to Dubai next month and looking for a two bedroom apartment to rent. Can you help me?",
   zipicka: "I ordered something last week and want to return it. How long do I have?",
 };
+
+/**
+ * Which business the WhatsApp number is registered to.
+ *
+ * Found rather than named. Hardcoding the owner would make this script quietly
+ * wrong the day the number moves, and quietly wrong is the failure mode the
+ * whole file exists to expose.
+ */
+async function findOrganizationOwningNumber(phoneNumberId: string) {
+  if (!phoneNumberId) return null;
+  const all = await listOrganizations();
+  // The owner is the one the webhook resolves to, which is the first match on
+  // that phone_number_id — the same lookup `findOrganizationByPhoneNumberId`
+  // makes, reused here rather than re-queried so the two cannot disagree.
+  return all.find((organization) => organization.whatsappPhoneNumberId === phoneNumberId) ?? null;
+}
 
 async function main() {
   console.log("Dry run — what each agent would reply. Nothing is sent.\n");
@@ -58,7 +91,19 @@ async function main() {
     console.log(`CUSTOMER: ${question}\n`);
 
     try {
-      await withTenant(organization.id, async () => {
+      // The transaction belongs to whoever owns the WhatsApp number, and the
+      // question is asked of the business the switchboard would have routed to.
+      // Falls back to the business itself when it owns its own number, which is
+      // also what the pipeline does.
+      const owner = await withAllTenants("dry-run: number owner", () =>
+        findOrganizationOwningNumber(organization.whatsappPhoneNumberId)
+      );
+      const scope = owner ?? organization;
+      if (scope.id !== organization.id) {
+        console.log(`  (asked from inside ${scope.slug}'s transaction — ${scope.slug} owns the number)`);
+      }
+
+      await withTenant(scope.id, async () => {
         const agent = await routeToDomainAgent({ id: organization.id, slug: organization.slug });
         if (!agent) {
           console.log("  NO ACTIVE AGENT CONFIGURED — this business would not reply at all.\n");
