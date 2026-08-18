@@ -1,6 +1,32 @@
 import { env } from "../config/env.js";
 
-export async function sendWhatsAppText(phoneNumberId: string, toWaId: string, body: string): Promise<void> {
+/**
+ * Meta's id for a message we sent — the `wamid` — or null if it did not give one.
+ *
+ * This is the only handle that exists on a sent message. Delivery is reported
+ * asynchronously on the inbound webhook as `value.statuses[]`, and a status
+ * carries the wamid and nothing else that identifies what it refers to. Both
+ * senders returned `void` until 2026-08-17, so every outbound row in this
+ * database was written with a null `wa_message_id` and the literal status
+ * 'sent' — a claim about a message nobody could look up afterwards.
+ *
+ * Nullable rather than thrown on, because a missing id is not a failed send:
+ * Meta accepted it. Losing the receipt is worth recording and is not worth
+ * refusing to save the message over.
+ */
+export type SentMessageId = string | null;
+
+function readWamid(payload: unknown): SentMessageId {
+  const messages = (payload as { messages?: Array<{ id?: unknown }> } | null)?.messages;
+  const id = Array.isArray(messages) ? messages[0]?.id : undefined;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+export async function sendWhatsAppText(
+  phoneNumberId: string,
+  toWaId: string,
+  body: string
+): Promise<SentMessageId> {
   const url = `https://graph.facebook.com/${env.metaGraphApiVersion}/${phoneNumberId}/messages`;
   const response = await fetch(url, {
     method: "POST",
@@ -20,6 +46,11 @@ export async function sendWhatsAppText(phoneNumberId: string, toWaId: string, bo
     const errorBody = await response.text();
     throw new Error(`WhatsApp send failed (${response.status}): ${errorBody}`);
   }
+
+  // A 200 means ACCEPTED, not delivered. That distinction is the whole reason
+  // this function stopped returning void: without the id there is no way to
+  // learn, later, which of the two it turned out to be.
+  return readWamid(await response.json().catch(() => null));
 }
 
 /** Sends a pre-approved Meta message template — the only message type allowed outside a 24h session window. */
@@ -29,7 +60,7 @@ export async function sendWhatsAppTemplate(
   templateName: string,
   language: string,
   bodyParams: string[] = []
-): Promise<void> {
+): Promise<SentMessageId> {
   const url = `https://graph.facebook.com/${env.metaGraphApiVersion}/${phoneNumberId}/messages`;
   const response = await fetch(url, {
     method: "POST",
@@ -65,6 +96,11 @@ export async function sendWhatsAppTemplate(
     const errorBody = await response.text();
     throw new Error(`WhatsApp template send failed (${response.status}): ${errorBody}`);
   }
+
+  // Templates go to people who have NOT messaged in 24 hours, which is the case
+  // most likely to be accepted and then rejected downstream — a stale number, a
+  // recipient who never opted in. The receipt matters more here, not less.
+  return readWamid(await response.json().catch(() => null));
 }
 
 // ============================================================

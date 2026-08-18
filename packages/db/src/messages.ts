@@ -1,5 +1,6 @@
 import { getPool, withTenant } from "./client.js";
-import type { MessageDirection, MessageDto, SenderType } from "@nexus/shared";
+import type { MessageDirection, MessageDto, MessageStatus, SenderType } from "@nexus/shared";
+import { DELIVERY_STATUS_LADDER } from "@nexus/shared";
 
 export interface RecordInboundMessageInput {
   organizationId: string;
@@ -120,9 +121,23 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
     status: string;
     created_at: string;
   }>(
+    // 'queued' where Meta gave us a receipt to follow, 'sent' where it did not.
+    //
+    // This row used to be written with the literal 'sent' always, which read as
+    // a measurement and was a hardcoded claim: nothing ever moved it, and on
+    // 2026-08-17 all 24 outbound rows in production said 'sent' with no
+    // `wa_message_id` to check it against. A 200 from the Graph API means Meta
+    // ACCEPTED the message; whether anybody received it arrives later, on the
+    // status webhook, keyed by the wamid.
+    //
+    // So with a wamid the honest state is 'queued' — accepted, not yet
+    // confirmed — and `recordDeliveryStatus` moves it. Without one there will
+    // never be a receipt, and parking it at 'queued' forever would have the
+    // operator report a permanent backlog of messages that were fine.
     `insert into messages
        (organization_id, conversation_id, contact_id, wa_message_id, direction, sender_type, sender_id, message_type, body, status, employee_id)
-     values ($1, $2, $3, $4, 'outbound', $5, $6, 'text', $7, 'sent', $8)
+     values ($1, $2, $3, $4, 'outbound', $5, $6, 'text', $7,
+             case when $4::text is null then 'sent' else 'queued' end, $8)
      returning id, conversation_id, direction, sender_type, body, status, created_at`,
     [
       input.organizationId,
@@ -176,4 +191,62 @@ export async function getMessagesForConversation(
     status: row.status as MessageDto["status"],
     createdAt: row.created_at,
   }));
+}
+
+/**
+ * A delivery receipt from Meta, applied to the message it refers to.
+ *
+ * The status webhook is the other half of `sendWhatsAppText` returning a wamid.
+ * It carries that id, a status, and a timestamp — and nothing else that says
+ * which message it is about, which is why migration 048 indexes
+ * `wa_message_id`.
+ *
+ * OUT-OF-ORDER DELIVERY IS THE NORMAL CASE, not the edge one. `sent`,
+ * `delivered` and `read` arrive as separate webhook deliveries and each can be
+ * retried, so a late `sent` landing after `read` is ordinary. Applied blindly it
+ * walks the message backwards, and the visible consequence is an operator
+ * reporting a message as stuck that the customer read an hour ago.
+ *
+ * So the guard lives in the WHERE clause rather than in a read-then-write, which
+ * would race two webhooks against each other. Two rules:
+ *
+ *   - `failed` always applies, unless the row already failed. It is terminal and
+ *     can arrive from any rung.
+ *   - anything else applies only if it is further along the ladder than what is
+ *     recorded, and only if the row has not failed.
+ *
+ * The ladder is passed in from `@nexus/shared` rather than written here, so
+ * there is exactly one definition of the order rather than one in TypeScript and
+ * one in SQL that agree right up until somebody edits either.
+ *
+ * Returns whether anything moved. False is a completely normal answer — a
+ * duplicate webhook, a stale status, or a wamid belonging to a message this
+ * platform did not send — and the caller must not treat it as an error.
+ */
+export async function recordDeliveryStatus(input: {
+  waMessageId: string;
+  status: MessageStatus;
+  errorText?: string | null;
+}): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update messages
+        set status = $2,
+            -- Preserved rather than overwritten with null: the error is the
+            -- most useful thing on a failed row, and a later status carrying no
+            -- error text must not erase why it failed.
+            delivery_error = coalesce($3, delivery_error),
+            delivery_updated_at = now()
+      where wa_message_id = $1
+        and direction = 'outbound'
+        and (
+              ($2 = 'failed' and status <> 'failed')
+              or (
+                status <> 'failed'
+                and coalesce(array_position($4::text[], $2), 0)
+                  > coalesce(array_position($4::text[], status), 0)
+              )
+            )`,
+    [input.waMessageId, input.status, input.errorText ?? null, [...DELIVERY_STATUS_LADDER]]
+  );
+  return (rowCount ?? 0) > 0;
 }

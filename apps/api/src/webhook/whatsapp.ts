@@ -73,10 +73,20 @@ whatsappWebhook.post("/", async (c) => {
   // BullMQ reserves ":" as its own Redis-key separator and rejects any
   // custom jobId containing one — join with "-" instead (entry/message ids
   // never contain a hyphen-breaking char, so this stays unique and stable).
+  //
+  // A STATUS-ONLY DELIVERY USED TO FALL THROUGH TO `Date.now()`, which is not an
+  // identity. Two receipts arriving in the same millisecond collided on one
+  // jobId and BullMQ dropped the second, and Meta redelivering the SAME receipt
+  // produced a fresh id and processed it twice. Both stopped mattering the day
+  // statuses were actually read (migration 048), so the id now falls back to the
+  // first status's wamid: stable across Meta's retries, distinct between
+  // different receipts, and idempotent in the direction that matters.
+  const jobKey = value?.messages?.[0]?.id ?? value?.statuses?.[0]?.id ?? Date.now();
+
   await getInboundWebhookQueue().add(
     "inbound",
     { receivedAt: new Date().toISOString(), phoneNumberId, payload },
-    { jobId: payload.entry[0].id + "-" + (payload.entry[0].changes[0].value.messages?.[0]?.id ?? Date.now()) }
+    { jobId: payload.entry[0].id + "-" + jobKey }
   );
 
   return c.text("OK", 200);

@@ -985,9 +985,93 @@ const handoverAbandoned: Operator = {
   },
 };
 
+/**
+ * The business believes it replied. WhatsApp says the customer never got it.
+ *
+ * Until migration 048 this operator could not have existed, because the fact it
+ * watches was not recorded anywhere: `insertOutboundMessage` wrote the literal
+ * 'sent' on every row, and the status webhook that would have corrected it was
+ * counted in a log line and dropped. A reply Meta accepted and then failed to
+ * deliver looked exactly like one the customer read — in the inbox, in the
+ * database, and to every rollup computed from them.
+ *
+ * TWO STATES, ONE FINDING, AND THE SECOND IS THE ONE WORTH HAVING.
+ *
+ *   failed  — Meta said so, and said why. Unambiguous and urgent.
+ *   queued  — Meta accepted it and has since said NOTHING. No error exists to
+ *             find. This is the shape almost every defect on this platform has
+ *             taken: not a failure, but an absence that reads as success.
+ *
+ * The grace period is what makes the second state meaningful rather than noisy.
+ * A receipt normally lands within seconds; a message still unconfirmed after an
+ * hour is not in flight, it is lost — and the honest thing to say about it is
+ * that nobody knows, which is exactly what the detail says.
+ */
+const UNCONFIRMED_GRACE_MINUTES = 60;
+const DELIVERY_LOOKBACK_HOURS = 24;
+
+const deliveryFailing: Operator = {
+  slug: "delivery-failing",
+  title: "Replies are not reaching customers",
+  description:
+    "Messages this business believes it sent were rejected by WhatsApp, or were accepted and never confirmed. The conversation looks answered from the inside and is silent from the customer's side.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{
+      failed: string;
+      unconfirmed: string;
+      total: string;
+      reason: string | null;
+    }>(
+      `select count(*) filter (where status = 'failed')::text as failed,
+              count(*) filter (
+                where status = 'queued'
+                  and created_at < now() - ($3 || ' minutes')::interval
+              )::text as unconfirmed,
+              count(*)::text as total,
+              -- Meta's own words, not a code of ours. One example is worth more
+              -- than a count: "re-engagement message" and "recipient has not
+              -- accepted our new terms" call for completely different actions.
+              (array_agg(delivery_error) filter (where delivery_error is not null))[1] as reason
+         from messages
+        where organization_id = $1
+          and direction = 'outbound'
+          and created_at > now() - ($2 || ' hours')::interval`,
+      [organizationId, String(DELIVERY_LOOKBACK_HOURS), String(UNCONFIRMED_GRACE_MINUTES)]
+    );
+
+    const failed = Number(rows[0]?.failed ?? 0);
+    const unconfirmed = Number(rows[0]?.unconfirmed ?? 0);
+    const total = Number(rows[0]?.total ?? 0);
+    const reason = rows[0]?.reason ?? null;
+    if (failed === 0 && unconfirmed === 0) return [];
+
+    // Urgent on a confirmed failure: somebody asked a question and this
+    // business's answer does not exist as far as WhatsApp is concerned. A
+    // warning on unconfirmed, because "no receipt" is genuinely ambiguous and
+    // an operator that cried outage over a slow webhook would be switched off.
+    return [
+      {
+        fingerprint: "delivery-failing",
+        severity: failed > 0 ? ("urgent" as const) : ("warn" as const),
+        title:
+          failed > 0
+            ? `${failed} of ${total} replies were rejected by WhatsApp`
+            : `${unconfirmed} replies were never confirmed delivered`,
+        detail:
+          failed > 0
+            ? `In the last ${DELIVERY_LOOKBACK_HOURS} hours WhatsApp rejected ${failed} outbound messages${reason ? ` — Meta's reason: "${reason}"` : ""}. Those customers never received a reply, and the conversation reads as answered from this side.${unconfirmed > 0 ? ` A further ${unconfirmed} have no receipt at all.` : ""} Check the number's quality rating and messaging limits before assuming the content was at fault.`
+            : `${unconfirmed} of ${total} outbound messages in the last ${DELIVERY_LOOKBACK_HOURS} hours were accepted by Meta and never confirmed sent, delivered or read — no error, just silence, for over ${UNCONFIRMED_GRACE_MINUTES} minutes. That is either the status webhook not reaching us or messages not reaching customers, and those need telling apart: check that the account is subscribed to the \`messages\` field before looking at delivery.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   handoverAbandoned,
+  deliveryFailing,
   retrievalUnavailable,
   intentClassificationStopped,
   overdueFollowUp,

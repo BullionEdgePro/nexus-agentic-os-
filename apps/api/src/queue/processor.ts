@@ -19,6 +19,7 @@ import {
   recordTriagePrompt,
   recordInboundMessage,
   insertOutboundMessage,
+  recordDeliveryStatus,
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
@@ -243,8 +244,108 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
         // work for siblings that already succeeded.
         await processSingleTextMessage(phoneNumberId, message, change);
       }
+
+      // The half of this webhook nobody read until 2026-08-17.
+      //
+      // `value.statuses` has arrived on this endpoint since the day it was
+      // built, was counted in one log line, and was then dropped — so a reply
+      // Meta ACCEPTED and then failed to deliver was indistinguishable, in the
+      // inbox and in the database, from one the customer read. See migration
+      // 048; production had 24 outbound rows all claiming 'sent'.
+      await processDeliveryStatuses(phoneNumberId, change);
     }
   }
+}
+
+/**
+ * Delivery receipts, applied to the messages they refer to.
+ *
+ * SEPARATE FROM THE MESSAGE LOOP, and not merely for tidiness: a status webhook
+ * carries no customer message, starts no conversation and must never reach the
+ * agent. Folding it into `processSingleTextMessage` would put a Meta callback on
+ * the reply path, which is the one path on this platform that must not acquire
+ * new ways to fail.
+ *
+ * Every failure here is swallowed per status. A receipt is a record of something
+ * that has already happened; losing one costs a row its accuracy, and throwing
+ * would make BullMQ retry the whole webhook and re-deliver the customer messages
+ * beside it.
+ */
+async function processDeliveryStatuses(
+  phoneNumberId: string,
+  change: WhatsAppWebhookEntry["changes"][number]
+): Promise<void> {
+  const statuses = change.value.statuses ?? [];
+  if (statuses.length === 0) return;
+
+  // Same lookup as the message path, and outside any tenant context for the
+  // same reason: `organizations` is the tenant registry, not tenant data.
+  //
+  // THE OWNER IS THE RIGHT ANSWER HERE, unusually for this codebase. Five
+  // businesses share this number and `insertOutboundMessage` writes the owner's
+  // `organization_id` on every outbound row whichever business was answering —
+  // so the owner's context is the one that can see the row to update. Scoping
+  // to the serving business would match nothing and every receipt would be
+  // silently discarded, which is the shared-number trap wearing a third face.
+  const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
+  if (!organization) {
+    logger.warn({ phoneNumberId }, "Delivery status for an unmapped phone_number_id");
+    return;
+  }
+
+  for (const status of statuses) {
+    try {
+      const errorText = describeStatusError(status);
+      const moved = await withTenant(organization.id, () =>
+        recordDeliveryStatus({
+          waMessageId: status.id,
+          status: status.status,
+          errorText,
+        })
+      );
+
+      // Loud only for failures, and only for ones that landed. A customer did
+      // not receive something this business believes it said, which is worth a
+      // line in the log whether or not anybody is watching the operator.
+      if (status.status === "failed" && moved) {
+        logger.error(
+          { organizationId: organization.id, waMessageId: status.id, errorText },
+          "WhatsApp reported a message as UNDELIVERED — the customer never received this reply"
+        );
+      }
+    } catch (err) {
+      logger.warn({ waMessageId: status.id, err }, "Could not record a delivery status");
+    }
+  }
+}
+
+/**
+ * Meta's own words for why a message failed, or null.
+ *
+ * Kept verbatim rather than mapped to a code of this platform's invention. The
+ * useful ones are specific — a re-engagement message outside the 24-hour window,
+ * a recipient who has not accepted new terms, a number that is not on WhatsApp —
+ * and every one of those tells whoever reads it what to do differently, which a
+ * normalised enum would throw away.
+ *
+ * Defensive about the shape because this is somebody else's payload: Meta has
+ * moved these fields before, and a receipt that arrives in an unexpected shape
+ * must still record the STATUS rather than throw on the way to it.
+ */
+function describeStatusError(status: { errors?: unknown }): string | null {
+  const errors = Array.isArray(status.errors) ? status.errors : [];
+  const parts = errors
+    .map((error) => {
+      const e = error as { code?: unknown; title?: unknown; message?: unknown;
+                          error_data?: { details?: unknown } };
+      const detail = e.error_data?.details;
+      return [e.code, e.title ?? e.message, detail]
+        .filter((part) => part !== undefined && part !== null && part !== "")
+        .join(": ");
+    })
+    .filter((part) => part.length > 0);
+
+  return parts.length > 0 ? parts.join(" | ") : null;
 }
 
 async function processSingleTextMessage(
@@ -668,7 +769,7 @@ async function processSingleTextMessage(
       );
     }
 
-    await sendWhatsAppText(phoneNumberId, message.from, finalText);
+    const waMessageId = await sendWhatsAppText(phoneNumberId, message.from, finalText);
     sentToCustomer = true;
 
     // Recorded here, run after the transaction closes. See the note below the
@@ -683,6 +784,10 @@ async function processSingleTextMessage(
       senderId: shouldEscalate ? undefined : agent.config.id,
       body: finalText,
       employeeId: employee?.id ?? null,
+      // Meta's receipt. Without it this row says 'sent' and can never be
+      // corrected, because the status webhook identifies a message by this id
+      // and nothing else — see migration 048.
+      waMessageId: waMessageId ?? undefined,
     });
 
     await insertEvaluation(organization.id, outboundDto.id, evaluation);
@@ -935,8 +1040,9 @@ async function askWhichBusiness(
 ): Promise<void> {
   const body = buildTriageMessage(businesses, ctx.text);
 
+  let waMessageId: string | null = null;
   try {
-    await sendWhatsAppText(ctx.phoneNumberId, ctx.contactWaId, body);
+    waMessageId = await sendWhatsAppText(ctx.phoneNumberId, ctx.contactWaId, body);
   } catch (err) {
     logger.error({ conversationId: ctx.conversationId, err }, "Failed to send triage question");
     return;
@@ -958,6 +1064,7 @@ async function askWhichBusiness(
       contactId: ctx.contactId,
       senderType: "system",
       body,
+      waMessageId: waMessageId ?? undefined,
     });
     await publishInboxEvent({
       type: "message",
@@ -1055,13 +1162,18 @@ async function sendFallbackBestEffort(
       ? await resolvePhrase(organization.id, "handing_over", FALLBACK_REPLY)
       : await resolvePhrase(organization.id, "no_one_available", FALLBACK_REPLY_NO_STAFF);
 
-    await sendWhatsAppText(phoneNumberId, contactWaId, text);
+    const waMessageId = await sendWhatsAppText(phoneNumberId, contactWaId, text);
     const outboundDto = await insertOutboundMessage({
       organizationId: organization.id,
       conversationId,
       contactId,
       senderType: "system",
       body: text,
+      // The fallback is the message most worth following. It goes out when the
+      // model is unreachable, so it can be every reply for hours — and if the
+      // number is also failing to deliver, this is the one path where nobody
+      // would ever find out.
+      waMessageId: waMessageId ?? undefined,
     });
     await publishInboxEvent({
       type: "message",

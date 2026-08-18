@@ -28,6 +28,8 @@
 
 import {
   listOrganizations,
+  insertOutboundMessage,
+  recordDeliveryStatus,
   withTenant,
   withAllTenants,
   getPool,
@@ -316,6 +318,73 @@ async function main(): Promise<void> {
 
         await setProcedureActive(org.id, id, false, "schema-check");
       }
+
+      // ---- delivery receipts (migration 048) ----
+      //
+      // Same rolled-back transaction, and forced by the same rule: 048 revokes
+      // DELETE on `messages` from the application role, so a probe reply could
+      // not be cleaned up afterwards — it would sit in somebody's inbox as a
+      // message their business never sent.
+      //
+      // Worth planning here rather than trusting to unit tests because
+      // `recordDeliveryStatus` is the most intricate SQL added this session: a
+      // guarded UPDATE whose WHERE clause carries the whole out-of-order
+      // defence, including an `array_position` against an array passed in as a
+      // parameter. Every unit test around it reads the source. Only this
+      // executes it.
+      await step("a delivery receipt moves a message forward", async () => {
+        const { rows: c } = await getPool().query<{ id: string }>(
+          `insert into contacts (organization_id, wa_id, display_name)
+           values ($1, $2, 'Schema check probe')
+           on conflict (organization_id, wa_id) do update set display_name = excluded.display_name
+           returning id`,
+          [org.id, PROBE_WA_ID]
+        );
+        const { rows: conv } = await getPool().query<{ id: string }>(
+          `insert into conversations (organization_id, contact_id) values ($1, $2) returning id`,
+          [org.id, c[0].id]
+        );
+
+        const probeWamid = `wamid.schema-check-${org.id}`;
+        const written = await insertOutboundMessage({
+          organizationId: org.id,
+          conversationId: conv[0].id,
+          contactId: c[0].id,
+          senderType: "system",
+          body: "Schema check probe — not a real message.",
+          waMessageId: probeWamid,
+        });
+
+        // A receipt to follow means the honest starting state is 'queued'.
+        if (written.status !== "queued") {
+          throw new Error(`a message with a wamid should start queued, got ${written.status}`);
+        }
+
+        if (!(await recordDeliveryStatus({ waMessageId: probeWamid, status: "read" }))) {
+          throw new Error("a receipt did not reach the message it names");
+        }
+
+        // THE ASSERTION THIS BLOCK EXISTS FOR. Meta does not promise order, so a
+        // late 'sent' arriving after 'read' is ordinary — and applied, it would
+        // walk the message backwards and have the operator report it stuck.
+        if (await recordDeliveryStatus({ waMessageId: probeWamid, status: "sent" })) {
+          throw new Error("a stale receipt moved a message BACKWARDS from read to sent");
+        }
+
+        // 'failed' is terminal and reachable from any rung, including from
+        // 'read' — Postgres has to agree with that, not just TypeScript.
+        if (!(await recordDeliveryStatus({
+          waMessageId: probeWamid,
+          status: "failed",
+          errorText: "schema-check probe",
+        }))) {
+          throw new Error("a failure was refused");
+        }
+        if (await recordDeliveryStatus({ waMessageId: probeWamid, status: "delivered" })) {
+          throw new Error("a failed message was moved off 'failed'");
+        }
+        return written.id;
+      });
 
       // Written by hand, which is the other insert and takes the other branch of
       // the unique-index catch.

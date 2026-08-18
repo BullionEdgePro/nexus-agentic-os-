@@ -11,6 +11,14 @@ class UnsafeUrlError extends Error {}
 
 mock.module("@nexus/db", {
   exports: {
+    // Added when delivery receipts landed (migration 048). These mocks stub
+    // @nexus/db by ENUMERATION, so an export the processor imports and this
+    // object omits is a module-load failure rather than a wrong answer — which
+    // is how it should be, and is why this line exists rather than a spread.
+    //
+    // Returns false: none of these fixtures involves a status webhook, and
+    // "nothing moved" is the honest answer for a receipt that never arrived.
+    recordDeliveryStatus: async () => false,
     findOrganizationBySlug: async (slug) =>
       slug === "zipicka" ? { id: "org-1", slug: "zipicka", name: "Zipicka" } : null,
     getPool: () => ({ query: async () => ({ rows: [], rowCount: 0 }) }),

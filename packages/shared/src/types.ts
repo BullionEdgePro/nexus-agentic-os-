@@ -44,6 +44,20 @@ export interface WhatsAppWebhookEntry {
         status: MessageStatus;
         timestamp: string;
         recipient_id: string;
+        /**
+         * Present only on `failed`, and the most useful field on the payload.
+         *
+         * Typed loosely on purpose: this is Meta's shape, not ours, and it has
+         * changed before. `describeStatusError` reads it defensively and keeps
+         * the words verbatim — a normalised code of our own would discard
+         * exactly the part that tells somebody what to do differently.
+         */
+        errors?: Array<{
+          code?: number;
+          title?: string;
+          message?: string;
+          error_data?: { details?: string };
+        }>;
       }>;
     };
   }>;

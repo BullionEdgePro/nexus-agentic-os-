@@ -19,6 +19,14 @@ mock.module(new URL("../src/services/availability.ts", import.meta.url), {
 
 mock.module("@nexus/db", {
   exports: {
+    // Added when delivery receipts landed (migration 048). These mocks stub
+    // @nexus/db by ENUMERATION, so an export the processor imports and this
+    // object omits is a module-load failure rather than a wrong answer — which
+    // is how it should be, and is why this line exists rather than a spread.
+    //
+    // Returns false: none of these fixtures involves a status webhook, and
+    // "nothing moved" is the honest answer for a receipt that never arrived.
+    recordDeliveryStatus: async () => false,
     // Returns TRUE, preserving what these fixtures were written to test.
     // Escalation now only pauses the agent when somebody can take over, and
     // these cases all assert the staffed behaviour. Flipping this to false

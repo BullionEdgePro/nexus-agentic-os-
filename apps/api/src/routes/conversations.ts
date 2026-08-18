@@ -28,8 +28,15 @@ conversationsRoute.post("/:id/messages", async (c) => {
   const conversation = await findConversationById(conversationId);
   if (!conversation) return c.json({ error: "Conversation not found" }, 404);
 
+  // Declared out here so the insert below can carry Meta's receipt. Null when
+  // Meta accepted the send without returning an id — rare, and not a failure.
+  let waMessageId: string | null = null;
   try {
-    await sendWhatsAppText(conversation.phoneNumberId, conversation.contactWaId, body.text);
+    waMessageId = await sendWhatsAppText(
+      conversation.phoneNumberId,
+      conversation.contactWaId,
+      body.text
+    );
   } catch (err) {
     logger.error({ conversationId, err }, "Failed to send human-agent reply via WhatsApp");
     return c.json({ error: "Failed to send message" }, 502);
@@ -42,6 +49,9 @@ conversationsRoute.post("/:id/messages", async (c) => {
     senderType: "human_agent",
     senderId: body.senderId,
     body: body.text,
+    // A person's own words to a customer. If anything on this platform deserves
+    // to know whether it arrived, it is this rather than an agent's reply.
+    waMessageId: waMessageId ?? undefined,
   });
 
   await Promise.all([
