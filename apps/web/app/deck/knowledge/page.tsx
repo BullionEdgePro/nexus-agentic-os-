@@ -39,6 +39,16 @@ export default function KnowledgePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  /**
+   * A LOAD that failed, kept apart from an ACTION that failed.
+   *
+   * The render below refuses to draw anything when this is set, because the
+   * alternative is the previous business's numbers under the new one's name.
+   * An action failure — a recompute, a send, a save — must NOT do that: the
+   * screen it happened on is still correct, and blanking it would lose the
+   * context the message is about.
+   */
+  const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const [mode, setMode] = useState<"url" | "text">("url");
   const [url, setUrl] = useState("");
@@ -49,11 +59,12 @@ export default function KnowledgePage() {
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
     setError("");
+    setLoadError("");
     try {
       const data = await getKnowledge(slug);
       setSources(data.sources);
     } catch (err) {
-      setError(readable(err));
+      setLoadError(readable(err));
     } finally {
       setLoading(false);
     }
@@ -136,7 +147,25 @@ export default function KnowledgePage() {
           ))}
         </div>
 
-        {error ? <p className="act-msg">{error}</p> : null}
+        {loadError ? (
+          /*
+           * WHEN THE LOAD FAILS, NOTHING BELOW IS DRAWN.
+           *
+           * This line used to appear ABOVE the data, and the data was
+           * whatever the last successful load had put in state. Switch
+           * business, have the request fail, and this page showed the
+           * PREVIOUS business's numbers under the new one's name — one
+           * tenant's figures attributed to another, arriving through the
+           * UI rather than the database that spent a whole feature
+           * preventing exactly that.
+           *
+           * Clearing the data instead would have been worse: the page
+           * would fall through to its empty state and say "nothing to
+           * report" when the truth is "nobody could ask". Those are the
+           * two silences the operators panel was fixed for this morning.
+           */
+          <p className="act-msg">{loadError}</p>
+        ) : null}
         {notice && !error ? <p className="kn-ok">{notice}</p> : null}
 
         {failed.length > 0 ? (
@@ -216,7 +245,7 @@ export default function KnowledgePage() {
           ) : null}
         </h2>
 
-        {loading ? (
+        {loadError ? null : loading ? (
           <div className="act-empty">Loading…</div>
         ) : sources.length === 0 ? (
           <div className="act-empty">

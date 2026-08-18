@@ -50,6 +50,16 @@ export default function ProceduresPage() {
   const [readiness, setReadiness] = useState<InferenceReadiness | null>(null);
   const [intents, setIntents] = useState<string[]>([]);
   const [error, setError] = useState("");
+  /**
+   * A LOAD that failed, kept apart from an ACTION that failed.
+   *
+   * The render below refuses to draw anything when this is set, because the
+   * alternative is the previous business's numbers under the new one's name.
+   * An action failure — a recompute, a send, a save — must NOT do that: the
+   * screen it happened on is still correct, and blanking it would lose the
+   * context the message is about.
+   */
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [looking, setLooking] = useState(false);
   const [lastRun, setLastRun] = useState<InferenceRunSummary | null>(null);
@@ -65,6 +75,7 @@ export default function ProceduresPage() {
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
     setError("");
+    setLoadError("");
     try {
       const data = await getProcedures(slug);
       setProcedures(data.procedures);
@@ -72,7 +83,7 @@ export default function ProceduresPage() {
       setReadiness(data.readiness);
       setIntents(data.intents);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load procedures.");
+      setLoadError(err instanceof Error ? err.message : "Could not load procedures.");
     } finally {
       setLoading(false);
     }
@@ -203,7 +214,25 @@ export default function ProceduresPage() {
           </p>
         ) : null}
 
-        {error ? <p className="act-msg">{error}</p> : null}
+        {loadError ? (
+          /*
+           * WHEN THE LOAD FAILS, NOTHING BELOW IS DRAWN.
+           *
+           * This line used to appear ABOVE the data, and the data was
+           * whatever the last successful load had put in state. Switch
+           * business, have the request fail, and this page showed the
+           * PREVIOUS business's numbers under the new one's name — one
+           * tenant's figures attributed to another, arriving through the
+           * UI rather than the database that spent a whole feature
+           * preventing exactly that.
+           *
+           * Clearing the data instead would have been worse: the page
+           * would fall through to its empty state and say "nothing to
+           * report" when the truth is "nobody could ask". Those are the
+           * two silences the operators panel was fixed for this morning.
+           */
+          <p className="act-msg">{loadError}</p>
+        ) : null}
 
         {readiness?.blockedBecause ? (
           <div className="pr-blocked">
@@ -226,7 +255,7 @@ export default function ProceduresPage() {
 
         <h2 className="act-sub-head">Procedures</h2>
 
-        {loading ? (
+        {loadError ? null : loading ? (
           <div className="act-empty">Loading…</div>
         ) : procedures.length === 0 ? (
           <div className="act-empty">

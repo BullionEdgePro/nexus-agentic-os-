@@ -40,12 +40,23 @@ export default function BroadcastsPage() {
   const [templateId, setTemplateId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  /**
+   * A LOAD that failed, kept apart from an ACTION that failed.
+   *
+   * The render below refuses to draw anything when this is set, because the
+   * alternative is the previous business's numbers under the new one's name.
+   * An action failure — a recompute, a send, a save — must NOT do that: the
+   * screen it happened on is still correct, and blanking it would lose the
+   * context the message is about.
+   */
+  const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
     setError("");
+    setLoadError("");
     try {
       const data = await getBroadcasts(slug);
       setTemplates(data.templates);
@@ -54,7 +65,7 @@ export default function BroadcastsPage() {
       setCanSend(data.canSend);
       setTemplateId(data.templates.find((t) => t.isApproved)?.id ?? "");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load broadcasts.");
+      setLoadError(err instanceof Error ? err.message : "Could not load broadcasts.");
     } finally {
       setLoading(false);
     }
@@ -138,6 +149,19 @@ export default function BroadcastsPage() {
 
         {loading ? (
           <div className="act-empty">Loading…</div>
+        ) : loadError ? (
+          /*
+           * SAME RULE AS EVERY OTHER DECK PAGE, arrived at differently.
+           *
+           * Here the error line sat INSIDE the loaded branch, several sections
+           * down, so a failed reload rendered the whole screen — templates,
+           * campaigns, the send gate — from the previous business's data with a
+           * small red line halfway down it. The gate is the part that matters:
+           * "sending is open" is a statement about a WhatsApp account, and
+           * showing one business's under another's name is the wrong answer to
+           * the only question this screen exists to answer.
+           */
+          <p className="act-msg">{loadError}</p>
         ) : (
           <>
             {!canSend ? (
@@ -213,7 +237,9 @@ export default function BroadcastsPage() {
               </p>
             </section>
 
-            {error ? <p className="act-msg">{error}</p> : null}
+            {/* The load error is handled above, before anything is drawn. What
+                remains here is the notice from an ACTION on this page — a send
+                that was queued — which belongs beside the thing it acted on. */}
             {notice ? <p className="bc-ok">{notice}</p> : null}
 
             <h2 className="act-sub-head">Templates</h2>

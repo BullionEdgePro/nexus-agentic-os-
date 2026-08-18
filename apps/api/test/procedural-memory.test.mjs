@@ -495,7 +495,15 @@ test("nothing calls it success, because it is not success", () => {
   // and would have forced a rename of the column to satisfy a test about
   // wording. Comments and interpolated expressions are stripped so the
   // assertion is about what appears on the page.
-  const visible = SCREEN.replace(/\{\/\*[\s\S]*?\*\/\}/g, " ").replace(/\{[^{}]*\}/g, " ");
+  // Both comment forms, because JSX has two and only one was stripped. A bare
+  // /* ... */ inside an expression container is equally invisible to a reader,
+  // and the first one added to this page — explaining why a failed load draws
+  // nothing — contained the word "successful" and failed an assertion about
+  // what customers see. Widening the stripper matches what this test says it is
+  // about; it still fails on any visible "success".
+  const visible = SCREEN.replace(/\{\/\*[\s\S]*?\*\/\}/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\{[^{}]*\}/g, " ");
   assert.ok(
     !/succeeded|success/i.test(visible),
     "the screen must not present the containment count as success"
