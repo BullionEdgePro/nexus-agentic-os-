@@ -50,6 +50,7 @@ anything. Each of these runs the real code against the real database.
 | `retrieval-check` | Does each business's agent find the RIGHT page? | After re-indexing a site, and after changing a source list |
 | `shared-number-check` | Can a serving business be READ from the number owner's transaction? | After touching anything the reply path reads about the business that is answering |
 | `operator-fire-check` | Does each alarm actually produce a usable finding? | After adding or changing an operator |
+| `deep-link-check` | Does a published wa.me link route to the business that published it? | Before handing links to anybody, and after changing a slug or a number |
 
 Before committing, install the hook once from the monorepo root:
 
@@ -71,7 +72,7 @@ was written to avoid, made three times in one day by somebody who had written
 both warnings. Three repetitions in a day is a process failure, and the fix
 belongs in the repository rather than in anybody's discipline.
 
-All seven in one command, in the order that makes their answers mean something:
+All eight in one command, in the order that makes their answers mean something:
 
 ```bash
 cd /opt/nexus && ./scripts/verify-all.sh

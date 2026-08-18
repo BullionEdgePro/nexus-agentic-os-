@@ -23,6 +23,11 @@
 #   business directly, which is the one context in which that defect is
 #   invisible. Knowing the reads are sound first makes the rest interpretable.
 #
+#   deep-link-check early and cheaply. It calls no model and touches two
+#   registry tables, and it guards the mechanism the four pending website edits
+#   depend on entirely — if a tag stops routing, those links publish and every
+#   customer still lands in the triage menu, which looks like the edits failed.
+#
 #   retrieval-check last because it is the slow one — one embedding request per
 #   probe, eighteen today — and because a provider outage makes it fail for a
 #   reason that has nothing to do with the deploy being verified.
@@ -41,6 +46,7 @@ mkdir -p "$OUT_DIR"
 GATES=(
   schema-check
   shared-number-check
+  deep-link-check
   rls-preflight
   rls-verify
   operator-fire-check
