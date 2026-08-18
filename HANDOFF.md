@@ -14,7 +14,7 @@ dir `/opt/nexus`.
 |---|---|
 | Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
 | Migrations | through **050**, every one verified by its effect in the database, not by a log |
-| Tests | **772** passing, typecheck and `next build` clean |
+| Tests | **777** passing, typecheck and `next build` clean |
 | Operators | **16**, sweeping every 10 minutes. **1 standing finding**, and it is a real one — `customer-waiting` on a contact ignored since 17 Aug (see below). Since 050, "0 findings" finally means something: `GET /health/jobs` says whether the sweep ran |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
@@ -33,6 +33,11 @@ dir `/opt/nexus`.
    deliverable at https://claude.ai/code/artifact/5e5abf8d-eb55-46ce-ac49-2ff3d0e0afa7
 3. **ABR's office number.** One value; its `no_one_available` phrase cannot go live while it still
    contains `{{office_number}}`, by design.
+
+4. **One page edit at Juris Prime.** `/how-to-attest-educational-certificates-for-uae-jobs/`
+   does not list the documents a customer must provide and qualifies its
+   timeline, so the agent fills the gap and escalates every time. See below —
+   three attempts to fix this in the prompt did not move it.
 
 **And one thing that is not a task so much as a debt:** the contact who chose
 option 2 on 17 August has never been answered. The bug that ignored them is
@@ -906,6 +911,57 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## Juris Prime's agent escalates every time, and the prompt is not why
+
+Three dry runs on 18 August, each after a change aimed at fixing it. **Three
+mediums.** The reason shuffles between an invented timeline and invented document
+requirements, and once showed both.
+
+| run | juris-prime | the judge's objection |
+|---|---|---|
+| 1 — baseline | medium | "5–10 working days" and a UAE Embassy step not in the context |
+| 2 — figures rule | medium | invented document requirements and a five-step process |
+| 3 — broadened to every particular | medium | the timeline again, plus the requirements |
+
+**The constraint is kept and it did not work.** A grounded result now tells the
+model that every particular must appear in the excerpts — figures, prices,
+timelines, reference numbers, document requirements, the steps of a process —
+and names the moves individually, including filling in the plausible next item of
+a list. That is correct guidance and costs nothing. It has not changed the
+verdict, and three samples against a judge that varies is the point at which
+tuning prompt wording stops being measurement and becomes wishful.
+
+**What the evidence actually points at is the page, not the prompt.** The
+retrieved source says "10 working days" with qualifications and does not list the
+documents a customer must provide. The customer asks what to provide and how
+long; the agent has the right page and the page does not answer the question, so
+it fills the gap. **That is a content gap belonging to the business**, in the
+same category as the four website edits — and a person can close it in one
+edit: add the document list and an unqualified timeline to
+`/how-to-attest-educational-certificates-for-uae-jobs/`, or accept that this
+question always escalates.
+
+**Escalating is not a failure here.** Juris Prime has staff on shift, so the
+customer gets the handover phrase and a person picks it up — which for a legal
+timeline question is arguably the right outcome.
+
+### One thing that was worse, and was not caused by any of this
+
+In run 2, **sfs-international scored HIGH**: its draft asserted specific listings
+with prices and reference numbers, including "two-bedroom with sauna, AED
+11,000,000, ref HZ-09" — **which does not appear in the knowledge base at all**.
+The most serious fabrication this project has produced.
+
+Run 1 and run 3 both scored it **low** on the same question, correctly saying it
+had no matching rentals to hand. So that was variance, not the constraint;
+recorded rather than smoothed over because the reverse conclusion would have been
+just as easy to write and just as unfounded.
+
+**The customer was never at risk, and the reason is worth knowing:**
+`shouldEscalateReply` returns true for `high` **regardless of tenant tier**, so
+that reply could not have been sent. SFS has nobody on shift, so the customer
+would receive the no-staff phrase and the agent would stay live.
 
 ## The panel that said it had been checked was not checking
 
