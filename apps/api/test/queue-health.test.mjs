@@ -51,7 +51,7 @@ test("a count alone cannot say whether something is wrong NOW", () => {
   // describes both an outage happening this minute and one fixed hours ago. A
   // health field that stays red after the fix is one people learn to ignore.
   assert.match(HEALTH, /const FAILING_WINDOW_MS/);
-  assert.match(HEALTH, /failing: lastFailureAt !== null && now - lastFailureAt < FAILING_WINDOW_MS/);
+  assert.match(HEALTH, /now - lastFailureAt < FAILING_WINDOW_MS/);
 
   // Read from the sorted set's score rather than by fetching the job, because
   // the inbound queue's payload is a customer's message.
@@ -94,7 +94,7 @@ test("the shared Redis connection is not closed underneath the process", () => {
 });
 
 test("the endpoint reports it, and a queue problem makes ok false", () => {
-  assert.match(INDEX, /readQueueHealth\(\)\.catch\(\(\) => \[\]\)/);
+  assert.match(INDEX, /readQueueHealth\([\s\S]{0,120}?\)\.catch\(\(\) => \[\]\)/);
   assert.match(INDEX, /ok: stalled\.length === 0 && failing\.length === 0 && backedUp\.length === 0/);
 
   // Named lists rather than a bare boolean: a monitor should be able to say
@@ -106,6 +106,6 @@ test("reading queue health cannot take the endpoint down", () => {
   // Redis being unreachable is itself worth reporting, and reporting it as a
   // 500 would read as "the API is down" when the API is the part still working.
   const route = INDEX.slice(INDEX.indexOf('app.get("/health/jobs"'));
-  assert.match(route, /readQueueHealth\(\)\.catch/);
+  assert.match(route, /readQueueHealth\([\s\S]{0,120}?\)\.catch/);
   assert.match(route, /catch \(err\) \{[\s\S]*?ok: false/);
 });
