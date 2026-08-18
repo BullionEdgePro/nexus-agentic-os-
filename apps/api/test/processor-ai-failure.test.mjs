@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { classifyIntent } from "../../../packages/agents/src/intent.ts";
 
 
-const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversationHandoff: [], publishInboxEvent: [] };
+const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversationHandoff: [], publishInboxEvent: [], recordConversationMetric: [] };
 
 mock.module(new URL("../src/services/availability.ts", import.meta.url), {
   namedExports: {
@@ -72,7 +72,14 @@ mock.module("@nexus/db", {
     }),
     insertOutboundMessage: async (input) => { calls.insertOutboundMessage.push(input); return { id: "out-1", ...input, status: "sent", createdAt: "now" }; },
     insertEvaluation: async () => {},
-    recordConversationMetric: async () => {},
+    // RECORDED now, not swallowed. A model that throws used to jump past the
+    // metric write entirely, so a failed reply left no row and the conversation
+    // vanished from every denominator computed from that table — which is how
+    // an AI resolution rate of 100% survived four fallback messages. Captured
+    // here so the assertions below can read what was actually written.
+    recordConversationMetric: async (input) => {
+      calls.recordConversationMetric.push(input);
+    },
     setConversationHandoff: async (id, val) => { calls.setConversationHandoff.push({ id, val }); },
     findEmployeeForConversation: async () => null, // org-level tenant, no employee assigned
     // @nexus/leads imports getPool statically; a missing export fails at module
@@ -179,5 +186,31 @@ test("AI agent failure still delivers a fallback reply and escalates to human ha
   assert.equal(calls.insertOutboundMessage[0].senderType, "system");
   assert.equal(calls.setConversationHandoff.length, 1, "should flag the conversation for human handoff");
   assert.equal(calls.setConversationHandoff[0].val, true);
-  console.log("PASS: customer received exactly one fallback message and conversation was escalated");
+
+  // THE FAILURE IS NOW ON THE RECORD, which is the whole of migration 049.
+  // This assertion would have failed for the entire life of the platform up to
+  // 2026-08-17: the metric write sits near the end of the `try`, so a model
+  // that threw jumped past it and this conversation left no row at all. Four
+  // real fallbacks on 2026-08-01 are absent from the table for that reason,
+  // which is how an AI resolution rate of 100% survived them.
+  assert.equal(calls.recordConversationMetric.length, 1, "a failed reply must still be counted");
+  const metric = calls.recordConversationMetric[0];
+
+  // The customer got a worse answer, not no answer. Those are different rows.
+  assert.equal(metric.replyOutcome, "fallback");
+
+  // Not 'ai_agent'. A fallback is the agent saying it cannot answer, and
+  // filing it as an AI resolution is the same lie the missing row told.
+  assert.equal(metric.resolvedBy, "unresolved");
+
+  // Zero is the true value here: the model produced nothing.
+  assert.equal(metric.inputTokens, 0);
+  assert.equal(metric.outputTokens, 0);
+
+  // Still classified, from the text alone. Intent coverage feeds F5, F10 and
+  // F11, so an outage used to quietly starve the three features that grow with
+  // it — every failed reply contributed nothing.
+  assert.ok(metric.intent, "a failed reply should still contribute its intent");
+
+  console.log("PASS: customer received exactly one fallback message, escalated, and the failure was RECORDED");
 });

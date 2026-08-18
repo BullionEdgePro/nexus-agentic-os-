@@ -186,7 +186,36 @@ export interface ConversationMetricInput {
    * was down, so it must not be 'hit'.
    */
   retrievalOutcome?: "hit" | "miss" | "failed" | "degraded" | null;
+  /**
+   * What the customer actually received (migration 049).
+   *
+   * The reason this exists: metrics were written near the end of the reply
+   * pipeline's `try`, so a model that threw jumped past the write entirely and
+   * a failed reply left no row. Twelve rows existed, all 'ai_agent', beside four
+   * fallback messages that had no row at all — an AI resolution rate of 100%
+   * over a denominator that excluded every failure.
+   *
+   * Null on rows written before it was recorded, and deliberately not
+   * backfilled: the successes could be inferred and the failures could not, and
+   * a column complete for one and empty for the other is worse than honestly
+   * unknown for both.
+   */
+  replyOutcome?: ReplyOutcome | null;
 }
+
+/**
+ * What the customer received, as distinct from who resolved it.
+ *
+ *   agent            — a model reply. This row's token usage is that reply's.
+ *   fallback         — the model produced nothing; the platform's sentence went
+ *                      out instead. Tokens are 0, and 0 is the true value.
+ *   none             — the fallback failed too; the customer received nothing.
+ *   agent_unrecorded — a reply went out and the bookkeeping after it threw. The
+ *                      row keeps the conversation in the denominator; its token
+ *                      counts are NOT the reply's, and this value says so rather
+ *                      than a zero that would read as a measurement.
+ */
+export type ReplyOutcome = "agent" | "fallback" | "none" | "agent_unrecorded";
 
 /** Aggregated snapshot powering the command-deck overview. */
 export interface OverviewMetrics {

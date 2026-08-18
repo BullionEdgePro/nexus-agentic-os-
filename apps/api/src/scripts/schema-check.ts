@@ -294,7 +294,25 @@ async function main(): Promise<void> {
             inputTokens: 1,
             outputTokens: 1,
             procedureId: id,
+            replyOutcome: "agent",
           });
+
+          // The three values migration 049 added, planned for real. Nothing in
+          // the test suite executes them: the check constraint lives in
+          // Postgres, and a value the application writes and the database
+          // refuses would surface as a metric row silently missing — which is
+          // the exact defect 049 exists to end, reintroduced one layer down.
+          for (const outcome of ["fallback", "none", "agent_unrecorded"] as const) {
+            await recordConversationMetric({
+              organizationId: org.id,
+              conversationId: conv[0].id,
+              intent: "knowledge_lookup",
+              resolvedBy: "unresolved",
+              inputTokens: 0,
+              outputTokens: 0,
+              replyOutcome: outcome,
+            });
+          }
           return conv[0].id;
         });
 

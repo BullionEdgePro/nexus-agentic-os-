@@ -13,8 +13,8 @@ export async function recordConversationMetric(input: ConversationMetricInput): 
     `insert into conversation_metrics
        (organization_id, conversation_id, intent, resolved_by,
         input_tokens, output_tokens, first_response_ms, resolution_ms, procedure_id,
-        retrieval_outcome)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        retrieval_outcome, reply_outcome)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       input.organizationId,
       input.conversationId,
@@ -26,6 +26,7 @@ export async function recordConversationMetric(input: ConversationMetricInput): 
       input.resolutionMs ?? null,
       input.procedureId ?? null,
       input.retrievalOutcome ?? null,
+      input.replyOutcome ?? null,
     ]
   );
 }

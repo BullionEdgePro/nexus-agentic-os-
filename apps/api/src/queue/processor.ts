@@ -824,6 +824,10 @@ async function processSingleTextMessage(
       conversationId,
       intent: classifyIntent({ text: message.text?.body, toolCalls: result.toolCalls }).intent,
       resolvedBy: shouldEscalate ? "human_agent" : "ai_agent",
+      // A model reply went out and this row's token counts are that reply's.
+      // The value matters because of what its ABSENCE used to mean — see the
+      // catch below and migration 049.
+      replyOutcome: "agent" as const,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
       firstResponseMs: firstResponseMsFrom(message.timestamp),
@@ -843,6 +847,8 @@ async function processSingleTextMessage(
   } catch (err) {
     logger.error({ conversationId, sentToCustomer, err }, "AI reply pipeline failed");
 
+    // Did anything at all reach the customer?
+    let reached = sentToCustomer;
     if (sentToCustomer) {
       // The customer already received a real reply — the failure was in
       // bookkeeping afterward (DB write, evaluation log). Don't send a
@@ -850,8 +856,57 @@ async function processSingleTextMessage(
       // reply that already went through; just make sure a human is aware.
       await flagHandoffBestEffort(organization, conversationId);
     } else {
-      await sendFallbackBestEffort(organization, phoneNumberId, message.from, conversationId, contactId);
+      reached = await sendFallbackBestEffort(
+        organization,
+        phoneNumberId,
+        message.from,
+        conversationId,
+        contactId
+      );
     }
+
+    // ----------------------------------------------------------------
+    // THE ROW THAT NEVER EXISTED
+    // ----------------------------------------------------------------
+    //
+    // `recordMetricBestEffort` lives near the end of the `try` above, so a model
+    // that throws jumps straight past it and this conversation leaves no metric
+    // row at all. Production carried 12 rows, all 'ai_agent', beside 4 fallback
+    // messages with nothing recorded against them — an AI resolution rate of
+    // 100% computed over a denominator that excluded every failure.
+    //
+    // WHY 'unresolved' RATHER THAN 'ai_agent'. The vocabulary has always had the
+    // value and nothing had ever written it. A fallback is not the agent
+    // resolving anything; it is the agent saying it cannot. Recording it as an
+    // AI resolution is the same lie the missing row told, in a row that exists.
+    //
+    // The intent still classifies, from the text alone. That is not incidental:
+    // intent coverage is the load-bearing input to F5, F10 and F11, and until
+    // now every failed reply contributed nothing to it — so an outage quietly
+    // starved the three features that grow with coverage.
+    //
+    // Best-effort, like every other metric write. If the pipeline failed because
+    // the DATABASE is unreachable then this write fails too, and the honest
+    // outcome is the behaviour that existed before this block: nothing recorded.
+    await recordMetricBestEffort({
+      organizationId: organization.id,
+      conversationId,
+      intent: classifyIntent({ text: message.text?.body }).intent,
+      resolvedBy: "unresolved",
+      // Genuinely zero for a fallback: no model output was produced. For the
+      // sentToCustomer branch the reply DID cost tokens and the count was lost
+      // with the exception, which is exactly what `agent_unrecorded` says — the
+      // row keeps the conversation in the denominator without its zeros being
+      // read as a measurement.
+      inputTokens: 0,
+      outputTokens: 0,
+      firstResponseMs: firstResponseMsFrom(message.timestamp),
+      replyOutcome: sentToCustomer
+        ? ("agent_unrecorded" as const)
+        : reached
+          ? ("fallback" as const)
+          : ("none" as const),
+    });
   }
   });
 
@@ -1146,7 +1201,7 @@ async function sendFallbackBestEffort(
   contactWaId: string,
   conversationId: string,
   contactId: string
-): Promise<void> {
+): Promise<boolean> {
   try {
     // Same question as the governance path, for the same reason: this promises
     // a specialist and then pauses the agent, and with an empty rota that
@@ -1183,6 +1238,7 @@ async function sendFallbackBestEffort(
       message: outboundDto,
     });
     await flagHandoffBestEffort(organization, conversationId);
+    return true;
   } catch (err) {
     // We could not even deliver the fallback — this contact has received
     // NO response at all and needs a human to notice and follow up
@@ -1191,6 +1247,11 @@ async function sendFallbackBestEffort(
       { conversationId, err },
       "Failed to deliver fallback message after AI failure — customer received NO response, needs manual follow-up"
     );
+    // Reported back rather than only logged. The caller records it as `none`,
+    // which is the difference between a customer who got a worse answer and a
+    // customer who got nothing — and until migration 049 that difference
+    // existed only in a log on a box whose logs were erased on every deploy.
+    return false;
   }
 }
 

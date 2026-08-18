@@ -1068,8 +1068,82 @@ const deliveryFailing: Operator = {
   },
 };
 
+/**
+ * The agent is answering nobody, and every container is green.
+ *
+ * THIS OPERATOR IS A RESPONSE TO TWO REAL OUTAGES, not a hypothetical.
+ * `gemini-2.5-flash` began returning 404 for newly-created API keys while
+ * `models.list` still advertised it; separately, an Anthropic key ran out of
+ * credit. Both times every customer received "I'm looping in a specialist", the
+ * health checks passed, and nothing anywhere could move — because a reply that
+ * threw jumped past the metric write, so the failures were not merely
+ * unmonitored, they were UNRECORDED.
+ *
+ * `preflightModels()` catches a broken model at worker boot, which is the wrong
+ * moment: both outages began while the worker was already running and neither
+ * would have restarted it. Migration 049 records what the customer actually
+ * received, and this is the thing that reads it.
+ *
+ * Two thresholds, and both are deliberate.
+ *
+ *   ANY `none` is urgent. That value means the fallback failed too and the
+ *   customer received nothing at all — the worst state this platform can
+ *   reach, and one nobody would otherwise discover.
+ *
+ *   `fallback` warns, and turns urgent at three. One is a blip: a timeout, a
+ *   rate limit, a single malformed tool call. Three in six hours is not a blip,
+ *   it is a provider, and the outages this exists for produced every reply for
+ *   hours rather than three.
+ */
+const REPLY_LOOKBACK_HOURS = 6;
+const FALLBACK_URGENT_AT = 3;
+
+const agentUnavailable: Operator = {
+  slug: "agent-unavailable",
+  title: "The agent cannot answer, and is saying so to everybody",
+  description:
+    "Replies are coming out as the platform's fallback sentence instead of real answers — usually the model provider being unreachable, out of credit, or a model retired underneath us. Every health check passes while this happens.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{
+      fallback: string;
+      none: string;
+      total: string;
+    }>(
+      `select count(*) filter (where reply_outcome = 'fallback')::text as fallback,
+              count(*) filter (where reply_outcome = 'none')::text as none,
+              count(*) filter (where reply_outcome is not null)::text as total
+         from conversation_metrics
+        where organization_id = $1
+          and recorded_at > now() - ($2 || ' hours')::interval`,
+      [organizationId, String(REPLY_LOOKBACK_HOURS)]
+    );
+
+    const fallback = Number(rows[0]?.fallback ?? 0);
+    const none = Number(rows[0]?.none ?? 0);
+    const total = Number(rows[0]?.total ?? 0);
+    if (fallback === 0 && none === 0) return [];
+
+    const silent = none > 0;
+    return [
+      {
+        fingerprint: "agent-unavailable",
+        severity: silent || fallback >= FALLBACK_URGENT_AT ? ("urgent" as const) : ("warn" as const),
+        title: silent
+          ? `${none} customers received NO reply at all`
+          : `${fallback} of ${total} replies were the fallback, not an answer`,
+        detail: silent
+          ? `In the last ${REPLY_LOOKBACK_HOURS} hours ${none} messages got no response whatsoever — the agent failed and the fallback could not be delivered either.${fallback > 0 ? ` A further ${fallback} received the fallback sentence.` : ""} Those customers are waiting on a person and nothing else will reach them. Check the model provider and the WhatsApp send path, in that order.`
+          : `In the last ${REPLY_LOOKBACK_HOURS} hours ${fallback} of ${total} replies were the platform's "looping in a specialist" sentence rather than an answer the agent composed. That is the model provider being unreachable, out of credit, or a model retired underneath us — check the worker log for the preflight line naming the model before assuming the content was at fault. Health checks pass throughout this; they have twice.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      },
+    ];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
+  agentUnavailable,
   handoverAbandoned,
   deliveryFailing,
   retrievalUnavailable,
