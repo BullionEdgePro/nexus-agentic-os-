@@ -14,7 +14,7 @@ dir `/opt/nexus`.
 |---|---|
 | Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
 | Migrations | through **050**, every one verified by its effect in the database, not by a log |
-| Tests | **777** passing, typecheck and `next build` clean |
+| Tests | **787** passing, typecheck and `next build` clean |
 | Operators | **16**, sweeping every 10 minutes. **1 standing finding**, and it is a real one — `customer-waiting` on a contact ignored since 17 Aug (see below). Since 050, "0 findings" finally means something: `GET /health/jobs` says whether the sweep ran |
 | Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
 | Governance | evaluating 1:1 with every AI reply |
@@ -911,6 +911,60 @@ correction inline and in the footer.
 **ABR is marked a decision, not a defect.** Its number reaches a person with real history; switching
 means the agent takes first contact under the strict legal tier and whoever answers today stops
 hearing from customers. That is the owner's call.
+
+## The knowledge base had never been re-indexed — found by the heartbeat, six hours old
+
+Migration 050 earned itself on its first day. `/health/jobs` showed:
+
+```
+knowledge-reindex   runs 2   failures 2   lastFinishedAt null
+last_error: Query touched tenant-scoped table "knowledge_sources" with no tenant
+            context. Wrap it in withTenant(organizationId, ...) — or, if it is
+            deliberately cross-tenant, in withAllTenants("why", ...)
+```
+
+**`findStaleSources` sweeps every business by design and carried no context at
+all**, so `DB_TENANT_ASSERT=strict` threw on every run since strict was set. The
+assert was doing exactly its job; nothing was listening. The scheduler logs
+"Knowledge re-index scheduled (every 6h)" at boot, and the failure happens six
+hours later in a job whose only trace was a log line on a box whose logs were
+erased on every deploy. `broken-knowledge` could not have caught it either —
+that operator watches sources marked *failed*, and this job threw before it could
+mark one.
+
+**Two layers, and the second is the interesting one.** Fixing the sweep made the
+job complete and then fail on all twenty sources, this time from inside
+`ingestTextSource`, which touches `knowledge_sources` five times with no context
+of its own. **That asymmetry is why it survived:** ingest is also reached from the
+manual path, which already has an open context, so a person indexing a site by
+hand saw it work every time. Only the scheduled caller arrives with none.
+
+Scoped **per step** rather than around the whole function: the write phase
+deliberately begins *after* `embedTexts` so a slow network call is never made
+with a connection pinned open, and one wrapper would undo that and roll the whole
+ingest back on any embedding hiccup.
+
+**First successful scheduled re-index this platform has ever had:**
+`refreshed 20, unchanged 0, failed 0`.
+
+### And then I broke juris-prime for ten minutes
+
+The intermediate run — sweep fixed, ingest not — marked **20 sources failed**,
+17 of them juris-prime's entire knowledge base. `searchKnowledge` filters on
+`status = 'indexed'`, so **juris-prime's agent had no knowledge at all** until it
+was restored.
+
+The chunks were never touched: the assert throws before any of them is read, so
+all 91 passages sat intact behind a status column. The restore was targeted on
+the exact error text **and** on the source still having chunks, so a source that
+failed for a real reason — SFS's Lorem ipsum page is *meant* to be failed —
+was not resurrected by it. 20 rows restored; every business now reads
+`indexed: n, failed: 0`, and `retrieval-check` passes 18/18 afterwards.
+
+**The lesson is about the tool, not the bug.** Running a job by hand to see
+whether a fix worked is the right instinct and it wrote failure state to
+production. A dry-run mode for the re-index would have shown the same thing
+without marking anything.
 
 ## One command for all seven gates, and a floor under the backups
 
