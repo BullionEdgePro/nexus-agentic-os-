@@ -31,6 +31,8 @@ import {
   operatorOnly,
 } from "./middleware/require-tenant-scope.js";
 import { logger } from "./lib/logger.js";
+import { listJobHeartbeats } from "@nexus/db";
+import { isJobStalled, type ScheduledJob } from "@nexus/shared";
 import { tenantContext, webhookContext } from "./middleware/tenant-context.js";
 
 const app = new Hono();
@@ -89,6 +91,65 @@ app.use("/api/catalog/*", operatorOnly);
 app.use("/api/*", tenantContext);
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+/**
+ * The check that comes from OUTSIDE the thing being checked (migration 050).
+ *
+ * `/health` above answers "is this process accepting HTTP" and has been read as
+ * "is the platform working". It touches no database, no queue and no schedule,
+ * and it is deliberately left exactly as it is: the container healthcheck and
+ * anything else depending on it must keep getting a cheap, unconditional
+ * answer, and a liveness probe that fails because a daily job is late would
+ * restart a healthy container.
+ *
+ * This one answers the different question. Six jobs are scheduled best-effort at
+ * worker boot, and the worst of them to lose is the operator sweep: if it stops,
+ * all fifteen operators go quiet and the deck reports 0 standing findings, which
+ * is what a platform with nothing wrong looks like. The `schedule-stalled`
+ * operator watches the other five and cannot watch that one, because it runs
+ * inside it. This route can, because it does not.
+ *
+ * UNAUTHENTICATED, ON PURPOSE. An uptime check that needs a session is an uptime
+ * check nobody wires up. It exposes six job names, timestamps and an error
+ * string — no tenant data, no customer, no business. `stalled` is computed here
+ * rather than left to the reader, so a monitor can match one field instead of
+ * re-deriving six tolerances.
+ *
+ * ALWAYS 200. The body carries the verdict; the status code stays a transport
+ * fact. A monitor reads `ok`, and nothing that treats a non-2xx as "restart
+ * this" is handed a reason to.
+ */
+app.get("/health/jobs", async (c) => {
+  const now = new Date();
+  // The API process, not the worker's — they are separate containers, and this
+  // is the only start time this process can know. It is used solely as the
+  // floor for "has never run", which errs toward silence just after a deploy.
+  const bootedAt = new Date(Date.now() - process.uptime() * 1000);
+
+  try {
+    const beats = await listJobHeartbeats();
+    const jobs = beats.map((beat) => ({
+      job: beat.job,
+      lastFinishedAt: beat.lastFinishedAt,
+      lastError: beat.lastError,
+      runs: beat.runs,
+      failures: beat.failures,
+      stalled: isJobStalled(
+        beat.job as ScheduledJob,
+        beat.lastFinishedAt ? new Date(beat.lastFinishedAt) : null,
+        now,
+        bootedAt
+      ),
+    }));
+    const stalled = jobs.filter((job) => job.stalled).map((job) => job.job);
+    return c.json({ ok: stalled.length === 0, stalled, jobs });
+  } catch (err) {
+    // A failure here is itself worth reporting rather than hiding behind a 500
+    // that a monitor would read as "the API is down" — the API is up; the thing
+    // it cannot do is tell you whether the schedule is.
+    return c.json({ ok: false, error: "could not read job heartbeats", jobs: [] });
+  }
+});
 app.use("/webhooks/whatsapp", webhookContext);
 app.route("/webhooks/whatsapp", whatsappWebhook);
 // Outside /api/*, because requireAuth guards everything under there and a

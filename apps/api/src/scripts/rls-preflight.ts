@@ -42,6 +42,7 @@
 process.env.DB_TENANT_ASSERT = "strict";
 
 import {
+  listJobHeartbeats,
   listOrganizations,
   withTenant,
   withAllTenants,
@@ -70,6 +71,11 @@ interface Path {
 const PATHS: Path[] = [
   { name: "organizations (registry)", unscoped: true, run: () => listOrganizations() },
   { name: "shared patterns (pooled)", unscoped: true, run: () => getSharedGuidance() },
+  // job_heartbeats has no organization_id and no RLS: these jobs run across
+  // every business at once, so there is no tenant whose row this is. Listed
+  // here so that fact is asserted rather than assumed — an unscoped read of a
+  // table that LATER gains a tenant column would otherwise stay quietly wrong.
+  { name: "job heartbeats (infrastructure)", unscoped: true, run: () => listJobHeartbeats() },
 
   { name: "employee activity (all)", crossTenant: true, run: () => getEmployeeActivity(null) },
   { name: "recent activity (all)", crossTenant: true, run: () => getRecentActivity(5) },

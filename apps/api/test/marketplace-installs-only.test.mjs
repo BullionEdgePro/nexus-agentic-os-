@@ -40,7 +40,18 @@ const API_INDEX = read("apps", "api", "src", "index.ts");
 const NAV = read("apps", "web", "lib", "nav.tsx");
 
 /** Comments stripped, so an assertion about code is never satisfied by prose. */
-const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+// Block comments are matched only where they START A LINE, which is how every
+// one in this codebase is written.
+//
+// The obvious version — /\/\*[\s\S]*?\*\//g — also matches inside a string
+// literal, and this file reads a source containing `app.use("/api/*", ...)`.
+// That `/*` opened a "comment" running to the end of the next real one, deleting
+// whatever routes sat between them; the assertions below then failed with the
+// line they were looking for missing from the input, pointing at a routing
+// change nobody had made. Found 2026-08-17, when a doc comment added after that
+// line moved the damage over these tests.
+const code = (text) =>
+  text.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, " ").replace(/\/\/[^\n]*/g, " ");
 const sqlCode = (text) =>
   text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
 

@@ -6,3 +6,4 @@ export * from "./phrases.js";
 export * from "./forecast.js";
 export * from "./retrieval.js";
 export * from "./delivery.js";
+export * from "./schedule.js";

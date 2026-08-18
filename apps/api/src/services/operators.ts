@@ -2,6 +2,7 @@ import {
   getPool,
   listOrganizations,
   reconcileFindings,
+  listJobHeartbeats,
   withTenant,
   type FindingInput,
 } from "@nexus/db";
@@ -9,6 +10,7 @@ import {
 // the property that makes them cheap enough to run every ten minutes.
 import { scoreLead } from "@nexus/leads";
 import { JUDGE_UNAVAILABLE } from "@nexus/governance";
+import { isJobStalled, JOB_STALE_AFTER_SECONDS, type ScheduledJob } from "@nexus/shared";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -1141,9 +1143,97 @@ const agentUnavailable: Operator = {
   },
 };
 
+/**
+ * The scheduled work stopped, and the platform looks exactly the same.
+ *
+ * Six things are scheduled at worker boot and every one of them is scheduled
+ * best-effort, so any can fail to register or stop repeating while customer
+ * messages carry on being answered. Knowledge quietly stops being re-indexed,
+ * template approvals never arrive, the quality rollups freeze at their last
+ * value and read as a quiet week.
+ *
+ * ============================================================
+ * THIS OPERATOR CANNOT WATCH THE ONE THAT MATTERS MOST
+ * ============================================================
+ *
+ * It runs INSIDE the operator sweep. If that sweep stops, this stops with it,
+ * and the deck goes on reporting 0 standing findings — which is what a platform
+ * with nothing wrong looks like. No operator can fix that; the check has to come
+ * from outside the thing being checked, which is what `GET /health/jobs` is for.
+ *
+ * So `operators` is deliberately EXCLUDED here rather than silently un-watched.
+ * Including it would produce a check that passes in every case where it could
+ * conceivably be needed: the sweep is running, therefore the sweep is running.
+ * Five of six is the honest coverage, and the sixth is named in the detail text
+ * so whoever reads a finding also learns what this cannot tell them.
+ */
+const scheduleStalled: Operator = {
+  slug: "schedule-stalled",
+  title: "Scheduled work has stopped running",
+  description:
+    "A background job has not completed within its window. These are scheduled best-effort at worker boot, so one can stop while everything else keeps working — the knowledge index goes stale, template approvals never arrive, or the rollups freeze at their last value.",
+  run: async (organizationId) => {
+    // Not per-business, even though the finding is raised per business. These
+    // rows belong to no tenant, and the CONSEQUENCE is per tenant: each
+    // business's knowledge stops being re-indexed, each business's rollups
+    // freeze. Raising it where the person responsible for that business will
+    // see it is right; querying it per business would be five identical reads.
+    const heartbeats = await listJobHeartbeats();
+    const now = new Date();
+
+    // Judged from process start, not from the epoch. A worker that came up
+    // ninety seconds ago has not failed to run its daily inference — it has not
+    // reached it yet, and reporting that on every deploy is the fastest way to
+    // teach somebody to ignore this list.
+    const bootedAt = new Date(Date.now() - process.uptime() * 1000);
+
+    const stalled = heartbeats.filter(
+      (beat) =>
+        // See the note above: the sweep cannot testify to its own liveness.
+        beat.job !== "operators" &&
+        isJobStalled(
+          beat.job as ScheduledJob,
+          beat.lastFinishedAt ? new Date(beat.lastFinishedAt) : null,
+          now,
+          bootedAt
+        )
+    );
+
+    if (stalled.length === 0) return [];
+
+    return stalled.map((beat) => {
+      const never = beat.lastFinishedAt === null;
+      const hours = never
+        ? null
+        : Math.round((now.getTime() - new Date(beat.lastFinishedAt as string).getTime()) / 3_600_000);
+
+      return {
+        // Per job, so fixing one does not retract the others — and so the list
+        // shrinks a job at a time, which is what reconciliation is for.
+        fingerprint: `schedule-stalled:${beat.job}`,
+        severity: "warn" as const,
+        title: never
+          ? `${beat.job} has never completed a run`
+          : `${beat.job} last finished ${hours} hours ago`,
+        detail: `${never ? "This job has not completed once since the worker started, which usually means its schedule failed to register at boot — the log line to look for is \"Could not schedule\"." : `Expected roughly every ${describeInterval(beat.job as ScheduledJob)}; last completed run finished ${hours} hours ago.`}${beat.lastError ? ` Last error: "${beat.lastError}".` : ""} Note that this check runs inside the operator sweep, so it can say nothing about whether the SWEEP itself is running — that is what GET /health/jobs answers, from outside.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      };
+    });
+  },
+};
+
+/** Human wording for a tolerance, used only in a finding's detail text. */
+function describeInterval(job: ScheduledJob): string {
+  const seconds = JOB_STALE_AFTER_SECONDS[job];
+  const hours = seconds / 3600;
+  return hours >= 24 ? "day" : hours >= 1 ? `${Math.round(hours / 3)} hours` : `${Math.round(seconds / 60)} minutes`;
+}
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   agentUnavailable,
+  scheduleStalled,
   handoverAbandoned,
   deliveryFailing,
   retrievalUnavailable,
