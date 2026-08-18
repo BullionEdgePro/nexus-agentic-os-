@@ -3,8 +3,10 @@ import {
   listOpenFindings,
   countOpenFindings,
   lastSeenByOperator,
+  listJobHeartbeats,
   findOrganizationBySlug,
 } from "@nexus/db";
+import { isJobStalled } from "@nexus/shared";
 import { OPERATORS } from "../services/operators.js";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
@@ -46,15 +48,46 @@ operatorsRoute.get("/", async (c) => {
     }
   }
 
-  const [findings, counts, lastSeen] = await Promise.all([
+  const [findings, counts, lastSeen, heartbeats] = await Promise.all([
     listOpenFindings(organizationId),
     countOpenFindings(organizationId),
     lastSeenByOperator(organizationId),
+    // Migration 050. Not tenant-scoped and correctly so — the sweep runs across
+    // every business at once, so its liveness is one fact rather than five.
+    listJobHeartbeats().catch(() => []),
   ]);
+
+  // WHEN THE SWEEP LAST RAN, because the page was asserting it.
+  //
+  // "Nothing needs attention … checked within the last ten minutes" was
+  // hardcoded prose. If the sweep stops, `operator_findings` stops changing,
+  // the count stays at zero, and that sentence goes on reassuring somebody
+  // indefinitely — which is the exact failure migration 050 exists to end,
+  // rendered as good news.
+  //
+  // `lastSeenAt` per operator cannot answer this: it comes from findings, so an
+  // operator that has never found anything is null forever whether or not it
+  // ran. The heartbeat is the only record that the sweep HAPPENED.
+  const sweep = heartbeats.find((beat) => beat.job === "operators");
+  const lastSweptAt = sweep?.lastFinishedAt ?? null;
 
   return c.json({
     findings,
     counts,
+    lastSweptAt,
+    // Computed here rather than in the browser: the tolerance lives in
+    // @nexus/shared beside the schedule it judges, and a second copy in the web
+    // app would be a second thing to forget when the interval changes.
+    //
+    // Judged from the API process's own start, which is the only clock this
+    // handler has. It errs toward silence right after a deploy, which is the
+    // right direction for a banner.
+    sweepStalled: isJobStalled(
+      "operators",
+      lastSweptAt ? new Date(lastSweptAt) : null,
+      new Date(),
+      new Date(Date.now() - process.uptime() * 1000)
+    ),
     // The roster comes from CODE, not from the findings table. Deriving it from
     // stored rows would mean an operator that has never found anything simply
     // does not exist as far as the page is concerned — and "no findings" and

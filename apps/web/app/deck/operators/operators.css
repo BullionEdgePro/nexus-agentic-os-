@@ -123,3 +123,15 @@
   line-height: 1.55;
   color: var(--pencil);
 }
+
+/*
+ * The empty state when the sweep itself has stopped (migration 050).
+ *
+ * Deliberately not styled as an error. It is not one — the page loaded, the
+ * query worked, and the list really is empty. What is wrong is the REASON, and
+ * the warning colour carries that without implying the screen is broken.
+ */
+.op-clear.stale {
+  border-color: var(--warn-border, #b8860b);
+  background: var(--warn-bg, rgba(184, 134, 11, 0.08));
+}

@@ -265,11 +265,24 @@ test("a truncated findings list says so", () => {
   assert.match(PAGE, /Showing the \{findings\.length\} most serious of \{total\}/);
 });
 
-test("an empty result is written as a result", () => {
+test("an empty result is written as a result, and says when it was checked", () => {
   // A blank panel after a successful check reads as "not loaded", which is the
   // opposite of what happened.
   assert.match(PAGE, /Nothing needs attention\./);
-  assert.match(PAGE, /Checked within the last ten minutes\./);
+
+  // This assertion used to demand the literal sentence "Checked within the last
+  // ten minutes." — which was hardcoded prose, and therefore a test pinning a
+  // CLAIM rather than a fact. It would have gone on passing while the sweep sat
+  // dead for a week and the panel reassured somebody every time they opened it.
+  //
+  // Migration 050 records when the sweep actually finished, so the page now
+  // reports it. What is asserted here is that the freshness is DERIVED, not
+  // written down; sweep-freshness.test.mjs covers the stalled wording.
+  assert.match(PAGE, /describeSweep\(sweep\.lastSweptAt\)/);
+  assert.ok(
+    !/Checked within the last ten minutes/.test(PAGE.replace(/^[ 	]*\/\*[\s\S]*?\*\//gm, " ")),
+    "the panel must not go back to asserting its own freshness"
+  );
   console.log("PASS: operators run without inference, and can retract what they raised");
 });
 

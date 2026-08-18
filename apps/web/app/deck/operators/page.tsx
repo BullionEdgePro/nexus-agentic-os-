@@ -24,10 +24,31 @@ import "./operators.css";
  * exactly the wrong conclusion to draw from good news — and the reason the
  * roster of what is being watched is listed underneath rather than hidden.
  */
+/**
+ * How long ago the sweep finished, in words.
+ *
+ * Deliberately blunt about never having run. "Last checked: never" reads as
+ * broken, which it is — the alternative wordings all soften it into something a
+ * reader skims past, and this is the one line on the page whose job is to stop
+ * an empty list being mistaken for good news.
+ */
+function describeSweep(lastSweptAt: string | null): string {
+  if (!lastSweptAt) return "The sweep has not completed once since the worker started.";
+  const minutes = Math.round((Date.now() - new Date(lastSweptAt).getTime()) / 60000);
+  if (minutes < 1) return "Checked less than a minute ago.";
+  if (minutes < 60) return `Checked ${minutes} minute${minutes === 1 ? "" : "s"} ago.`;
+  const hours = Math.round(minutes / 60);
+  return `Last checked ${hours} hour${hours === 1 ? "" : "s"} ago.`;
+}
+
 export default function OperatorsPage() {
   const [findings, setFindings] = useState<OperatorFinding[]>([]);
   const [operators, setOperators] = useState<OperatorInfo[]>([]);
   const [counts, setCounts] = useState({ urgent: 0, warn: 0, info: 0 });
+  const [sweep, setSweep] = useState<{ lastSweptAt: string | null; stalled: boolean }>({
+    lastSweptAt: null,
+    stalled: false,
+  });
   const [business, setBusiness] = useState<BusinessSlug | "">("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -40,6 +61,7 @@ export default function OperatorsPage() {
       setFindings(data.findings);
       setCounts(data.counts);
       setOperators(data.operators);
+      setSweep({ lastSweptAt: data.lastSweptAt, stalled: data.sweepStalled });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load findings.");
     } finally {
@@ -85,13 +107,37 @@ export default function OperatorsPage() {
         {loading ? (
           <div className="act-empty">Loading…</div>
         ) : total === 0 ? (
-          <div className="op-clear">
-            <strong>Nothing needs attention.</strong>
-            <p>
-              No customer is waiting, nothing promised is overdue, and every knowledge source is
-              indexing. Checked within the last ten minutes.
-            </p>
-          </div>
+          /*
+           * THIS PANEL USED TO ASSERT ITS OWN FRESHNESS.
+           *
+           * It said "Checked within the last ten minutes" as hardcoded prose. If
+           * the sweep stops, `operator_findings` stops changing, the count stays
+           * at zero, and that sentence reassures somebody indefinitely — the
+           * exact failure migration 050 exists to end, rendered as good news.
+           *
+           * So an empty list now says WHEN it was last checked, and when nobody
+           * has checked it says that instead of claiming otherwise. "Nothing
+           * found" and "nothing looked" are different facts and this is the one
+           * screen where confusing them costs the most.
+           */
+          sweep.stalled ? (
+            <div className="op-clear stale">
+              <strong>Nothing has been checked recently.</strong>
+              <p>
+                The list below is empty because the sweep is not running, not because there is
+                nothing wrong. {describeSweep(sweep.lastSweptAt)} Everything these operators watch
+                is currently unwatched.
+              </p>
+            </div>
+          ) : (
+            <div className="op-clear">
+              <strong>Nothing needs attention.</strong>
+              <p>
+                No customer is waiting, nothing promised is overdue, and every knowledge source is
+                indexing. {describeSweep(sweep.lastSweptAt)}
+              </p>
+            </div>
+          )
         ) : (
           <>
           {/* The list is capped server-side; the counts are not. At 250 open

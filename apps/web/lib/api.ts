@@ -884,6 +884,16 @@ export function getFindings(business?: BusinessSlug | ""): Promise<{
   findings: OperatorFinding[];
   counts: { urgent: number; warn: number; info: number };
   operators: OperatorInfo[];
+  /**
+   * When the sweep last completed, and whether it is overdue (migration 050).
+   *
+   * Null means it has not completed since the worker started. The page must not
+   * treat that as "recently" — an empty findings list from a sweep that stopped
+   * looks exactly like an empty list from a healthy one, which is the whole
+   * reason this field exists.
+   */
+  lastSweptAt: string | null;
+  sweepStalled: boolean;
 }> {
   return request(`/api/operators${business ? `?business=${business}` : ""}`);
 }
