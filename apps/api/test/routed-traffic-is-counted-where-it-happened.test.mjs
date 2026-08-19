@@ -42,6 +42,10 @@ const CONTACTS_MIGRATION = read(
   "packages", "db", "migrations",
   "055-a-contact-is-visible-to-whoever-serves-them.sql"
 );
+const CAST_FIX = read(
+  "packages", "db", "migrations",
+  "056-an-unset-tenant-must-not-throw-inside-a-policy.sql"
+);
 
 test("the column is maintained by a trigger, not by every writer", () => {
   // Every writer remembering is the pattern this codebase has been bitten by
@@ -185,4 +189,36 @@ test("the contacts policy still tests a column, not another policy", () => {
   assert.ok(!/select\s+1\s+from\s+conversations/.test(policy), "no subquery in the policy");
   const check = policy.slice(policy.indexOf("with check ("));
   assert.ok(!check.includes("served_organization_ids"), "writes must stay with the owner");
+});
+
+test("no policy casts the tenant setting to uuid", () => {
+  // 055 wrote `current_setting('app.current_org', true)::uuid = any (...)`.
+  // `withAllTenants` sets only app.tenant_scope and never app.current_org --
+  // a cross-tenant unit of work has no current organisation -- so inside it
+  // that setting is '' and the cast raises "invalid input syntax for type
+  // uuid". Worse, whether the cast was REACHED depended on how the planner
+  // ordered the OR branches: the same policy threw for one cross-tenant query
+  // and returned rows for another.
+  //
+  // Every older policy avoids this by casting the COLUMN to text instead. An
+  // array cannot be compared that way, so this uses nullif: an unset tenant
+  // becomes NULL, NULL = any(...) is NULL, and a NULL branch of an OR is simply
+  // not true.
+  assert.match(CAST_FIX, /nullif\(current_setting\('app\.current_org', true\), ''\)::uuid = any \(served_organization_ids\)/);
+  const policy = CAST_FIX.slice(CAST_FIX.indexOf("create policy contacts_tenant_isolation"));
+  assert.ok(
+    !/[^f]current_setting\('app\.current_org', true\)::uuid/.test(policy),
+    "an unguarded cast of the tenant setting is the defect"
+  );
+});
+
+test("the migration does not pretend to verify its own policy", () => {
+  // Migrations run as the OWNER, who bypasses row-level security
+  // unconditionally -- so a probe inside one never evaluates the policy at all
+  // and reports the same thing whether it is correct, broken, or absent. The
+  // first version of 056 ended with exactly such a block, and it cheerfully
+  // announced that ABR could see fifteen contacts, which is the number ABR must
+  // not see.
+  assert.ok(!/^do \$\$/m.test(CAST_FIX), "no self-probe in a file that cannot run one");
+  assert.match(CAST_FIX, /WHY THERE IS NO PROBE HERE/);
 });
