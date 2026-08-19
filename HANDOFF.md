@@ -101,8 +101,12 @@ git -C "$NAO" add -A
 #     githooks/pre-commit and verify-all.sh were added after it and inherited
 #     nothing. Following it literally on 2026-08-19 demoted all three to 644 —
 #     including verify-all.sh, which is how the eight gates are run on the VPS.
-#     So the list is DERIVED FROM THE MIRROR'S OWN HEAD, never typed:
-git -C "$NAO" ls-tree -r HEAD | awk '$1=="100755"{print $4}' |
+#     DERIVED FROM THE SOURCE TREE, not the mirror's. Reading the MIRROR's HEAD
+#     was the first version and it is subtly wrong in one direction: it can only
+#     re-assert bits on files the mirror already had, so a NEW executable is
+#     recorded 644 on the commit that introduces it and stays that way. Caught
+#     the same day it was written, by adding build-check.sh and deploy.sh.
+git -C "C:/CLAUDE CODE" ls-tree -r HEAD:nexus-agentic-os | awk '$1=="100755"{print $4}' |
   while read -r f; do git -C "$NAO" update-index --chmod=+x "$f"; done
 #     Then confirm, because this failure is silent until something will not run:
 git -C "$NAO" diff --cached --summary | grep "mode change" && echo "STILL DEMOTED"
@@ -112,10 +116,14 @@ git -C "$NAO" commit -m "..."
 #    no write access to BullionEdgePro, and it hijacks all github.com auth.
 git -C "$NAO" -c credential.helper= -c credential.helper=manager push origin main
 
-# 4. on the VPS
-cd /opt/nexus && git pull --ff-only origin main
-docker compose -f docker-compose.prod.yml build api worker
-docker compose -f docker-compose.prod.yml up -d api worker
+# 4. on the VPS — ONE COMMAND, and it builds web too
+cd /opt/nexus && ./scripts/deploy.sh
+#
+#    This step used to read `build api worker`, and `web` was left to whoever
+#    remembered it. Every gate talks to the API, so a forgotten web build is a
+#    deploy where all ten gates pass and the deck still shows the previous
+#    revision. deploy.sh pulls, exports GIT_COMMIT, builds all three, restarts,
+#    and runs build-check on itself rather than assuming it worked.
 ```
 
 A fresh clone of the mirror also needs `git config user.email/user.name`, or the commit fails
