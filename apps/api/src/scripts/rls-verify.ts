@@ -189,23 +189,35 @@ async function main(): Promise<void> {
     }
     console.log(`\nIsolation (${a.slug} must not see ${b.slug}'s ${hidden} contacts)`);
 
-    // The decisive check. Inside A's context, ask for rows that belong to B.
-    // Without RLS this returns B's real count; with RLS it must return zero.
+    // The decisive check, asked the way that stayed true after migration 055.
+    //
+    // "Can A see rows belonging to B" now has a legitimate yes: a contact is
+    // created by the number's owner, before anybody knows which business is
+    // being asked for, so a person ABR is serving is a contact Zipicka OWNS.
+    // ABR must be able to read their name — until 055 the inner join on
+    // contacts silently emptied ABR's inbox for a customer waiting in it.
+    //
+    // So: can this business see somebody it neither owns nor is serving?
+    // Stronger than the question it replaces, because it covers every other
+    // tenant at once instead of one named comparison.
     const leaked = await withTenant(a.id, async () => {
       const { rows } = await getPool().query<{ n: string }>(
-        `select count(*)::text as n from contacts where organization_id = $1`,
-        [b.id]
+        `select count(*)::text as n
+           from contacts
+          where organization_id <> $1
+            and not ($1::uuid = any (served_organization_ids))`,
+        [a.id]
       );
       return Number(rows[0].n);
     });
     line(
       leaked === 0,
-      `contacts of ${b.slug}`,
+      `contacts neither owned nor served by ${a.slug}`,
       leaked === 0
         ? hidden > 0
           ? `${hidden} rows invisible`
           : "nothing to hide — see above"
-        : `LEAKED ${leaked} rows`
+        : `LEAKED ${leaked} rows — ${a.slug} can read a stranger's customers`
     );
 
     // A SHARPER QUESTION THAN "CAN A SEE B'S ROWS", because after migration 054
