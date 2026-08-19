@@ -208,17 +208,35 @@ async function main(): Promise<void> {
         : `LEAKED ${leaked} rows`
     );
 
+    // A SHARPER QUESTION THAN "CAN A SEE B'S ROWS", because after migration 054
+    // that question has a legitimate yes.
+    //
+    // All five businesses answer on one number, so a conversation routed to ABR
+    // is OWNED by Zipicka. ABR must be able to read it -- it is ABR's customer,
+    // and until 054 ABR's own inbox was empty while they waited. Counting by
+    // organization_id therefore reported that correct behaviour as a leak, on
+    // exactly one row, which is the shape a real leak also has.
+    //
+    // So this asks the question that stayed true: can this business see a
+    // conversation that is NEITHER its own NOR one it is serving? Strictly
+    // stronger than the old assertion -- it covers every other tenant at once
+    // rather than one named comparison -- and it still fails on a genuine leak.
     const leakedConversations = await withTenant(a.id, async () => {
       const { rows } = await getPool().query<{ n: string }>(
-        `select count(*)::text as n from conversations where organization_id = $1`,
-        [b.id]
+        `select count(*)::text as n
+           from conversations
+          where organization_id <> $1
+            and coalesce(routed_organization_id, organization_id) <> $1`,
+        [a.id]
       );
       return Number(rows[0].n);
     });
     line(
       leakedConversations === 0,
-      `conversations of ${b.slug}`,
-      leakedConversations === 0 ? "invisible" : `LEAKED ${leakedConversations} rows`
+      `conversations neither owned nor served by ${a.slug}`,
+      leakedConversations === 0
+        ? "invisible"
+        : `LEAKED ${leakedConversations} rows — ${a.slug} can read someone else's customers`
     );
   }
 
