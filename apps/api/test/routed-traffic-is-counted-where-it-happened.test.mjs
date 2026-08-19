@@ -38,6 +38,10 @@ const MIGRATION = read(
   "packages", "db", "migrations",
   "054-routed-traffic-belongs-to-the-serving-business.sql"
 );
+const CONTACTS_MIGRATION = read(
+  "packages", "db", "migrations",
+  "055-a-contact-is-visible-to-whoever-serves-them.sql"
+);
 
 test("the column is maintained by a trigger, not by every writer", () => {
   // Every writer remembering is the pattern this codebase has been bitten by
@@ -132,4 +136,53 @@ test("agent_quality_daily is deliberately NOT re-resolved", () => {
     !body.includes("serving_organization_id"),
     "the rollup is already per business; resolving twice would be wrong"
   );
+});
+
+test("the contact is visible to whoever is serving them", () => {
+  // 054 was not enough and the inbox proved it. Measured as ABR immediately
+  // after 054:
+  //
+  //   conversations abr can see                 1
+  //   contacts abr can see                      0
+  //   conversations surviving the contact join  0
+  //
+  // The inbox joins contacts for the customer's name, and a contact belongs to
+  // the number's owner because it is created when the message arrives, before
+  // anybody knows which business is being asked for. The inner join silently
+  // removed the row 054 had just made visible.
+  //
+  // A LEFT JOIN would have hidden this rather than fixed it: an inbox entry
+  // with no name and no number is not something anybody can act on.
+  assert.match(CONTACTS_MIGRATION, /served_organization_ids uuid\[\] not null default/);
+  assert.match(CONTACTS_MIGRATION, /any \(served_organization_ids\)/);
+});
+
+test("a contact can be served by more than one business at once", () => {
+  // An array, not a second serving_organization_id. A conversation has one
+  // serving business; a CONTACT can have several -- the same person may ask the
+  // letting agent about a flat and the law firm about a lease, on the same
+  // number, and both need their name. A single column would pick one and be
+  // wrong for the other.
+  assert.match(CONTACTS_MIGRATION, /array_agg\(distinct coalesce\(c\.routed_organization_id, c\.organization_id\)\)/);
+  // Rebuilt from the conversations rather than appended to, so a conversation
+  // that is deleted or re-routed away stops granting access.
+  assert.match(CONTACTS_MIGRATION, /after insert or delete or update of routed_organization_id, contact_id on conversations/);
+});
+
+test("the contacts policy still tests a column, not another policy", () => {
+  // Same rule as 054. "Exists a conversation for this contact routed to me"
+  // would have worked and would have made the contacts policy depend on the
+  // conversations policy.
+  // BOUNDED TO THE POLICY STATEMENT. The first version sliced to the end of
+  // the file and matched the assertion block below it, which legitimately
+  // does select from conversations -- a test that could not tell a policy
+  // from the check that verifies it.
+  const policyStart = CONTACTS_MIGRATION.indexOf("create policy contacts_tenant_isolation");
+  const policy = CONTACTS_MIGRATION.slice(
+    policyStart,
+    CONTACTS_MIGRATION.indexOf("-- ---", policyStart)
+  );
+  assert.ok(!/select\s+1\s+from\s+conversations/.test(policy), "no subquery in the policy");
+  const check = policy.slice(policy.indexOf("with check ("));
+  assert.ok(!check.includes("served_organization_ids"), "writes must stay with the owner");
 });
