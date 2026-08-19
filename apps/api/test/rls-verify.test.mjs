@@ -35,12 +35,20 @@ test("enablement comes from the catalog, not from the migration succeeding", () 
   assert.match(VERIFY, /pg_policies/);
 });
 
-test("the decisive check counts another tenant's rows from inside this one", () => {
+test("the decisive check counts rows this tenant has no claim on", () => {
   // Installation is visible in the catalog. Enforcement is only visible by
   // asking for something that should be invisible and getting nothing.
+  //
+  // "Rows belonging to another tenant" was the question until migration 055,
+  // when it acquired a legitimate yes: a contact is created by the number's
+  // owner before anybody knows which business is being asked for, so a person
+  // ABR is serving is a contact Zipicka OWNS. The check now asks whether a
+  // business can see somebody it neither owns nor serves -- stronger, because
+  // it covers every other tenant at once rather than one named comparison.
   assert.match(VERIFY, /must not see/);
   assert.match(VERIFY, /LEAKED \$\{leaked\} rows|LEAKED/);
-  assert.match(VERIFY, /from contacts where organization_id = \$1/);
+  assert.match(VERIFY, /where organization_id <> \$1/);
+  assert.match(VERIFY, /not \(\$1::uuid = any \(served_organization_ids\)\)/);
 });
 
 test("it also proves the tenant can still see itself", () => {

@@ -262,9 +262,21 @@ async function main(): Promise<void> {
       );
       return Number(rows[0].n);
     });
+    // THE BASELINE IS "WHAT THIS BUSINESS IS ENTITLED TO SEE", not "what it
+    // owns", and those stopped being the same thing at migration 055.
+    //
+    // A contact is created by the number's owner, before anybody knows which
+    // business is being asked for, so ABR owns none and is serving one. Read as
+    // ownership this check demanded that ABR see zero contacts -- which is the
+    // state that emptied its inbox while a customer waited in it, and is
+    // exactly what this section exists to catch: a policy that hides everything
+    // is "secure" and useless.
     const viaAll = await withAllTenants("rls-verify: baseline", async () => {
       const { rows } = await getPool().query<{ n: string }>(
-        `select count(*)::text as n from contacts where organization_id = $1`,
+        `select count(*)::text as n
+           from contacts
+          where organization_id = $1
+             or $1::uuid = any (served_organization_ids)`,
         [org.id]
       );
       return Number(rows[0].n);
