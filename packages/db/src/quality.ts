@@ -54,7 +54,7 @@ export async function rollUpQualityDay(organizationId: string, day: string): Pro
      day_messages as (
        select m.conversation_id, m.sender_type, m.created_at
          from messages m, bounds b
-        where m.organization_id = $1
+        where m.serving_organization_id = $1
           and m.created_at >= b.day_start
           and m.created_at <  b.day_end
      ),
@@ -85,7 +85,7 @@ export async function rollUpQualityDay(organizationId: string, day: string): Pro
        select coalesce(sum(cm.input_tokens), 0)  as input_tokens,
               coalesce(sum(cm.output_tokens), 0) as output_tokens
          from conversation_metrics cm, bounds b
-        where cm.organization_id = $1
+        where cm.serving_organization_id = $1
           and cm.recorded_at >= b.day_start
           and cm.recorded_at <  b.day_end
      )
@@ -252,7 +252,7 @@ export async function getEscalationHotspots(
               min(intent)                             as intent,
               bool_or(resolved_by = 'human_agent')    as escalated
          from conversation_metrics
-        where organization_id = $1
+        where serving_organization_id = $1
           and intent is not null
           -- Same exclusion as the F5 rollup, for a sharper version of the same
           -- reason. This ranking exists to send someone to fix a knowledge gap.

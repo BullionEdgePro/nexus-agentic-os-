@@ -417,9 +417,19 @@ test("the rate is per conversation, not per metric row", () => {
   assert.match(hotspots, /group by conversation_id/);
 });
 
-test("hotspots are scoped to one business", () => {
+test("hotspots are scoped to the business that SERVED the conversation", () => {
+  // `organization_id` names the business that owns the WhatsApp number, because
+  // that is whose transaction the reply path writes in. On this platform all
+  // five answer on one number, so scoping a per-business number to it counted
+  // ten of Zipicka's sixty-six messages against the wrong firm and left Juris
+  // Prime's page reading zero. Migration 054 added the column that says who was
+  // actually being talked to.
   const hotspots = QUALITY_SQL.slice(QUALITY_SQL.indexOf("export async function getEscalationHotspots"));
-  assert.match(hotspots, /where organization_id = \$1/);
+  assert.match(hotspots, /where serving_organization_id = \$1/);
+  assert.ok(
+    !/where organization_id = \$1/.test(hotspots),
+    "the owning business is not the business this number is about"
+  );
 });
 
 test("the loop closes: measurement points at the fix", () => {

@@ -47,7 +47,13 @@ export async function getConversationsForOrganization(
        order by created_at desc
        limit 1
      ) lm on true
-     where c.organization_id = $1
+     -- THE BUSINESS THE CUSTOMER IS TALKING TO, not the one that owns the
+     -- number. All five answer on Zipicka's, so filtering on organization_id
+     -- showed Juris Prime an empty inbox while its own customers were waiting,
+     -- and showed Zipicka three conversations it could not help with.
+     -- Migration 054 widened the policy so the serving business can read these
+     -- at all; this decides which of them are its own.
+     where coalesce(c.routed_organization_id, c.organization_id) = $1
      order by coalesce(lm.created_at, c.opened_at) desc
      limit $2`,
     [organizationId, limit]

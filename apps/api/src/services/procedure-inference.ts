@@ -161,14 +161,14 @@ export async function findWellHandledConversations(
               min(m.created_at) filter (where m.sender_type = 'ai_agent') as first_ai_at,
               max(m.created_at) filter (where m.sender_type = 'contact')  as last_inbound_at
          from messages m
-        where m.organization_id = $1
+        where m.serving_organization_id = $1
           and m.created_at > now() - ($2::integer * interval '1 day')
         group by m.conversation_id
      ),
      labelled as (
        select conversation_id, min(intent) as intent
          from conversation_metrics
-        where organization_id = $1
+        where serving_organization_id = $1
           and intent is not null
         group by conversation_id
      )
@@ -237,7 +237,7 @@ export async function getInferenceReadiness(
     getPool().query<{ conversations: string }>(
       `select count(distinct conversation_id)::text as conversations
          from messages
-        where organization_id = $1
+        where serving_organization_id = $1
           and created_at > now() - ($2::integer * interval '1 day')`,
       [organizationId, windowDays]
     ),
