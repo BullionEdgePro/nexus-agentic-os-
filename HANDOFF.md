@@ -1346,36 +1346,40 @@ customer would get the handover phrase rather than that answer. That is the
 governance layer doing exactly what it is for, on the first grounded reply this
 business has ever been observed to produce.
 
-## PENDING: migration 052 is written, tested and NOT applied
+## Migration 052 applied — all ten gates pass
 
-*As of 2026-08-19. Two of the ten gates fail until it is, and they are right to.*
+*2026-08-19. `Row-level security holds on 25 tenant table(s), derived from the
+schema rather than a list.`*
 
-```bash
-cd /opt/nexus && docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U nexus -d nexus -v ON_ERROR_STOP=1 -f - \
-  < packages/db/migrations/052-rls-for-every-tenant-table.sql
-```
+Four tenant tables had no row-level security: `agent_quality_daily` (195 rows
+across all five businesses), `employee_presence_events`, `organization_users`,
+`twin_handbacks`. 052 derives the set from the schema, so a table added later
+is covered by running migrations rather than by remembering.
 
-Then `./scripts/verify-all.sh` should return all nine PASS.
+The order mattered in one direction and it held. `agent_quality_daily` had no
+policy, and the quality route read it with **no tenant context** — correct only
+because every query carried an explicit `where organization_id = $1`. Applying
+the migration before scoping that route would have emptied the Quality deck
+page. Measured after, in production:
 
-**The code is already deployed and is safe either way.** The ordering matters
-in one direction only: `agent_quality_daily` had no policy, and the quality
-route read it with no tenant context, so applying the migration BEFORE that
-route was scoped would have emptied the Quality deck page -- no context, no
-rows. That route now opens `withTenant`, verified against production: 30 rows
-for zipicka over 30 days.
-
-What the two failing gates are reporting, correctly:
-
-| gate | says |
+| the read | result |
 |---|---|
-| `schema-drift-check` | four `ENABLE ROW LEVEL SECURITY` statements and five policies exist in the repository and not in production |
-| `rls-verify` | `agent_quality_daily`, `employee_presence_events`, `organization_users`, `twin_handbacks` each have an `organization_id` and no row-level security |
+| scoped, as the route now does | **30 rows** |
+| unscoped, as it did before | **refused** by the strict tenant assert |
 
-`agent_quality_daily` holds 195 rows across all five businesses. Every reader
-of it filters on `organization_id` explicitly, so no query known to exist
-returns another business's rows; what is missing is the guarantee that a query
-which forgot the filter would return nothing.
+The old path is not merely unused, it is now impossible.
+
+### What the drift check found on the way
+
+Its own filter never matched a psql meta-command. pg_dump 17 emits
+`\restrict` / `\unrestrict` lines carrying a token that is random per dump, so
+they read as two lines of permanent drift in both directions. Two attempts at
+the pattern got the escaping wrong and neither matched anything — `^..connect`
+wants two characters before `connect` and the line has one, which went
+unnoticed for as long as no dump contained a `\connect` line. It is now
+"starts with a backslash", which covers every meta-command pg_dump emits
+rather than the ones somebody thought to name.
+
 ## The sixth instance — the argument was fixed and the transaction was not
 
 *Found 2026-08-19, before it fired.*
