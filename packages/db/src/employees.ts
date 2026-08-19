@@ -1,4 +1,4 @@
-import { getPool, withAllTenants, withTenant } from "./client.js";
+import { getPool, withAllTenants, withTenant, withServingTenant } from "./client.js";
 import type { Employee, PresenceSource, PresenceStatus, WeeklySchedule } from "@nexus/shared";
 
 interface EmployeeRow {
@@ -75,7 +75,26 @@ function toEmployee(row: EmployeeRow): Employee {
   };
 }
 
+/**
+ * WIDENED AT THE READ, not at the call site.
+ *
+ * Every caller was already wrapping this correctly, which is exactly the
+ * condition under which the next one will not. `findAvailableSlots` carries a
+ * paragraph telling its callers to wrap it; three do. That is a convention, and
+ * a convention holds until somebody adds a fourth call — at which point the
+ * failure is an empty roster, not an error, and the customer is told nobody is
+ * available.
+ *
+ * Widening here costs nothing where the wrapping was already right:
+ * `withServingTenant` is a no-op when the ambient scope already matches, when
+ * the scope is cross-tenant on purpose, and it opens an ordinary transaction
+ * when there is no scope at all.
+ */
 export async function listEmployees(organizationId: string): Promise<Employee[]> {
+  return withServingTenant(organizationId, () => listEmployeesScoped(organizationId));
+}
+
+async function listEmployeesScoped(organizationId: string): Promise<Employee[]> {
   const { rows } = await getPool().query<EmployeeRow>(
     `select ${EMPLOYEE_COLUMNS} from employees
      where organization_id = $1 and is_active = true
@@ -100,7 +119,32 @@ export async function listEmployees(organizationId: string): Promise<Employee[]>
  * empty, and fetching every employee's full profile to answer a yes/no on the
  * reply path is work nobody uses.
  */
+/**
+ * THE ARGUMENT WAS FIXED AND THE TRANSACTION WAS NOT — instance six.
+ *
+ * `processor.ts` asks this on the stale-handoff release path, and it used to
+ * ask it about `organization.id`: the number's OWNER. That was found, corrected
+ * to `answering` — the business the switchboard routed to — and locked with a
+ * test that asserts the argument by name. The argument is now right and the
+ * answer was still wrong, because on this platform naming the business is only
+ * half of asking about it. The read runs inside the owner's transaction, and
+ * RLS does not care which id is in the WHERE clause: it returns zero rows.
+ *
+ * False here does not mean "escalate carefully". It means "nobody at this
+ * business can take a handoff", so the release clears the flag and the agent
+ * starts answering a conversation a human had taken over — over the top of a
+ * real person, mid-thread, with the state that said so wiped.
+ *
+ * Latent rather than live when found on 2026-08-19: no routed conversation was
+ * in handoff, and the three that were belong to Zipicka, which owns the number,
+ * so the read was in scope by coincidence of who was asking. Juris Prime has an
+ * active employee today, so the first routed handoff would have fired it.
+ */
 export async function hasActiveEmployees(organizationId: string): Promise<boolean> {
+  return withServingTenant(organizationId, () => hasActiveEmployeesScoped(organizationId));
+}
+
+async function hasActiveEmployeesScoped(organizationId: string): Promise<boolean> {
   const { rows } = await getPool().query<{ n: string }>(
     `select count(*)::text as n from employees
       where organization_id = $1 and is_active = true`,

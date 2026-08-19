@@ -125,7 +125,13 @@ test("the empty-rota case is logged, because nothing else would show it", () => 
 test("it counts rather than listing", () => {
   // The caller needs a yes/no. Fetching every employee's full profile to answer
   // it on the reply path is work nobody uses.
-  const fn = EMPLOYEES_DB.slice(EMPLOYEES_DB.indexOf("export async function hasActiveEmployees"));
+  // The SQL moved into `hasActiveEmployeesScoped` on 2026-08-19, when the
+  // exported name became the widening wrapper — the reader was running raw
+  // `getPool().query` inside the number owner's transaction and returning zero
+  // for every serving business. This slices the private half, which is where
+  // the query lives now; anchoring on the exported name would have made this
+  // test fail on a fix and pass on a re-break.
+  const fn = EMPLOYEES_DB.slice(EMPLOYEES_DB.indexOf("async function hasActiveEmployeesScoped"));
   const body = fn.slice(0, fn.indexOf("\n}"));
   assert.match(body, /select count\(\*\)::text as n from employees/);
   assert.match(body, /is_active = true/);

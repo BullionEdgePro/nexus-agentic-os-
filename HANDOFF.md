@@ -94,9 +94,18 @@ git -C "C:/CLAUDE CODE" archive HEAD:nexus-agentic-os | tar -x -C "$NAO"
 git -C "$NAO" add -A
 # 2b. THE EXEC BIT DOES NOT SURVIVE THIS. `git rm --cached .` empties the index,
 #     tar on Windows drops the mode, and `add` re-records 644 because
-#     core.fileMode is false here. Re-assert it or the nightly backup silently
-#     stops being runnable:
-git -C "$NAO" update-index --chmod=+x scripts/backup-db.sh
+#     core.fileMode is false here.
+#
+#     THIS STEP USED TO NAME ONE FILE and there are four. It was written when
+#     backup-db.sh was the only executable in the tree; pre-commit.sh,
+#     githooks/pre-commit and verify-all.sh were added after it and inherited
+#     nothing. Following it literally on 2026-08-19 demoted all three to 644 —
+#     including verify-all.sh, which is how the eight gates are run on the VPS.
+#     So the list is DERIVED FROM THE MIRROR'S OWN HEAD, never typed:
+git -C "$NAO" ls-tree -r HEAD | awk '$1=="100755"{print $4}' |
+  while read -r f; do git -C "$NAO" update-index --chmod=+x "$f"; done
+#     Then confirm, because this failure is silent until something will not run:
+git -C "$NAO" diff --cached --summary | grep "mode change" && echo "STILL DEMOTED"
 git -C "$NAO" commit -m "..."
 
 # 3. THIS is the part that breaks: gh is logged in as Rancho-Felipe, which has

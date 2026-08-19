@@ -8,7 +8,7 @@
  * WHY THIS EXISTS
  * ============================================================
  *
- * The same defect has now been found FIVE times, and every time it was found
+ * The same defect has now been found SIX times, and every time it was found
  * after it had already cost something:
  *
  *   1. `hasStaffOnShift` answered "you have no staff at all" for four of five
@@ -21,6 +21,11 @@
  *      business from the triage menu got NO REPLY AT ALL for seventeen hours.
  *   5. `searchKnowledge` returned nothing, so a routed customer's every question
  *      would have been answered "I'll check with a colleague".
+ *   6. `hasActiveEmployees` returned false, so the stale-handoff release would
+ *      have decided a human's conversation was abandoned and let the agent talk
+ *      over them. Found before it fired, and only because #3 fixed the argument
+ *      to this same call and a test locked it — proving the argument right is
+ *      not proving the question right.
  *
  * The mechanism is identical each time. Migration 010 put all five businesses on
  * Zipicka's WhatsApp number. Every inbound message therefore runs inside a
@@ -58,6 +63,7 @@ import {
   getActivePhrase,
   getActiveProcedure,
   listOpenTasksForContact,
+  hasActiveEmployees,
 } from "@nexus/db";
 import { routeToEmployeeTwin } from "@nexus/agents";
 import { searchKnowledgeLexical } from "@nexus/knowledge";
@@ -136,6 +142,24 @@ const PROBES: Probe[] = [
     // indistinguishable from an empty result from the wrong tenant.
     count: async (serving) =>
       (await listOpenTasksForContact(serving.id, ABSENT_CONTACT)).length,
+  },
+  {
+    name: "handoff release",
+    consequence: "the agent talks over a human who had taken the conversation",
+    // A SEPARATE PROBE FROM "staff on shift", because they are separate
+    // functions and only one of them was widened.
+    //
+    // `hasStaffOnShift` reads presence and was fixed on 2026-08-17.
+    // `hasActiveEmployees` reads the rota, is asked by the stale-handoff
+    // release, and was still raw SQL two days later. Both answer "can anyone
+    // here take this", which is what made the gap invisible: the probe for one
+    // passed and the reader beside it was untouched.
+    //
+    // Its failure direction is the opposite of every other probe here, and
+    // worse. The others return nothing and the customer is told nothing. This
+    // one returns FALSE — "this business has no staff at all" — and the
+    // pipeline acts on it by releasing a handoff a human is holding.
+    count: async (serving) => ((await hasActiveEmployees(serving.id)) ? 1 : 0),
   },
   {
     name: "active procedures",
