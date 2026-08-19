@@ -676,7 +676,24 @@ const reengagementCandidate: Operator = {
     const { rows } = await getPool().query<{ n: string }>(
       `select count(*)::text as n
          from contacts ct
-        where ct.organization_id = $1
+        -- WHO TALKED TO THIS BUSINESS, which is not who owns the contact row.
+        --
+        -- A contact is created by the number's owner, before anybody knows
+        -- which of the five firms is being asked for -- so keyed on
+        -- ct.organization_id, this list offers Zipicka people who have only ever
+        -- spoken to Juris Prime, and offers Juris Prime nobody at all.
+        --
+        -- The served_organization_ids array is what migration 055 added and keeps
+        -- true by trigger. It is an array precisely because of this case: the
+        -- same person may ask the letting agent about a flat and the law firm
+        -- about a lease, and both should be able to follow up with them.
+        --
+        -- This is the last of the seven readers that keyed a per-business
+        -- question on the number's owner, and the only one where the answer had
+        -- to be a set rather than a column.
+        where ($1::uuid = any (ct.served_organization_ids)
+               or (cardinality(ct.served_organization_ids) = 0
+                   and ct.organization_id = $1))
           and ct.reengagement_opted_out = false
           -- Quiet is measured on MESSAGES, not on the conversation row.
           --
@@ -769,7 +786,12 @@ const retrievalUnavailable: Operator = {
               count(*) filter (where retrieval_outcome = 'degraded')::text as degraded,
               count(*) filter (where retrieval_outcome is not null)::text as attempted
          from conversation_metrics
-        where organization_id = $1
+        -- SERVING, NOT OWNING. All five businesses answer on one number, so a
+        -- routed conversation's rows carry the owner's organization_id. Keyed
+        -- on that, this alarm fires at Zipicka about another firm's traffic
+        -- and stays silent on the page belonging to the firm that can fix it.
+        -- The column is filled by the trigger from migration 054.
+        where serving_organization_id = $1
           and recorded_at > now() - ($2 || ' hours')::interval`,
       [organizationId, String(RETRIEVAL_LOOKBACK_HOURS)]
     );
@@ -848,7 +870,12 @@ const intentClassificationStopped: Operator = {
       `select count(*) filter (where intent is null)::text  as missing,
               count(*)::text                                as total
          from conversation_metrics
-        where organization_id = $1
+        -- SERVING, NOT OWNING. All five businesses answer on one number, so a
+        -- routed conversation's rows carry the owner's organization_id. Keyed
+        -- on that, this alarm fires at Zipicka about another firm's traffic
+        -- and stays silent on the page belonging to the firm that can fix it.
+        -- The column is filled by the trigger from migration 054.
+        where serving_organization_id = $1
           and recorded_at > now() - ($2 || ' hours')::interval
           -- A message the agent stood down from never reached the classifier,
           -- so its null intent is expected rather than a fault. Counting it
@@ -1084,7 +1111,12 @@ const deliveryFailing: Operator = {
               -- accepted our new terms" call for completely different actions.
               (array_agg(delivery_error) filter (where delivery_error is not null))[1] as reason
          from messages
-        where organization_id = $1
+        -- SERVING, NOT OWNING. All five businesses answer on one number, so a
+        -- routed conversation's rows carry the owner's organization_id. Keyed
+        -- on that, this alarm fires at Zipicka about another firm's traffic
+        -- and stays silent on the page belonging to the firm that can fix it.
+        -- The column is filled by the trigger from migration 054.
+        where serving_organization_id = $1
           and direction = 'outbound'
           and created_at > now() - ($2 || ' hours')::interval`,
       [organizationId, String(DELIVERY_LOOKBACK_HOURS), String(UNCONFIRMED_GRACE_MINUTES)]
@@ -1173,7 +1205,12 @@ const agentUnavailable: Operator = {
                   and reply_outcome <> 'skipped_handover'
               )::text as total
          from conversation_metrics
-        where organization_id = $1
+        -- SERVING, NOT OWNING. All five businesses answer on one number, so a
+        -- routed conversation's rows carry the owner's organization_id. Keyed
+        -- on that, this alarm fires at Zipicka about another firm's traffic
+        -- and stays silent on the page belonging to the firm that can fix it.
+        -- The column is filled by the trigger from migration 054.
+        where serving_organization_id = $1
           and recorded_at > now() - ($2 || ' hours')::interval`,
       [organizationId, String(REPLY_LOOKBACK_HOURS)]
     );
