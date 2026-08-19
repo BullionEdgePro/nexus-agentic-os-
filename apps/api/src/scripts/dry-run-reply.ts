@@ -130,12 +130,37 @@ async function main() {
           }`
         );
 
+        // THE JUDGE MUST SEE WHAT THE AGENT SAW, NOT A SECOND SEARCH.
+        //
+        // This passed `hits` — the three passages from the separate lookup above
+        // — while the agent had retrieved its own, with its own queries and a
+        // limit of five. The judge was therefore asked whether a reply was
+        // supported by a SUBSET of the evidence behind it, and answered
+        // correctly and uselessly: on 18 August it returned `high` for SFS
+        // twice, calling a listing fabricated that is in the knowledge base four
+        // chunks over — sauna, HZ-09, HZ-04, doorman and the exact prices all
+        // present. Nothing was hallucinated; the harness had hidden the source.
+        //
+        // Worse than a wrong number on a screen: that verdict was repeated as
+        // fact, as "the most serious fabrication this project has produced". A
+        // tool that manufactures the defect it was built to detect is the most
+        // expensive kind of wrong.
+        //
+        // The live path never had this bug — `processor.ts` reconstructs the
+        // context from `result.toolCalls`, "what the agent read, not what a
+        // second search might have found". This now does the same, which is also
+        // the only version that tests what production does.
+        const agentContext = (reply.toolCalls ?? [])
+          .filter((call) => call.name === "search_knowledge")
+          .map((call) => (typeof call.output === "string" ? call.output : JSON.stringify(call.output)))
+          .join("\n\n");
+
         // The same judge the live pipeline runs before sending. Its verdict is
         // what decides whether this reply would have gone out or escalated.
         const verdict = await evaluateOutgoingMessage({
           draftReply: reply.text,
           conversationHistory: `customer: ${question}`,
-          ragContext: hits.map((h) => h.content).join("\n\n"),
+          ragContext: agentContext || undefined,
           businessName: organization.name,
         });
         console.log(
