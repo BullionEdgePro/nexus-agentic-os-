@@ -251,7 +251,10 @@ test("a duplicate fingerprint cannot kill the sweep", () => {
   assert.match(OPERATORS_DB, /for \(const finding of found\) unique\.set\(finding\.fingerprint, finding\);/);
   // And the deduped list is what is actually bound — a dedupe computed and then
   // not used would be worse than none, because it reads as handled.
-  assert.equal((OPERATORS_DB.match(/deduped\.map\(/g) ?? []).length, 6);
+  // Seven since migration 053 added serving_organization_id. Counted rather
+  // than listed so a binding added without a column, or the reverse, fails
+  // here rather than at the first sweep after a deploy.
+  assert.equal((OPERATORS_DB.match(/deduped\.map\(/g) ?? []).length, 7);
   assert.ok(!/found\.map\(/.test(OPERATORS_DB), "the raw list must not be bound");
 });
 

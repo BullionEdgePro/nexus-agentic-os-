@@ -88,6 +88,7 @@ const customerWaiting: Operator = {
   run: async (organizationId) => {
     const { rows } = await getPool().query<{
       conversation_id: string;
+      serving_organization_id: string;
       contact_name: string | null;
       wa_id: string;
       waited_hours: string;
@@ -96,6 +97,13 @@ const customerWaiting: Operator = {
       has_assessment: boolean;
     }>(
       `select c.id as conversation_id,
+              -- WHO THIS CUSTOMER IS ACTUALLY WAITING ON. All five businesses
+              -- answer on one number, so a routed conversation is owned by the
+              -- number's owner and this operator can only see it from the
+              -- owner's transaction. Two findings on production named Zipicka
+              -- for customers of SFS International and Juris Prime; the second
+              -- of those IS the seventeen-hour silence. See migration 053.
+              coalesce(c.routed_organization_id, c.organization_id) as serving_organization_id,
               ct.display_name as contact_name,
               ct.wa_id,
               round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as waited_hours,
@@ -194,6 +202,7 @@ const customerWaiting: Operator = {
           : "The AI was not paused, so it should have answered. Check the reply pipeline for this conversation.",
         subjectKind: "conversation",
         subjectId: row.conversation_id,
+        servingOrganizationId: row.serving_organization_id,
       } satisfies FindingInput;
     });
   },
@@ -934,6 +943,7 @@ const handoverAbandoned: Operator = {
   run: async (organizationId) => {
     const { rows } = await getPool().query<{
       conversation_id: string;
+      serving_organization_id: string;
       contact_name: string | null;
       wa_id: string;
       paused_hours: string;
@@ -941,6 +951,11 @@ const handoverAbandoned: Operator = {
       has_assessment: boolean;
     }>(
       `select c.id as conversation_id,
+              -- The business that was supposed to send the colleague. Same
+              -- reason as customer-waiting: this can only be seen from the
+              -- number owner's transaction, so without this the promise is
+              -- chased at the wrong firm. See migration 053.
+              coalesce(c.routed_organization_id, c.organization_id) as serving_organization_id,
               ct.display_name as contact_name,
               ct.wa_id,
               round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as paused_hours,
@@ -1009,6 +1024,7 @@ const handoverAbandoned: Operator = {
           detail: `The agent handed this conversation to a person and paused itself ${hours} hours ago. No colleague has ever replied in it, so the customer has heard nothing since being told help was coming — and because the agent spoke last, every other check reads this as answered. Either reply to them, or take the conversation off handover so the agent starts answering again.`,
           subjectKind: "conversation",
           subjectId: row.conversation_id,
+          servingOrganizationId: row.serving_organization_id,
         } satisfies FindingInput;
       });
   },

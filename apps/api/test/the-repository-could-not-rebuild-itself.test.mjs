@@ -88,10 +88,12 @@ test("row-level security is derived from the schema, not typed out again", () =>
   // And it asserts, which is what makes it a check rather than a best effort.
   assert.match(sql, /Tenant tables still without row-level security/);
 
-  // It must stay the LAST migration, or tables created after it go unprotected
-  // again -- the exact way 018 stopped covering contact_memory.
-  assert.equal(last, "052-rls-for-every-tenant-table.sql",
-    "a migration was added after 052; move the derived RLS pass to the end");
+  // The ordering invariant moved to a-finding-names-the-business-it-is-about,
+  // where it is stated as what actually matters: no migration after this one
+  // may CREATE A TABLE. "052 must be last" was a proxy for that, and it would
+  // have failed on the very next migration regardless of what the migration
+  // did -- which it did, one migration later, on a file that adds a column to
+  // a table that already has a policy.
 });
 
 test("the three hand-maintained lists agree about the four tables", () => {

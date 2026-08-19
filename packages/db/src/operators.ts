@@ -18,6 +18,20 @@ export interface FindingInput {
   detail?: string | null;
   subjectKind?: string | null;
   subjectId?: string | null;
+  /**
+   * The business this finding is ABOUT, when that is not the business whose
+   * sweep found it.
+   *
+   * All five businesses answer on one WhatsApp number, so a routed conversation
+   * is owned by the number's owner and served by somebody else. The sweep can
+   * only see it from the owner's transaction, so the finding must stay owned
+   * there -- see migration 053 for why filing it against the serving business
+   * makes the next sweep retract it. This names who it is about.
+   *
+   * Null for the ten operators that read the business's own data, where owner
+   * and subject are the same business by construction.
+   */
+  servingOrganizationId?: string | null;
 }
 
 export interface OperatorFinding {
@@ -125,20 +139,25 @@ export async function reconcileFindings(
   const { rows } = await getPool().query<{ standing: string; retracted: string }>(
     `with incoming as (
        select * from unnest(
-         $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::uuid[]
-       ) as t(fingerprint, severity, title, detail, subject_kind, subject_id)
+         $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::uuid[], $9::uuid[]
+       ) as t(fingerprint, severity, title, detail, subject_kind, subject_id, serving_organization_id)
      ),
      upserted as (
        insert into operator_findings (
-         organization_id, operator, fingerprint, severity, title, detail, subject_kind, subject_id
+         organization_id, operator, fingerprint, severity, title, detail, subject_kind, subject_id,
+         serving_organization_id
        )
-       select $1, $2, fingerprint, severity, title, detail, subject_kind, subject_id from incoming
+       select $1, $2, fingerprint, severity, title, detail, subject_kind, subject_id,
+              serving_organization_id from incoming
        on conflict (organization_id, operator, fingerprint) do update set
          severity     = excluded.severity,
          title        = excluded.title,
          detail       = excluded.detail,
          subject_kind = excluded.subject_kind,
          subject_id   = excluded.subject_id,
+         -- Updated rather than left alone: a conversation can be routed after
+         -- the finding was first raised, and the finding should follow it.
+         serving_organization_id = excluded.serving_organization_id,
          last_seen_at = now(),
          -- A finding that had been resolved and is back is NEW again. Keeping
          -- the original first_seen_at would report something that returned
@@ -174,6 +193,7 @@ export async function reconcileFindings(
       deduped.map((f) => f.detail ?? null),
       deduped.map((f) => f.subjectKind ?? null),
       deduped.map((f) => f.subjectId ?? null),
+      deduped.map((f) => f.servingOrganizationId ?? null),
     ]
   );
 
@@ -183,15 +203,26 @@ export async function reconcileFindings(
   };
 }
 
+/**
+ * WHICH BUSINESS A FINDING IS ABOUT, which is not always the one that owns it.
+ *
+ * A routed conversation belongs to the shared number's owner, so the sweep can
+ * only see it from the owner's transaction and the finding is owned there.
+ * `serving_organization_id` names who it is actually about. Every read that a
+ * person sees resolves through this; RECONCILIATION does not, and must not --
+ * see migration 053.
+ */
+const FINDING_BUSINESS = "coalesce(f.serving_organization_id, f.organization_id)";
+
 const FINDING_SELECT = `
-  select f.id, f.organization_id,
+  select f.id, ${FINDING_BUSINESS} as organization_id,
          o.name as business_name,
          o.slug as business_slug,
          f.operator, f.severity, f.title, f.detail,
          f.subject_kind, f.subject_id,
          f.first_seen_at, f.last_seen_at, f.resolved_at
     from operator_findings f
-    join organizations o on o.id = f.organization_id
+    join organizations o on o.id = ${FINDING_BUSINESS}
 `;
 
 /**
@@ -208,7 +239,7 @@ export async function listOpenFindings(
   const { rows } = await getPool().query<FindingRow>(
     `${FINDING_SELECT}
       where f.resolved_at is null
-        and ($1::uuid is null or f.organization_id = $1)
+        and ($1::uuid is null or ${FINDING_BUSINESS} = $1)
       order by case f.severity when 'urgent' then 0 when 'warn' then 1 else 2 end,
                f.first_seen_at asc
       limit $2`,
@@ -230,9 +261,9 @@ export async function countOpenFindings(
     `select count(*) filter (where severity = 'urgent')::text as urgent,
             count(*) filter (where severity = 'warn')::text   as warn,
             count(*) filter (where severity = 'info')::text   as info
-       from operator_findings
-      where resolved_at is null
-        and ($1::uuid is null or organization_id = $1)`,
+       from operator_findings f
+      where f.resolved_at is null
+        and ($1::uuid is null or ${FINDING_BUSINESS} = $1)`,
     [organizationId ?? null]
   );
   return {
@@ -259,10 +290,10 @@ export async function lastSeenByOperator(
   organizationId?: string | null
 ): Promise<Record<string, string>> {
   const { rows } = await getPool().query<{ operator: string; last_seen_at: string }>(
-    `select operator, max(last_seen_at) as last_seen_at
-       from operator_findings
-      where ($1::uuid is null or organization_id = $1)
-      group by operator`,
+    `select f.operator, max(f.last_seen_at) as last_seen_at
+       from operator_findings f
+      where ($1::uuid is null or ${FINDING_BUSINESS} = $1)
+      group by f.operator`,
     [organizationId ?? null]
   );
   return Object.fromEntries(rows.map((row) => [row.operator, row.last_seen_at]));
