@@ -419,7 +419,18 @@ async function processSingleTextMessage(
   let { isHumanHandoff } = inboundResult;
 
   if (!messageId) {
-    // Meta redelivered a message we already processed — skip the agent call.
+    // SILENT-RETURN-OK: a webhook retry is not a message.
+    //
+    // `recordInboundMessage` returns a null messageId on exactly one condition
+    // — `on conflict (wa_message_id) do nothing` matched — so this is Meta
+    // redelivering something already recorded, and a reply already went out for
+    // it. There is no customer waiting and nothing to report; logging every
+    // retry would be volume without information.
+    //
+    // The marker above is load-bearing: `every-silent-return-leaves-a-trace`
+    // fails on any return in this path that neither replies nor records, unless
+    // it carries this marker and a reason. Adding one is meant to be a decision
+    // somebody writes down, not an omission.
     return;
   }
 
@@ -568,12 +579,28 @@ async function processSingleTextMessage(
 
   if (employee && presence && !presence.shouldTwinRespond) {
     // The human owns this conversation right now (they are online and opted
-    // into human_first, or their twin is switched off). This is a deliberate,
-    // recorded handoff rather than silence — the deck shows it as human-owned.
-    logger.debug(
-      { conversationId, employeeId: employee.id, presence: presence.status },
-      "Employee is handling this conversation — twin standing down"
+    // into human_first, or their twin is switched off).
+    //
+    // THE COMMENT HERE USED TO CALL THIS "a deliberate, recorded handoff rather
+    // than silence — the deck shows it as human-owned", AND HALF OF THAT WAS
+    // TRUE. `flagHandoffBestEffort` does set the flag and publish an inbox
+    // event, so the CONVERSATION is visibly human-owned. The MESSAGE was not
+    // recorded at all: no metric row, and a debug line below the level the
+    // containers log at. Same shape as the handover branch above, one branch
+    // over, and found the same way — by asking what a message that got no
+    // reply left behind. See migration 057.
+    logger.info(
+      { conversationId, organizationId: organization.id, employeeId: employee.id, presence: presence.status },
+      "Twin stood down — the employee is handling this conversation, so no reply was sent"
     );
+    await recordMetricBestEffort({
+      organizationId: organization.id,
+      conversationId,
+      resolvedBy: "human_agent" as const,
+      inputTokens: 0,
+      outputTokens: 0,
+      replyOutcome: "skipped_handover" as const,
+    });
     await flagHandoffBestEffort(organization, conversationId);
     return;
   }
