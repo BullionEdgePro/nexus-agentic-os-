@@ -100,7 +100,7 @@ git -C "$NAO" add -A
 #     backup-db.sh was the only executable in the tree; pre-commit.sh,
 #     githooks/pre-commit and verify-all.sh were added after it and inherited
 #     nothing. Following it literally on 2026-08-19 demoted all three to 644 —
-#     including verify-all.sh, which is how the eight gates are run on the VPS.
+#     including verify-all.sh, which is how the ten gates are run on the VPS.
 #     DERIVED FROM THE SOURCE TREE, not the mirror's. Reading the MIRROR's HEAD
 #     was the first version and it is subtly wrong in one direction: it can only
 #     re-assert bits on files the mirror already had, so a NEW executable is
@@ -1030,7 +1030,7 @@ whether a fix worked is the right instinct and it wrote failure state to
 production. A dry-run mode for the re-index would have shown the same thing
 without marking anything.
 
-## One command for all seven gates, and a floor under the backups
+## One command for all the gates, and a floor under the backups
 
 ```bash
 cd /opt/nexus && ./scripts/verify-all.sh          # --fast skips retrieval-check
@@ -1348,7 +1348,7 @@ business has ever been observed to produce.
 
 ## PENDING: migration 052 is written, tested and NOT applied
 
-*As of 2026-08-19. Two of the nine gates fail until it is, and they are right to.*
+*As of 2026-08-19. Two of the ten gates fail until it is, and they are right to.*
 
 ```bash
 cd /opt/nexus && docker compose -f docker-compose.prod.yml exec -T postgres \
