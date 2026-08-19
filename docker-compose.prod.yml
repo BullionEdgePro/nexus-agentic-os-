@@ -138,7 +138,6 @@ services:
         # "unknown", which build-check reports as a failure rather
         # than passing quietly.
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
-      args:
         NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
         NEXT_PUBLIC_WS_URL: wss://${API_DOMAIN}/ws
     restart: unless-stopped

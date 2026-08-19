@@ -44,6 +44,25 @@ test("all three services pass the argument through", () => {
   assert.equal(occurrences, 3, "api, worker and web must each pass GIT_COMMIT");
 });
 
+test("no build block declares args twice", () => {
+  // The web service already had an `args:` block for its NEXT_PUBLIC_* values,
+  // and adding a second one is valid-looking YAML that the parser rejects
+  // outright: "mapping key args already defined". The deploy script caught it
+  // on the first run and refused to build, which is the right outcome and one
+  // round-trip later than a test.
+  //
+  // Counted per build block rather than per file, because three services each
+  // having one `args:` is correct and a naive whole-file count cannot tell that
+  // from one service having three.
+  const blocks = COMPOSE.split(/^  (?=\w)/m);
+  for (const block of blocks) {
+    if (!block.includes("build:")) continue;
+    const name = block.split(":")[0];
+    const count = (block.match(/^      args:$/gm) ?? []).length;
+    assert.ok(count <= 1, `${name} declares args ${count} times — that YAML will not parse`);
+  }
+});
+
 test("a build that forgets the argument is reported, not tolerated", () => {
   // The default is "unknown" rather than a stale value or a failed build: an
   // image nobody can date is exactly the state this mechanism exists to end,
