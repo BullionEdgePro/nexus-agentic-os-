@@ -33,6 +33,21 @@ RUN npm ci --omit=dev
 COPY . .
 
 ENV NODE_ENV=production
+
+# WHICH COMMIT IS THIS, stamped at build time.
+#
+# Nothing tied a running container to a revision. The deploy is three hand-run
+# docker builds across two repositories, and the failure it invites is silent:
+# `build api worker` without `web` leaves the deck running yesterday's code
+# while every gate passes, because every gate talks to the API. On 2026-08-19
+# the web image happened to be current, and the only way to know that was to
+# compare an image timestamp against a git log by eye.
+#
+# Defaults to "unknown" so a build that forgets the arg is reported as unknown
+# rather than inheriting a stale value or failing the build.
+ARG GIT_COMMIT=unknown
+ENV NEXUS_COMMIT=$GIT_COMMIT
+
 EXPOSE 8080
 
 CMD ["npx", "tsx", "apps/api/src/index.ts"]

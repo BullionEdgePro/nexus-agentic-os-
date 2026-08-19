@@ -1,0 +1,73 @@
+// Nothing tied a running container to a revision.
+//
+// The deploy is three hand-run docker builds across two repositories, and the
+// documented command was `build api worker` -- `web` was left to whoever
+// remembered it. Every gate talks to the API, so a forgotten web build is a
+// deploy where all nine gates pass and the screen nobody looks away from is
+// still showing yesterday's code.
+//
+// On 2026-08-19 the web image happened to be current. Establishing that meant
+// reading `docker image inspect --format {{.Created}}` against `git log -1 --
+// apps/web` and comparing two timestamps by eye, in different timezones. That
+// is a habit, not a check, and it is the kind that holds until it matters.
+//
+// So each image carries the commit it was built from, build-check compares all
+// three against the working copy, and it runs FIRST -- before every gate whose
+// answer would otherwise be about a build nobody had established the age of.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..", "..", "..");
+const read = (...p) => readFileSync(join(root, ...p), "utf8");
+
+const COMPOSE = read("docker-compose.prod.yml");
+const VERIFY = read("scripts", "verify-all.sh");
+const CHECK = read("scripts", "build-check.sh");
+const DEPLOY = read("scripts", "deploy.sh");
+
+test("every image stamps the commit it was built from", () => {
+  for (const file of ["Dockerfile.api", "Dockerfile.web"]) {
+    const df = read(file);
+    assert.match(df, /ARG GIT_COMMIT=unknown/, `${file} must accept the commit`);
+    assert.match(df, /ENV NEXUS_COMMIT=\$GIT_COMMIT/, `${file} must expose it at runtime`);
+  }
+});
+
+test("all three services pass the argument through", () => {
+  // Three, not two. api and worker share Dockerfile.api and are separate
+  // services, and web is the one the old deploy command left out.
+  const occurrences = COMPOSE.split("GIT_COMMIT: ${GIT_COMMIT:-unknown}").length - 1;
+  assert.equal(occurrences, 3, "api, worker and web must each pass GIT_COMMIT");
+});
+
+test("a build that forgets the argument is reported, not tolerated", () => {
+  // The default is "unknown" rather than a stale value or a failed build: an
+  // image nobody can date is exactly the state this mechanism exists to end,
+  // so it has to be visible rather than fatal at build time.
+  assert.match(CHECK, /built without GIT_COMMIT/);
+  assert.match(CHECK, /NO STAMP/);
+  // "cannot tell" and "wrong" are different findings and need different actions.
+  assert.match(CHECK, /STALE, working copy is/);
+});
+
+test("build-check runs first", () => {
+  const gates = VERIFY.slice(VERIFY.indexOf("GATES=("), VERIFY.indexOf(")", VERIFY.indexOf("GATES=(")));
+  const listed = gates.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("GATES"));
+  assert.equal(listed[0], "build-check",
+    "a gate that passes against a stale build has verified the stale build");
+  assert.ok(listed.includes("schema-drift-check"));
+  assert.equal(listed.length, 10);
+});
+
+test("the deploy script builds web too", () => {
+  // The whole point. The old instruction was `build api worker`.
+  assert.match(DEPLOY, /build api worker web/);
+  assert.match(DEPLOY, /up -d --no-deps api worker web/);
+  assert.match(DEPLOY, /export GIT_COMMIT/);
+  // And it verifies itself rather than trusting that it worked.
+  assert.match(DEPLOY, /\.\/scripts\/build-check\.sh/);
+});

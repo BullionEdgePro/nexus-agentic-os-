@@ -4,7 +4,7 @@
 #
 #   cd /opt/nexus && ./scripts/verify-all.sh
 #
-# WHY THIS EXISTS. There are nine gates now, and the only record of how to run
+# WHY THIS EXISTS. There are ten gates now, and the only record of how to run
 # them was seven separate commands in prose. Verification that costs seven
 # copy-pastes is verification that gets done on the days somebody has time,
 # which are not the days it matters. Every one of these has caught something no
@@ -12,7 +12,14 @@
 #
 # THE ORDER IS NOT ALPHABETICAL AND IS NOT A PREFERENCE.
 #
-#   schema-check first, always. It is the only one that plans SQL that has never
+#   build-check first of all, because it decides what the rest of this run is
+#   about. Every other gate talks to the API, so none of them can see that the
+#   deck is running an older image — and a suite that passes while the screen
+#   shows yesterday's code is worse than one that fails. It is also the only
+#   check whose answer changes the meaning of every answer after it: gates that
+#   pass against a stale build have verified the stale build.
+#
+#   schema-check next, and first among the ones that touch the database. It is the only one that plans SQL that has never
 #   executed, so it is the one that fails on a migration that was written and
 #   not applied — and every gate after it would otherwise fail in a way that
 #   looks like a feature bug rather than a missing column.
@@ -52,6 +59,7 @@ mkdir -p "$OUT_DIR"
 
 # The last one is optional because of its cost, not because it matters less.
 GATES=(
+  build-check
   schema-check
   schema-drift-check
   shared-number-check
@@ -92,8 +100,8 @@ for gate in "${GATES[@]}"; do
   # separately is a gate that gets run on the days somebody has time, which is
   # the reason this file exists at all -- so it runs here, with a special case,
   # rather than in a paragraph of prose.
-  if [ "$gate" = "schema-drift-check" ]; then
-    ./scripts/schema-drift-check.sh > "$OUT_DIR/${gate}.out" 2>&1
+  if [ "$gate" = "schema-drift-check" ] || [ "$gate" = "build-check" ]; then
+    "./scripts/${gate}.sh" > "$OUT_DIR/${gate}.out" 2>&1
   else
     $COMPOSE exec -T worker npx tsx "apps/api/src/scripts/${gate}.ts" > "$OUT_DIR/${gate}.out" 2>&1
   fi
