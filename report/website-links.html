@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WhatsApp links to publish</title>
+<style>
+  :root{
+    --paper:#FBF9F5; --ink:#16202B; --muted:#5A6672; --faint:#8A94A0;
+    --rule:#E2DDD3; --accent:#0F6E5C; --signal:#C4622D; --wash:#F1EDE4;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:32px 28px 60px; background:var(--paper); color:var(--ink);
+    font-family:"Segoe UI",system-ui,sans-serif; font-size:15px; line-height:1.6;
+  }
+  .wrap{max-width:920px;margin:0 auto}
+  h1,h2,h3{font-family:"Iowan Old Style",Georgia,serif;margin:0;text-wrap:balance}
+  h1{font-size:34px;line-height:1.1;letter-spacing:-.4px}
+  h2{font-size:20px;margin:0 0 6px}
+  h3{font-size:17px;margin:0}
+  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:0 0 10px}
+  p{margin:0 0 12px;max-width:64ch}
+  .lede{font-size:17px;color:var(--muted)}
+  hr{border:0;border-top:2px solid var(--ink);margin:18px 0 26px}
+  .biz{background:#fff;border:1px solid var(--rule);border-radius:8px;padding:20px;margin:0 0 18px}
+  .biz-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .slug{font-family:Consolas,monospace;font-size:12px;color:var(--faint)}
+  .row{margin-top:14px}
+  .label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:5px}
+  .box{
+    position:relative;background:var(--wash);border:1px solid var(--rule);border-radius:5px;
+    padding:11px 92px 11px 12px;font-family:Consolas,monospace;font-size:12.5px;
+    line-height:1.5;word-break:break-all;white-space:pre-wrap;
+  }
+  button{
+    position:absolute;top:8px;right:8px;border:1px solid var(--accent);background:#fff;
+    color:var(--accent);font:inherit;font-size:11px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;padding:5px 10px;border-radius:4px;cursor:pointer;
+  }
+  button:hover{background:var(--accent);color:#fff}
+  button.done{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .note{background:var(--wash);border-left:3px solid var(--signal);padding:14px 16px;border-radius:0 5px 5px 0;margin:0 0 22px}
+  .note p:last-child{margin:0}
+  .small{font-size:13px;color:var(--muted)}
+  .try{display:inline-block;margin-top:10px;font-size:13px;color:var(--accent);font-weight:600}
+  code{font-family:Consolas,monospace;font-size:13px;background:var(--wash);padding:1px 5px;border-radius:3px}
+  ol{max-width:64ch}
+  li{margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Nexus Agentic OS &middot; 19 August 2026</p>
+  <h1>WhatsApp links to publish</h1>
+  <p class="lede" style="margin-top:8px">
+    Every link below was generated from the live registry and passed through the
+    platform's own router. Each one is confirmed to reach the business that
+    publishes it &mdash; not the triage menu.
+    <span style="display:block;margin-top:10px;font-size:15px">
+      Four of these are the pending website edits. Zipicka is listed too because
+      it owns the number and the same tag applies &mdash; its own link is worth
+      publishing for the same reason.
+    </span>
+  </p>
+  <hr>
+
+  <div class="note">
+    <p><strong>Why the <code>#tag</code> matters.</strong> All five businesses answer on one
+    WhatsApp number. Without the tag the switchboard cannot tell which firm a
+    stranger wants, so it has to ask &mdash; and the customer picks from a menu of
+    five before anyone can help them.</p>
+    <p class="small" style="margin-top:8px">The tag is prefilled in the message box and the customer
+    sends it without thinking about it. It only counts at the <em>start</em> of a
+    message: someone writing "do you know anything about #juris-prime"
+    mid-sentence is not treated as arriving from a link.</p>
+  </div>
+
+  <div id="list"></div>
+
+  <hr style="border-top:1px solid var(--rule)">
+  <h2>Where to put them</h2>
+  <ol class="small">
+    <li>The main <strong>Contact</strong> or <strong>Enquire</strong> button in the header, so it is on every page.</li>
+    <li>The footer, beside the phone number you already publish.</li>
+    <li>Any <strong>"Speak to a lawyer"</strong> / <strong>"Book a viewing"</strong> call to action.</li>
+    <li>Your Google Business Profile, as the website or appointment link.</li>
+  </ol>
+  <p class="small">
+    Each business needs only its own link. Test one from a phone that has never
+    messaged the number before &mdash; the reply should come from that business
+    directly, with no menu in between.
+  </p>
+</div>
+
+<script>
+const BUSINESSES = [
+  { slug:"juris-prime",       name:"Juris Prime",                        what:"certificate attestation" },
+  { slug:"juris-prime-legal", name:"Juris Prime Legal",                  what:"disputes and legal consultancy" },
+  { slug:"abr",               name:"ABR Advocates & Legal Consultants",  what:"criminal defence and advocacy" },
+  { slug:"sfs-international", name:"SFS International",                  what:"property sales and rentals" },
+  { slug:"zipicka",           name:"Zipicka",                            what:"retail orders and returns" },
+];
+const NUMBER = "971504805436";
+
+function linkFor(b){
+  const text = "#" + b.slug + " Hello " + b.name + ", I would like to ask about";
+  return "https://wa.me/" + NUMBER + "?text=" + encodeURIComponent(text);
+}
+function snippetFor(b){
+  return '<a href="' + linkFor(b) + '"\n   target="_blank" rel="noopener">\n  Message us on WhatsApp\n</a>';
+}
+
+const list = document.getElementById("list");
+for (const b of BUSINESSES) {
+  const url = linkFor(b);
+  const el = document.createElement("section");
+  el.className = "biz";
+  el.innerHTML =
+    '<div class="biz-head"><h3>' + b.name + '</h3><span class="slug">#' + b.slug + '</span></div>' +
+    '<p class="small" style="margin:0">' + b.what + '</p>' +
+    '<div class="row"><div class="label">The link</div>' +
+      '<div class="box"><span></span><button data-copy="' + encodeURIComponent(url) + '">Copy</button></div></div>' +
+    '<div class="row"><div class="label">Paste-ready HTML</div>' +
+      '<div class="box"><span></span><button data-copy="' + encodeURIComponent(snippetFor(b)) + '">Copy</button></div></div>' +
+    '<a class="try" href="' + url + '" target="_blank" rel="noopener">Open it yourself to check &rarr;</a>';
+  // Text set as textContent so nothing in a business name can render as markup.
+  const boxes = el.querySelectorAll(".box span");
+  boxes[0].textContent = url;
+  boxes[1].textContent = snippetFor(b);
+  list.appendChild(el);
+}
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-copy]");
+  if (!btn) return;
+  await navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copy));
+  const was = btn.textContent;
+  btn.textContent = "Copied";
+  btn.classList.add("done");
+  setTimeout(() => { btn.textContent = was; btn.classList.remove("done"); }, 1400);
+});
+</script>
+</body>
+</html>
