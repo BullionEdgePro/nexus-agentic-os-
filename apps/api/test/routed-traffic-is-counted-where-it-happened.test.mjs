@@ -222,3 +222,42 @@ test("the migration does not pretend to verify its own policy", () => {
   assert.ok(!/^do \$\$/m.test(CAST_FIX), "no self-probe in a file that cannot run one");
   assert.match(CAST_FIX, /WHY THERE IS NO PROBE HERE/);
 });
+
+test("header search finds a customer for the firm serving them", () => {
+  // The fix for the inbox reached the inbox and not this. Keyed on
+  // ct.organization_id, an employee of Juris Prime searching for their own
+  // customer by name got nothing at all -- the same emptiness, one screen over.
+  //
+  // Measured on production before and after:
+  //
+  //   old rule, keyed on who owns the contact row   0 hits for juris-prime
+  //   new rule, keyed on who is serving them        1 hit
+  const SEARCH = read("packages", "db", "src", "search.ts");
+  assert.match(SEARCH, /\$2::uuid = any \(ct\.served_organization_ids\)/);
+  assert.ok(
+    !/where \(\$2::uuid is null or ct\.organization_id = \$2\)/.test(SEARCH),
+    "searching by who owns the contact row is the defect"
+  );
+  // A contact imported before they ever messaged has an empty array and still
+  // belongs to whoever created them.
+  assert.match(SEARCH, /cardinality\(ct\.served_organization_ids\) = 0/);
+});
+
+test("a search result is labelled by the conversation, not the contact", () => {
+  // A contact belongs to the number's owner, so the label read "Zipicka" beside
+  // every routed customer -- including on an operator's global search, where
+  // the label is the only thing separating five businesses' customers.
+  //
+  // From the CONVERSATION rather than the contact's served set, because a
+  // person who asks the letting agent about a flat and the law firm about a
+  // lease belongs to both and a single label has to pick one. Production check:
+  // the contact whose WhatsApp profile name is "Zipicka Trading Dxb" now
+  // labels as juris-prime, which is who they are actually talking to.
+  const SEARCH = read("packages", "db", "src", "search.ts");
+  assert.match(SEARCH, /coalesce\(routed_organization_id, organization_id\) as serving/);
+  assert.match(SEARCH, /join organizations o on o\.id = coalesce\(c\.serving, ct\.organization_id\)/);
+  assert.ok(
+    !/join organizations o on o\.id = ct\.organization_id/.test(SEARCH),
+    "labelling by the contact's owner is the defect"
+  );
+});

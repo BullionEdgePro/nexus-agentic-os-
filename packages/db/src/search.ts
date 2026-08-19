@@ -81,24 +81,49 @@ export async function search(
   const [contacts, tasks] = await Promise.all([
     getPool().query<ContactRow>(
       `select ct.id, ct.display_name, ct.wa_id,
+              -- LABELLED BY WHO IS TALKING TO THEM, not who owns the row.
+              --
+              -- A contact belongs to the number's owner, because it is created
+              -- when the message arrives and before anybody knows which of the
+              -- five firms is being asked for. Reading the label off
+              -- ct.organization_id put "Zipicka" beside every routed customer,
+              -- including on an operator's global search where the label is the
+              -- only thing distinguishing five businesses' customers from each
+              -- other.
+              --
+              -- Taken from the conversation rather than from the contact's
+              -- served set, because a person who asks the letting agent about a
+              -- flat and the law firm about a lease belongs to both, and a
+              -- single label has to pick one. The most recent conversation is
+              -- the one somebody searching is looking for.
               o.name as business_name, o.slug as business_slug,
               c.id  as conversation_id,
               lm.created_at as last_message_at
          from contacts ct
-         join organizations o on o.id = ct.organization_id
          left join lateral (
-           select id from conversations
+           select id, coalesce(routed_organization_id, organization_id) as serving
+             from conversations
             where contact_id = ct.id
             order by opened_at desc
             limit 1
          ) c on true
+         join organizations o on o.id = coalesce(c.serving, ct.organization_id)
          left join lateral (
            select created_at from messages
             where contact_id = ct.id
             order by created_at desc
             limit 1
          ) lm on true
-        where ($2::uuid is null or ct.organization_id = $2)
+        -- FOUND BY THE FIRM THAT IS SERVING THEM. Keyed on ct.organization_id,
+        -- an employee of Juris Prime searching for their own customer by name
+        -- got nothing at all -- the same emptiness the inbox had before
+        -- migration 055, left behind because that fix reached the inbox and not
+        -- this. The array is 055's, kept true by trigger; the fallback covers a
+        -- contact imported before they ever messaged.
+        where ($2::uuid is null
+               or $2::uuid = any (ct.served_organization_ids)
+               or (cardinality(ct.served_organization_ids) = 0
+                   and ct.organization_id = $2))
           and (lower(coalesce(ct.display_name, '')) like $1
                or ($3::text is not null and ct.wa_id like $3))
         order by lm.created_at desc nulls last
