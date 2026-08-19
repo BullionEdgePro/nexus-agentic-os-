@@ -51,6 +51,22 @@ const TENANT_SCOPED_TABLES = [
   "operator_findings",
   "bookings",
   "forecasts",
+  // Added 2026-08-19. Each carries an organization_id, so each is tenant data
+  // by construction, and none was on this list, on migration 018's array, or on
+  // rls-verify's copy — the three places the set is typed out. A table is
+  // protected only if it appears in all three, and these appeared in none.
+  //
+  // `agent_quality_daily` held 195 rows across all five businesses that way.
+  // The other three are empty; `employee_presence_events` and `twin_handbacks`
+  // have writers and no readers, `organization_users` is referenced by no code
+  // at all. Listed anyway, because "empty today" is not a property.
+  //
+  // Found by building the repository's own schema in a throwaway database and
+  // diffing it against production, which is now `schema-drift-check.sh`.
+  "agent_quality_daily",
+  "employee_presence_events",
+  "organization_users",
+  "twin_handbacks",
 ];
 // Not on the list, and each for a reason worth stating:
 //

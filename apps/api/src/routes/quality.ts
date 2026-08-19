@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  withTenant,
   findOrganizationBySlug,
   getQualityTrend,
   summarise,
@@ -34,10 +35,21 @@ qualityRoute.get("/:slug", async (c) => {
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
   const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 180);
-  const [trend, hotspots] = await Promise.all([
-    getQualityTrend(organization.id, days),
-    getEscalationHotspots(organization.id, days),
-  ]);
+  // INSIDE A TENANT CONTEXT, which this route did without until 2026-08-19.
+  //
+  // `agent_quality_daily` had no row-level security — one of four tenant tables
+  // that never made it onto any of the three hand-maintained lists — so an
+  // unscoped read here returned rows anyway, held correct by the explicit
+  // `where organization_id = $1` in each query and nothing else. That is the
+  // forgotten-WHERE-clause exposure RLS exists to make impossible, and it is
+  // also why enabling the policy without this line would have emptied the
+  // Quality page: no context, no rows.
+  const [trend, hotspots] = await withTenant(organization.id, () =>
+    Promise.all([
+      getQualityTrend(organization.id, days),
+      getEscalationHotspots(organization.id, days),
+    ])
+  );
 
   return c.json({ trend, summary: summarise(trend), hotspots });
 });
@@ -73,7 +85,12 @@ qualityRoute.post("/:slug/ask", async (c) => {
   if (question.length > 500) return c.json({ error: "That question is too long" }, 400);
 
   try {
-    const answer = await askCopilot(organization.id, question);
+    // Same reason as the trend handler above: the copilot's four queries all
+    // read `agent_quality_daily`, and every one of them would return nothing
+    // once the policy is on.
+    const answer = await withTenant(organization.id, () =>
+      askCopilot(organization.id, question)
+    );
     logger.info({ slug: organization.slug, matched: answer.matched }, "Copilot question");
     return c.json(answer);
   } catch (err) {

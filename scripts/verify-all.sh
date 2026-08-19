@@ -4,7 +4,7 @@
 #
 #   cd /opt/nexus && ./scripts/verify-all.sh
 #
-# WHY THIS EXISTS. There are seven gates now, and the only record of how to run
+# WHY THIS EXISTS. There are nine gates now, and the only record of how to run
 # them was seven separate commands in prose. Verification that costs seven
 # copy-pastes is verification that gets done on the days somebody has time,
 # which are not the days it matters. Every one of these has caught something no
@@ -16,6 +16,14 @@
 #   executed, so it is the one that fails on a migration that was written and
 #   not applied — and every gate after it would otherwise fail in a way that
 #   looks like a feature bug rather than a missing column.
+#
+#   schema-drift-check straight after it, and for the same reason one step
+#   further out. schema-check proves the SQL the application plans plans; this
+#   proves the SCHEMA IS THE ONE THE REPOSITORY DESCRIBES, by building it from
+#   scratch in a throwaway database and diffing. It is the only check that can
+#   see a migration written and never applied, a change made in production by
+#   hand, and a fresh install that would not complete -- it found all three on
+#   2026-08-19, including four tenant tables with no row-level security.
 #
 #   shared-number-check before the reply-path checks. All five businesses answer
 #   on one number, and when a serving business is unreadable from the owner's
@@ -45,6 +53,7 @@ mkdir -p "$OUT_DIR"
 # The last one is optional because of its cost, not because it matters less.
 GATES=(
   schema-check
+  schema-drift-check
   shared-number-check
   deep-link-check
   rls-preflight
@@ -76,7 +85,18 @@ for gate in "${GATES[@]}"; do
   fi
 
   printf '%-22s ' "$gate"
-  $COMPOSE exec -T worker npx tsx "apps/api/src/scripts/${gate}.ts" > "$OUT_DIR/${gate}.out" 2>&1
+  # One of these is a shell script rather than a tsx gate: it builds the schema
+  # this repository describes in a throwaway database and diffs it against
+  # production, which is not something that can run from inside the app's own
+  # container against the app's own connection. A gate that has to be remembered
+  # separately is a gate that gets run on the days somebody has time, which is
+  # the reason this file exists at all -- so it runs here, with a special case,
+  # rather than in a paragraph of prose.
+  if [ "$gate" = "schema-drift-check" ]; then
+    ./scripts/schema-drift-check.sh > "$OUT_DIR/${gate}.out" 2>&1
+  else
+    $COMPOSE exec -T worker npx tsx "apps/api/src/scripts/${gate}.ts" > "$OUT_DIR/${gate}.out" 2>&1
+  fi
   code=$?
 
   NAMES+=("$gate")

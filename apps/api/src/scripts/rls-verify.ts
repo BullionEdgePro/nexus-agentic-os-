@@ -125,6 +125,49 @@ async function main(): Promise<void> {
   const missing = TABLES.filter((t) => !enabled.some((r) => r.tbl === t));
   for (const t of missing) line(false, t, "table not found in catalog");
 
+  // ---- 2b. the tables NOBODY listed ----
+  //
+  // Everything above checks the list. This checks the database, and it is the
+  // only part of this gate that can find a table nobody thought of.
+  //
+  // The set is typed out in three places — migration 018's array,
+  // TENANT_SCOPED_TABLES in client.ts, and the TABLES above — and a table is
+  // protected only if it is in all three. On 2026-08-19 four were in none:
+  // agent_quality_daily (195 rows across all five businesses),
+  // employee_presence_events, organization_users and twin_handbacks. This gate
+  // reported PASS the whole time, correctly, about the tables it had been told
+  // about.
+  //
+  // Derived from the schema instead: any table carrying an organization_id is
+  // tenant data by construction. The exclusions client.ts documents
+  // (organizations, admins, catalog_items, broadcast_recipients) have no such
+  // column, so they do not appear here and need no special case.
+  console.log("\nTenant tables nobody listed");
+  const { rows: unlisted } = await withAllTenants("rls-verify: derived catalog", () =>
+    getPool().query<{ tbl: string }>(
+      `select c.relname as tbl
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and c.relkind = 'r'
+          and not c.relrowsecurity
+          and exists (
+            select 1 from information_schema.columns col
+             where col.table_schema = 'public'
+               and col.table_name = c.relname
+               and col.column_name = 'organization_id'
+          )
+        order by c.relname`
+    )
+  );
+  if (unlisted.length === 0) {
+    line(true, "derived from organization_id", "every tenant table has RLS on");
+  } else {
+    for (const row of unlisted) {
+      line(false, row.tbl, "has organization_id and NO row-level security");
+    }
+  }
+
   // ---- 3 & 4. do they filter, and do they let work through ----
   const organizations = await withAllTenants("rls-verify: tenants", () => listOrganizations());
   if (organizations.length < 2) {

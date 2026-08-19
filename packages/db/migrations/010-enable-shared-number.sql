@@ -103,6 +103,23 @@ begin
     from organizations
    where slug = 'zipicka' and is_active = true;
 
+  -- NOTHING TO SHARE IS NOT THE SAME AS A BLANK NUMBER, and this guard could
+  -- not tell them apart. On an empty database there is no zipicka row at all,
+  -- so `select into` leaves src_phone null and the raise below fired -- which
+  -- means `npm run migrate` against a fresh database has always failed here,
+  -- at file 010 of 51. The documented fresh-install path could not complete,
+  -- and nobody found out because nobody has installed this from scratch since
+  -- the seed and the migrations diverged. Found 2026-08-19 by building the
+  -- repository's own schema in a throwaway database.
+  --
+  -- A database with no organizations has no number to copy and no tenants to
+  -- copy it to, so this file has genuinely nothing to do. Seeding happens
+  -- afterwards and creates the businesses already sharing the number.
+  if not found then
+    raise notice 'No zipicka row -- fresh database, nothing to share. Skipping.';
+    return;
+  end if;
+
   if src_phone is null or src_phone = '' then
     raise exception
       'Cannot share the number: zipicka has no whatsapp_phone_number_id. Set it before running migration 010.';
@@ -152,6 +169,15 @@ declare
 begin
   select whatsapp_phone_number_id into shared_no
     from organizations where slug = 'zipicka';
+
+  -- Same distinction as the guard above: on a fresh database there is nothing
+  -- to verify, and asserting "5 of 5 reachable" against an empty table reports
+  -- 0 and reads as a catastrophe. The businesses arrive with the seed, which
+  -- runs after this file.
+  if not found then
+    raise notice 'No organizations yet -- nothing to verify. Skipping.';
+    return;
+  end if;
 
   select count(*) into reachable
     from organizations

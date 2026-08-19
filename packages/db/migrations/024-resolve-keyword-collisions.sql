@@ -76,6 +76,15 @@ declare
   n integer := 0;
   abr_lawyer boolean;
 begin
+  -- SEEDED DATA IS NOT PART OF THE SCHEMA, and this block asserts the shape of
+  -- rows the seed creates. On an empty database there are none, so the check
+  -- reported a catastrophe -- and `npm run migrate` against a fresh database
+  -- could not get past it. See migration 010 for the full account.
+  if not exists (select 1 from organizations) then
+    raise notice 'No organizations yet -- skipping this data check on a fresh database.';
+    return;
+  end if;
+
   -- Assert the terms survived on the business that should keep them. Removing
   -- from one side and finding the other never had it would leave the keyword
   -- routing nowhere at all — strictly worse than the collision it replaced.
