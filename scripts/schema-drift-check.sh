@@ -67,7 +67,7 @@ echo "  schema.sql + $applied migrations applied cleanly"
 # blank lines and the dump's own headers carry no schema meaning.
 dump() {
   $COMPOSE exec -T postgres pg_dump -U nexus --schema-only --no-owner --no-acl -d "$1" \
-    | grep -vE '^--|^$|^SET |^SELECT pg_catalog|^\connect|^..restrict |^..unrestrict ' \
+    | grep -vE '^--|^$|^SET |^SELECT pg_catalog|^\\' \
     | sed 's/[[:space:]]*$//'
 }
 
