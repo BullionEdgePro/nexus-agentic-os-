@@ -1338,6 +1338,51 @@ customer would get the handover phrase rather than that answer. That is the
 governance layer doing exactly what it is for, on the first grounded reply this
 business has ever been observed to produce.
 
+## The sixth instance — the argument was fixed and the transaction was not
+
+*Found 2026-08-19, before it fired.*
+
+`hasActiveEmployees` is read on the stale-handoff release path. On 17 August it
+was found asking about `organization.id` — the number's OWNER — corrected to
+`answering`, and locked with a test that asserts the argument by name and
+asserts the old one is gone. Both were still true two days later and the read
+still returned nothing: it was raw `getPool().query` running inside the owner's
+transaction, and **RLS does not consult the WHERE clause to decide what you may
+see**.
+
+Measured against production, the exact read the release makes:
+
+| asked as | about | active employees seen |
+|---|---|---|
+| zipicka (owns the number) | juris-prime | **0** |
+| juris-prime | juris-prime | **1** |
+
+**The failure direction is the opposite of the other five, and worse.** They
+return nothing and a customer is told nothing. This returns *false* — "nobody
+at this business can take a handoff" — and the pipeline acts on it: it clears
+the flag a human is holding and the agent resumes answering over the top of
+them, mid-thread, with the state that said so wiped.
+
+**Latent, not live.** No routed conversation is in handoff, and the three that
+are belong to Zipicka, which owns the number — in scope by coincidence of who
+was asking. Juris Prime has an active employee, so the first routed handoff
+fires it.
+
+Two things this changes beyond the one line:
+
+- **Widened at the read, not the call site**, which is the rule
+  `shared-number-check` already prints when it fails. `listEmployees` went with
+  it: every caller was already wrapping it correctly, and `findAvailableSlots`
+  carries a paragraph asking them to — which is a convention, and a convention
+  holds until somebody adds the fourth call.
+- **The gate now probes this reader.** It already probed `hasStaffOnShift`,
+  which answers the same question — "can anyone here take this" — and was
+  widened on the 17th. Probing one of a pair and not the other is how the gate
+  passed for two days beside a raw read.
+
+The general lesson, worth more than the fix: **a test that locks which business
+is named does not lock which transaction asks.** On this platform those are two
+separate questions and only one of them is visible in the source line.
 ## The fifth instance, and a gate that would have caught all five
 
 Fixing the agent-config bug uncovered the next one immediately, and it is the
