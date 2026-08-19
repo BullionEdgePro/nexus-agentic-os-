@@ -87,6 +87,27 @@ export interface ReconcileResult {
   standing: number;
   /** Findings that were open and are no longer true. */
   retracted: number;
+  /**
+   * The ones that BECAME true in this sweep, which is a different question.
+   *
+   * `standing` counts everything still wrong, so it is the same number on the
+   * sweep a problem appears and on the two hundred sweeps afterwards. Anything
+   * that wants to tell somebody needs the transition, or it says the same thing
+   * every ten minutes until they stop reading it.
+   *
+   * Deliberately carries no title and no subject: a finding's title names the
+   * customer ("Ahmed has been waiting 3 hours"), and the caller for this is
+   * dispatch to somewhere outside the platform.
+   */
+  raised: RaisedFinding[];
+}
+
+/** A finding at the moment it became true. Severity and where to look, nothing else. */
+export interface RaisedFinding {
+  organizationId: string;
+  servingOrganizationId: string | null;
+  operator: string;
+  severity: FindingSeverity;
 }
 
 /**
@@ -136,7 +157,15 @@ export async function reconcileFindings(
   for (const finding of found) unique.set(finding.fingerprint, finding);
   const deduped = [...unique.values()];
 
-  const { rows } = await getPool().query<{ standing: string; retracted: string }>(
+  const { rows } = await getPool().query<{
+    standing: string;
+    retracted: string;
+    raised: Array<{
+      organizationId: string;
+      servingOrganizationId: string | null;
+      severity: FindingSeverity;
+    }>;
+  }>(
     `with incoming as (
        select * from unnest(
          $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::uuid[], $9::uuid[]
@@ -168,7 +197,14 @@ export async function reconcileFindings(
                          end,
          resolved_at  = null,
          updated_at   = now()
-       returning 1
+       -- NEWLY RAISED, distinguished without a second query.
+       --
+       -- now() is fixed for the whole statement, and first_seen_at is only
+       -- set to it on an insert or on a finding coming back from resolved --
+       -- every other path leaves the original. So the two timestamps being
+       -- equal is exactly "this became true just now", and nothing else.
+       returning organization_id, serving_organization_id, severity,
+                 (first_seen_at = last_seen_at) as newly_raised
      ),
      retracted as (
        update operator_findings f
@@ -183,7 +219,16 @@ export async function reconcileFindings(
         returning 1
      )
      select (select count(*) from upserted)::text  as standing,
-            (select count(*) from retracted)::text as retracted`,
+            (select count(*) from retracted)::text as retracted,
+            coalesce(
+              (select json_agg(json_build_object(
+                 'organizationId', u.organization_id,
+                 'servingOrganizationId', u.serving_organization_id,
+                 'severity', u.severity
+               ))
+                 from upserted u where u.newly_raised),
+              '[]'::json
+            ) as raised`,
     [
       organizationId,
       operator,
@@ -200,6 +245,9 @@ export async function reconcileFindings(
   return {
     standing: Number(rows[0]?.standing ?? 0),
     retracted: Number(rows[0]?.retracted ?? 0),
+    // Carries the operator through so a caller holding several results can tell
+    // them apart without threading context back in.
+    raised: (rows[0]?.raised ?? []).map((r) => ({ ...r, operator })),
   };
 }
 

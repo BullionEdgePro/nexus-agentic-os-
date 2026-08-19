@@ -5,6 +5,7 @@ import {
   listJobHeartbeats,
   withTenant,
   type FindingInput,
+  type RaisedFinding,
 } from "@nexus/db";
 // Pure and rules-based — no model call, so using it here keeps operators within
 // the property that makes them cheap enough to run every ten minutes.
@@ -12,6 +13,7 @@ import { scoreLead } from "@nexus/leads";
 import { JUDGE_UNAVAILABLE } from "@nexus/governance";
 import { isJobStalled, JOB_STALE_AFTER_SECONDS, type ScheduledJob } from "@nexus/shared";
 import { logger } from "../lib/logger.js";
+import { dispatchRaisedFindings } from "./alert-dispatch.js";
 
 /**
  * Operators (F8) — the first things this platform does without being asked.
@@ -1370,6 +1372,12 @@ export async function runOperators(): Promise<OperatorRunSummary[]> {
   const organizations = await listOrganizations();
   const summaries: OperatorRunSummary[] = [];
 
+  // Collected across the whole sweep and dispatched once at the end, not per
+  // operator. Sixteen operators times five businesses is eighty chances to
+  // notify somebody; a bad ten minutes should be one message, not eighty.
+  const raisedThisSweep: RaisedFinding[] = [];
+  const slugById = new Map(organizations.map((o) => [o.id, o.slug]));
+
   for (const organization of organizations) {
     for (const operator of OPERATORS) {
       try {
@@ -1378,6 +1386,7 @@ export async function runOperators(): Promise<OperatorRunSummary[]> {
           const result = await reconcileFindings(organization.id, operator.slug, found);
           return result;
         });
+        raisedThisSweep.push(...summary.raised);
         summaries.push({
           operator: operator.slug,
           organizationSlug: organization.slug,
@@ -1399,6 +1408,12 @@ export async function runOperators(): Promise<OperatorRunSummary[]> {
       }
     }
   }
+
+  // AFTER the sweep, and outside its error handling on purpose. Every finding
+  // is already written and visible on the deck by this point, so a dead webhook
+  // costs a log line and nothing else -- it must never be the reason an operator
+  // run is recorded as failed.
+  await dispatchRaisedFindings(raisedThisSweep, (id) => slugById.get(id) ?? id);
 
   return summaries;
 }

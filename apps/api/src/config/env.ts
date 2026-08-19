@@ -37,6 +37,54 @@ export const env = {
       .filter(Boolean);
   },
 
+  /**
+   * Where to post when a problem STARTS. Empty means nowhere, which is the
+   * behaviour the platform had before alerting existed.
+   *
+   * Any URL that accepts a JSON POST: a Slack or Discord incoming webhook, a
+   * relay, an endpoint of your own. Nothing is sent until this is set, and what
+   * is sent carries no customer name, no message body and no finding title --
+   * only which business, which operator, how severe, and a link back into the
+   * deck. See services/alert-dispatch.ts for why that boundary is where it is.
+   *
+   * Validated on read rather than trusted: a malformed value disables alerting
+   * loudly at boot instead of failing once, silently, at 3am on the sweep that
+   * mattered.
+   */
+  get operatorAlertWebhookUrl(): string | null {
+    const raw = (process.env.OPERATOR_ALERT_WEBHOOK_URL ?? "").trim();
+    if (!raw) return null;
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      throw new Error(
+        `OPERATOR_ALERT_WEBHOOK_URL is not a URL: ${JSON.stringify(raw)}. ` +
+          "Unset it to disable operator alerts."
+      );
+    }
+    if (parsed.protocol !== "https:") {
+      // The payload names businesses and what is wrong with them. That is not a
+      // customer's data, and it is still not something to post in clear text.
+      throw new Error(
+        `OPERATOR_ALERT_WEBHOOK_URL must be https, got ${parsed.protocol}. ` +
+          "Unset it to disable operator alerts."
+      );
+    }
+    return parsed.toString();
+  },
+
+  /**
+   * Whether a warning is worth a notification, or only an urgent finding is.
+   *
+   * Off by default. "A customer has waited two hours" belongs on a page; a
+   * phone buzzing for it at 3am is how somebody learns to mute the channel
+   * before the night it matters.
+   */
+  get operatorAlertOnWarn(): boolean {
+    return (process.env.ALERT_ON_WARN ?? "").toLowerCase() === "true";
+  },
+
   get metaAppSecret() {
     return required("META_APP_SECRET");
   },
