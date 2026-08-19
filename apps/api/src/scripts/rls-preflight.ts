@@ -56,6 +56,7 @@ import {
   getContactMemory,
   getSharedGuidance,
   getPool,
+  TENANT_SCOPED_TABLES,
 } from "@nexus/db";
 import { listKnowledgeSources } from "@nexus/knowledge";
 
@@ -133,16 +134,18 @@ const WRITES_VIA_HELPER =
   /\b(create|upsert|insert|record|reconcile|deactivate|remove|forget|purge|set)[A-Z]\w*\s*\(/;
 
 /**
- * The tables a missing context actually breaks. Mirrors TENANT_SCOPED_TABLES in
- * packages/db/src/client.ts — the two are checked against each other by
- * schema-check, so drift shows up rather than silently narrowing this scan.
+ * The tables a missing context actually breaks -- THE LIST ITSELF, not a copy.
+ *
+ * This was a transcription of TENANT_SCOPED_TABLES carrying a comment saying
+ * "the two are checked against each other by schema-check, so drift shows up
+ * rather than silently narrowing this scan". Nothing compared them. The copy
+ * was six tables short -- bookings, forecasts, procedures, agent_phrases,
+ * catalog_installs, reengagement_attempts -- so raw SQL against any of those
+ * with no tenant context passed this gate without ever being looked at.
+ *
+ * A list that must agree with another list is one import away from having to.
  */
-const TENANT_TABLES = [
-  "contacts", "conversations", "messages", "employees", "lead_assessments",
-  "knowledge_sources", "knowledge_chunks", "message_templates", "broadcasts",
-  "agent_configs", "ai_message_evaluations", "conversation_metrics",
-  "contact_memory", "tasks", "operator_findings",
-];
+const TENANT_TABLES = TENANT_SCOPED_TABLES;
 
 /**
  * WHAT THIS CAN AND CANNOT PROVE, stated because the distinction decides

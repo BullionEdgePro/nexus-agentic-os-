@@ -29,34 +29,24 @@
  *   docker exec -w /app/apps/api nexus-api-1 npx tsx src/scripts/rls-verify.ts
  */
 
-import { listOrganizations, withTenant, withAllTenants, getPool } from "@nexus/db";
+import {
+  listOrganizations,
+  withTenant,
+  withAllTenants,
+  getPool,
+  TENANT_SCOPED_TABLES,
+} from "@nexus/db";
 
-const TABLES = [
-  "contacts",
-  "conversations",
-  "messages",
-  "employees",
-  "lead_assessments",
-  "knowledge_sources",
-  "knowledge_chunks",
-  "message_templates",
-  "broadcasts",
-  "agent_configs",
-  "ai_message_evaluations",
-  "conversation_metrics",
-  "contact_memory",
-  // Added with migration 025. A task names a customer and what was agreed with
-  // them, so it is exactly the material tenant isolation exists to protect.
-  "tasks",
-  // Added with migration 027. A finding names the customer who is waiting or
-  // the commitment that is late, so it carries the same isolation.
-  "operator_findings",
-  // Added with migration 031. A booking names a customer, a phone number, a
-  // time and a place they will be — arguably the most sensitive row on the
-  // platform, and the only one that describes where somebody will physically
-  // be.
-  "bookings",
-];
+/**
+ * THE LIST ITSELF, not a third transcription of it.
+ *
+ * This gate had its own copy, `rls-preflight` had another, and migration 018
+ * had a fourth as a SQL array. A table was protected only if it appeared in all
+ * of them, which on 2026-08-19 four tables did not. Two of the copies are now
+ * this import; 018's array is history and cannot be changed, which is why
+ * migration 052 derives its set from the schema rather than adding a fifth.
+ */
+const TABLES = TENANT_SCOPED_TABLES;
 
 let failures = 0;
 

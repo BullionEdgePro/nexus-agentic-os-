@@ -29,7 +29,18 @@ function rawPool(): Pool {
  * loses its assertion silently, while a table wrongly on it fails loudly the
  * first time it is queried, with a message naming the fix.
  */
-const TENANT_SCOPED_TABLES = [
+/**
+ * EXPORTED SINCE 2026-08-19, because it was being copied instead.
+ *
+ * `rls-preflight` kept its own transcription of this array and said so in a
+ * comment: "the two are checked against each other by schema-check, so drift
+ * shows up rather than silently narrowing this scan". Nothing compared them.
+ * The copy was six tables short -- bookings, forecasts, procedures,
+ * agent_phrases, catalog_installs, reengagement_attempts -- so the gate that
+ * scans for raw SQL against tenant tables with no context could not see any of
+ * them. The comment named the exact failure it was there to rule out.
+ */
+export const TENANT_SCOPED_TABLES = [
   "contacts",
   "conversations",
   "messages",
