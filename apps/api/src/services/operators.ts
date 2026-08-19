@@ -849,7 +849,13 @@ const intentClassificationStopped: Operator = {
               count(*)::text                                as total
          from conversation_metrics
         where organization_id = $1
-          and recorded_at > now() - ($2 || ' hours')::interval`,
+          and recorded_at > now() - ($2 || ' hours')::interval
+          -- A message the agent stood down from never reached the classifier,
+          -- so its null intent is expected rather than a fault. Counting it
+          -- would raise this URGENT every time a person takes a conversation
+          -- over -- which is the normal, correct operation of the platform.
+          -- See migration 057.
+          and coalesce(reply_outcome, '') <> 'skipped_handover'`,
       [organizationId, String(INTENT_LOOKBACK_HOURS)]
     );
 
@@ -1156,7 +1162,16 @@ const agentUnavailable: Operator = {
     }>(
       `select count(*) filter (where reply_outcome = 'fallback')::text as fallback,
               count(*) filter (where reply_outcome = 'none')::text as none,
-              count(*) filter (where reply_outcome is not null)::text as total
+              -- EXCLUDED FROM THE DENOMINATOR TOO, and that is the half worth
+              -- stating. A message the agent stood down from was never a chance
+              -- for the agent to fail, so leaving it in the total would make the
+              -- failure rate look better the more conversations humans take
+              -- over. That is migration 049's argument pointing the other way:
+              -- a fraction is wrong if the wrong things are underneath it.
+              count(*) filter (
+                where reply_outcome is not null
+                  and reply_outcome <> 'skipped_handover'
+              )::text as total
          from conversation_metrics
         where organization_id = $1
           and recorded_at > now() - ($2 || ' hours')::interval`,

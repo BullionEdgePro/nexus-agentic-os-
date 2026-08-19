@@ -505,10 +505,37 @@ async function processSingleTextMessage(
   }
 
   if (isHumanHandoff || aiPaused) {
-    logger.debug(
-      { conversationId, isHumanHandoff, aiPaused },
-      "Skipping AI agent — conversation is in human handoff"
+    // INFO, NOT DEBUG, AND A RECORDED OUTCOME.
+    //
+    // This branch is correct: a person has the conversation and an agent
+    // replying over the top of them is worse than silence. But it used to leave
+    // no trace anywhere -- debug is below the level the containers log at, the
+    // job completes cleanly, and no metric row was written. On 2026-08-19 a
+    // live message took this branch and, with full database access, "skipped on
+    // purpose" was indistinguishable from "the reply path is broken" for seven
+    // minutes. The owner could not have told them apart at all.
+    //
+    // Both halves matter. The log line is what somebody reads at the time; the
+    // metric row is what stops a whole class of "no reply went out" being
+    // absent from every denominator, which is the argument migration 049 makes
+    // about failures and applies just as well to deliberate silence.
+    logger.info(
+      { conversationId, organizationId: organization.id, isHumanHandoff, aiPaused },
+      "Agent stood down — a person has this conversation, so no reply was sent"
     );
+    await recordMetricBestEffort({
+      // The number owner, as every write on this path does. Which business the
+      // row is ABOUT is filled in by the trigger from migration 054, so a
+      // routed conversation is counted against the firm actually serving it.
+      organizationId: organization.id,
+      conversationId,
+      // The human holding the conversation is who this message resolves to,
+      // whether or not they have answered yet.
+      resolvedBy: "human_agent" as const,
+      inputTokens: 0,
+      outputTokens: 0,
+      replyOutcome: "skipped_handover" as const,
+    });
     return;
   }
 

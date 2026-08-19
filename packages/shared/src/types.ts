@@ -215,7 +215,20 @@ export interface ConversationMetricInput {
  *                      counts are NOT the reply's, and this value says so rather
  *                      than a zero that would read as a measurement.
  */
-export type ReplyOutcome = "agent" | "fallback" | "none" | "agent_unrecorded";
+/**
+ * What happened to the reply for one inbound message.
+ *
+ * `skipped_handover` is NOT a failure. It records that a message arrived at a
+ * conversation a person had taken over and the agent stood down on purpose --
+ * which until 2026-08-19 left no trace at all: a debug log below the container
+ * log level, a job that completed cleanly, and no metric row. See migration 057.
+ */
+export type ReplyOutcome =
+  | "agent"
+  | "fallback"
+  | "none"
+  | "agent_unrecorded"
+  | "skipped_handover";
 
 /** Aggregated snapshot powering the command-deck overview. */
 export interface OverviewMetrics {
