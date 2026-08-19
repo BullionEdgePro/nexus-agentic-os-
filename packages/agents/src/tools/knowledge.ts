@@ -80,36 +80,35 @@ export const searchKnowledgeTool: ToolDefinition = {
       return {
         found: true,
         outcome: "hit" as const,
-        // ADDED AFTER READING A REAL DRAFT (2026-08-18).
+        // KEPT, BUT ADDED ON A PREMISE THAT TURNED OUT TO BE FALSE.
         //
-        // Asked how long UK degree attestation takes, juris-prime's agent
-        // retrieved the right page — 0.78 similarity, the correct URL — and
-        // then wrote "5-10 working days". The page says "10 working days", with
-        // qualifications. The lower bound was invented, and the agent also
-        // added a UAE Embassy step the page does not list for UK certificates.
+        // The story this comment used to tell: juris-prime's agent retrieved the
+        // right page and then wrote "5-10 working days" where the page says
+        // "10 working days", and added a document list the page does not carry.
+        // The judge scored it medium four runs in a row. This rule was written
+        // to stop it, broadened when the next run failed the same way, and then
+        // honestly reported as not having worked.
         //
-        // Nothing was fabricated in the usual sense: every word came from a
-        // grounded reply about the right subject. What went wrong is narrower
-        // and more common — a figure was made MORE precise and more favourable
-        // than its source. For a law firm quoting a timeline that is the
-        // difference between an answer and a promise.
+        // It had not worked because there was nothing to fix. The medium came
+        // from `dry-run-reply` handing the judge its OWN three-passage search
+        // instead of the passages the agent actually read — so the judge was
+        // asked whether a reply was supported by a subset of its own evidence.
+        // With the harness corrected, the same question on the same agent scores
+        // LOW, and the judge names the very items it had called invented as
+        // "directly supported by the retrieved excerpts".
         //
-        // The governance judge caught it (medium, which escalates on the strict
-        // tier), so no customer was misled. But an agent whose every grounded
-        // answer escalates is an agent that never answers, and the fix is
-        // upstream of the judge rather than a stricter judge.
+        // So: no figure was ever narrowed, no requirement invented, and the page
+        // was never the problem either. Three conclusions published that day were
+        // downstream of one broken measurement.
         //
-        // BROADENED THE SAME DAY, AFTER MEASURING. A first version of this
-        // named only figures. Re-running the dry run, juris-prime scored medium
-        // again — for invented DOCUMENT REQUIREMENTS and a five-step process
-        // instead of an invented number. The rule had not failed; it had been
-        // written too narrowly, and the model simply invented in the nearest
-        // uncovered category. So it now covers every particular a customer
-        // could act on, not just the numeric ones.
+        // The rule stays because it is true independently of the evidence that
+        // prompted it — it is what "answer ONLY from the excerpts returned",
+        // which has been in the tool description since the tool existed, means in
+        // practice. It is not retained as a fix, and nothing here should be read
+        // as evidence that it prevented anything.
         //
         // Platform-level on purpose. This is not a business decision about
-        // wording — no tenant's system prompt is edited — it is the rule that
-        // makes "answer only from the excerpts" mean what it says.
+        // wording — no tenant's system prompt is edited.
         constraints:
           "Every specific in your reply must appear in these excerpts: figures, prices, " +
           "timelines, reference numbers, document requirements, and the steps of a process. " +

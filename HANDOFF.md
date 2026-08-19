@@ -1156,6 +1156,52 @@ Those are reasons **not to write a check**, which is different from not having
 got round to it. The gate still **fails if an operator is neither covered nor
 listed**, so the next one added cannot slip through.
 
+## CORRECTED — Juris Prime's agent does not escalate, and never did
+
+**Everything in the section below is wrong, and it is left standing because the
+way it was wrong is the most useful thing on this page.**
+
+Four dry runs scored `juris-prime` **medium** and two scored `sfs-international`
+**high**. I published three conclusions from that: that the agent narrowed a
+timeline, that SFS fabricated a property listing, and that the remedy was a page
+edit at Juris Prime. **All three were false.**
+
+`dry-run-reply` built the judge's `ragContext` from its OWN `searchKnowledge`
+call with `limit: 3`, while the agent had retrieved its own passages with its own
+queries and a limit of five. The judge was asked whether a reply was supported by
+a **subset of its own evidence**, and answered correctly and uselessly.
+
+**The live path never had this bug.** `processor.ts` reconstructs the judge's
+context from `result.toolCalls`, and its comment already said why: *"what the
+agent read, not what a second search might have found."* The harness had a second
+search.
+
+With the harness corrected, the same questions against the same agents:
+
+| business | before | after |
+|---|---|---|
+| juris-prime | medium ×4 | **low** |
+| juris-prime-legal | low | low |
+| abr | low | low |
+| sfs-international | high ×2 | **low** |
+| zipicka | low | low |
+
+The judge now names the exact items it had called invented — *"document
+requirements, attestation steps, and timeframe — are directly supported by the
+retrieved excerpts"*, and for SFS, *"quotes one specific rental listing (AED
+190,000/Yearly for 'Central apartment with doorman') directly from the retrieved
+context"*.
+
+**And the fabrication I reported was in the knowledge base all along.** Counted
+against SFS's 27 chunks: `sauna` 4, `HZ-09` 1, `11,000,000` 1, `HZ-04` 1,
+`doorman` 2. I took a judge's verdict as evidence and published it as *"the most
+serious fabrication this project has produced"* — on the day I spent auditing
+claims that were asserted rather than measured. Checking it cost two SQL queries.
+
+**What survives:** the `constraints` field added to grounded tool results stays,
+because it restates what "answer only from the excerpts" has always meant —
+but it is not a fix and prevented nothing. Its comment says so.
+
 ## Juris Prime's agent escalates every time, and the prompt is not why
 
 Three dry runs on 18 August, each after a change aimed at fixing it. **Three
