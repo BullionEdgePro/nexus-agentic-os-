@@ -18,6 +18,7 @@ import {
   setConversationRouting,
   recordTriagePrompt,
   recordInboundMessage,
+  findRecentBroadcastSender,
   insertOutboundMessage,
   recordDeliveryStatus,
   recordBroadcastDelivery,
@@ -175,6 +176,22 @@ async function businessAnsweringFor(
 // How many times a customer may be handed the triage menu before a human takes
 // over. Bounded because the failure mode is a loop: if someone's messages never
 // classify and never answer the menu, re-asking forever is worse than silence.
+/**
+ * How long after we message somebody their reply still routes to us.
+ *
+ * Seven days, and the number is a judgement rather than a measurement — no
+ * campaign has ever been sent, so there is no reply-latency distribution to fit
+ * to. It is chosen from what it costs to be wrong in each direction: too short
+ * and a reply to Thursday's campaign gets a menu on Monday, which is the exact
+ * failure this exists to stop; too long and a campaign from last month quietly
+ * claims a genuinely new enquiry.
+ *
+ * A week is the longest window in which "you messaged me and I am replying" is
+ * still what a person means. Revisit it against real reply times once campaigns
+ * have actually been sent — that is the measurement this is standing in for.
+ */
+const BROADCAST_ROUTING_WINDOW_HOURS = 24 * 7;
+
 const MAX_TRIAGE_ATTEMPTS = 3;
 
 // Intent classification moved to `classifyIntent` (@nexus/agents/intent.ts).
@@ -1114,6 +1131,44 @@ async function resolveServingOrganization(ctx: {
 
   const outcome = classifyBusiness(ctx.text, businesses);
   if (outcome.kind === "routed") return commitRoute(ctx, outcome.business, outcome.matched);
+
+  // WE MESSAGED THEM FIRST, SO WE ALREADY KNOW WHO THIS IS FOR.
+  //
+  // A campaign goes out from Juris Prime. A recipient replies "yes please".
+  // That reply carries no tag and probably no keyword, so everything above
+  // fails to place it — and the customer is shown a menu of five firms by the
+  // same number that messaged them ninety seconds earlier.
+  //
+  // AFTER the tag and the keywords, never before. Those are things the customer
+  // said; this is a thing we did. If somebody who received a property campaign
+  // writes in about a lease dispute, the words they chose win — this only ever
+  // replaces "ask them" with "we already know", and never overrides an explicit
+  // signal.
+  //
+  // It also runs before the triage-attempt counter below, so a broadcast reply
+  // never burns one of a customer's three chances to be understood.
+  if (ctx.contactId) {
+    const priorContact = await findRecentBroadcastSender(
+      ctx.contactId,
+      BROADCAST_ROUTING_WINDOW_HOURS
+    ).catch(() => null);
+
+    const sender = priorContact
+      ? businesses.find((business) => business.id === priorContact.organizationId)
+      : undefined;
+
+    if (sender) {
+      logger.info(
+        {
+          conversationId: ctx.conversationId,
+          business: sender.slug,
+          messagedAt: priorContact?.sentAt,
+        },
+        "Routed by who messaged this contact — a reply to a campaign is not an unplaceable enquiry"
+      );
+      return commitRoute(ctx, sender, ["replied to our message"]);
+    }
+  }
 
   logger.debug(
     {

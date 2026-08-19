@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants } from "./client.js";
 import type { AudienceFilter, BroadcastStatus, CreateBroadcastInput } from "@nexus/shared";
 
 export interface BroadcastRow {
@@ -448,4 +448,61 @@ export async function retireMissingTemplates(
     [organizationId, keepMetaIds]
   );
   return rowCount ?? 0;
+}
+
+/**
+ * Which business messaged this contact first, if one did.
+ *
+ * ============================================================
+ * THE PROBLEM THIS ANSWERS
+ * ============================================================
+ *
+ * A campaign goes out from Juris Prime. A recipient replies "yes please". That
+ * inbound message arrives on the shared number carrying no tag and probably no
+ * keyword, so the switchboard cannot tell which of five businesses it is for —
+ * and asks. The customer is shown a menu of five firms by the same number that
+ * messaged them ninety seconds ago.
+ *
+ * Nobody had to decide that; it is what "route by the text of the message"
+ * does when the message is a reply to something. The context that answers it
+ * was already in the database.
+ *
+ * ============================================================
+ * WHY THIS IS CROSS-TENANT, AND SAYS SO
+ * ============================================================
+ *
+ * `broadcasts` is tenant-scoped. The reply pipeline runs inside the NUMBER
+ * OWNER's transaction, so a broadcast belonging to Juris Prime is invisible
+ * there — the eighth appearance of the trap this platform keeps producing, and
+ * the first where widening to the serving business is not the fix, because
+ * WHICH business is serving is precisely the question being asked.
+ *
+ * So it is a stated cross-tenant read, in the same class as resolving which
+ * tenant a phone number belongs to: the answer cannot be scoped to a tenant
+ * because it is what determines the tenant.
+ *
+ * Sent or delivered only. A recipient row that is `pending` was never actually
+ * messaged, and routing somebody to a business that has not spoken to them yet
+ * would be inventing a conversation neither party had.
+ */
+export async function findRecentBroadcastSender(
+  contactId: string,
+  withinHours: number
+): Promise<{ organizationId: string; sentAt: string } | null> {
+  return withAllTenants("switchboard: which business messaged this contact", async () => {
+    const { rows } = await getPool().query<{ organization_id: string; sent_at: string }>(
+      `select b.organization_id, r.sent_at::text
+         from broadcast_recipients r
+         join broadcasts b on b.id = r.broadcast_id
+        where r.contact_id = $1
+          and r.status in ('sent', 'delivered')
+          and r.sent_at is not null
+          and r.sent_at > now() - ($2 || ' hours')::interval
+        order by r.sent_at desc
+        limit 1`,
+      [contactId, String(withinHours)]
+    );
+    const row = rows[0];
+    return row ? { organizationId: row.organization_id, sentAt: row.sent_at } : null;
+  });
 }

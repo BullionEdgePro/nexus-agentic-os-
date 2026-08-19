@@ -40,6 +40,14 @@ mock.module("@nexus/db", {
     // would silently change what they cover rather than extending it — the
     // empty-rota branch is covered by escalation-needs-a-destination.test.mjs.
     hasActiveEmployees: async () => true,
+    // No prior campaign, which is every case these tests cover: they exercise
+    // the reply path, not the switchboard's campaign-reply shortcut. Returning
+    // null keeps routing exactly as it was before that shortcut existed.
+    //
+    // These mocks stub @nexus/db by ENUMERATION, so a new import in the
+    // processor is a module-load failure here rather than a wrong answer —
+    // which is how this stub came to be added at all.
+    findRecentBroadcastSender: async () => null,
     // Needed by src/services/availability.ts, which the processor now imports.
     // These mocks stub @nexus/db by enumeration, so a missing export is a
     // module-load failure rather than a wrong answer.
