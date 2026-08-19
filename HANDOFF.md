@@ -1338,6 +1338,36 @@ customer would get the handover phrase rather than that answer. That is the
 governance layer doing exactly what it is for, on the first grounded reply this
 business has ever been observed to produce.
 
+## PENDING: migration 052 is written, tested and NOT applied
+
+*As of 2026-08-19. Two of the nine gates fail until it is, and they are right to.*
+
+```bash
+cd /opt/nexus && docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U nexus -d nexus -v ON_ERROR_STOP=1 -f - \
+  < packages/db/migrations/052-rls-for-every-tenant-table.sql
+```
+
+Then `./scripts/verify-all.sh` should return all nine PASS.
+
+**The code is already deployed and is safe either way.** The ordering matters
+in one direction only: `agent_quality_daily` had no policy, and the quality
+route read it with no tenant context, so applying the migration BEFORE that
+route was scoped would have emptied the Quality deck page -- no context, no
+rows. That route now opens `withTenant`, verified against production: 30 rows
+for zipicka over 30 days.
+
+What the two failing gates are reporting, correctly:
+
+| gate | says |
+|---|---|
+| `schema-drift-check` | four `ENABLE ROW LEVEL SECURITY` statements and five policies exist in the repository and not in production |
+| `rls-verify` | `agent_quality_daily`, `employee_presence_events`, `organization_users`, `twin_handbacks` each have an `organization_id` and no row-level security |
+
+`agent_quality_daily` holds 195 rows across all five businesses. Every reader
+of it filters on `organization_id` explicitly, so no query known to exist
+returns another business's rows; what is missing is the guarantee that a query
+which forgot the filter would return nothing.
 ## The sixth instance — the argument was fixed and the transaction was not
 
 *Found 2026-08-19, before it fired.*
