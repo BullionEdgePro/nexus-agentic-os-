@@ -1346,6 +1346,76 @@ customer would get the handover phrase rather than that answer. That is the
 governance layer doing exactly what it is for, on the first grounded reply this
 business has ever been observed to produce.
 
+## The seventh instance, and the one it uncovered
+
+*2026-08-19.*
+
+### Fixed: a finding named the wrong business
+
+Measured from findings already in production:
+
+| operator | filed against | customer was actually | seen |
+|---|---|---|---|
+| `customer-waiting` | zipicka | sfs-international | 12 Aug |
+| `customer-waiting` | zipicka | juris-prime | 17 Aug |
+
+**The second is the seventeen-hour silence.** A customer picked Juris Prime
+from the triage menu, got nothing back, and the operator that noticed filed the
+alert against the wrong firm.
+
+The sweep runs `withTenant(organization.id)` per business, and a routed
+conversation is visible only inside the number owner's turn — so the finding is
+filed against Zipicka, correct according to the row and wrong according to the
+customer. The console labels it "Zipicka", and **the label is the part that
+tells somebody who to call**; an employee session filters on their own
+organization, so the serving business never sees it and the owner sees one they
+cannot help.
+
+Migration 053 adds `serving_organization_id`. **A column, not a refiling** —
+reconciliation is keyed on `(organization_id, operator)`, so filing Juris
+Prime's finding under Juris Prime would put it in reach of Juris Prime's own
+turn, which sees no routed conversations, produces an empty list, and retracts
+what was just raised. Every read a person sees resolves through the coalesce;
+reconciliation deliberately does not.
+
+Verified against production after deploying: 3 conversations that would have
+been filed under Zipicka now resolve to `abr`, `juris-prime` and
+`sfs-international`; 12 correctly stay Zipicka.
+
+**A correction to that commit message.** It says four aggregate operators
+"count routed conversations under the owner". Only three operators query
+`conversations` at all — `customer-waiting`, `handover-abandoned` (both fixed)
+and `reengagement-candidate`, which counts CONTACTS and is keyed on
+`contacts.organization_id`. Whether a contact belongs to the business that
+served them is a product question about the contact model, not this bug.
+
+### NOT fixed, and bigger: every per-business number counts routed traffic under the owner
+
+Chasing the aggregates turned up the same trap one layer down. Measured on
+production:
+
+| table | rows attributed to zipicka that belong elsewhere |
+|---|---|
+| `conversation_metrics` | 2 — one ABR, one SFS International |
+| `messages` | 10 — six Juris Prime, three SFS, one ABR |
+
+The rows are not wrong. They **must** carry the owner's `organization_id`: the
+reply path writes them inside the owner's transaction, and writing the serving
+business's id would fail the RLS `with check`. What is wrong is that every
+per-business READ keys on that column and therefore inflates the owner and
+empties everyone else — quality trend, escalation hotspots, delivery-failing,
+agent-unavailable, intent-unclassified, retrieval-unavailable, and the deck's
+per-business message counts.
+
+No migration is needed: both tables join to `conversations`, which already
+carries `routed_organization_id`. The work is to resolve through it at each
+read — and it is **not** a mechanical sweep, because some reads should stay
+owner-scoped (anything about the number itself). Blast radius: 20 queries
+against `messages`, seven files touching `conversation_metrics`.
+
+Left undone deliberately rather than half-done. Doing it badly would put wrong
+numbers on the deck with more confidence than the current ones carry.
+
 ## Migration 052 applied — all ten gates pass
 
 *2026-08-19. `Row-level security holds on 25 tenant table(s), derived from the
