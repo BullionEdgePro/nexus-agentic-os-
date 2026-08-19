@@ -1389,32 +1389,84 @@ and `reengagement-candidate`, which counts CONTACTS and is keyed on
 `contacts.organization_id`. Whether a contact belongs to the business that
 served them is a product question about the contact model, not this bug.
 
-### NOT fixed, and bigger: every per-business number counts routed traffic under the owner
+### Fixed: every per-business number counted routed traffic under the owner
 
-Chasing the aggregates turned up the same trap one layer down. Measured on
-production:
+Chasing the aggregates turned up the same trap one layer down. Measured before:
 
 | table | rows attributed to zipicka that belong elsewhere |
 |---|---|
-| `conversation_metrics` | 2 — one ABR, one SFS International |
+| `conversation_metrics` | 2 — one ABR, one SFS |
 | `messages` | 10 — six Juris Prime, three SFS, one ABR |
 
-The rows are not wrong. They **must** carry the owner's `organization_id`: the
-reply path writes them inside the owner's transaction, and writing the serving
-business's id would fail the RLS `with check`. What is wrong is that every
-per-business READ keys on that column and therefore inflates the owner and
-empties everyone else — quality trend, escalation hotspots, delivery-failing,
-agent-unavailable, intent-unclassified, retrieval-unavailable, and the deck's
-per-business message counts.
+The rows are not wrong — they **must** carry the owner's `organization_id`,
+since the reply path writes them inside the owner's transaction. What was wrong
+is that every per-business read keyed on that column, **and under RLS the
+serving business could not see the rows at all** — so changing a WHERE clause
+alone would have fixed nothing. Both halves had to move.
 
-No migration is needed: both tables join to `conversations`, which already
-carries `routed_organization_id`. The work is to resolve through it at each
-read — and it is **not** a mechanical sweep, because some reads should stay
-owner-scoped (anything about the number itself). Blast radius: 20 queries
-against `messages`, seven files touching `conversation_metrics`.
+**Migration 054** widens the policies: `conversations` gains
+`routed_organization_id`; `messages` and `conversation_metrics` gain a
+`serving_organization_id` denormalised from the conversation, **maintained by
+trigger rather than by every writer** — including a cascade for the case no
+writer could cover, a conversation routed *after* its first messages arrived,
+which is exactly what the triage menu does. Reads widen; writes stay with the
+owner.
 
-Left undone deliberately rather than half-done. Doing it badly would put wrong
-numbers on the deck with more confidence than the current ones carry.
+**Migration 055** was needed because 054 was not enough, and the inbox proved
+it. As ABR, immediately after 054:
+
+```
+conversations abr can see                 1
+contacts abr can see                      0
+conversations surviving the contact join  0
+```
+
+The inbox joins contacts for the customer's name, and a contact belongs to the
+owner — so the inner join silently removed the row 054 had just made visible.
+An array rather than another single column, because a conversation has one
+serving business and **a contact can have several**.
+
+**Migration 056** fixes a defect 055 introduced: a `::uuid` cast inside a
+policy, where an unset tenant is `''`. It did not always raise — whether the
+cast was *reached* depended on the planner's OR ordering, so the same policy
+threw for one cross-tenant query and returned rows for another. `rls-verify`
+caught it within minutes.
+
+Measured after, through the inbox's own reader:
+
+| business | inbox | top conversation |
+|---|---|---|
+| abr | 1 | sam |
+| juris-prime | 1 | Zipicka Trading Dxb |
+| juris-prime-legal | 0 | — |
+| sfs-international | 1 | mshakirkhanmshakirkhan03 |
+| zipicka | 12 | gemail |
+
+Fifteen conversations, each appearing exactly once, under the business actually
+talking to the customer. Juris Prime's is the 17 August conversation that went
+seventeen hours unanswered.
+
+The quality history was recomputed over 120 days — 600 business-days — so the
+stored rollups carry the corrected attribution rather than only new ones:
+
+| business | conversations | inbound | active days |
+|---|---|---|---|
+| zipicka | 17 | 33 | 11 |
+| juris-prime | 4 | 3 | 3 |
+| sfs-international | 1 | 2 | 1 |
+| abr | 1 | 1 | 1 |
+
+### Three gate assertions had to be re-asked, not relaxed
+
+`rls-verify` failed three times during this work, each time correctly. "Can A
+see B's rows" acquired a legitimate yes, so it now asks whether a business can
+see something it **neither owns nor serves** — stronger, because it covers
+every other tenant at once instead of one named comparison. The "own rows"
+baseline moved from *what it owns* to *what it may see*, which is the
+distinction that emptied ABR's inbox in the first place.
+
+Each was proved able to fail before shipping: 0 with the policy enforcing, 14
+with `tenant_scope` forced to `all`.
 
 ## Migration 052 applied — all ten gates pass
 
