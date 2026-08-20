@@ -693,8 +693,8 @@ const wordingAwaitingReview: Operator = {
           ? `Your "${row.moment}" wording needs ${row.needs} before it can be switched on`
           : `Your "${row.moment}" wording is written but switched off`,
         detail: row.needs
-          ? `Written ${age} ago and still not in use. It cannot be activated while it contains {{${row.needs}}} — a customer would receive that literally. Fill it in on the Wording screen and switch it on; until then they get the platform's generic message instead of yours.`
-          : `Written ${age} ago and never switched on, so customers get the platform's generic message instead of yours. Switch it on from the Wording screen, or delete it if you have changed your mind.`,
+          ? `Written ${age} ago and still not in use. It cannot be activated while it contains {{${row.needs}}} — a customer would receive that literally. Fill it in on the Procedures screen, under "What we say", and switch it on; until then they get the platform's generic message instead of yours.`
+          : `Written ${age} ago and never switched on, so customers get the platform's generic message instead of yours. Switch it on from the Procedures screen, under "What we say", or delete it if you have changed your mind.`,
         subjectKind: "phrase",
         // The phrase itself, so the finding is a link to the thing that needs
         // editing. operator-fire-check refuses a finding with no subject, and
