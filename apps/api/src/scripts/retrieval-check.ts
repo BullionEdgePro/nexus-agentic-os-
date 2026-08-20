@@ -27,7 +27,7 @@
  * that does not exist fails forever and gets deleted rather than investigated.
  */
 import { pathToFileURL } from "node:url";
-import { withTenant, withAllTenants, findOrganizationBySlug } from "@nexus/db";
+import { withTenant, withAllTenants, findOrganizationBySlug, findNumberOwner } from "@nexus/db";
 import { searchKnowledge, searchKnowledgeLexical } from "@nexus/knowledge";
 
 interface Probe {
@@ -146,12 +146,37 @@ async function main() {
       continue;
     }
 
-    console.log(`${slug}`);
+    // `is_number_owner`, not the first business on the number: two of this
+    // platform's gates once called ABR the owner because listOrganizations
+    // orders by name, and ran every probe from the one direction production
+    // never takes.
+    const owner = await withAllTenants("retrieval-check: number owner", () =>
+      findNumberOwner(organization.whatsappPhoneNumberId)
+    );
+
+    console.log(
+      `${slug}${owner && owner.id !== organization.id ? `  (asked from inside ${owner.slug}'s transaction)` : ""}`
+    );
     for (const probe of probes) {
-      // Scoped, because knowledge_chunks is under RLS. Unscoped this returns
-      // nothing and every probe would read as a knowledge gap rather than as a
-      // missing tenant context.
-      const hits = await withTenant(organization.id, () =>
+      // FROM THE NUMBER OWNER'S TRANSACTION, which is the only shape a
+      // customer ever experiences.
+      //
+      // This used to open `withTenant(organization.id)` — scoped to the
+      // business being asked about. That is the one context in which the
+      // shared-number defect is invisible, and this gate is a knowledge check
+      // that would have reported "the right page came back" on a day when no
+      // routed customer could reach any page at all. `dry-run-reply` had
+      // exactly this blind spot and was corrected on 18 August; this was noted
+      // the same day and left, because `searchKnowledge` self-widens now and so
+      // the gate passes either way.
+      //
+      // Passing either way is the problem. A harness that agrees with
+      // production by coincidence stops agreeing the moment somebody removes
+      // the widening — and reports a knowledge result rather than the missing
+      // context that caused it. So it runs the way the reply pipeline runs:
+      // the owner's transaction, asking about the serving business.
+      const scope = owner ?? organization;
+      const hits = await withTenant(scope.id, () =>
         searchKnowledge({
           organizationId: organization.id,
           query: probe.question,
