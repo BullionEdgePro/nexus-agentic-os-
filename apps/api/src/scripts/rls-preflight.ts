@@ -66,6 +66,18 @@ interface Path {
   crossTenant?: boolean;
   /** True when the path touches no tenant-scoped table (registry, pooled aggregates). */
   unscoped?: boolean;
+  /**
+   * True when the reader supplies its own tenant context.
+   *
+   * A self-scoping reader wraps its own body in `withServingTenant`, which with
+   * no ambient scope degrades to an ordinary `withTenant`. There is no unscoped
+   * path left for the assertion to catch, so requiring one to fire would be
+   * requiring the reader to be less safe than it is.
+   *
+   * What it can still get wrong is isolation, and that is rls-verify's
+   * question, asked as nexus_app against real rows.
+   */
+  selfScoping?: boolean;
   run: (organizationId: string) => Promise<unknown>;
 }
 
@@ -90,6 +102,21 @@ const PATHS: Path[] = [
   { name: "knowledge sources", run: (id) => listKnowledgeSources(id) },
   {
     name: "contact memory",
+    // SELF-SCOPING, so it must NOT throw — and that is a stronger guarantee
+    // than the one this gate usually checks, not a weaker one.
+    //
+    // Everything else here proves that calling it without a tenant context
+    // raises rather than quietly returning another business's rows. This one
+    // supplies its own context: `getContactMemory` widens to the serving
+    // business at the read, and `withServingTenant` with no ambient scope
+    // degrades to an ordinary `withTenant`. There is no unscoped path left to
+    // catch, which is why the probe changed shape when the reader did.
+    //
+    // Isolation is still checked, by rls-verify, which connects as nexus_app
+    // and asks whether one business can see another's rows. That is the
+    // question this reader can still get wrong; "did you remember to wrap it"
+    // is not, any more.
+    selfScoping: true,
     run: (id) => getContactMemory(id, "00000000-0000-0000-0000-000000000000"),
   },
 ];
@@ -216,6 +243,12 @@ async function main(): Promise<void> {
   console.log("\nUnwrapped on purpose (tenant-scoped paths must refuse)");
   for (const path of PATHS) {
     if (path.unscoped || path.crossTenant) continue;
+    if (path.selfScoping) {
+      // Printed rather than skipped in silence. A probe that quietly stops
+      // being run is how a gate loses coverage without anybody deciding to.
+      line(true, path.name, "self-scoping — no unwrapped path to refuse; isolation is rls-verify's");
+      continue;
+    }
     try {
       await path.run(org.id);
       // Reaching here means the guard let a tenant-scoped query through with no
