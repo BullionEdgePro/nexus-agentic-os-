@@ -82,11 +82,106 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * Keyed on the conversation rather than the message: a customer who sends three
  * messages while waiting has one problem, not three.
  */
+/**
+ * WHICH OF FOUR THINGS HAPPENED, rather than which of two.
+ *
+ * ============================================================
+ * WHAT THE OLD SENTENCE COST
+ * ============================================================
+ *
+ * This finding used to branch on one boolean. If the AI was not paused it said
+ * "it should have answered. Check the reply pipeline for this conversation."
+ *
+ * On 2026-08-20 that sentence was read literally and an afternoon went into
+ * chasing a reply pipeline that was working perfectly. The truth was the third
+ * case below: a colleague had answered the conversation on the 10th, the
+ * customer wrote again on the 19th while the handoff flag was still set, the
+ * agent correctly stayed silent, and the flag was cleared afterwards -- leaving
+ * a conversation that looks, to one boolean, exactly like a broken pipeline.
+ *
+ * Measured on production the same day: three waiting conversations, three
+ * DIFFERENT causes, one sentence between them.
+ *
+ * ============================================================
+ * WHY THE ORDER OF THE BRANCHES IS THE DESIGN
+ * ============================================================
+ *
+ * Each branch names a different person and a different next action, so the
+ * order runs from the most specific evidence to the least:
+ *
+ *   paused now          somebody holds it. Chase them.
+ *   a colleague spoke   somebody held it and stopped. Chase them, and know the
+ *                       agent will take their NEXT message.
+ *   an outcome recorded the agent decided, and said why. Read the reason.
+ *   nothing recorded    nobody accounted for this message. THIS is the one that
+ *                       means the platform, and it is now the only one that
+ *                       says so.
+ *
+ * The last branch is deliberately the fallback rather than the default. Before,
+ * "the platform is broken" was what you got whenever the flag was false, which
+ * is most of the time -- so the alarming reading was also the commonest one,
+ * and it stopped meaning anything. It now requires every other explanation to
+ * have been ruled out, which is what makes it worth reading.
+ *
+ * SEVERITY IS UNCHANGED AND STAYS ON TIME ALONE. The cause decides who acts,
+ * not how fast. Grading a platform fault higher would be defensible, but it
+ * would also change what the dispatcher sends at 3am on a signal this operator
+ * has only just started collecting.
+ */
+function whyNobodyAnswered(row: {
+  is_human_handoff: boolean;
+  a_human_spoke_before: boolean;
+  recorded_outcome: string | null;
+}): string {
+  if (row.is_human_handoff) {
+    return "The AI is paused on this conversation because it was handed to a person. Nobody has replied since.";
+  }
+
+  if (row.a_human_spoke_before) {
+    return (
+      "A colleague replied here earlier and the conversation has gone quiet since. The AI is no " +
+      "longer paused, so it will answer this customer's NEXT message — but this one is waiting on " +
+      "a person, not on the platform."
+    );
+  }
+
+  if (row.recorded_outcome) {
+    return `${describeOutcome(row.recorded_outcome)} This was a decision, not a failure — the reply path ran and recorded it.`;
+  }
+
+  return (
+    "Nothing recorded an outcome for this message, so as far as the platform can tell it was never " +
+    "answered and never deliberately skipped. This is the one to escalate: check the worker and the " +
+    "webhook for this conversation."
+  );
+}
+
+/** The recorded reply outcomes, in the words of somebody who has to act on one. */
+function describeOutcome(outcome: string): string {
+  switch (outcome) {
+    case "skipped_handover":
+      return "The agent stayed silent on purpose because the conversation was handed to a person at the time.";
+    case "fallback":
+      return "The agent could not answer and sent its fallback message instead.";
+    case "none":
+      return "The agent ran and decided to send nothing.";
+    case "agent":
+    case "agent_unrecorded":
+      // Contradicts the operator's own premise -- it only selects conversations
+      // whose last message is inbound. Say so rather than paper over it: a
+      // reply recorded as sent with no outbound message is a delivery problem,
+      // and is worth more attention than a customer simply waiting.
+      return "The platform recorded a reply as sent, but no outbound message exists on this conversation. That is a delivery problem, not a slow colleague.";
+    default:
+      return `The reply path recorded "${outcome}" for this message.`;
+  }
+}
+
 const customerWaiting: Operator = {
   slug: "customer-waiting",
   title: "Customer waiting",
   description:
-    "Someone messaged and nothing has gone back. Normally the agent answers in seconds, so this means the AI is paused for a handover nobody picked up, or the reply path failed.",
+    "Someone messaged and nothing has gone back. Normally the agent answers in seconds, so each finding works out which of four things happened — a handover nobody picked up, a colleague who replied and then stopped, a deliberate silence the agent recorded, or a message the reply path never accounted for at all.",
   run: async (organizationId) => {
     const { rows } = await getPool().query<{
       conversation_id: string;
@@ -97,6 +192,8 @@ const customerWaiting: Operator = {
       is_human_handoff: boolean;
       last_body: string | null;
       has_assessment: boolean;
+      a_human_spoke_before: boolean;
+      recorded_outcome: string | null;
     }>(
       `select c.id as conversation_id,
               -- WHO THIS CUSTOMER IS ACTUALLY WAITING ON. All five businesses
@@ -113,7 +210,35 @@ const customerWaiting: Operator = {
               last.body as last_body,
               exists (
                 select 1 from lead_assessments la where la.conversation_id = c.id
-              ) as has_assessment
+              ) as has_assessment,
+              -- DID A COLLEAGUE EVER SPEAK HERE?
+              --
+              -- handover-abandoned deliberately excludes any conversation where
+              -- a human has spoken, because its subject is a promise nobody
+              -- came to. That leaves the half-abandoned case -- a colleague
+              -- answered once and then went quiet -- belonging to no operator
+              -- at all, and arriving here with the handoff flag since cleared.
+              exists (
+                select 1 from messages m
+                 where m.conversation_id = c.id and m.sender_type = 'human_agent'
+              ) as a_human_spoke_before,
+              -- WHAT THE REPLY PATH SAID ABOUT *THIS* MESSAGE.
+              --
+              -- Bounded to outcomes recorded at or after the unanswered message
+              -- arrived. Without that bound this picks up the outcome of a
+              -- PREVIOUS exchange and reports it as the reason for this
+              -- silence -- which is the same class of mistake as the sentence
+              -- this whole change exists to remove, produced by a sloppier
+              -- query. Null means nothing accounted for the message at all.
+              (
+                select cm.reply_outcome
+                  from conversation_metrics cm
+                 where cm.conversation_id = c.id
+                   and cm.reply_outcome is not null
+                   and cm.recorded_at >= last.created_at
+                 order by cm.recorded_at asc
+                 limit 1
+              ) as recorded_outcome
          from conversations c
          join contacts ct on ct.id = c.contact_id
          join lateral (
@@ -199,9 +324,7 @@ const customerWaiting: Operator = {
         fingerprint: row.conversation_id,
         severity: hours >= WAITING_URGENT_HOURS ? "urgent" : "warn",
         title: `${who} has been waiting ${hours} hours for a reply`,
-        detail: row.is_human_handoff
-          ? "The AI is paused on this conversation because it was handed to a person. Nobody has replied since."
-          : "The AI was not paused, so it should have answered. Check the reply pipeline for this conversation.",
+        detail: whyNobodyAnswered(row),
         subjectKind: "conversation",
         subjectId: row.conversation_id,
         servingOrganizationId: row.serving_organization_id,
