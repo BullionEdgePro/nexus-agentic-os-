@@ -588,11 +588,31 @@ const PROCEDURE_REVIEW_DAYS = 7;
  * Two actions, and the finding names both, because "you have no staff" is a
  * description of the business rather than a task.
  */
+/*
+ * WHAT A CUSTOMER ACTUALLY GETS, measured rather than assumed.
+ *
+ * This finding first said every appointment request "is answered with 'nobody
+ * is available'". That was written from the operator's side of the problem and
+ * asserted a customer experience nobody had checked. Running findAvailableSlots
+ * against the three flagged businesses in production returned zero slots for
+ * each -- and zero slots is not an error and not a dead end: check_availability
+ * turns an empty result into a note telling the model to offer a colleague
+ * follow-up. The agent degrades gracefully.
+ *
+ * So the finding stands and its reason moved. The cost is not a rude answer; it
+ * is that an appointment request becomes a callback promise, and a business
+ * with nobody on the rota has nobody to make that call either -- which then
+ * surfaces as unowned-followup, one operator further on.
+ *
+ * A finding that overstates its own consequence is the same failure as a badge
+ * that cannot be cleared: it spends the reader's trust, and the reader stops
+ * spending attention back.
+ */
 const bookingWithoutAnyone: Operator = {
   slug: "booking-without-anyone",
   title: "The agent offers appointments nobody can take",
   description:
-    "This business's agent can book appointments, but there is no active member of staff with working hours — so every request for one is answered with 'nobody is available'.",
+    "This business's agent can book appointments, but no member of staff has working hours — so the diary can never offer a time, and every appointment request turns into a promise to call back.",
   run: async (organizationId) => {
     const { rows } = await getPool().query<{ id: string; staff: string }>(
       `select ac.id,
@@ -627,8 +647,8 @@ const bookingWithoutAnyone: Operator = {
         title: "The agent offers appointments nobody can take",
         detail:
           staff > 0
-            ? `Your agent can book appointments and ${staff === 1 ? "your one member of staff has" : `all ${staff} of your staff have`} no working hours set, so the diary has nobody to offer. Every customer who asks for an appointment is told nobody is available. Set working hours on the Team screen, or switch the booking tool off so the agent stops offering.`
-            : "Your agent can book appointments and this business has no active staff, so the diary has nobody to offer. Every customer who asks for an appointment is told nobody is available. Add someone on the Team screen, or switch the booking tool off so the agent stops offering.",
+            ? `Your agent can book appointments and ${staff === 1 ? "your one member of staff has" : `all ${staff} of your staff have`} no working hours set, so the diary can never offer a time. Every customer who asks for an appointment is offered a call back instead — and with nobody on the rota, there is also nobody to make that call. Set working hours on the Team screen, or switch the booking tool off so the agent stops offering appointments at all.`
+            : "Your agent can book appointments and this business has no active staff, so the diary can never offer a time. Every customer who asks for an appointment is offered a call back instead — and with no staff, there is also nobody to make that call. Add someone on the Team screen, or switch the booking tool off so the agent stops offering appointments at all.",
         subjectKind: "agent_config",
         subjectId: row.id,
       } satisfies FindingInput;
