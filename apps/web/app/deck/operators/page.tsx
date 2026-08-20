@@ -33,6 +33,31 @@ import { whereToFixIt } from "./where-to-fix-it";
  * reader skims past, and this is the one line on the page whose job is to stop
  * an empty list being mistaken for good news.
  */
+/**
+ * Whether anything on this page reaches a person who is not looking at it.
+ *
+ * The page already refuses to let an empty list read as good news. This is the
+ * same refusal one step out: a fresh sweep and a short list say nothing about
+ * whether anybody is TOLD when that list grows at three in the morning.
+ *
+ * Measured before the dispatcher existed: broken-knowledge stood 4.7 hours on
+ * average across twenty-eight findings, and a knowledge outage that took 53 of
+ * one firm's 72 passages offline stood for sixteen. Every one of those was
+ * detected inside ten minutes and reached nobody.
+ *
+ * The unconfigured wording is the blunt one, deliberately. "Alerts are off"
+ * reads as a setting; "these reach nobody unless somebody opens this page" is
+ * the consequence, and the consequence is the part worth acting on.
+ */
+function describeAlerts(configured: boolean, includeWarnings: boolean): string {
+  if (!configured) {
+    return "No alert destination is set, so nothing here reaches anybody unless this page is open.";
+  }
+  return includeWarnings
+    ? "Urgent findings and warnings are sent to your alert destination as they appear."
+    : "Urgent findings are sent to your alert destination as they appear. Warnings stay on this page.";
+}
+
 function describeSweep(lastSweptAt: string | null): string {
   if (!lastSweptAt) return "The sweep has not completed once since the worker started.";
   const minutes = Math.round((Date.now() - new Date(lastSweptAt).getTime()) / 60000);
@@ -46,9 +71,16 @@ export default function OperatorsPage() {
   const [findings, setFindings] = useState<OperatorFinding[]>([]);
   const [operators, setOperators] = useState<OperatorInfo[]>([]);
   const [counts, setCounts] = useState({ urgent: 0, warn: 0, info: 0 });
-  const [sweep, setSweep] = useState<{ lastSweptAt: string | null; stalled: boolean }>({
+  const [sweep, setSweep] = useState<{
+    lastSweptAt: string | null;
+    stalled: boolean;
+    alerts: boolean;
+    alertsWarn: boolean;
+  }>({
     lastSweptAt: null,
     stalled: false,
+    alerts: false,
+    alertsWarn: false,
   });
   const [business, setBusiness] = useState<BusinessSlug | "">("");
   const [error, setError] = useState("");
@@ -73,7 +105,12 @@ export default function OperatorsPage() {
       setFindings(data.findings);
       setCounts(data.counts);
       setOperators(data.operators);
-      setSweep({ lastSweptAt: data.lastSweptAt, stalled: data.sweepStalled });
+      setSweep({
+        lastSweptAt: data.lastSweptAt,
+        stalled: data.sweepStalled,
+        alerts: data.alertsConfigured,
+        alertsWarn: data.alertsIncludeWarnings,
+      });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load findings.");
     } finally {
@@ -215,6 +252,10 @@ export default function OperatorsPage() {
           </ul>
           </>
         )}
+
+        <p className={sweep.alerts ? "op-alerts" : "op-alerts off"}>
+          {describeAlerts(sweep.alerts, sweep.alertsWarn)}
+        </p>
 
         <section className="op-roster">
           <h2 className="act-sub-head">What is being watched</h2>

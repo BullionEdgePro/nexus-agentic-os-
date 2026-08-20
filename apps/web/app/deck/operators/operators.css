@@ -152,3 +152,20 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Whether these findings reach anybody who is not looking at this page.
+   Sits between the list and the roster, so it is read after "what is wrong"
+   and before "what is being watched" — which is the order somebody asks. */
+.op-alerts {
+  margin: 1.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted, #5a6672);
+}
+/* The unconfigured case is the one worth noticing, and is the default state
+   until somebody sets a destination. Marked, not alarmed: it is a gap in the
+   setup rather than something going wrong right now. */
+.op-alerts.off {
+  padding-left: 0.75rem;
+  border-left: 2px solid #c4622d;
+  color: #8a5a3a;
+}

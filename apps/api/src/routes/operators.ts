@@ -10,6 +10,7 @@ import { isJobStalled } from "@nexus/shared";
 import { OPERATORS } from "../services/operators.js";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
+import { alertTarget } from "../services/alert-dispatch.js";
 
 /**
  * What the operators have found.
@@ -82,6 +83,22 @@ operatorsRoute.get("/", async (c) => {
     // Judged from the API process's own start, which is the only clock this
     // handler has. It errs toward silence right after a deploy, which is the
     // right direction for a banner.
+    // DO THESE FINDINGS REACH ANYBODY?
+    //
+    // The dispatcher shipped this afternoon and is silent until somebody sets
+    // OPERATOR_ALERT_WEBHOOK_URL. Nothing said so anywhere, which leaves the
+    // page in the one state it was written to avoid: reassuring. A reader sees
+    // sixteen operators, a fresh sweep and a short list, and has no way to know
+    // whether anybody is told when that list grows at 3am. The measured answer
+    // before alerting existed was 4.7 hours for broken-knowledge and sixteen
+    // for a knowledge outage.
+    //
+    // A BOOLEAN, NOT THE URL. The destination is a config value that may carry
+    // a token in its path -- Slack's incoming webhooks do -- and this response
+    // goes to a browser. Whether it is set is the useful fact; what it is, is
+    // not this page's business.
+    alertsConfigured: alertTarget() !== null,
+    alertsIncludeWarnings: alertTarget()?.alsoWarn ?? false,
     sweepStalled: isJobStalled(
       "operators",
       lastSweptAt ? new Date(lastSweptAt) : null,

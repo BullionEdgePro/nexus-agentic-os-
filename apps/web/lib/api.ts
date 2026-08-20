@@ -897,6 +897,8 @@ export function getFindings(business?: BusinessSlug | ""): Promise<{
    */
   lastSweptAt: string | null;
   sweepStalled: boolean;
+  alertsConfigured: boolean;
+  alertsIncludeWarnings: boolean;
 }> {
   return request(`/api/operators${business ? `?business=${business}` : ""}`);
 }

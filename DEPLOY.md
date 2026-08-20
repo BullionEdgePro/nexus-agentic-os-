@@ -54,6 +54,25 @@ monorepo; the deploy repo is a flattened mirror of it. Cloning the monorepo here
 instead would put the compose file one level down and every command in this
 document would miss it.
 
+**Getting a commit from the monorepo into that mirror is `./scripts/mirror.sh`**,
+run from `nexus-agentic-os/` on the development machine. It unpacks
+`git archive HEAD:nexus-agentic-os` at the root of a clone of the deploy repo,
+propagates deletions, commits with the same subject plus the source sha, and
+pushes. It refuses to run while the subdirectory has uncommitted changes,
+because mirroring HEAD when the disk says something else deploys a commit
+behind and passes every gate doing it.
+
+It mirrors the COMMIT, never the working tree. That is what keeps `.env`,
+`node_modules` and `.next` out of a repo that is public.
+
+So a full deploy is three commands:
+
+```bash
+cd nexus-agentic-os && ./scripts/mirror.sh
+ssh root@200.141.5.204 'cd /opt/nexus && ./scripts/deploy.sh'
+ssh root@200.141.5.204 'cd /opt/nexus && ./scripts/verify-all.sh'
+```
+
 ## 4. Configure
 
 ```bash
