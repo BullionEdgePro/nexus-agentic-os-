@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withServingTenant } from "./client.js";
 
 /**
  * Appointments the agent can actually make.
@@ -251,7 +251,37 @@ export async function listUpcomingBookingsForContact(
  * time we can already see is busy, so the customer is not told about a slot that
  * is then refused a second later.
  */
+/**
+ * WIDENED AT THE READ, not at the call site.
+ *
+ * The diary belongs to the business ANSWERING, so a booking row carries the
+ * serving firm's organization_id -- createBooking runs inside
+ * withServingTenant. Reading it back from the number owner's transaction
+ * returns nothing, and for a diary that is the dangerous direction: an empty
+ * list of existing bookings does not read as an error, it reads as a free
+ * afternoon, and the agent offers a slot somebody already has.
+ *
+ * Correct today only because all four call sites in the booking tool remember
+ * to wrap it, and findAvailableSlots carries a paragraph asking them to. That
+ * is a convention, and this codebase has been bitten eight times by the moment
+ * somebody adds the call that does not.
+ *
+ * The exclusion constraint is what stops an actual double-booking and it does
+ * hold -- the customer would be told the slot went while they were deciding.
+ * That is a bad exchange rather than a broken diary, and still not a reason to
+ * leave the read wrong.
+ */
 export async function listBookingsInWindow(
+  organizationId: string,
+  from: Date,
+  to: Date
+): Promise<Array<{ employeeId: string | null; startsAt: string; endsAt: string }>> {
+  return withServingTenant(organizationId, () =>
+    listBookingsInWindowScoped(organizationId, from, to)
+  );
+}
+
+async function listBookingsInWindowScoped(
   organizationId: string,
   from: Date,
   to: Date

@@ -64,6 +64,7 @@ import {
   getActiveProcedure,
   listOpenTasksForContact,
   hasActiveEmployees,
+  listBookingsInWindow,
 } from "@nexus/db";
 import { routeToEmployeeTwin } from "@nexus/agents";
 import { searchKnowledgeLexical } from "@nexus/knowledge";
@@ -160,6 +161,29 @@ const PROBES: Probe[] = [
     // one returns FALSE — "this business has no staff at all" — and the
     // pipeline acts on it by releasing a handoff a human is holding.
     count: async (serving) => ((await hasActiveEmployees(serving.id)) ? 1 : 0),
+  },
+  {
+    name: "the diary",
+    consequence: "the agent offers an appointment slot somebody already has",
+    // THE ONLY PROBE HERE WHOSE FAILURE DIRECTION IS A FALSE POSITIVE.
+    //
+    // Every other read on this list goes empty and the customer is told
+    // nothing. This one goes empty and the customer is told YES: an unwidened
+    // diary read returns no existing bookings, which does not look like an
+    // error, it looks like a free afternoon. The agent then offers a slot that
+    // is taken.
+    //
+    // Counting bookings in a window wide enough to include whatever is in the
+    // diary. Zero either way is reported as proving nothing, same as the rest —
+    // four of these businesses have never taken a booking.
+    count: async (serving) =>
+      (
+        await listBookingsInWindow(
+          serving.id,
+          new Date(Date.now() - 90 * 86_400_000),
+          new Date(Date.now() + 90 * 86_400_000)
+        )
+      ).length,
   },
   {
     name: "active procedures",
