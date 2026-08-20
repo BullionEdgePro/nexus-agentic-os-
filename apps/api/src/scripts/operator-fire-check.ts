@@ -291,6 +291,7 @@ const CASES: Case[] = [
 /** Operators this file does not seed, and why. Printed on every run. */
 const UNCOVERED: Record<string, string> = {
   "customer-waiting": "fires in production — findings on record, most recently today",
+  "booking-without-anyone": "fires on an ABSENCE of staff, which cannot be seeded by adding a row — and fires in production today for abr, juris-prime-legal and sfs-international, all three measured at 0 offerable slots with the booking tool on",
   "handover-abandoned": "fires in production",
   "schedule-stalled":
     "CANNOT be seeded here — it reads job_heartbeats through withAllTenants, which opens its own connection, so an uncommitted seed is invisible to it",

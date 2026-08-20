@@ -552,6 +552,90 @@ const PROCEDURE_REVIEW_DAYS = 7;
  * and "it needs office_number" is a task. Anything a person cannot act on from
  * the notification alone becomes something they look at later.
  */
+/**
+ * An agent that offers appointments for a business with nobody to book.
+ *
+ * MEASURED ON PRODUCTION 2026-08-19, by asking the real availability engine
+ * what each business could offer a customer right now:
+ *
+ *   abr                  0 slots offerable   <- agent offers booking
+ *   juris-prime          3 slots offerable
+ *   juris-prime-legal    0 slots offerable   <- agent offers booking
+ *   sfs-international    0 slots offerable   <- agent offers booking
+ *   zipicka              3 slots offerable
+ *
+ * Three firms advertise a capability that cannot work. A customer asks ABR for
+ * a consultation, the agent reaches for `check_availability`, and
+ * `findAvailableSlots` returns an empty list because the business has no active
+ * employee with a schedule — so the customer is told nobody is available to
+ * take appointments. Not once: every time, permanently, until somebody adds
+ * staff.
+ *
+ * NOBODY LEARNS THIS. The reply is graceful, the tool did not error, no
+ * exception was raised, and the firm's own screens show a booking-capable
+ * agent. The only visible trace is a customer who asked for an appointment and
+ * did not get one, which looks like an ordinary conversation.
+ *
+ * Migration 032 already asserts the near-miss version of this — that every
+ * agent which can book can also check the diary, so it never offers a slot
+ * outside working hours. The complement was never checked: that there is
+ * anybody in the diary at all.
+ *
+ * A WARNING, NOT URGENT. Nobody is waiting and nothing is broken; a capability
+ * is inert. Putting it beside "a customer has been waiting a day" would be
+ * wrong in both directions.
+ *
+ * Two actions, and the finding names both, because "you have no staff" is a
+ * description of the business rather than a task.
+ */
+const bookingWithoutAnyone: Operator = {
+  slug: "booking-without-anyone",
+  title: "The agent offers appointments nobody can take",
+  description:
+    "This business's agent can book appointments, but there is no active member of staff with working hours — so every request for one is answered with 'nobody is available'.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{ id: string; staff: string }>(
+      `select ac.id,
+              (
+                select count(*)::text from employees e
+                 where e.organization_id = ac.organization_id and e.is_active
+              ) as staff
+         from agent_configs ac
+        where ac.organization_id = $1
+          and ac.is_active
+          and ac.tools ? 'book_appointment'
+          -- Nobody who could ever be offered. A rota is what turns an employee
+          -- into a bookable one: findAvailableSlots reads working_hours, and an
+          -- empty schedule matches no window, ever. So an active employee with
+          -- no hours is counted here as nobody, which is what the diary does
+          -- with them.
+          and not exists (
+            select 1 from employees e
+             where e.organization_id = ac.organization_id
+               and e.is_active
+               and e.working_hours is not null
+               and e.working_hours <> '{}'::jsonb
+          )`,
+      [organizationId]
+    );
+
+    return rows.map((row) => {
+      const staff = Number(row.staff ?? 0);
+      return {
+        fingerprint: "booking-without-anyone",
+        severity: "warn" as const,
+        title: "The agent offers appointments nobody can take",
+        detail:
+          staff > 0
+            ? `Your agent can book appointments and ${staff === 1 ? "your one member of staff has" : `all ${staff} of your staff have`} no working hours set, so the diary has nobody to offer. Every customer who asks for an appointment is told nobody is available. Set working hours on the Team screen, or switch the booking tool off so the agent stops offering.`
+            : "Your agent can book appointments and this business has no active staff, so the diary has nobody to offer. Every customer who asks for an appointment is told nobody is available. Add someone on the Team screen, or switch the booking tool off so the agent stops offering.",
+        subjectKind: "agent_config",
+        subjectId: row.id,
+      } satisfies FindingInput;
+    });
+  },
+};
+
 const wordingAwaitingReview: Operator = {
   slug: "wording-awaiting-review",
   title: "Your own wording is switched off",
@@ -1446,6 +1530,7 @@ export const OPERATORS: Operator[] = [
   judgeOffline,
   procedureAwaitingReview,
   wordingAwaitingReview,
+  bookingWithoutAnyone,
   bookingUnassigned,
   templateRejected,
   reengagementCandidate,
