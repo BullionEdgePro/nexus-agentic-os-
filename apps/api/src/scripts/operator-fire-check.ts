@@ -210,6 +210,23 @@ const CASES: Case[] = [
     },
   },
   {
+    slug: "wording-awaiting-review",
+    // Seeded with a placeholder still in it, because that is the branch a real
+    // business hits: ABR wrote `no_one_available` wording containing
+    // {{office_number}}, the route correctly refused to activate it, and
+    // nothing told them. This proves the finding names the missing value rather
+    // than only saying something is wrong.
+    seed: async (organizationId) => {
+      await getPool().query(
+        `insert into agent_phrases (organization_id, moment, language, body, source, is_active)
+         values ($1, 'handing_over', 'en',
+                 'Operator fire check — not real wording. Call {{probe_number}}.',
+                 'operator', false)`,
+        [organizationId]
+      );
+    },
+  },
+  {
     slug: "procedure-awaiting-review",
     seed: async (organizationId) => {
       await upsertInferredProcedure({

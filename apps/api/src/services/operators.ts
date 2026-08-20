@@ -518,6 +518,104 @@ const judgeOffline: Operator = {
 // operator like every other one.
 const PROCEDURE_REVIEW_DAYS = 7;
 
+/**
+ * Wording a business wrote and never switched on.
+ *
+ * FOUND ON PRODUCTION 2026-08-19. ABR — a criminal defence firm — has authored
+ * `no_one_available` wording sitting inactive:
+ *
+ *   "There is nobody at the desk to take this over right now, so I will keep
+ *    helping where I can. Anything I say is general information, not legal
+ *    advice. If this is urgent - a police station, a court date, or a deadline
+ *    today - do not wait on this chat; call us on {{office_number}}."
+ *
+ * While it is off, their customers get the platform default instead:
+ *
+ *   "I want to make sure you get an accurate answer, so I'm looping in a
+ *    specialist from our team. They'll follow up shortly."
+ *
+ * A legal disclaimer and an urgent route, replaced by a promise of follow-up —
+ * which, fired precisely when nobody is on shift, is the false promise this
+ * platform has already been burned by twice.
+ *
+ * IT IS OFF FOR A GOOD REASON AND THAT IS THE POINT. The route refuses to
+ * activate wording that still contains a `{{placeholder}}`, correctly: sending
+ * a customer literal curly braces where a phone number belongs would be worse,
+ * and on this particular sentence far worse. The guard worked. What never
+ * happened is anybody being TOLD, so the firm wrote its wording, the platform
+ * quietly declined it, and both sides have been waiting since.
+ *
+ * `procedure-awaiting-review` already does exactly this for inferred
+ * procedures. Wording had no equivalent, which is why this one sat unnoticed.
+ *
+ * NAMES THE PLACEHOLDER, because "your wording is inactive" is a description
+ * and "it needs office_number" is a task. Anything a person cannot act on from
+ * the notification alone becomes something they look at later.
+ */
+const wordingAwaitingReview: Operator = {
+  slug: "wording-awaiting-review",
+  title: "Your own wording is switched off",
+  description:
+    "This business wrote its own version of a message the agent sends, and it is not being used. Until it is switched on, customers get the platform's generic wording instead.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{
+      moment: string;
+      needs: string | null;
+      days: string;
+    }>(
+      `select p.moment,
+              -- Every distinct {{placeholder}} still in the body, so the finding
+              -- can say what is actually missing rather than that something is.
+              (
+                select string_agg(distinct m[1], ', ' order by m[1])
+                  from regexp_matches(p.body, '\{\{([a-z0-9_]+)\}\}', 'g') as m
+              ) as needs,
+              extract(day from now() - p.created_at)::text as days
+         from agent_phrases p
+        where p.organization_id = $1
+          and p.is_active = false
+          -- Authored by this business, not catalogue wording nobody has looked
+          -- at. Somebody sat down and wrote this; that is what makes it worth
+          -- interrupting them about.
+          and p.source <> 'catalog'
+          -- Nothing else is active for that moment. If they have since written
+          -- a replacement and switched THAT on, this one is a discarded draft
+          -- and reporting it is noise.
+          and not exists (
+            select 1 from agent_phrases live
+             where live.organization_id = p.organization_id
+               and live.moment = p.moment
+               and live.language = p.language
+               and live.is_active
+          )
+        order by p.created_at asc`,
+      [organizationId]
+    );
+
+    if (rows.length === 0) return [];
+
+    return rows.map((row) => {
+      const days = Number(row.days ?? 0);
+      const age = days >= 1 ? `${days} day${days === 1 ? "" : "s"}` : "today";
+      return {
+        fingerprint: `wording-${row.moment}`,
+        // A warning, not urgent. The customer is getting a worse sentence, not
+        // no sentence — and treating it as urgent would put it beside "a
+        // customer has been waiting a day", which is not the same thing.
+        severity: "warn" as const,
+        title: row.needs
+          ? `Your "${row.moment}" wording needs ${row.needs} before it can be switched on`
+          : `Your "${row.moment}" wording is written but switched off`,
+        detail: row.needs
+          ? `Written ${age} ago and still not in use. It cannot be activated while it contains {{${row.needs}}} — a customer would receive that literally. Fill it in on the Wording screen and switch it on; until then they get the platform's generic message instead of yours.`
+          : `Written ${age} ago and never switched on, so customers get the platform's generic message instead of yours. Switch it on from the Wording screen, or delete it if you have changed your mind.`,
+        subjectKind: "phrase",
+        subjectId: null,
+      } satisfies FindingInput;
+    });
+  },
+};
+
 const procedureAwaitingReview: Operator = {
   slug: "procedure-awaiting-review",
   title: "Suggested answers are waiting for a decision",
@@ -1341,6 +1439,7 @@ export const OPERATORS: Operator[] = [
   thinKnowledge,
   judgeOffline,
   procedureAwaitingReview,
+  wordingAwaitingReview,
   bookingUnassigned,
   templateRejected,
   reengagementCandidate,
