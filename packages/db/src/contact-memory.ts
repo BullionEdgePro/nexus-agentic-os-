@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withServingTenant } from "./client.js";
 
 /**
  * What we remember about one customer of one business.
@@ -14,7 +14,31 @@ export interface ContactMemory {
   updatedAt: string;
 }
 
+/**
+ * WIDENED AT THE READ. The last agent-reachable reader that was not.
+ *
+ * The reply path runs in the number owner's transaction and asks this about the
+ * SERVING business, so unscoped it returns nothing -- and nothing is a
+ * perfectly ordinary answer here. A customer the agent has met before becomes
+ * a customer it has never met, and no error is raised because forgetting looks
+ * exactly like having nothing to remember.
+ *
+ * The one call site already wraps it, correctly and with a comment explaining
+ * why. That is the condition under which the next call site will not, which is
+ * the argument that widened listEmployees, hasActiveEmployees and
+ * listBookingsInWindow before it. This closes the set, and
+ * every-agent-read-widens-itself now holds it closed.
+ */
 export async function getContactMemory(
+  organizationId: string,
+  contactId: string
+): Promise<ContactMemory | null> {
+  return withServingTenant(organizationId, () =>
+    getContactMemoryScoped(organizationId, contactId)
+  );
+}
+
+async function getContactMemoryScoped(
   organizationId: string,
   contactId: string
 ): Promise<ContactMemory | null> {
