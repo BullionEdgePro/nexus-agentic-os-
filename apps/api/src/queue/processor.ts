@@ -53,6 +53,7 @@ import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
+import { withConversationLock } from "./conversation-lock.js";
 
 /**
  * THE PLATFORM DEFAULT, now that a business may write its own (migration 045).
@@ -390,6 +391,27 @@ async function processSingleTextMessage(
   const text = message.text;
   if (!text) return; // caller already filters for this, but keep the function safe standalone
 
+  // ONE CUSTOMER IS ANSWERED ONE MESSAGE AT A TIME.
+  //
+  // The worker runs at concurrency 10 and people send "Hello dear", "How are
+  // u?", then the actual question seconds apart. Without this each webhook is
+  // answered by a job that cannot see the others: production has a contact who
+  // received four replies in nineteen seconds, the last two three seconds apart
+  // answering two halves of the same message. See conversation-lock.ts.
+  //
+  // Keyed on the number and sender rather than the conversation, because the
+  // conversation does not exist yet for the first message of one.
+  return withConversationLock(phoneNumberId, message.from, () =>
+    answerOneMessage(phoneNumberId, message, change, text)
+  );
+}
+
+async function answerOneMessage(
+  phoneNumberId: string,
+  message: WhatsAppTextMessage,
+  change: WhatsAppWebhookEntry["changes"][number],
+  text: NonNullable<WhatsAppTextMessage["text"]>
+): Promise<void> {
   const contactName = change.value.contacts?.find((c) => c.wa_id === message.from)?.profile.name;
 
   // Resolved outside any tenant context, and correctly so: `organizations` is

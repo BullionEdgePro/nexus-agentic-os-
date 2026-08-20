@@ -7,6 +7,21 @@ import { classifyIntent } from "../../../packages/agents/src/intent.ts";
 
 const calls = { sendWhatsAppText: [], insertOutboundMessage: [], setConversationHandoff: [], recordConversationMetric: [] };
 
+mock.module(new URL("../src/queue/conversation-lock.ts", import.meta.url), {
+  namedExports: {
+    // Runs the body straight through. The real lock reaches Redis, and ioredis
+    // is configured with maxRetriesPerRequest: null — required by BullMQ so a
+    // Redis outage cannot kill the worker — which means a call in a test
+    // environment with no Redis RETRIES FOREVER. It does not fail, it hangs,
+    // and the whole suite hangs with it. Found exactly that way.
+    //
+    // These tests are about what the reply path decides, not about who is
+    // allowed to decide it at the same time. The lock has its own test.
+    withConversationLock: async (_phoneNumberId, _contactWaId, fn) => fn(),
+    ConversationBusyError: class ConversationBusyError extends Error {},
+  },
+});
+
 mock.module(new URL("../src/services/availability.ts", import.meta.url), {
   namedExports: {
     // Mirrors the hasActiveEmployees stub above: these tests were written
