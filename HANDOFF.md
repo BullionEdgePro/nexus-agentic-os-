@@ -1346,6 +1346,40 @@ customer would get the handover phrase rather than that answer. That is the
 governance layer doing exactly what it is for, on the first grounded reply this
 business has ever been observed to produce.
 
+## Known limit: a shared contact has single-valued state
+
+*Latent, recorded 2026-08-19 while auditing the write policies. Nothing to do yet.*
+
+Migration 058 widened the **messages** write check so a firm can answer the
+customer it is serving. The same move on **contacts** looks like the obvious
+next step and would be wrong.
+
+A message belongs to one conversation, so it has one serving business. A
+contact is **shared** — one row per person per number, which is why migration
+055 made `served_organization_ids` an array. Every mutable field on that row is
+a single value:
+
+| field | what widening would allow |
+|---|---|
+| `ai_paused_until` | Juris Prime's lawyer taking over silences SFS's agent for the same person |
+| `display_name` | one firm correcting a name changes it for every firm |
+| `reengagement_opted_out` | opting out of one firm's campaigns opts out of all of them |
+
+So widening would not grant "write your own customer", it would grant "write a
+row another firm depends on". **The fix, when it matters, is per-business
+contact state — not a wider policy.**
+
+Measured today: all 16 contacts are served by exactly one business and no AI
+pause is live, so none of this bites yet. `a-shared-contact-is-not-one-firms-to-edit`
+asserts the write check stays owner-only and says why, so the inconsistency is
+not closed by somebody reading 058 and finishing the job.
+
+**The write path is not blocked today**, for a reason worth knowing on its own:
+every route that writes a served contact — including the direct-contact handover
+— is mounted without a `:slug`, so `tenantContext` hands it a cross-tenant
+context and the policy never applies. That is the same accident of URL shape 058
+removed for messages, still standing here.
+
 ## The seventh instance, and the one it uncovered
 
 *2026-08-19.*
