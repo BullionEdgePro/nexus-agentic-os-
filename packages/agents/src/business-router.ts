@@ -132,8 +132,82 @@ export function classifyBusiness(
  * governance policy is known. Asking a question is the only substantive thing
  * that is safe to say at this point.
  */
+/** Does this string contain Arabic script? */
+const isArabic = (value: string) => /\p{Script=Arabic}/u.test(value);
+
+/**
+ * How many of a business's own terms to show beside its name.
+ *
+ * Three. One is not a description, and five turns a menu into a wall on a phone
+ * screen — the whole point is that it can be read at a glance and answered with
+ * a digit.
+ */
+const HINT_TERMS = 3;
+
+/**
+ * A few words telling a stranger what this business actually does.
+ *
+ * THE MENU LISTED NAMES AND NOTHING ELSE, and on this platform that asked
+ * customers an impossible question. Three of the five are law firms, and two of
+ * them are called "Juris Prime" and "Juris Prime Legal". Somebody who wants a
+ * degree certificate attested has no way to tell which of those to pick, and a
+ * person with a rent dispute has three plausible answers. Getting it wrong
+ * routes them to a firm that cannot help and makes their first impression of
+ * all five a wasted exchange.
+ *
+ * TAKEN FROM THEIR OWN ROUTING KEYWORDS, not written here. These are the terms
+ * each business configured as "this enquiry is mine", so showing them tells the
+ * customer what that firm says it handles. Inventing descriptions for five real
+ * companies would be putting words in their mouths on their own number.
+ *
+ * FILTERED BY SCRIPT, because the keyword lists are bilingual and interleaved:
+ * ABR's begin "legal, التحكيم, محامون, defence". Taking the first three
+ * verbatim would hand an English speaker two words they cannot read. So the
+ * hint is drawn from the terms in the script the customer wrote in, which is
+ * the same signal the surrounding message already uses.
+ *
+ * Returns empty when nothing matches, and the line falls back to the bare name.
+ * A business with no keywords in the customer's script is better shown plainly
+ * than annotated with characters they cannot read.
+ */
+function hintFor(business: RoutableBusiness, wantArabic: boolean): string {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+
+  for (const raw of business.routingKeywords) {
+    const keyword = raw.trim();
+    if (!keyword || isArabic(keyword) !== wantArabic) continue;
+
+    // Deduplicated on a NORMALISED form and displayed as written.
+    //
+    // SFS lists both "ايجار" and "إيجار" — the same word, spelled with and
+    // without the hamza, because both are typed and both must route. That is
+    // correct for matching and reads as a stutter in a menu: two of the three
+    // things the customer is told about this firm would be one thing twice.
+    //
+    // Alef forms are folded for the comparison only. The term shown is the
+    // business's own spelling, not a normalised one.
+    const normalised = keyword.toLowerCase().replace(/[\u0623\u0625\u0622]/g, "\u0627");
+    if (seen.has(normalised)) continue;
+    seen.add(normalised);
+
+    terms.push(keyword);
+    if (terms.length === HINT_TERMS) break;
+  }
+
+  if (terms.length === 0) return "";
+
+  // The Arabic comma, in the Arabic menu. The rest of that message is written
+  // with Arabic punctuation and a Latin comma in the middle of it is the kind
+  // of detail a reader notices without being able to say why.
+  return ` — ${terms.join(wantArabic ? "\u060C " : ", ")}`;
+}
+
 export function buildTriageMessage(businesses: RoutableBusiness[], customerText = ""): string {
-  const options = businesses.map((b, i) => `${i + 1}. ${b.name}`).join("\n");
+  const wantArabic = isArabic(customerText);
+  const options = businesses
+    .map((b, i) => `${i + 1}. ${b.name}${hintFor(b, wantArabic)}`)
+    .join("\n");
 
   // Answered in the script the customer wrote in.
   //
@@ -150,7 +224,7 @@ export function buildTriageMessage(businesses: RoutableBusiness[], customerText 
   //
   // Business names are left as written — they are brand names rather than text
   // to translate, and "ABR Advocates" is what appears on their door.
-  if (/\p{Script=Arabic}/u.test(customerText)) {
+  if (wantArabic) {
     return (
       "مرحباً! لقد وصلت إلى مجموعة شركاتنا. " +
       "لتوجيهك إلى الفريق المناسب، ما هو موضوع استفسارك؟\n\n" +
