@@ -90,3 +90,21 @@ test("the deploy script builds web too", () => {
   // And it verifies itself rather than trusting that it worked.
   assert.match(DEPLOY, /\.\/scripts\/build-check\.sh/);
 });
+
+test("a stale checkout is a failure, not a note", () => {
+  // build-check compares images to the WORKING COPY. That answers "was this
+  // built from what is checked out", not "is what is checked out current", and
+  // the two came apart on 2026-08-19: a pull aborted on an untracked file,
+  // deploy.sh correctly refused to continue, and the verify run afterwards
+  // reported all three images matching -- because they matched a checkout one
+  // commit old. Ten gates passed against a build without the commit they were
+  // verifying.
+  assert.match(CHECK, /rev-list --count HEAD\.\.origin\/main/);
+  assert.match(CHECK, /behind origin\/main/);
+  // And it must FAIL. A warning printed above three green ticks reads as green,
+  // which is exactly how the stale build got through.
+  assert.match(CHECK, /FAIL - images match the working copy, but the working copy is/);
+  // The fetch is best-effort: no network is a reason to say so, not a reason to
+  // fail a check about images.
+  assert.match(CHECK, /git fetch --quiet origin main 2>\/dev\/null/);
+});

@@ -36,6 +36,30 @@ fi
 
 echo "Working copy is at $head_commit"
 
+# IS THE WORKING COPY ITSELF BEHIND?
+#
+# Everything below compares the running images to the WORKING COPY, which
+# answers "was this built from what is checked out" and not "is what is checked
+# out current". Those came apart on 2026-08-19: a pull aborted on an untracked
+# file, deploy.sh correctly refused to continue, and a verify run afterwards
+# reported all three images matching — because they matched a checkout one
+# commit old. Every gate passed against a build that did not include the commit
+# being verified.
+#
+# The fetch is best-effort. No network is a reason to say so, not a reason to
+# fail a check about images.
+behind=""
+if git fetch --quiet origin main 2>/dev/null; then
+  behind=$(git rev-list --count HEAD..origin/main 2>/dev/null)
+fi
+if [ -n "$behind" ] && [ "$behind" != "0" ]; then
+  echo
+  echo "STOP: the working copy is $behind commit(s) behind origin/main."
+  echo "      Everything below compares images to THIS checkout, so it can only"
+  echo "      tell you they match something stale. Pull first:  ./scripts/deploy.sh"
+  echo
+fi
+
 dirty=$(git status --porcelain 2>/dev/null | grep -vE "^\?\?" | head -20)
 if [ -n "$dirty" ]; then
   # Not a failure on its own: a file edited and not yet built is a state a
@@ -80,4 +104,13 @@ if [ "$failed" -gt 0 ]; then
   echo "Rebuild them: ./scripts/deploy.sh"
   exit 1
 fi
-echo "PASS - all three running images were built from $head_commit."
+
+if [ -n "$behind" ] && [ "$behind" != "0" ]; then
+  # Deliberately a failure rather than the note printed above. A warning sitting
+  # over three green ticks gets read as green, which is precisely how a stale
+  # build passed a full verify run the day this was written.
+  echo "FAIL - images match the working copy, but the working copy is $behind commit(s) behind."
+  exit 1
+fi
+
+echo "PASS - all three running images were built from $head_commit, and it is current."
