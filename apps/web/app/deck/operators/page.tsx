@@ -8,6 +8,7 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./operators.css";
+import { whereToFixIt } from "./where-to-fix-it";
 
 /**
  * What is wrong right now, found without anybody asking.
@@ -184,7 +185,21 @@ export default function OperatorsPage() {
             {findings.map((finding) => (
               <li className={`op-item ${finding.severity}`} key={finding.id}>
                 <div className="op-main">
-                  <p className="op-title">{finding.title}</p>
+                  {/* THE TITLE IS THE LINK, because the title is what a reader
+                      is already looking at when they decide to act. A separate
+                      "open" affordance would be one more thing to find on a
+                      list whose whole point is being scannable.
+
+                      Not every finding has somewhere useful to go -- see
+                      whereToFixIt -- and those stay plain text rather than
+                      linking to a page that cannot show the thing. */}
+                  {whereToFixIt(finding) ? (
+                    <a className="op-title op-link" href={whereToFixIt(finding)!}>
+                      {finding.title}
+                    </a>
+                  ) : (
+                    <p className="op-title">{finding.title}</p>
+                  )}
                   {finding.detail ? <p className="op-detail">{finding.detail}</p> : null}
                   <p className="op-meta">
                     <span className="op-biz">{finding.businessName}</span>

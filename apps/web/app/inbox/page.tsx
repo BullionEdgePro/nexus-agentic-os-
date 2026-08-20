@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useInboxStore, BUSINESS_OPTIONS } from "@/lib/store";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
@@ -29,6 +30,40 @@ export default function InboxPage() {
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOrg]);
+
+  // ARRIVING FROM A LINK, which until now was not possible.
+  //
+  // The operators deck lists what is wrong -- "Ahmed has been waiting 3 hours"
+  // -- and the only way to reach that conversation was to come here and find
+  // the name by eye. The finding knew exactly which conversation it meant and
+  // had no way to say so, because this page kept its selection in a client
+  // store and read nothing from the URL.
+  //
+  // Applied ONCE, on arrival. Re-applying would fight the person: click a
+  // different conversation and a re-render would drag them back to the one the
+  // link named. `applied` is a ref rather than state so setting it cannot
+  // itself cause the render that re-runs this.
+  const params = useSearchParams();
+  const applied = useRef(false);
+
+  useEffect(() => {
+    if (applied.current) return;
+
+    const business = params.get("business");
+    const conversation = params.get("conversation");
+    if (!business && !conversation) return;
+
+    applied.current = true;
+
+    // The business first: setSelectedOrg clears the selected conversation and
+    // the loaded list, so choosing a conversation before it would be undone
+    // half a line later.
+    if (business && BUSINESS_OPTIONS.some((option) => option.slug === business)) {
+      if (business !== selectedOrg) setSelectedOrg(business as typeof selectedOrg);
+    }
+    if (conversation) selectConversation(conversation);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   const activeConversation = conversations.find((c) => c.id === selectedConversationId);
   const messages = selectedConversationId ? messagesByConversation[selectedConversationId] ?? [] : [];

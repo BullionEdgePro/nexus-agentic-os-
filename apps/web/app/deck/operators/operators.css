@@ -135,3 +135,20 @@
   border-color: var(--warn-border, #b8860b);
   background: var(--warn-bg, rgba(184, 134, 11, 0.08));
 }
+
+/* A finding's title is a link when there is somewhere to act on it.
+   Styled as the same text it replaced rather than as a blue link: the list is
+   scanned for severity and age first, and a row of underlined headlines would
+   compete with the thing the eye is meant to land on. The affordance shows on
+   hover, which is when somebody has already decided this is the row. */
+.op-title.op-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  display: block;
+}
+.op-title.op-link:hover,
+.op-title.op-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
