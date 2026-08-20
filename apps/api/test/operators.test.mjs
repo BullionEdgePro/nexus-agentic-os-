@@ -263,9 +263,15 @@ test("a truncated findings list says so", () => {
   // findings the page would show 200 and say nothing, which reads as "this is
   // everything" — the exact failure a page called "needs attention" must not
   // have.
+  //
+  // AGAINST `active`, NOT `findings`, since migration 061. The list now carries
+  // accepted findings too, and `total` counts only what needs attention -- so
+  // comparing against findings.length would put the accepted ones on one side
+  // of the inequality and not the other, and the banner would stop appearing at
+  // exactly the moment the cap started to bite. Same check, corrected operand.
   assert.match(OPERATORS_DB, /limit = 200/);
-  assert.match(PAGE, /total > findings\.length/);
-  assert.match(PAGE, /Showing the \{findings\.length\} most serious of \{total\}/);
+  assert.match(PAGE, /total > active\.length/);
+  assert.match(PAGE, /Showing the \{active\.length\} most serious of \{total\}/);
 });
 
 test("the promise is caught at least as fast as the silence", () => {

@@ -169,3 +169,90 @@
   border-left: 2px solid #c4622d;
   color: #8a5a3a;
 }
+
+/* ============================================================
+   ACCEPTED FINDINGS
+   ============================================================
+
+   A finding somebody has seen and decided not to act on. Still true, still
+   reconciled, still counted -- in its own bucket, away from the badge that
+   means "this needs you".
+
+   The visual job here is the opposite of the rest of this list. Everything
+   above is shaped to be noticed; this is shaped to be findable and not
+   noticed, because an accepted finding competing for attention with an urgent
+   one is the alert fatigue the whole feature exists to remove. Quieter, never
+   invisible. */
+
+.op-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.op-accept {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.op-accept:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--ink-1);
+}
+
+.op-accept:disabled { opacity: 0.45; cursor: default; }
+
+.op-dismissed {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.op-dismissed-toggle {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.op-dismissed-toggle:hover { color: var(--ink-1); }
+
+/* No left rule and no severity pill: severity is about urgency, and these have
+   been taken out of the urgency conversation by somebody's decision. Showing
+   an "urgent" pill on a finding whose whole state is "I have accepted this"
+   restates the thing being overridden. */
+.op-list-quiet { margin-top: 12px; }
+
+.op-item.accepted {
+  border-left-color: var(--line);
+  background: transparent;
+  opacity: 0.72;
+}
+
+.op-item.accepted .op-title { font-weight: 400; }
+
+.op-by { color: var(--ink-3); font-style: italic; }
+
+/* The sentence that stops "nothing needs attention" being a half-truth when
+   the only findings left are accepted ones. It sits inside the clear state, so
+   it must not read as an alarm -- it is a footnote, not a warning. */
+.op-accepted-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}

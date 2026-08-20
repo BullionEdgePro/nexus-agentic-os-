@@ -873,6 +873,17 @@ export interface OperatorFinding {
   subjectId: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  /**
+   * When somebody accepted this finding. Null for everything nobody has
+   * looked at, which is almost everything.
+   *
+   * An accepted finding is still TRUE and still reconciled — it is not
+   * resolved and not deleted. It lapses back to unaccepted if the condition
+   * goes away and returns, because that is a new occurrence.
+   */
+  dismissedAt: string | null;
+  dismissedBy: string | null;
+  dismissedReason: string | null;
 }
 
 export interface OperatorInfo {
@@ -885,7 +896,16 @@ export interface OperatorInfo {
 
 export function getFindings(business?: BusinessSlug | ""): Promise<{
   findings: OperatorFinding[];
-  counts: { urgent: number; warn: number; info: number };
+  /**
+   * The three severities EXCLUDE accepted findings; `dismissed` counts them.
+   *
+   * A badge that still reads "1 urgent" after somebody accepted the only urgent
+   * finding can never be cleared, and an unclearable badge is ignored inside a
+   * week. Counted separately rather than dropped, because a page that silently
+   * knows about four problems it is not mentioning is exactly what this screen
+   * exists not to be.
+   */
+  counts: { urgent: number; warn: number; info: number; dismissed: number };
   operators: OperatorInfo[];
   /**
    * When the sweep last completed, and whether it is overdue (migration 050).
@@ -901,6 +921,27 @@ export function getFindings(business?: BusinessSlug | ""): Promise<{
   alertsIncludeWarnings: boolean;
 }> {
   return request(`/api/operators${business ? `?business=${business}` : ""}`);
+}
+
+/**
+ * Accept a finding, or take the acceptance back.
+ *
+ * Not a delete. The row stays and stays reconciled, so a finding that stops
+ * being true is still retracted normally, and one that comes back arrives
+ * un-accepted because it is a new occurrence.
+ */
+export function dismissFinding(id: string, reason?: string): Promise<{ ok: true }> {
+  return request(`/api/operators/findings/${encodeURIComponent(id)}/dismiss`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+}
+
+export function restoreFinding(id: string): Promise<{ ok: true }> {
+  return request(`/api/operators/findings/${encodeURIComponent(id)}/restore`, {
+    method: "POST",
+  });
 }
 
 // ============================================================

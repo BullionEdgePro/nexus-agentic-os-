@@ -48,6 +48,12 @@ export interface OperatorFinding {
   firstSeenAt: string;
   lastSeenAt: string;
   resolvedAt: string | null;
+  /** When a person accepted it. Null for everything nobody has looked at. */
+  dismissedAt: string | null;
+  /** Who accepted it. A dismissal is an act by somebody. */
+  dismissedBy: string | null;
+  /** Why, if they said. Optional, and usually empty. */
+  dismissedReason: string | null;
 }
 
 interface FindingRow {
@@ -64,6 +70,9 @@ interface FindingRow {
   first_seen_at: string;
   last_seen_at: string;
   resolved_at: string | null;
+  dismissed_at: string | null;
+  dismissed_by: string | null;
+  dismissed_reason: string | null;
 }
 
 const toFinding = (row: FindingRow): OperatorFinding => ({
@@ -80,6 +89,9 @@ const toFinding = (row: FindingRow): OperatorFinding => ({
   firstSeenAt: row.first_seen_at,
   lastSeenAt: row.last_seen_at,
   resolvedAt: row.resolved_at,
+  dismissedAt: row.dismissed_at,
+  dismissedBy: row.dismissed_by,
+  dismissedReason: row.dismissed_reason,
 });
 
 export interface ReconcileResult {
@@ -195,6 +207,33 @@ export async function reconcileFindings(
                            when operator_findings.resolved_at is not null then now()
                            else operator_findings.first_seen_at
                          end,
+         -- A DISMISSAL LAPSES EXACTLY WHEN THE AGE RESETS, and the shared
+         -- predicate is the point. "I have accepted this" is about the
+         -- occurrence somebody looked at, not about the fingerprint forever:
+         -- accepting that three firms have no staff today must not silence the
+         -- same finding next March, when it would mean something else.
+         --
+         -- Split these two branches apart and you get a permanent, silent mute
+         -- that looks like a working feature. The test named
+         -- a-dismissal-lapses-when-the-finding-does fails if they stop
+         -- matching. (No backticks in here: this is a template literal, and a
+         -- backtick in a SQL comment ends the string. Fourth time today.)
+         --
+         -- Note this is the ONLY write to dismissed_at in the sweep path, and
+         -- it only ever writes NULL. An operator can retract a finding; it can
+         -- never accept one. That is a person's act by definition.
+         dismissed_at = case
+                          when operator_findings.resolved_at is not null then null
+                          else operator_findings.dismissed_at
+                        end,
+         dismissed_by = case
+                          when operator_findings.resolved_at is not null then null
+                          else operator_findings.dismissed_by
+                        end,
+         dismissed_reason = case
+                          when operator_findings.resolved_at is not null then null
+                          else operator_findings.dismissed_reason
+                        end,
          resolved_at  = null,
          updated_at   = now()
        -- NEWLY RAISED, distinguished without a second query.
@@ -203,8 +242,13 @@ export async function reconcileFindings(
        -- set to it on an insert or on a finding coming back from resolved --
        -- every other path leaves the original. So the two timestamps being
        -- equal is exactly "this became true just now", and nothing else.
+       -- The dismissed_at test below is belt and braces: by the reasoning
+       -- above a dismissed row cannot be newly-raised, because the only path
+       -- that sets first_seen_at = now() also clears the dismissal in the same
+       -- statement. It is written down because "cannot happen" arguments are
+       -- how alerting starts firing at somebody who already said they knew.
        returning organization_id, serving_organization_id, severity,
-                 (first_seen_at = last_seen_at) as newly_raised
+                 (first_seen_at = last_seen_at and dismissed_at is null) as newly_raised
      ),
      retracted as (
        update operator_findings f
@@ -268,7 +312,8 @@ const FINDING_SELECT = `
          o.slug as business_slug,
          f.operator, f.severity, f.title, f.detail,
          f.subject_kind, f.subject_id,
-         f.first_seen_at, f.last_seen_at, f.resolved_at
+         f.first_seen_at, f.last_seen_at, f.resolved_at,
+         f.dismissed_at, f.dismissed_by, f.dismissed_reason
     from operator_findings f
     join organizations o on o.id = ${FINDING_BUSINESS}
 `;
@@ -279,6 +324,13 @@ const FINDING_SELECT = `
  * Ordered by severity then by age, oldest first — a problem standing for three
  * days matters more than the same problem noticed an hour ago, and burying it
  * under the newest arrival is how a list stops being read.
+ *
+ * RETURNS DISMISSED FINDINGS TOO, each carrying its `dismissedAt`. Filtering
+ * them out here would be the cheaper implementation and the wrong one: the deck
+ * has to be able to show how many were accepted and by whom, and a caller that
+ * cannot see them cannot say so. Hiding them at the source is how a list starts
+ * lying by omission, which is the failure this whole screen is built against.
+ * The caller partitions; the reader is told.
  */
 export async function listOpenFindings(
   organizationId?: string | null,
@@ -300,15 +352,40 @@ export interface FindingCounts {
   urgent: number;
   warn: number;
   info: number;
+  /**
+   * Open, still true, and accepted by somebody.
+   *
+   * Counted SEPARATELY rather than folded into the three above, because those
+   * three drive a badge that means "this needs you" and an accepted finding
+   * does not. Counted rather than dropped, because a screen that silently knows
+   * about four problems it is not mentioning is the thing this deck exists not
+   * to be.
+   */
+  dismissed: number;
 }
 
+/**
+ * How much needs attention, and how much has been accepted.
+ *
+ * The severity counts EXCLUDE dismissed findings. That is the single decision
+ * in this function and it is what makes dismissal worth having: a badge that
+ * still reads "1 urgent" after somebody has accepted the only urgent finding is
+ * a badge nobody can ever clear, and an uncleafable badge is ignored within a
+ * week — the same disease as an alert list that only grows.
+ */
 export async function countOpenFindings(
   organizationId?: string | null
 ): Promise<FindingCounts> {
-  const { rows } = await getPool().query<{ urgent: string; warn: string; info: string }>(
-    `select count(*) filter (where severity = 'urgent')::text as urgent,
-            count(*) filter (where severity = 'warn')::text   as warn,
-            count(*) filter (where severity = 'info')::text   as info
+  const { rows } = await getPool().query<{
+    urgent: string;
+    warn: string;
+    info: string;
+    dismissed: string;
+  }>(
+    `select count(*) filter (where severity = 'urgent' and dismissed_at is null)::text as urgent,
+            count(*) filter (where severity = 'warn'   and dismissed_at is null)::text as warn,
+            count(*) filter (where severity = 'info'   and dismissed_at is null)::text as info,
+            count(*) filter (where dismissed_at is not null)::text                     as dismissed
        from operator_findings f
       where f.resolved_at is null
         and ($1::uuid is null or ${FINDING_BUSINESS} = $1)`,
@@ -318,7 +395,95 @@ export async function countOpenFindings(
     urgent: Number(rows[0]?.urgent ?? 0),
     warn: Number(rows[0]?.warn ?? 0),
     info: Number(rows[0]?.info ?? 0),
+    dismissed: Number(rows[0]?.dismissed ?? 0),
   };
+}
+
+/**
+ * A person accepts a finding, or takes the acceptance back.
+ *
+ * NOT A DELETE. The row stays, stays reconciled, and stays counted in its own
+ * bucket. Deleting would lose the fact that somebody looked, and would also let
+ * the very next sweep re-raise it as brand new — the upsert would insert rather
+ * than update, first_seen_at would be now(), and the alert dispatcher would
+ * treat it as a transition and tell somebody about a finding they had just
+ * dismissed thirty seconds earlier.
+ *
+ * Scoped by the finding's OWNING organization, not the business it is about.
+ * `${FINDING_BUSINESS}` resolves who a finding concerns for display, but the
+ * row lives under the number owner's tenant and RLS is enforced on
+ * organization_id — so an update filtered on the resolved business would match
+ * zero rows and report success, which is instance ten of the defect this
+ * codebase has met nine times. The caller wraps this in withServingTenant and
+ * the predicate below stays on the owning column.
+ *
+ * Returns false when nothing matched, so the route can 404 rather than tell
+ * somebody it worked.
+ */
+export async function setFindingDismissal(
+  findingId: string,
+  by: string | null,
+  reason: string | null
+): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update operator_findings
+        set dismissed_at     = case when $2::text is null then null else now() end,
+            dismissed_by     = $2,
+            dismissed_reason = case when $2::text is null then null else $3 end,
+            updated_at       = now()
+      where id = $1
+        and resolved_at is null`,
+    [findingId, by, reason]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/** Who owns a finding's row, and which business it is actually about. */
+export interface FindingScope {
+  /** The tenant the ROW lives under. RLS is enforced on this. */
+  organizationId: string;
+  /** The business the finding CONCERNS. Authorise on this. */
+  businessId: string;
+}
+
+/**
+ * The two organizations a finding has, which is the whole reason this exists.
+ *
+ * ============================================================
+ * AUTHORISE ON ONE, WRITE IN THE OTHER
+ * ============================================================
+ *
+ * All five firms answer on one WhatsApp number. A routed conversation is owned
+ * by the number's owner, so a finding about Juris Prime's customer is a row
+ * under Zipicka's tenant with serving_organization_id = Juris Prime. Juris
+ * Prime's staff see it on their deck, correctly, because every read resolves
+ * through coalesce(serving, owner).
+ *
+ * A dismissal has to go the other way. The row is under Zipicka, and RLS filters
+ * on organization_id — so an update run in Juris Prime's transaction matches
+ * ZERO ROWS AND REPORTS SUCCESS. The person clicks dismiss, the finding stays,
+ * and nothing anywhere says why. That is instance ten of the defect this
+ * codebase has met nine times, and it is why this returns both ids instead of
+ * letting the route pick one and be right by luck.
+ *
+ * Read across tenants deliberately: which transaction to open is precisely the
+ * question being asked, so it cannot be asked from inside one. It returns two
+ * ids and nothing else — no title, no detail, no customer name — so somebody
+ * probing for a finding they are not entitled to learns only that a row exists.
+ */
+export async function findingScope(findingId: string): Promise<FindingScope | null> {
+  const { rows } = await getPool().query<{
+    organization_id: string;
+    business_id: string;
+  }>(
+    `select organization_id,
+            coalesce(serving_organization_id, organization_id) as business_id
+       from operator_findings
+      where id = $1`,
+    [findingId]
+  );
+  const row = rows[0];
+  return row ? { organizationId: row.organization_id, businessId: row.business_id } : null;
 }
 
 /**

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
-import { getFindings, type OperatorFinding, type OperatorInfo } from "@/lib/api";
+import {
+  getFindings,
+  dismissFinding,
+  restoreFinding,
+  type OperatorFinding,
+  type OperatorInfo,
+} from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -70,7 +76,11 @@ function describeSweep(lastSweptAt: string | null): string {
 export default function OperatorsPage() {
   const [findings, setFindings] = useState<OperatorFinding[]>([]);
   const [operators, setOperators] = useState<OperatorInfo[]>([]);
-  const [counts, setCounts] = useState({ urgent: 0, warn: 0, info: 0 });
+  const [counts, setCounts] = useState({ urgent: 0, warn: 0, info: 0, dismissed: 0 });
+  /** Ids currently being accepted or restored, so a click cannot fire twice. */
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  /** Whether the accepted list is expanded. Collapsed by default, never hidden. */
+  const [showDismissed, setShowDismissed] = useState(false);
   const [sweep, setSweep] = useState<{
     lastSweptAt: string | null;
     stalled: boolean;
@@ -121,6 +131,49 @@ export default function OperatorsPage() {
   useEffect(() => {
     void load(business);
   }, [business, load]);
+
+  /**
+   * Accept a finding, or take the acceptance back.
+   *
+   * RELOADS RATHER THAN PATCHING LOCAL STATE. The counts are computed server
+   * side and the severity buckets exclude accepted findings, so mutating the
+   * list in place would need this component to reimplement that arithmetic --
+   * and a second implementation of "what needs attention" is a second thing to
+   * get wrong. The request is cheap and the page is small.
+   *
+   * A failure sets `error`, not `loadError`: the screen is still correct, and
+   * blanking it would lose the finding the message is about.
+   */
+  const act = useCallback(
+    async (finding: OperatorFinding) => {
+      const id = finding.id;
+      if (busy.has(id)) return;
+      setBusy((prev) => new Set(prev).add(id));
+      setError("");
+      try {
+        if (finding.dismissedAt) await restoreFinding(id);
+        else await dismissFinding(id);
+        await load(business);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "That did not go through.");
+      } finally {
+        setBusy((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [busy, business, load]
+  );
+
+  // The list carries accepted findings too -- the API returns them so this page
+  // can say how many there are. Split here rather than server side, because a
+  // caller that cannot see them cannot report them, and a page that silently
+  // knows about problems it is not mentioning is what this screen exists not
+  // to be.
+  const active = findings.filter((f) => !f.dismissedAt);
+  const dismissed = findings.filter((f) => f.dismissedAt);
 
   const total = counts.urgent + counts.warn + counts.info;
 
@@ -203,6 +256,19 @@ export default function OperatorsPage() {
                 No customer is waiting, nothing promised is overdue, and every knowledge source is
                 indexing. {describeSweep(sweep.lastSweptAt)}
               </p>
+              {/* AN EMPTY LIST BECAUSE THINGS WERE ACCEPTED IS NOT AN EMPTY
+                  LIST. Both sentences above are true when the only findings
+                  left are ones somebody dismissed -- and stopping there would
+                  be this page telling a half-truth about itself, which is the
+                  single failure it was built to prevent. Say what is being
+                  left out, and where it went. */}
+              {counts.dismissed > 0 ? (
+                <p className="op-accepted-note">
+                  {counts.dismissed === 1
+                    ? "One finding is still true and was accepted; it is listed below."
+                    : `${counts.dismissed} findings are still true and were accepted; they are listed below.`}
+                </p>
+              ) : null}
             </div>
           )
         ) : (
@@ -212,14 +278,19 @@ export default function OperatorsPage() {
               that reads as "this is everything". Named rather than hidden,
               because a silent cap on a page whose whole job is "what needs
               attention" is the same failure the page exists to prevent. */}
-          {total > findings.length ? (
+          {/* Against `active`, not `findings`. The list now carries accepted
+              findings too, and `total` counts only what needs attention -- so
+              comparing against findings.length would count the accepted ones on
+              one side of the inequality and not the other, and the banner would
+              stop appearing at exactly the moment the cap started biting. */}
+          {total > active.length ? (
             <p className="op-truncated">
-              Showing the {findings.length} most serious of {total}. The rest are the same
+              Showing the {active.length} most serious of {total}. The rest are the same
               kinds of thing — clear these and the next ones appear.
             </p>
           ) : null}
           <ul className="op-list">
-            {findings.map((finding) => (
+            {active.map((finding) => (
               <li className={`op-item ${finding.severity}`} key={finding.id}>
                 <div className="op-main">
                   {/* THE TITLE IS THE LINK, because the title is what a reader
@@ -246,12 +317,89 @@ export default function OperatorsPage() {
                     <span>standing {since(finding.firstSeenAt)}</span>
                   </p>
                 </div>
-                <span className={`op-sev ${finding.severity}`}>{finding.severity}</span>
+                <div className="op-side">
+                  <span className={`op-sev ${finding.severity}`}>{finding.severity}</span>
+                  {/* "Accept", not "dismiss" or "ignore".
+                      Dismiss suggests the finding goes away; ignore suggests it
+                      was never worth raising. Neither is what happens: it stays
+                      true, stays reconciled, stays counted, and comes back
+                      un-accepted if it lapses and returns. Accept is the only
+                      one of the three that describes that. */}
+                  <button
+                    type="button"
+                    className="op-accept"
+                    onClick={() => void act(finding)}
+                    disabled={busy.has(finding.id)}
+                    title="Still true, but you have seen it and it does not need action"
+                  >
+                    {busy.has(finding.id) ? "…" : "Accept"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
           </>
         )}
+
+        {/* ACCEPTED FINDINGS, COLLAPSED BUT NEVER HIDDEN.
+            The count is always on screen; only the detail folds away. A screen
+            that quietly drops findings somebody accepted last March is how an
+            accepted problem becomes a forgotten one -- and "we knew and chose
+            not to act" is a defensible position only while somebody can still
+            see the choice. */}
+        {dismissed.length > 0 ? (
+          <section className="op-dismissed">
+            <button
+              type="button"
+              className="op-dismissed-toggle"
+              onClick={() => setShowDismissed((v) => !v)}
+              aria-expanded={showDismissed}
+            >
+              {dismissed.length === 1
+                ? "1 accepted finding"
+                : `${dismissed.length} accepted findings`}
+              <span aria-hidden="true">{showDismissed ? " ▾" : " ▸"}</span>
+            </button>
+            {showDismissed ? (
+              <ul className="op-list op-list-quiet">
+                {dismissed.map((finding) => (
+                  <li className="op-item accepted" key={finding.id}>
+                    <div className="op-main">
+                      <p className="op-title">{finding.title}</p>
+                      <p className="op-meta">
+                        <span className="op-biz">{finding.businessName}</span>
+                        <span>{finding.operator}</span>
+                        <span>standing {since(finding.firstSeenAt)}</span>
+                        {/* Who accepted it. A dismissal is an act by somebody
+                            and is shown as one -- an anonymous one is an
+                            invitation to accept things nobody will answer for. */}
+                        {finding.dismissedBy ? (
+                          <span className="op-by">accepted by {finding.dismissedBy}</span>
+                        ) : null}
+                      </p>
+                    </div>
+                    <div className="op-side">
+                      <button
+                        type="button"
+                        className="op-accept"
+                        onClick={() => void act(finding)}
+                        disabled={busy.has(finding.id)}
+                        title="Put this back on the list"
+                      >
+                        {busy.has(finding.id) ? "…" : "Restore"}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="op-note">
+                Still true and still watched. They do not raise alerts and are not counted above,
+                and any that goes away and comes back arrives un-accepted.
+              </p>
+            )}
+          </section>
+        ) : null}
 
         <p className={sweep.alerts ? "op-alerts" : "op-alerts off"}>
           {describeAlerts(sweep.alerts, sweep.alertsWarn)}

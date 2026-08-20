@@ -1,10 +1,14 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import {
   listOpenFindings,
   countOpenFindings,
   lastSeenByOperator,
   listJobHeartbeats,
   findOrganizationBySlug,
+  findingScope,
+  setFindingDismissal,
+  withServingTenant,
 } from "@nexus/db";
 import { isJobStalled } from "@nexus/shared";
 import { OPERATORS } from "../services/operators.js";
@@ -118,3 +122,81 @@ operatorsRoute.get("/", async (c) => {
     })),
   });
 });
+
+/**
+ * A person accepts a finding, or takes the acceptance back.
+ *
+ * ============================================================
+ * AUTHORISE ON THE BUSINESS, WRITE IN THE OWNER
+ * ============================================================
+ *
+ * A finding about Juris Prime's customer is a ROW UNDER ZIPICKA, because all
+ * five firms answer on Zipicka's number and a routed conversation belongs to
+ * the number's owner. Juris Prime's staff see it, correctly, because every read
+ * resolves through coalesce(serving, owner).
+ *
+ * The write cannot use the same id. RLS filters on organization_id, so an
+ * update run in Juris Prime's transaction matches zero rows AND REPORTS
+ * SUCCESS: the button greys out, the finding stays, and nothing says why. That
+ * is instance ten of the defect this codebase has met nine times, and it is why
+ * `findingScope` returns both ids rather than letting this handler pick one.
+ *
+ * So: authorise against `businessId`, open the transaction on `organizationId`.
+ *
+ * WHY DISMISSAL IS NOT DELETION. The row stays and stays reconciled. Deleting
+ * it would let the next sweep insert it fresh — first_seen_at = now(), which
+ * the reconciler reads as a transition — and the alert dispatcher would tell
+ * somebody about a finding they dismissed ten minutes earlier.
+ */
+async function handleDismissal(c: Context, by: string | null, reason: string | null) {
+  const scope = scopeOf(c);
+  // Typed as possibly-undefined because Context is not parameterised on the
+  // path here. It cannot actually be absent -- both routes declare :id -- but
+  // asserting that with a non-null assertion would hand a literal "undefined"
+  // to a uuid column and turn a routing mistake into a 500.
+  const findingId = c.req.param("id");
+  if (!findingId) return c.json({ error: "Finding not found" }, 404);
+
+  const finding = await findingScope(findingId);
+  // Same 404 for "no such finding" and "not yours". A different message would
+  // let somebody enumerate which finding ids exist under other businesses.
+  const entitled =
+    finding !== null &&
+    (scope.role === "operator" || finding.businessId === scope.organizationId);
+  if (!entitled) return c.json({ error: "Finding not found" }, 404);
+
+  const changed = await withServingTenant(finding.organizationId, () =>
+    setFindingDismissal(findingId, by, reason)
+  );
+
+  // False means the finding was resolved between the read above and the write
+  // — the sweep retracted it while somebody had the page open. Nothing is
+  // wrong, but saying "dismissed" would be false.
+  if (!changed) {
+    return c.json({ error: "That finding was resolved while you were looking at it." }, 409);
+  }
+
+  logger.info(
+    { sub: scope.sub, findingId, dismissed: by !== null },
+    by !== null ? "Finding accepted" : "Finding acceptance withdrawn"
+  );
+  return c.json({ ok: true });
+}
+
+operatorsRoute.post("/findings/:id/dismiss", async (c) => {
+  const scope = scopeOf(c);
+  // Optional and usually absent. Read defensively: this is a browser body.
+  let reason: string | null = null;
+  try {
+    const body = (await c.req.json()) as { reason?: unknown };
+    if (typeof body?.reason === "string" && body.reason.trim()) {
+      reason = body.reason.trim().slice(0, 500);
+    }
+  } catch {
+    // No body is the normal case.
+  }
+  return handleDismissal(c, scope.sub, reason);
+});
+
+operatorsRoute.post("/findings/:id/restore", async (c) => handleDismissal(c, null, null));
+
