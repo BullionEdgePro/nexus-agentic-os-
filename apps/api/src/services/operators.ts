@@ -559,11 +559,13 @@ const wordingAwaitingReview: Operator = {
     "This business wrote its own version of a message the agent sends, and it is not being used. Until it is switched on, customers get the platform's generic wording instead.",
   run: async (organizationId) => {
     const { rows } = await getPool().query<{
+      id: string;
       moment: string;
       needs: string | null;
       days: string;
     }>(
-      `select p.moment,
+      `select p.id,
+              p.moment,
               -- Every distinct {{placeholder}} still in the body, so the finding
               -- can say what is actually missing rather than that something is.
               (
@@ -610,7 +612,11 @@ const wordingAwaitingReview: Operator = {
           ? `Written ${age} ago and still not in use. It cannot be activated while it contains {{${row.needs}}} — a customer would receive that literally. Fill it in on the Wording screen and switch it on; until then they get the platform's generic message instead of yours.`
           : `Written ${age} ago and never switched on, so customers get the platform's generic message instead of yours. Switch it on from the Wording screen, or delete it if you have changed your mind.`,
         subjectKind: "phrase",
-        subjectId: null,
+        // The phrase itself, so the finding is a link to the thing that needs
+        // editing. operator-fire-check refuses a finding with no subject, and
+        // was right to: an alert you cannot click through to is one somebody
+        // has to go hunting from.
+        subjectId: row.id,
       } satisfies FindingInput;
     });
   },
