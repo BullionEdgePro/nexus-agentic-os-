@@ -102,8 +102,8 @@ export function ConsoleShell({
         <a className="rail-brand" href="/" title="Nexus Agentic OS">
           <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
             <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="currentColor" strokeWidth="1.3" />
-            <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" stroke="var(--blueprint)" strokeWidth="1.2" />
-            <circle cx="16" cy="16" r="2" fill="var(--blueprint)" />
+            <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" stroke="var(--signal)" strokeWidth="1.2" />
+            <circle cx="16" cy="16" r="2" fill="var(--signal)" />
           </svg>
           <span className="rail-wordmark">Nexus</span>
         </a>

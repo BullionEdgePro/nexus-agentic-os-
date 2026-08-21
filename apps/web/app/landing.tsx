@@ -10,9 +10,9 @@ import "./deck/deck.css";
 const BrandMark = () => (
   <span className="brand-mark">
     <svg viewBox="0 0 32 32" fill="none">
-      <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="#16160f" strokeWidth="1.3" />
-      <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" fill="none" stroke="#1d3fbf" strokeWidth="1.2" />
-      <circle cx="16" cy="16" r="2" fill="#1d3fbf" />
+      <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="var(--ink)" strokeWidth="1.3" />
+      <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" fill="none" stroke="var(--signal)" strokeWidth="1.2" />
+      <circle cx="16" cy="16" r="2" fill="var(--signal)" />
     </svg>
   </span>
 );

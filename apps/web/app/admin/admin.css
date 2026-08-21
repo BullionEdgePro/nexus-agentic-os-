@@ -19,8 +19,8 @@
 .admin-card {
   width: 100%;
   max-width: 26rem;
-  background: var(--vellum-card);
-  border: 1px solid var(--line);
+  background: var(--paper);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
   padding: clamp(24px, 5vw, 34px);
   display: flex;
@@ -33,7 +33,7 @@
   font-size: 10px;
   letter-spacing: .18em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
 }
 
 .admin-card h1 {
@@ -43,7 +43,7 @@
   line-height: 1.15;
 }
 
-.admin-note { font-size: 13px; color: var(--graphite); }
+.admin-note { font-size: 13px; color: var(--slate); }
 
 .admin-card form { display: flex; flex-direction: column; gap: 7px; margin-top: 6px; }
 
@@ -52,7 +52,7 @@
   font-size: 10px;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
   margin-top: 8px;
 }
 
@@ -62,11 +62,11 @@
   color: var(--ink);
   padding: 11px 13px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--vellum);
+  border: 1px solid var(--hairline-strong);
+  background: var(--marble);
 }
 .admin-card input:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 1px;
   border-color: transparent;
 }
@@ -81,10 +81,10 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
-.admin-root .btn:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.admin-root .btn:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); }
 .admin-root .btn:disabled { opacity: .45; cursor: default; }
 
 .admin-error {
@@ -101,8 +101,8 @@
 .admin-foot {
   margin-top: 6px;
   font-size: 11.5px;
-  color: var(--pencil);
-  border-top: 1px solid var(--line);
+  color: var(--mist);
+  border-top: 1px solid var(--hairline);
   padding-top: 12px;
 }
 
@@ -111,8 +111,8 @@
   font-size: 10.5px;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--graphite);
+  color: var(--slate);
   text-decoration: none;
   align-self: flex-start;
 }
-.admin-back:hover { color: var(--blueprint); }
+.admin-back:hover { color: var(--signal-text); }

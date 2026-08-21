@@ -17,7 +17,7 @@
   margin-top: 4px;
 }
 .op-clear strong { font-family: var(--display); font-size: 18px; font-weight: 500; color: var(--good); }
-.op-clear p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--graphite); }
+.op-clear p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--slate); }
 
 /* --- findings --- */
 
@@ -39,10 +39,10 @@
   gap: 14px;
   align-items: flex-start;
   justify-content: space-between;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--hairline-strong);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 13px 15px;
 }
 
@@ -51,7 +51,7 @@
    cannot separate the hues. */
 .op-item.urgent { border-left-color: var(--crit); }
 .op-item.warn { border-left-color: var(--warn); }
-.op-item.info { border-left-color: var(--blueprint); }
+.op-item.info { border-left-color: var(--signal); }
 
 .op-main { flex: 1 1 320px; min-width: 0; }
 
@@ -68,7 +68,7 @@
   margin: 5px 0 0;
   font-size: 12.5px;
   line-height: 1.45;
-  color: var(--graphite);
+  color: var(--slate);
   overflow-wrap: anywhere;
 }
 
@@ -81,10 +81,10 @@
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
-.op-biz { color: var(--blueprint); }
+.op-biz { color: var(--signal-text); }
 
 .op-sev {
   flex: 0 0 auto;
@@ -94,13 +94,13 @@
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
-  color: var(--graphite);
+  border: 1px solid var(--hairline-strong);
+  color: var(--slate);
   white-space: nowrap;
 }
 .op-sev.urgent { border-color: rgba(162, 59, 46, 0.45); color: var(--crit); background: rgba(162, 59, 46, 0.07); }
 .op-sev.warn { border-color: rgba(169, 118, 47, 0.45); color: var(--warn); background: rgba(169, 118, 47, 0.07); }
-.op-sev.info { border-color: rgba(29, 63, 191, 0.35); color: var(--blueprint); background: var(--blueprint-soft); }
+.op-sev.info { border-color: rgba(29, 63, 191, 0.35); color: var(--signal-text); background: var(--signal-soft); }
 
 /* --- the roster --- */
 
@@ -110,18 +110,18 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  border-left: 2px solid var(--line);
+  border-left: 2px solid var(--hairline);
   padding-left: 12px;
 }
 
 .op-roster strong { font-size: 13.5px; color: var(--ink); font-weight: 500; }
-.op-roster span { font-size: 12.5px; line-height: 1.5; color: var(--graphite); }
+.op-roster span { font-size: 12.5px; line-height: 1.5; color: var(--slate); }
 
 .op-note {
   margin-top: 14px;
   font-size: 12px;
   line-height: 1.55;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 /*
@@ -132,7 +132,7 @@
  * the warning colour carries that without implying the screen is broken.
  */
 .op-clear.stale {
-  border-color: var(--warn-border, #b8860b);
+  border-color: var(--warn);
   background: var(--warn-bg, rgba(184, 134, 11, 0.08));
 }
 
@@ -159,15 +159,15 @@
 .op-alerts {
   margin: 1.25rem 0 0;
   font-size: 0.85rem;
-  color: var(--muted, #5a6672);
+  color: var(--slate);
 }
 /* The unconfigured case is the one worth noticing, and is the default state
    until somebody sets a destination. Marked, not alarmed: it is a gap in the
    setup rather than something going wrong right now. */
 .op-alerts.off {
   padding-left: 0.75rem;
-  border-left: 2px solid #c4622d;
-  color: #8a5a3a;
+  border-left: 2px solid var(--warn);
+  color: var(--warn);
 }
 
 /* ============================================================
@@ -198,7 +198,7 @@
   letter-spacing: 0.09em;
   text-transform: uppercase;
   padding: 4px 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
   background: transparent;
   color: var(--ink-3);
@@ -206,7 +206,7 @@
 }
 
 .op-accept:hover:not(:disabled) {
-  border-color: var(--line-strong);
+  border-color: var(--hairline-strong);
   color: var(--ink-1);
 }
 
@@ -215,7 +215,7 @@
 .op-dismissed {
   margin-top: 18px;
   padding-top: 14px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
 }
 
 .op-dismissed-toggle {
@@ -239,7 +239,7 @@
 .op-list-quiet { margin-top: 12px; }
 
 .op-item.accepted {
-  border-left-color: var(--line);
+  border-left-color: var(--hairline);
   background: transparent;
   opacity: 0.72;
 }

@@ -17,13 +17,13 @@
   gap: 9px;
   padding: 0 12px;
   height: 36px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: 100px;
-  background: var(--vellum-card);
+  background: var(--paper);
 }
 
-.deck-root .hs-field:focus-within { border-color: var(--line-strong); }
-.deck-root .hs-field > svg { width: 15px; height: 15px; color: var(--pencil); flex: 0 0 auto; }
+.deck-root .hs-field:focus-within { border-color: var(--hairline-strong); }
+.deck-root .hs-field > svg { width: 15px; height: 15px; color: var(--mist); flex: 0 0 auto; }
 
 .deck-root .hs-field input {
   flex: 1;
@@ -36,13 +36,13 @@
   color: var(--ink);
 }
 
-.deck-root .hs-field input::placeholder { color: var(--pencil); }
+.deck-root .hs-field input::placeholder { color: var(--mist); }
 
 .deck-root .hs-field kbd {
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--pencil);
-  border: 1px solid var(--line);
+  color: var(--mist);
+  border: 1px solid var(--hairline);
   border-radius: 4px;
   padding: 2px 5px;
   flex: 0 0 auto;
@@ -55,10 +55,10 @@
   position: absolute;
   top: calc(100% + 8px);
   z-index: 40;
-  background: var(--vellum-card);
-  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--r);
-  box-shadow: 0 14px 40px rgba(22, 22, 15, 0.14);
+  box-shadow: var(--lift);
   overflow: hidden;
 }
 
@@ -83,7 +83,7 @@
 }
 
 .deck-root .hs-panel a:hover,
-.deck-root .hm-list a:hover { background: var(--vellum); }
+.deck-root .hm-list a:hover { background: var(--marble); }
 
 .deck-root .hs-kind,
 .deck-root .hm-tag {
@@ -91,11 +91,11 @@
   font-size: 8.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
   justify-self: start;
 }
 
-.deck-root .hs-kind.contact { color: var(--blueprint); }
+.deck-root .hs-kind.contact { color: var(--signal-text); }
 .deck-root .hm-tag.urgent,
 .deck-root .hm-tag.late { color: var(--crit); }
 .deck-root .hm-tag.warn { color: var(--warn); }
@@ -114,7 +114,7 @@
 .deck-root .hm-m {
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .deck-root .hs-note,
@@ -122,7 +122,7 @@
   padding: 14px;
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--graphite);
+  color: var(--slate);
   margin: 0;
 }
 
@@ -134,7 +134,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .deck-root .hm-head strong { font-family: var(--display); font-size: 14px; font-weight: 600; }
@@ -142,22 +142,22 @@
 .deck-root .hm-head span {
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--pencil);
+  color: var(--mist);
   text-transform: uppercase;
   letter-spacing: 0.09em;
 }
 
 /* An unread row carries a rule as well as its position. A background wash
    alone is invisible to anyone who cannot separate two close tones. */
-.deck-root .hm-list li.new > a { box-shadow: inset 2px 0 0 var(--blueprint); }
+.deck-root .hm-list li.new > a { box-shadow: inset 2px 0 0 var(--signal); }
 
 .deck-root .hm-foot {
   display: flex;
   gap: 14px;
   align-items: center;
   padding: 10px 14px;
-  border-top: 1px solid var(--line);
-  background: var(--vellum);
+  border-top: 1px solid var(--hairline);
+  background: var(--marble);
 }
 
 .deck-root .hm-foot a,
@@ -166,7 +166,7 @@
   font-size: 9.5px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
   background: none;
   border: none;
   cursor: pointer;
@@ -193,7 +193,7 @@
   display: flex;
   gap: 12px;
   padding: 14px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .deck-root .acct-face {
@@ -205,7 +205,7 @@
   place-items: center;
   overflow: hidden;
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0.04em;
@@ -216,14 +216,14 @@
 
 .deck-root .acct-who { display: grid; gap: 2px; min-width: 0; }
 .deck-root .acct-who strong { font-size: 14px; color: var(--ink); }
-.deck-root .acct-who span { font-size: 11.5px; color: var(--graphite); overflow-wrap: anywhere; }
+.deck-root .acct-who span { font-size: 11.5px; color: var(--slate); overflow-wrap: anywhere; }
 
 .deck-root .acct-role {
   font-family: var(--mono);
   font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.09em;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .deck-root .acct-rows { margin: 0; padding: 12px 14px; display: grid; gap: 10px; }
@@ -234,7 +234,7 @@
   font-size: 9px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .deck-root .acct-rows dd { margin: 0; font-size: 13px; color: var(--ink); }
@@ -250,16 +250,16 @@
   font-size: 9px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .deck-root .acct-form input {
   font-family: var(--sans);
   font-size: 13px;
   padding: 8px 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--r-sm);
-  background: var(--vellum);
+  background: var(--marble);
   color: var(--ink);
   width: 100%;
 }
@@ -274,7 +274,7 @@
   font-size: 9px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .deck-root .acct-fixed p {
@@ -290,7 +290,7 @@
 .deck-root .acct-sub {
   font-style: normal;
   font-size: 11px;
-  color: var(--pencil);
+  color: var(--mist);
   line-height: 1.4;
 }
 
@@ -306,13 +306,13 @@
   object-fit: cover;
   display: grid;
   place-items: center;
-  background: var(--vellum);
-  border: 1px solid var(--line-strong);
+  background: var(--marble);
+  border: 1px solid var(--hairline-strong);
 }
 
 .deck-root .acct-preview.empty {
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   font-family: var(--mono);
   font-size: 15px;
   border-color: var(--ink);
@@ -330,17 +330,17 @@
   text-transform: uppercase;
   padding: 7px 13px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   color: var(--ink);
   cursor: pointer;
 }
 
-.deck-root .acct-file:hover { background: var(--vellum); }
+.deck-root .acct-file:hover { background: var(--marble); }
 .deck-root .acct-file input { display: none; }
 
 /* Focus has to be visible on the hidden input's label, or keyboard users get
    no indication the control is selected at all. */
-.deck-root .acct-file:focus-within { outline: 2px solid var(--blueprint); outline-offset: 2px; }
+.deck-root .acct-file:focus-within { outline: 2px solid var(--signal); outline-offset: 2px; }
 
 .deck-root .acct-photo-acts button {
   font-family: var(--mono);
@@ -349,15 +349,15 @@
   text-transform: uppercase;
   padding: 7px 13px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
-  color: var(--graphite);
+  color: var(--slate);
   cursor: pointer;
 }
 
-.deck-root .acct-locked { display: block; font-size: 10.5px; color: var(--pencil); margin-top: 2px; }
+.deck-root .acct-locked { display: block; font-size: 10.5px; color: var(--mist); margin-top: 2px; }
 
-.deck-root .acct-hint { font-size: 11.5px; line-height: 1.45; color: var(--pencil); margin: 0; }
+.deck-root .acct-hint { font-size: 11.5px; line-height: 1.45; color: var(--mist); margin: 0; }
 .deck-root .acct-err { font-size: 12px; color: var(--crit); margin: 0; }
 
 .deck-root .acct-actions { display: flex; gap: 8px; }
@@ -371,7 +371,7 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
 
@@ -380,8 +380,8 @@
 .deck-root .acct-actions button.quiet,
 .deck-root .acct-foot button.quiet {
   background: transparent;
-  color: var(--graphite);
-  border-color: var(--line-strong);
+  color: var(--slate);
+  border-color: var(--hairline-strong);
 }
 
 .deck-root .acct-foot {
@@ -389,8 +389,8 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-top: 1px solid var(--line);
-  background: var(--vellum);
+  border-top: 1px solid var(--hairline);
+  background: var(--marble);
 }
 
 .deck-root .acct-foot button {
@@ -402,7 +402,7 @@
   border: 1px solid transparent;
   border-radius: 100px;
   padding: 6px 10px;
-  color: var(--graphite);
+  color: var(--slate);
   cursor: pointer;
 }
 
@@ -421,7 +421,7 @@
   color: var(--good);
 }
 
-.deck-root .acct-note { font-size: 11px; color: var(--pencil); }
+.deck-root .acct-note { font-size: 11px; color: var(--mist); }
 
 .deck-root .hs-field input:focus-visible,
 .deck-root .hm .icon-btn:focus-visible,
@@ -429,7 +429,7 @@
 .deck-root .acct-form input:focus-visible,
 .deck-root .acct-foot button:focus-visible,
 .deck-root .acct-actions button:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
 

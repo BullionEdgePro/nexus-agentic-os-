@@ -18,9 +18,9 @@
 
 .pr-count {
   flex: 1 1 150px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -41,7 +41,7 @@
   font-size: 9.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 /* Only when non-zero. A permanent green panel reading "0 shaping replies" would
@@ -72,7 +72,7 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
 
@@ -82,8 +82,8 @@
 
 .pr-actions button.quiet {
   background: transparent;
-  color: var(--graphite);
-  border-color: var(--line-strong);
+  color: var(--slate);
+  border-color: var(--hairline-strong);
 }
 
 .pr-run button:focus-visible,
@@ -92,11 +92,11 @@
 .pr-field select:focus-visible,
 .pr-field textarea:focus-visible,
 .pr-edit textarea:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
 
-.pr-run span { font-size: 12.5px; line-height: 1.5; color: var(--graphite); flex: 1 1 260px; }
+.pr-run span { font-size: 12.5px; line-height: 1.5; color: var(--slate); flex: 1 1 260px; }
 
 .pr-result {
   margin: 12px 0 0;
@@ -104,7 +104,7 @@
   font-size: 10px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
 }
 
 /* --- why there is nothing yet --- */
@@ -112,16 +112,16 @@
 /* An explained absence, given the same weight as a result. An unexplained empty
    list reads as a broken page, which sends someone to fix the wrong thing. */
 .pr-blocked {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--blueprint);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--signal);
   border-radius: var(--r);
-  background: var(--blueprint-soft);
+  background: var(--signal-soft);
   padding: 16px 18px;
   margin: 18px 0 4px;
 }
 
 .pr-blocked strong { font-family: var(--display); font-size: 16px; font-weight: 500; color: var(--ink); }
-.pr-blocked p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: var(--graphite); }
+.pr-blocked p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: var(--slate); }
 
 .pr-blocked ul {
   list-style: none;
@@ -140,20 +140,20 @@
   font-size: 10px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
-.pr-blocked em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--graphite); }
+.pr-blocked em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--slate); }
 
 /* --- the procedures --- */
 
 .pr-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 
 .pr-item {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--hairline-strong);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 14px 16px;
 }
 
@@ -187,18 +187,18 @@
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
-  color: var(--graphite);
+  border: 1px solid var(--hairline-strong);
+  color: var(--slate);
   white-space: nowrap;
 }
 
 .pr-pill.on { border-color: rgba(63, 107, 74, 0.45); color: var(--good); background: rgba(63, 107, 74, 0.07); }
-.pr-pill.operator { border-color: rgba(29, 63, 191, 0.35); color: var(--blueprint); background: var(--blueprint-soft); }
+.pr-pill.operator { border-color: rgba(29, 63, 191, 0.35); color: var(--signal-text); background: var(--signal-soft); }
 /* From the catalogue: distinct from both neighbours on purpose. Not the
    blueprint of "written here", because nobody at this business wrote it; not
    the plain pill of "suggested", because it was not drawn from this business's
    conversations either. */
-.pr-pill.catalog { border-color: rgba(91, 92, 80, 0.45); color: var(--graphite); background: rgba(91, 92, 80, 0.07); }
+.pr-pill.catalog { border-color: rgba(91, 92, 80, 0.45); color: var(--slate); background: rgba(91, 92, 80, 0.07); }
 
 /* --- the steps --- */
 
@@ -252,7 +252,7 @@
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .pr-dismissed { color: var(--warn); }
@@ -270,7 +270,7 @@
   font-size: 9.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .pr-edit textarea,
@@ -281,8 +281,8 @@
   line-height: 1.5;
   padding: 9px 11px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--vellum);
+  border: 1px solid var(--hairline-strong);
+  background: var(--marble);
   color: var(--ink);
   width: 100%;
   min-width: 0;
@@ -294,15 +294,15 @@
   margin: 8px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 /* --- writing one by hand --- */
 
 .pr-new {
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 16px 18px 18px;
   margin: 24px 0 6px;
 }
@@ -321,7 +321,7 @@
    preview of something else.
    ============================================================ */
 
-.ph-root { margin-top: 44px; padding-top: 26px; border-top: 1px solid var(--line-strong); }
+.ph-root { margin-top: 44px; padding-top: 26px; border-top: 1px solid var(--hairline-strong); }
 
 /* The one warning on this screen that is about damage rather than accuracy. */
 .ph-warn {
@@ -339,10 +339,10 @@
 
 .ph-moment {
   margin-top: 16px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--hairline-strong);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 15px 17px;
 }
 
@@ -353,7 +353,7 @@
   margin-top: 6px;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--graphite);
+  color: var(--slate);
   max-width: 76ch;
 }
 
@@ -362,16 +362,16 @@
   margin-top: 11px;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--graphite);
+  color: var(--slate);
   font-style: italic;
 }
 
 .ph-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 
 .ph-item {
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-sm);
-  background: var(--vellum);
+  background: var(--marble);
   padding: 12px 13px;
 }
 .ph-item.on { border-color: rgba(63, 107, 74, .45); background: rgba(63, 107, 74, .05); }
@@ -393,7 +393,7 @@
   gap: 12px;
   margin-top: 11px;
 }
-.ph-meta > span { font-size: 11px; color: var(--pencil); }
+.ph-meta > span { font-size: 11px; color: var(--mist); }
 
 .ph-actions { display: flex; gap: 7px; }
 .ph-actions button {
@@ -402,14 +402,14 @@
   letter-spacing: .09em;
   text-transform: uppercase;
   padding: 8px 12px;
-  border: 1px solid var(--blueprint);
+  border: 1px solid var(--signal);
   border-radius: var(--r-sm);
-  background: var(--blueprint);
-  color: var(--vellum);
+  background: var(--signal);
+  color: var(--marble);
   cursor: pointer;
 }
 .ph-actions button:disabled { opacity: .5; cursor: default; }
-.ph-actions .ph-quiet { border-color: var(--line-strong); background: transparent; color: var(--graphite); }
+.ph-actions .ph-quiet { border-color: var(--hairline-strong); background: transparent; color: var(--slate); }
 
 .ph-item textarea, .ph-new textarea {
   width: 100%;
@@ -417,8 +417,8 @@
   font-size: 13px;
   line-height: 1.6;
   color: var(--ink);
-  background: var(--vellum-card);
-  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--r-sm);
   padding: 10px 11px;
   resize: vertical;
@@ -430,9 +430,9 @@
   font-family: var(--sans);
   font-size: 13px;
   padding: 9px 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--r-sm);
-  background: var(--vellum-card);
+  background: var(--paper);
   color: var(--ink);
 }
 .ph-new button {
@@ -442,10 +442,10 @@
   letter-spacing: .09em;
   text-transform: uppercase;
   padding: 9px 13px;
-  border: 1px solid var(--blueprint);
+  border: 1px solid var(--signal);
   border-radius: var(--r-sm);
-  background: var(--blueprint);
-  color: var(--vellum);
+  background: var(--signal);
+  color: var(--marble);
   cursor: pointer;
 }
 .ph-new button:disabled { opacity: .5; cursor: default; }

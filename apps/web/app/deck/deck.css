@@ -1,38 +1,117 @@
 /* ============================================================
-   NEXUS AGENTIC OS — "Routing Plate" theme
-   A technical-drawing / blueprint-plate visual language: the
-   Switchboard router rendered as a schematic, vellum paper ground,
-   ink typography, blueprint-blue as the single working accent.
-   Scoped under .deck-root so it can't leak elsewhere in the app.
+   NEXUS AGENTIC OS — "Instrument Face" theme
+   ============================================================
+
+   Navy engraving on cool marble, with exactly one live blue.
+
+   WHAT THIS REPLACED, and why the change is more than a repaint.
+   The previous theme was a draughtsman's routing plate: warm vellum
+   paper, near-black ink, blueprint blue. It was coherent, and it was
+   built for a page you read once. This console is read under pressure,
+   at speed, to find out what is wrong -- so the ground went cool and
+   quiet, the ink went navy, and the contrast budget was re-spent on the
+   things that actually need to be seen.
+
+   THE ONE RULE THIS SYSTEM HAS THAT ITS REFERENCE DOES NOT.
+   The reference reserves its saturated blue for primary actions. Here,
+   severity outranks action: this screen's entire job is telling somebody
+   what needs attention, so an urgent finding must be the most saturated
+   thing in the frame, always. Signal blue is for navigation, links and
+   the primary action -- and it must never out-shout a crit. If you ever
+   find yourself wanting a louder blue, the answer is a quieter
+   everything-else.
+
+   NEVER PURE BLACK, and never a neutral-black shadow. Text is Ink Navy;
+   elevation is a three-layer blue-tinted stack. Both rules exist for the
+   same reason: a warm-neutral black on a cool ground reads as dirt, and
+   one grey shadow undoes the whole palette.
+
+   MONO IS KEPT ON PURPOSE. The reference is a landing-page system --
+   80px display type, decorative blobs, product-card collage. Applied
+   literally to an operations console it would be fancy dress. The
+   geometric humanist sans is adopted; the mono spec-labels are not
+   given up, because they are what make this an instrument face rather
+   than a marketing page.
+
+   Scoped under .deck-root so it cannot leak elsewhere in the app.
    ============================================================ */
 
 .deck-root {
-  --vellum: #efeee6;
-  --vellum-card: #f7f6f0;
-  --charcoal: #121210;
-  --charcoal-card: #1b1a16;
-  --ink: #16160f;
-  --ink-soft: rgba(22, 22, 15, 0.78);
-  --graphite: #5b5c50;
-  --pencil: #9a9b8c;
-  --muted: var(--pencil);
-  --line: rgba(22, 22, 15, 0.14);
-  --line-strong: rgba(22, 22, 15, 0.32);
-  --line-on-dark: rgba(239, 238, 230, 0.18);
-  --blueprint: #1d3fbf;
-  --blueprint-soft: rgba(29, 63, 191, 0.1);
-  --good: #3f6b4a;
-  --warn: #a9762f;
-  --crit: #a23b2e;
-  --r: 10px;
-  --r-sm: 6px;
-  --display: var(--font-display), "Bricolage Grotesque", var(--sans);
+  /* --- ground and surfaces -------------------------------- */
+  --marble: #f8f9fb;          /* canvas */
+  --paper: #ffffff;           /* cards and elevated panels */
+  --pebble: #f0f3f8;          /* inset fills, badges, hover washes */
+  --charcoal: #0b3558;        /* inverse surfaces — navy, not black */
+  --charcoal-card: #12406a;
+
+  /* --- ink ------------------------------------------------ */
+  /* Named for what the reference calls it. Pure #000 is banned: on a
+     cool ground it reads as a hole rather than as text. */
+  --ink: #0b3558;
+  --ink-soft: rgba(11, 53, 88, 0.78);
+  --slate: #476788;           /* secondary copy, helper text */
+  --mist: #55708d;            /* tertiary copy — 4.62:1 on pebble, the worst ground */
+  --faint: #a6bbd1;           /* genuinely disabled/inactive ONLY — never content */
+  --muted: var(--slate);      /* was --mist: too faint to read as body copy */
+
+  /* --- lines ---------------------------------------------- */
+  /* Solid rather than an alpha of the ink. A translucent border over a
+     card and over the canvas resolves to two different colours, which is
+     what made the old hairlines look inconsistent between surfaces. */
+  --hairline: #d4e0ed;
+  --hairline-strong: #b9cde1;
+  --hairline-on-dark: rgba(248, 249, 251, 0.22);
+
+  /* --- the one working accent ----------------------------- */
+  --signal: #006bff;
+  --signal-soft: rgba(0, 107, 255, 0.09);
+  --signal-deep: #004eba;     /* informational text on pebble fills */
+  /* #006bff measures 4.38 on marble: correct as a FILL behind white text, half
+     a point short as small text on the canvas. Links and inline accents take
+     the deep cobalt instead, which is the same decision the reference makes
+     when it puts #004eba on badge text and keeps #006bff for the button. */
+  --signal-text: #004eba;
+
+  /* --- text on the inverse (navy) surfaces ---------------- */
+  /* The band is #0b3558. Everything below is measured against it. */
+  --ink-on-dark: #f8f9fb;     /* primary — the marble, inverted */
+  --mist-on-dark: #a6bbd1;    /* secondary — 7.4:1 on the band */
+  --signal-on-dark: #86baff;  /* the accent, lifted to clear the LIGHTER navy card */
+
+  /* --- severity, which outranks the accent ---------------- */
+  /* Retuned off the old earth tones. Brick and ochre were mixed for a
+     warm vellum ground; on cool marble they go muddy and stop reading as
+     urgent. These keep the warmth that separates them from the blue
+     while carrying enough saturation to win against it. */
+  --good: #0f7a56;
+  --warn: #9c5d0f;
+  --crit: #c4342a;
+
+  /* --- shape ---------------------------------------------- */
+  --r: 16px;                  /* cards */
+  --r-sm: 8px;                /* buttons, inputs — sharp-but-soft */
+  --r-lg: 24px;               /* feature panels */
+  --r-xs: 4px;
+  --r-pill: 9999px;
+
+  /* --- elevation ------------------------------------------ */
+  /* Three layers, all tinted with the slate blue rather than black. A
+     neutral shadow on this palette greys the card it is lifting. */
+  --lift: rgba(71, 103, 136, 0.04) 0 4px 5px 0,
+          rgba(71, 103, 136, 0.03) 0 8px 15px 0,
+          rgba(71, 103, 136, 0.08) 0 30px 50px 0;
+  --lift-sm: rgba(71, 103, 136, 0.04) 0 4px 5px 0,
+             rgba(71, 103, 136, 0.03) 0 4px 10px 0,
+             rgba(71, 103, 136, 0.05) 0 10px 20px 0;
+
+  /* --- type ----------------------------------------------- */
+  --display: var(--font-display), "Manrope", var(--sans);
   --mono: var(--font-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
-  --sans: var(--font-body), "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --sans: var(--font-body), "Manrope", system-ui, -apple-system, sans-serif;
 
   position: relative;
   min-height: 100dvh;
-  background: var(--vellum);
+  background: var(--marble);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
@@ -58,7 +137,7 @@
   .deck-root.fx-cursor textarea { cursor: text !important; }
 }
 .deck-root a { color: inherit; text-decoration: none; }
-.deck-root ::selection { background: var(--blueprint); color: var(--vellum); }
+.deck-root ::selection { background: var(--signal); color: var(--marble); }
 .deck-root h1, .deck-root h2, .deck-root h3, .deck-root p { margin: 0; }
 .deck-root button { font-family: inherit; }
 
@@ -67,8 +146,8 @@
 .deck-root .grid-overlay {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    linear-gradient(var(--hairline) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hairline) 1px, transparent 1px);
   background-size: 28px 28px;
   opacity: 0.4;
 }
@@ -82,49 +161,49 @@
   position: fixed; top: 0; left: 0; z-index: 9999; pointer-events: none; border-radius: 50%;
   transform: translate(-50%, -50%);
 }
-.deck-root .cur-dot { width: 5px; height: 5px; background: var(--blueprint); }
+.deck-root .cur-dot { width: 5px; height: 5px; background: var(--signal); }
 .deck-root .cur-ring {
-  width: 30px; height: 30px; border: 1.2px solid var(--line-strong);
+  width: 30px; height: 30px; border: 1.2px solid var(--hairline-strong);
   transition: width .16s ease, height .16s ease, border-color .16s ease, background .16s ease;
 }
-.deck-root .cur-ring.hot { width: 44px; height: 44px; border-color: var(--blueprint); background: var(--blueprint-soft); }
+.deck-root .cur-ring.hot { width: 44px; height: 44px; border-color: var(--signal); background: var(--signal-soft); }
 .deck-root .cur-ring.press { width: 18px; height: 18px; border-color: var(--ink); }
 @media (pointer: coarse) { .deck-root .cur-dot, .deck-root .cur-ring { display: none; } }
 
 /* ---- shared bits ---- */
 .deck-root .eyebrow {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase;
-  color: var(--graphite);
+  color: var(--slate);
 }
 .deck-root .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .deck-root .pill {
   display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10.5px;
   letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: 100px;
-  border: 1px solid var(--line-strong); color: var(--ink-soft);
+  border: 1px solid var(--hairline-strong); color: var(--ink-soft);
 }
 .deck-root .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
-.deck-root .dot.live { background: var(--blueprint); }
+.deck-root .dot.live { background: var(--signal); }
 .deck-root .dot.warnd { background: var(--warn); }
 .deck-root .btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
   font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
-  padding: 13px 22px; border-radius: var(--r-sm); border: 1px solid var(--ink); color: var(--vellum);
+  padding: 13px 22px; border-radius: var(--r-sm); border: 1px solid var(--ink); color: var(--marble);
   background: var(--ink); transition: transform .12s ease, background .16s ease, color .16s ease;
 }
-.deck-root .btn:hover { background: var(--blueprint); border-color: var(--blueprint); }
+.deck-root .btn:hover { background: var(--signal); border-color: var(--signal); }
 .deck-root .btn:active { transform: translateY(1px); }
 .deck-root .btn:disabled { opacity: .55; }
 .deck-root .btn.ghost { background: transparent; color: var(--ink); }
-.deck-root .btn.ghost:hover { background: var(--ink); color: var(--vellum); }
+.deck-root .btn.ghost:hover { background: var(--ink); color: var(--marble); }
 .deck-root .btn:focus-visible, .deck-root a:focus-visible, .deck-root input:focus-visible {
-  outline: 2px solid var(--blueprint); outline-offset: 2px;
+  outline: 2px solid var(--signal); outline-offset: 2px;
 }
 
 .deck-root .brand { display: flex; align-items: center; gap: 11px; }
 .deck-root .brand-mark { width: 30px; height: 30px; flex: none; }
 .deck-root .brand-mark svg { width: 100%; height: 100%; }
 .deck-root .brand-name { font-family: var(--display); font-weight: 700; letter-spacing: -.01em; font-size: 15px; }
-.deck-root .brand-name b { color: var(--ink); } .deck-root .brand-name span { color: var(--blueprint); }
+.deck-root .brand-name b { color: var(--ink); } .deck-root .brand-name span { color: var(--signal-text); }
 
 /* ---- halftone divider: a dithered band with a torn/jagged edge ---- */
 .deck-root .dither {
@@ -146,7 +225,7 @@
   position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between;
   padding: 26px 52px; max-width: 1280px; margin: 0 auto;
 }
-.deck-root .nav-links { display: flex; align-items: center; gap: 34px; font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--graphite); }
+.deck-root .nav-links { display: flex; align-items: center; gap: 34px; font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--slate); }
 .deck-root .nav-links a:hover { color: var(--ink); }
 
 .deck-root .hero {
@@ -159,22 +238,22 @@
   font-family: var(--display); font-weight: 700; font-size: clamp(40px, 6vw, 78px);
   line-height: .98; letter-spacing: -.03em; text-wrap: balance; color: var(--ink);
 }
-.deck-root .hero h1 em { font-style: normal; color: var(--blueprint); }
+.deck-root .hero h1 em { font-style: normal; color: var(--signal-text); }
 .deck-root .hero-sub { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 22px; flex-wrap: wrap; }
-.deck-root .hero-sub p { max-width: 46ch; color: var(--graphite); font-size: 16.5px; }
+.deck-root .hero-sub p { max-width: 46ch; color: var(--slate); font-size: 16.5px; }
 .deck-root .cta-row { display: flex; align-items: center; gap: 16px; flex: none; }
-.deck-root .cta-row .link-btn { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); border-bottom: 1px solid var(--line-strong); padding-bottom: 2px; }
-.deck-root .cta-row .link-btn:hover { border-color: var(--blueprint); color: var(--blueprint); }
+.deck-root .cta-row .link-btn { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); border-bottom: 1px solid var(--hairline-strong); padding-bottom: 2px; }
+.deck-root .cta-row .link-btn:hover { border-color: var(--signal); color: var(--signal-text); }
 
 /* ---- the routing plate (signature diagram) ---- */
 .deck-root .plate {
-  position: relative; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--vellum-card);
-  overflow: hidden; box-shadow: 0 1px 0 var(--line);
+  position: relative; border: 1px solid var(--hairline-strong); border-radius: var(--r); background: var(--paper);
+  overflow: hidden; box-shadow: 0 1px 0 var(--hairline);
 }
 .deck-root .plate-titleblock {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 18px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 10.5px;
-  letter-spacing: .08em; text-transform: uppercase; color: var(--graphite); flex-wrap: wrap;
+  padding: 12px 18px; border-bottom: 1px solid var(--hairline); font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--slate); flex-wrap: wrap;
 }
 .deck-root .plate-titleblock b { color: var(--ink); font-weight: 600; }
 .deck-root .plate-body { position: relative; height: 380px; }
@@ -182,22 +261,22 @@
 .deck-root .plate-core {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center; text-align: center;
-  background: var(--vellum); border: 1.4px solid var(--ink);
+  background: var(--marble); border: 1.4px solid var(--ink);
 }
 .deck-root .plate-core::before {
-  content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed var(--line-strong);
+  content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed var(--hairline-strong);
 }
 .deck-root .plate-core b { font-family: var(--display); font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; }
-.deck-root .plate-core span { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--blueprint); text-transform: uppercase; display: block; margin-top: 2px; }
+.deck-root .plate-core span { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--signal-text); text-transform: uppercase; display: block; margin-top: 2px; }
 .deck-root .plate-node {
   position: absolute; transform: translate(-50%, -50%); width: 132px; padding: 9px 11px 10px;
-  border-radius: var(--r-sm); background: var(--vellum-card); border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm); background: var(--paper); border: 1px solid var(--hairline-strong);
   transition: transform .16s ease, border-color .16s ease;
 }
-.deck-root .plate-node:hover { transform: translate(-50%, -50%) scale(1.04); border-color: var(--blueprint); }
-.deck-root .plate-node .ref { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--blueprint); }
+.deck-root .plate-node:hover { transform: translate(-50%, -50%) scale(1.04); border-color: var(--signal); }
+.deck-root .plate-node .ref { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--signal-text); }
 .deck-root .plate-node .nm { font-family: var(--sans); font-size: 12px; font-weight: 600; margin-top: 3px; }
-.deck-root .plate-node .rl { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; color: var(--pencil); text-transform: uppercase; margin-top: 1px; }
+.deck-root .plate-node .rl { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; color: var(--mist); text-transform: uppercase; margin-top: 1px; }
 
 /* ---- stat band ---- */
 .deck-root .stat-band {
@@ -205,21 +284,21 @@
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px;
 }
 .deck-root .stat-band-item .num { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 3.4vw, 46px); letter-spacing: -.02em; }
-.deck-root .stat-band-item .lbl { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--graphite); margin-top: 6px; max-width: 30ch; }
+.deck-root .stat-band-item .lbl { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--slate); margin-top: 6px; max-width: 30ch; }
 
 /* ---- dark feature band ---- */
-.deck-root .feature-band { position: relative; z-index: 2; background: var(--charcoal); color: var(--vellum); padding: 64px 52px; }
+.deck-root .feature-band { position: relative; z-index: 2; background: var(--charcoal); color: var(--marble); padding: 64px 52px; }
 .deck-root .feature-inner { max-width: 1280px; margin: 0 auto; }
-.deck-root .feature-band .eyebrow { color: var(--pencil); }
+.deck-root .feature-band .eyebrow { color: var(--mist-on-dark); }
 .deck-root .feature-band h2 {
   font-family: var(--display); font-weight: 700; font-size: clamp(28px, 3.6vw, 44px); letter-spacing: -.02em;
   max-width: 18ch; margin-top: 16px; text-wrap: balance;
 }
-.deck-root .feature-grid { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-on-dark); border: 1px solid var(--line-on-dark); }
+.deck-root .feature-grid { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hairline-on-dark); border: 1px solid var(--hairline-on-dark); }
 .deck-root .feature-card { background: var(--charcoal-card); padding: 26px 24px; }
-.deck-root .feature-card .ref { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--blueprint); }
+.deck-root .feature-card .ref { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--signal-on-dark); }
 .deck-root .feature-card h3 { font-family: var(--sans); font-weight: 600; font-size: 16px; margin-top: 12px; }
-.deck-root .feature-card p { font-family: var(--sans); font-size: 13.5px; color: rgba(239, 238, 230, 0.68); margin-top: 8px; line-height: 1.55; }
+.deck-root .feature-card p { font-family: var(--sans); font-size: 13.5px; color: var(--mist-on-dark); margin-top: 8px; line-height: 1.55; }
 
 /* ---- sign-in section ---- */
 .deck-root .signin {
@@ -227,74 +306,74 @@
   display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: start;
 }
 .deck-root .signin-copy h2 { font-family: var(--display); font-weight: 700; font-size: clamp(26px, 3vw, 36px); letter-spacing: -.02em; max-width: 16ch; }
-.deck-root .signin-copy p { color: var(--graphite); margin-top: 14px; max-width: 42ch; }
+.deck-root .signin-copy p { color: var(--slate); margin-top: 14px; max-width: 42ch; }
 .deck-root .tenant-list { margin-top: 28px; display: flex; flex-direction: column; gap: 9px; }
 .deck-root .tenant-list .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .deck-root .tenant-list .row span.name { font-weight: 500; }
-.deck-root .tenant-list .row span.role { font-family: var(--mono); font-size: 10.5px; color: var(--pencil); text-transform: uppercase; letter-spacing: .05em; }
+.deck-root .tenant-list .row span.role { font-family: var(--mono); font-size: 10.5px; color: var(--mist); text-transform: uppercase; letter-spacing: .05em; }
 /* A tenant that is configured but not yet answering customers reads as a hollow
    node, so "live" stays the only filled state on the plate — a board that
    lights every node green tells the operator nothing. */
-.deck-root .tenant-list .row .dot:not(.live) { box-shadow: inset 0 0 0 1.5px var(--pencil); }
+.deck-root .tenant-list .row .dot:not(.live) { box-shadow: inset 0 0 0 1.5px var(--mist); }
 .deck-root .tenant-list .row span.state {
   margin-left: auto; font-family: var(--mono); font-size: 10px;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--pencil);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--mist);
 }
 
-.deck-root .auth-card { width: 100%; padding: 30px 28px; border-radius: var(--r); background: var(--vellum-card); border: 1px solid var(--line-strong); }
+.deck-root .auth-card { width: 100%; padding: 30px 28px; border-radius: var(--r); background: var(--paper); border: 1px solid var(--hairline-strong); }
 .deck-root .auth-card h3 { font-family: var(--display); font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
-.deck-root .auth-card .sub { color: var(--pencil); font-size: 12.5px; margin-top: 5px; font-family: var(--mono); }
+.deck-root .auth-card .sub { color: var(--mist); font-size: 12.5px; margin-top: 5px; font-family: var(--mono); }
 .deck-root .field { margin-top: 19px; }
-.deck-root .field label { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--graphite); margin-bottom: 7px; }
-.deck-root .field .inp { display: flex; align-items: center; gap: 10px; background: var(--vellum); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 0 13px; transition: border-color .16s; }
-.deck-root .field .inp:focus-within { border-color: var(--blueprint); }
-.deck-root .field .inp svg { width: 15px; height: 15px; color: var(--pencil); flex: none; }
+.deck-root .field label { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--slate); margin-bottom: 7px; }
+.deck-root .field .inp { display: flex; align-items: center; gap: 10px; background: var(--marble); border: 1px solid var(--hairline-strong); border-radius: var(--r-sm); padding: 0 13px; transition: border-color .16s; }
+.deck-root .field .inp:focus-within { border-color: var(--signal); }
+.deck-root .field .inp svg { width: 15px; height: 15px; color: var(--mist); flex: none; }
 .deck-root .field input { flex: 1; background: none; border: none; outline: none; color: var(--ink); font-size: 14px; padding: 12px 0; font-family: var(--sans); }
-.deck-root .field input::placeholder { color: var(--pencil); }
+.deck-root .field input::placeholder { color: var(--mist); }
 .deck-root .rowline { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; font-size: 12px; }
-.deck-root .rowline label { display: flex; align-items: center; gap: 8px; color: var(--graphite); font-family: var(--mono); cursor: pointer; }
-.deck-root .rowline a { color: var(--blueprint); font-family: var(--mono); }
-.deck-root .chk { width: 15px; height: 15px; border: 1px solid var(--line-strong); border-radius: 3px; display: grid; place-items: center; background: var(--vellum); }
+.deck-root .rowline label { display: flex; align-items: center; gap: 8px; color: var(--slate); font-family: var(--mono); cursor: pointer; }
+.deck-root .rowline a { color: var(--signal-text); font-family: var(--mono); }
+.deck-root .chk { width: 15px; height: 15px; border: 1px solid var(--hairline-strong); border-radius: 3px; display: grid; place-items: center; background: var(--marble); }
 .deck-root .chk.on { background: var(--ink); border-color: var(--ink); }
-.deck-root .chk svg { width: 10px; height: 10px; color: var(--vellum); opacity: 0; } .deck-root .chk.on svg { opacity: 1; }
+.deck-root .chk svg { width: 10px; height: 10px; color: var(--marble); opacity: 0; } .deck-root .chk.on svg { opacity: 1; }
 .deck-root .auth-card .btn { width: 100%; margin-top: 22px; }
-.deck-root .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 4px; color: var(--pencil); font-family: var(--mono); font-size: 10px; letter-spacing: .16em; }
-.deck-root .divider::before, .deck-root .divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
-.deck-root .hint { margin-top: 16px; font-family: var(--mono); font-size: 10.5px; color: var(--pencil); text-align: center; line-height: 1.7; }
-.deck-root .hint b { color: var(--graphite); }
+.deck-root .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 4px; color: var(--mist); font-family: var(--mono); font-size: 10px; letter-spacing: .16em; }
+.deck-root .divider::before, .deck-root .divider::after { content: ""; height: 1px; flex: 1; background: var(--hairline); }
+.deck-root .hint { margin-top: 16px; font-family: var(--mono); font-size: 10.5px; color: var(--mist); text-align: center; line-height: 1.7; }
+.deck-root .hint b { color: var(--slate); }
 .deck-root .errline { color: var(--crit); font-family: var(--mono); font-size: 11px; margin-top: 10px; min-height: 14px; }
 
 .deck-root .site-foot {
   position: relative; z-index: 2; max-width: 1280px; margin: 0 auto; padding: 24px 52px 40px;
-  display: flex; align-items: center; justify-content: space-between; color: var(--pencil);
+  display: flex; align-items: center; justify-content: space-between; color: var(--mist);
   font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; flex-wrap: wrap; gap: 8px;
 }
 
 /* ============ APP SHELL (dashboard) ============ */
 .deck-root .app { position: relative; z-index: 2; min-height: 100dvh; display: grid; grid-template-columns: 212px 1fr; grid-template-rows: 58px 1fr; }
-.deck-root .topbar { grid-column: 1 / 3; display: flex; align-items: center; gap: 16px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--vellum); }
+.deck-root .topbar { grid-column: 1 / 3; display: flex; align-items: center; gap: 16px; padding: 0 20px; border-bottom: 1px solid var(--hairline); background: var(--marble); }
 .deck-root .topbar .brand { margin-right: 4px; }
-.deck-root .tenant-switch { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--vellum-card); font-size: 12.5px; }
-.deck-root .tenant-switch b { font-weight: 600; } .deck-root .tenant-switch svg { width: 12px; height: 12px; color: var(--pencil); }
-.deck-root .search { flex: 1; max-width: 400px; display: flex; align-items: center; gap: 9px; padding: 8px 13px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--vellum-card); }
-.deck-root .search svg { width: 14px; height: 14px; color: var(--pencil); }
+.deck-root .tenant-switch { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: var(--r-sm); border: 1px solid var(--hairline-strong); background: var(--paper); font-size: 12.5px; }
+.deck-root .tenant-switch b { font-weight: 600; } .deck-root .tenant-switch svg { width: 12px; height: 12px; color: var(--mist); }
+.deck-root .search { flex: 1; max-width: 400px; display: flex; align-items: center; gap: 9px; padding: 8px 13px; border-radius: var(--r-sm); border: 1px solid var(--hairline); background: var(--paper); }
+.deck-root .search svg { width: 14px; height: 14px; color: var(--mist); }
 .deck-root .search input { flex: 1; background: none; border: none; outline: none; color: var(--ink); font-size: 12.5px; }
-.deck-root .search input::placeholder { color: var(--pencil); }
-.deck-root .search kbd { font-family: var(--mono); font-size: 10px; color: var(--pencil); border: 1px solid var(--line-strong); border-radius: 4px; padding: 2px 6px; }
+.deck-root .search input::placeholder { color: var(--mist); }
+.deck-root .search kbd { font-family: var(--mono); font-size: 10px; color: var(--mist); border: 1px solid var(--hairline-strong); border-radius: 4px; padding: 2px 6px; }
 .deck-root .top-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-.deck-root .icon-btn { width: 33px; height: 33px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--vellum-card); display: grid; place-items: center; position: relative; transition: border-color .16s, background .16s; }
-.deck-root .icon-btn:hover { border-color: var(--blueprint); background: var(--blueprint-soft); }
+.deck-root .icon-btn { width: 33px; height: 33px; border-radius: var(--r-sm); border: 1px solid var(--hairline-strong); background: var(--paper); display: grid; place-items: center; position: relative; transition: border-color .16s, background .16s; }
+.deck-root .icon-btn:hover { border-color: var(--signal); background: var(--signal-soft); }
 .deck-root .icon-btn svg { width: 15px; height: 15px; color: var(--ink-soft); }
-.deck-root .icon-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--crit); color: var(--vellum); font-family: var(--mono); font-size: 9px; display: grid; place-items: center; }
-.deck-root .avatar { width: 33px; height: 33px; border-radius: var(--r-sm); display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--vellum); background: var(--ink); }
+.deck-root .icon-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--crit); color: var(--marble); font-family: var(--mono); font-size: 9px; display: grid; place-items: center; }
+.deck-root .avatar { width: 33px; height: 33px; border-radius: var(--r-sm); display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--marble); background: var(--ink); }
 
-.deck-root .rail { grid-row: 2 / 3; border-right: 1px solid var(--line); background: var(--vellum); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0; }
-.deck-root .rail a { width: 40px; height: 40px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--pencil); position: relative; transition: color .16s, background .16s; border: none; background: transparent; }
+.deck-root .rail { grid-row: 2 / 3; border-right: 1px solid var(--hairline); background: var(--marble); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0; }
+.deck-root .rail a { width: 40px; height: 40px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--mist); position: relative; transition: color .16s, background .16s; border: none; background: transparent; }
 .deck-root .rail a svg { width: 17px; height: 17px; }
-.deck-root .rail a:hover { color: var(--ink); background: var(--vellum-card); }
-.deck-root .rail a.on { color: var(--vellum); background: var(--ink); }
+.deck-root .rail a:hover { color: var(--ink); background: var(--paper); }
+.deck-root .rail a.on { color: var(--marble); background: var(--ink); }
 .deck-root .rail .sep { flex: 1; }
-.deck-root .rail a .tip { position: absolute; left: 48px; white-space: nowrap; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; background: var(--ink); color: var(--vellum); padding: 5px 9px; border-radius: 5px; opacity: 0; transform: translateX(-4px); transition: .15s; pointer-events: none; z-index: 5; }
+.deck-root .rail a .tip { position: absolute; left: 48px; white-space: nowrap; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; background: var(--ink); color: var(--marble); padding: 5px 9px; border-radius: 5px; opacity: 0; transform: translateX(-4px); transition: .15s; pointer-events: none; z-index: 5; }
 .deck-root .rail a:hover .tip { opacity: 1; transform: none; }
 
 .deck-root .main { grid-row: 2 / 3; overflow: auto; padding: 22px 26px 40px; }
@@ -305,66 +384,66 @@
 .deck-root .main > .dither { margin: 16px -26px 20px; width: calc(100% + 52px); }
 
 .deck-root .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 18px; }
-.deck-root .stat { padding: 15px 15px 12px; border-radius: var(--r); position: relative; overflow: hidden; background: var(--vellum-card); border: 1px solid var(--line); }
+.deck-root .stat { padding: 15px 15px 12px; border-radius: var(--r); position: relative; overflow: hidden; background: var(--paper); border: 1px solid var(--hairline); }
 .deck-root .stat.hi { border-color: var(--ink); }
-.deck-root .stat .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--graphite); }
+.deck-root .stat .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--slate); }
 .deck-root .stat .v { font-family: var(--display); font-size: 25px; font-weight: 700; letter-spacing: -.02em; margin-top: 8px; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 5px; }
-.deck-root .stat .v small { font-size: 12px; font-weight: 500; color: var(--graphite); font-family: var(--sans); }
-.deck-root .stat .d { font-family: var(--mono); font-size: 10.5px; margin-top: 4px; display: flex; align-items: center; gap: 5px; color: var(--graphite); }
+.deck-root .stat .v small { font-size: 12px; font-weight: 500; color: var(--slate); font-family: var(--sans); }
+.deck-root .stat .d { font-family: var(--mono); font-size: 10.5px; margin-top: 4px; display: flex; align-items: center; gap: 5px; color: var(--slate); }
 .deck-root .stat .d.up { color: var(--good); }
 .deck-root .stat .spark { position: absolute; right: 11px; bottom: 10px; width: 58px; height: 24px; opacity: .9; }
 
 .deck-root .grid-2 { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; margin-bottom: 14px; }
 .deck-root .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
-.deck-root .card { padding: 17px; border-radius: var(--r); background: var(--vellum-card); border: 1px solid var(--line); }
+.deck-root .card { padding: 17px; border-radius: var(--r); background: var(--paper); border: 1px solid var(--hairline); }
 .deck-root .card-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .deck-root .card-h h3 { font-family: var(--sans); font-size: 13.5px; font-weight: 600; letter-spacing: -.005em; display: flex; align-items: center; gap: 8px; }
-.deck-root .card-h h3 .ic { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; background: var(--vellum); border: 1px solid var(--line-strong); }
-.deck-root .card-h h3 .ic svg { width: 13px; height: 13px; color: var(--blueprint); }
+.deck-root .card-h h3 .ic { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; background: var(--marble); border: 1px solid var(--hairline-strong); }
+.deck-root .card-h h3 .ic svg { width: 13px; height: 13px; color: var(--signal-text); }
 
-.deck-root .switchboard { position: relative; height: 320px; border-radius: var(--r-sm); overflow: hidden; background: var(--vellum); border: 1px dashed var(--line-strong); }
+.deck-root .switchboard { position: relative; height: 320px; border-radius: var(--r-sm); overflow: hidden; background: var(--marble); border: 1px dashed var(--hairline-strong); }
 .deck-root .switchboard > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.deck-root .core { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 108px; height: 108px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: var(--vellum-card); border: 1.4px solid var(--ink); }
-.deck-root .core::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed var(--line-strong); }
+.deck-root .core { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 108px; height: 108px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: var(--paper); border: 1.4px solid var(--ink); }
+.deck-root .core::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed var(--hairline-strong); }
 .deck-root .core b { font-family: var(--display); font-size: 11.5px; font-weight: 700; letter-spacing: -.01em; }
-.deck-root .core span { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--blueprint); text-transform: uppercase; display: block; margin-top: 2px; }
-.deck-root .node { position: absolute; transform: translate(-50%, -50%); width: 116px; padding: 9px 11px; border-radius: var(--r-sm); background: var(--vellum-card); border: 1px solid var(--line-strong); transition: transform .16s, border-color .16s; }
-.deck-root .node:hover { transform: translate(-50%, -50%) scale(1.05); border-color: var(--blueprint); }
-.deck-root .node .ref { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; color: var(--blueprint); }
+.deck-root .core span { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--signal-text); text-transform: uppercase; display: block; margin-top: 2px; }
+.deck-root .node { position: absolute; transform: translate(-50%, -50%); width: 116px; padding: 9px 11px; border-radius: var(--r-sm); background: var(--paper); border: 1px solid var(--hairline-strong); transition: transform .16s, border-color .16s; }
+.deck-root .node:hover { transform: translate(-50%, -50%) scale(1.05); border-color: var(--signal); }
+.deck-root .node .ref { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; color: var(--signal-text); }
 .deck-root .node .nm { font-size: 12px; font-weight: 600; letter-spacing: -.01em; margin-top: 2px; }
-.deck-root .node .rl { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--pencil); margin-top: 1px; }
-.deck-root .node .st { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-family: var(--mono); font-size: 9.5px; color: var(--graphite); }
+.deck-root .node .rl { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); margin-top: 1px; }
+.deck-root .node .st { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-family: var(--mono); font-size: 9.5px; color: var(--slate); }
 
-.deck-root .gov-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.deck-root .gov-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--hairline); }
 .deck-root .gov-row:last-child { border-bottom: none; }
 .deck-root .gov-row .lbl { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
-.deck-root .gov-row .lbl .ic { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; border: 1px solid var(--line-strong); background: var(--vellum); }
+.deck-root .gov-row .lbl .ic { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; border: 1px solid var(--hairline-strong); background: var(--marble); }
 .deck-root .gov-row .lbl .ic svg { width: 14px; height: 14px; }
-.deck-root .gov-row small { display: block; color: var(--pencil); font-family: var(--mono); font-size: 9.5px; margin-top: 2px; }
-.deck-root .meter { width: 140px; height: 5px; border-radius: 5px; background: var(--vellum); border: 1px solid var(--line); overflow: hidden; margin-top: 6px; }
+.deck-root .gov-row small { display: block; color: var(--mist); font-family: var(--mono); font-size: 9.5px; margin-top: 2px; }
+.deck-root .meter { width: 140px; height: 5px; border-radius: 5px; background: var(--marble); border: 1px solid var(--hairline); overflow: hidden; margin-top: 6px; }
 .deck-root .meter i { display: block; height: 100%; }
 
 .deck-root .bar-row { margin-bottom: 13px; } .deck-root .bar-row:last-child { margin-bottom: 0; }
 .deck-root .bar-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
-.deck-root .bar-top span { color: var(--graphite); } .deck-root .bar-top b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.deck-root .bar { height: 6px; border-radius: 5px; background: var(--vellum); border: 1px solid var(--line); overflow: hidden; }
-.deck-root .bar i { display: block; height: 100%; background: var(--blueprint); transition: width 1s cubic-bezier(.2,.8,.2,1); }
+.deck-root .bar-top span { color: var(--slate); } .deck-root .bar-top b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.deck-root .bar { height: 6px; border-radius: 5px; background: var(--marble); border: 1px solid var(--hairline); overflow: hidden; }
+.deck-root .bar i { display: block; height: 100%; background: var(--signal); transition: width 1s cubic-bezier(.2,.8,.2,1); }
 
 .deck-root .feed { display: flex; flex-direction: column; }
-.deck-root .feed-item { display: flex; gap: 11px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.deck-root .feed-item { display: flex; gap: 11px; padding: 11px 0; border-bottom: 1px solid var(--hairline); }
 .deck-root .feed-item:last-child { border-bottom: none; }
-.deck-root .feed-av { width: 30px; height: 30px; border-radius: 7px; flex: none; display: grid; place-items: center; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--ink); background: var(--vellum); border: 1px solid var(--line-strong); }
+.deck-root .feed-av { width: 30px; height: 30px; border-radius: 7px; flex: none; display: grid; place-items: center; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--ink); background: var(--marble); border: 1px solid var(--hairline-strong); }
 .deck-root .feed-b { flex: 1; min-width: 0; }
 .deck-root .feed-b .top { display: flex; align-items: center; gap: 8px; }
 .deck-root .feed-b .top b { font-size: 12px; font-weight: 600; }
-.deck-root .feed-b .top time { margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--pencil); }
-.deck-root .feed-b p { font-size: 12px; color: var(--graphite); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.deck-root .tag { font-family: var(--mono); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--line-strong); color: var(--graphite); }
-.deck-root .tag.ai { color: var(--blueprint); border-color: rgba(29, 63, 191, .35); }
+.deck-root .feed-b .top time { margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--mist); }
+.deck-root .feed-b p { font-size: 12px; color: var(--slate); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-root .tag { font-family: var(--mono); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--hairline-strong); color: var(--slate); }
+.deck-root .tag.ai { color: var(--signal-text); border-color: rgba(29, 63, 191, .35); }
 .deck-root .tag.h { color: var(--warn); border-color: rgba(169, 118, 47, .35); }
 
 .deck-root .area { width: 100%; height: 148px; }
-.deck-root .foot { margin-top: 24px; display: flex; align-items: center; justify-content: space-between; color: var(--pencil); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; flex-wrap: wrap; gap: 8px; }
+.deck-root .foot { margin-top: 24px; display: flex; align-items: center; justify-content: space-between; color: var(--mist); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; flex-wrap: wrap; gap: 8px; }
 
 /* ============ responsive ============ */
 @media (max-width: 1100px) {
@@ -394,7 +473,7 @@
    rather than merely coloured: on a line of monospace labels in the same
    muted tone, colour alone does not read as "this one is a link". */
 .deck-root .foot-link {
-  color: var(--blueprint);
+  color: var(--signal-text);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -432,7 +511,7 @@
 .deck-root .topbar a.icon-btn:focus-visible,
 .deck-root .topbar button.avatar:focus-visible,
 .deck-root .topbar .brand:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
 
@@ -481,3 +560,39 @@
 .reveal svg { width: 17px; height: 17px; }
 .reveal:hover { color: rgba(22, 22, 15, 0.9); background: rgba(22, 22, 15, 0.06); }
 .reveal:focus-visible { outline: 2px solid #1d3fbf; outline-offset: 1px; }
+
+/* ============================================================
+   ELEVATION
+   ============================================================
+   Three layers, all tinted with slate blue rather than black. A neutral
+   shadow on this palette greys the surface it is meant to be lifting,
+   which is why --lift exists as a token and no rule below writes its
+   own rgba.
+
+   SPENT ON PANELS, NOT ON ROWS. There are 51 surfaces painted --paper
+   in this app and most of them are list rows inside a panel. Lifting
+   all of them would leave nothing looking lifted; depth here marks
+   structure, and the hairline does the rest of the work.
+   ============================================================ */
+
+.deck-root .plate,
+.deck-root .card,
+.deck-root .panel,
+.admin-root .admin-card {
+  box-shadow: var(--lift);
+}
+
+/* Interactive surfaces get the shallower stack and raise on hover, which is
+   the only motion this system has and the only place it is warranted. */
+.deck-root .lift-hover {
+  box-shadow: var(--lift-sm);
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.deck-root .lift-hover:hover {
+  box-shadow: var(--lift);
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck-root .lift-hover { transition: none; }
+  .deck-root .lift-hover:hover { transform: none; }
+}

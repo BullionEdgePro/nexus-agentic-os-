@@ -14,9 +14,9 @@
 }
 
 .q-card {
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
@@ -24,10 +24,10 @@
   /* A severity stripe rather than a coloured number: the value stays legible
      against both themes while the state reads at a glance. */
   border-left-width: 3px;
-  border-left-color: var(--line-strong);
+  border-left-color: var(--hairline-strong);
 }
-.q-card.q-good { border-left-color: var(--blueprint); }
-.q-card.q-warn { border-left-color: #b8860b; }
+.q-card.q-good { border-left-color: var(--signal); }
+.q-card.q-warn { border-left-color: var(--warn); }
 .q-card.q-bad  { border-left-color: var(--crit); }
 
 .q-label {
@@ -35,7 +35,7 @@
   font-size: 9.5px;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 .q-value {
   font-family: var(--display);
@@ -44,7 +44,7 @@
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
-.q-note { font-size: 12px; color: var(--graphite); line-height: 1.45; }
+.q-note { font-size: 12px; color: var(--slate); line-height: 1.45; }
 
 /* --- daily bars --- */
 
@@ -54,9 +54,9 @@
   gap: 4px;
   height: 180px;
   padding: 14px 16px 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   overflow-x: auto;
 }
 
@@ -73,7 +73,7 @@
 .q-bar {
   width: 100%;
   min-height: 2px;
-  background: var(--blueprint);
+  background: var(--signal);
   border-radius: 2px 2px 0 0;
   display: flex;
   flex-direction: column;
@@ -91,7 +91,7 @@
 .q-day {
   font-family: var(--mono);
   font-size: 9px;
-  color: var(--pencil);
+  color: var(--mist);
   font-variant-numeric: tabular-nums;
 }
 .q-day.partial { color: var(--crit); }
@@ -103,12 +103,12 @@
   flex-wrap: wrap;
   margin-top: 10px;
   font-size: 11.5px;
-  color: var(--graphite);
+  color: var(--slate);
 }
 .q-key { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-.q-key-ai { background: var(--blueprint); }
+.q-key-ai { background: var(--signal); }
 .q-key-esc { background: var(--crit); margin-left: 10px; }
-.q-partial-note { margin-left: auto; color: var(--pencil); }
+.q-partial-note { margin-left: auto; color: var(--mist); }
 
 .q-refresh {
   margin-top: 16px;
@@ -118,12 +118,12 @@
   text-transform: uppercase;
   padding: 8px 14px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
   color: var(--ink);
   cursor: pointer;
 }
-.q-refresh:hover:not(:disabled) { border-color: var(--blueprint); color: var(--blueprint); }
+.q-refresh:hover:not(:disabled) { border-color: var(--signal); color: var(--signal-text); }
 .q-refresh:disabled { opacity: .45; cursor: default; }
 
 /* --- ask panel --- */
@@ -139,11 +139,11 @@
   color: var(--ink);
   padding: 11px 14px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--vellum);
+  border: 1px solid var(--hairline-strong);
+  background: var(--marble);
 }
 .q-ask input:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 1px;
   border-color: transparent;
 }
@@ -157,22 +157,22 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
-.q-ask button:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.q-ask button:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); }
 .q-ask button:disabled { opacity: .4; cursor: default; }
 
 .q-reply {
   margin-top: 14px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--blueprint);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--signal);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 16px 18px;
 }
 /* A refusal is a valid answer, but it should not look like a finding. */
-.q-reply.unmatched { border-left-color: var(--line-strong); }
+.q-reply.unmatched { border-left-color: var(--hairline-strong); }
 
 .q-answer { font-size: 15px; line-height: 1.55; color: var(--ink); }
 .q-reply-table { margin-top: 12px; }
@@ -182,19 +182,19 @@
   font-size: 10px;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
-.q-ask-note { margin-top: 12px; font-size: 12px; color: var(--pencil); line-height: 1.55; max-width: 70ch; }
+.q-ask-note { margin-top: 12px; font-size: 12px; color: var(--mist); line-height: 1.55; max-width: 70ch; }
 
 .q-hotspot-note {
   margin-top: 10px;
   font-size: 12.5px;
-  color: var(--graphite);
+  color: var(--slate);
   line-height: 1.6;
   max-width: 72ch;
 }
-.q-hotspot-note a { color: var(--blueprint); }
+.q-hotspot-note a { color: var(--signal-text); }
 
 /* ============================================================
    The shared brain (F5), pooled across every business.
@@ -204,15 +204,15 @@
    spent months reporting an emptiness that looked like youth.
    ============================================================ */
 
-.br-root { margin-top: 44px; padding-top: 26px; border-top: 1px solid var(--line-strong); }
+.br-root { margin-top: 44px; padding-top: 26px; border-top: 1px solid var(--hairline-strong); }
 
 .br-counts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 
 .br-count {
   flex: 1 1 160px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 13px 15px;
 }
 .br-count strong {
@@ -228,7 +228,7 @@
   margin-top: 4px;
   font-size: 11.5px;
   line-height: 1.35;
-  color: var(--graphite);
+  color: var(--slate);
 }
 /* Only ever when non-zero. A permanent red panel reading "0 never classified"
    would make the one state worth noticing invisible when it arrives. */
@@ -255,14 +255,14 @@
 .br-blocked {
   margin: 16px 0 0;
   padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--blueprint);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--signal);
   border-radius: var(--r);
-  background: var(--blueprint-soft);
+  background: var(--signal-soft);
   max-width: 78ch;
 }
 .br-blocked strong { font-family: var(--display); font-size: 15px; color: var(--ink); }
-.br-blocked p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--graphite); }
+.br-blocked p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--slate); }
 
 .br-table { width: 100%; margin-top: 16px; border-collapse: collapse; font-size: 12.5px; }
 .br-table th {
@@ -271,14 +271,14 @@
   font-size: 10px;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
   font-weight: 400;
   padding: 0 10px 7px 0;
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--hairline-strong);
 }
 .br-table td {
   padding: 9px 10px 9px 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
 }

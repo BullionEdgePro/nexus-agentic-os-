@@ -99,7 +99,7 @@ function sparkPath(vals: number[], w: number, h: number): string {
 function Spark({ vals }: { vals: number[]; hi?: boolean }) {
   const id = useMemo(() => "sg" + Math.random().toString(36).slice(2, 8), []);
   const p = sparkPath(vals, 64, 26);
-  const color = "#1d3fbf";
+  const color = "var(--signal)";
   return (
     <svg className="spark" viewBox="0 0 64 26" fill="none">
       <defs>
@@ -165,9 +165,9 @@ function liveFeed(m: OverviewMetrics) {
 const BrandMark = () => (
   <span className="brand-mark">
     <svg viewBox="0 0 32 32" fill="none">
-      <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="#16160f" strokeWidth="1.3" />
-      <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" fill="none" stroke="#1d3fbf" strokeWidth="1.2" />
-      <circle cx="16" cy="16" r="2" fill="#1d3fbf" />
+      <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="var(--ink)" strokeWidth="1.3" />
+      <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" fill="none" stroke="var(--signal)" strokeWidth="1.2" />
+      <circle cx="16" cy="16" r="2" fill="var(--signal)" />
     </svg>
   </span>
 );
@@ -398,7 +398,7 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                         strokeWidth="1"
                         strokeDasharray="3 4"
                       />
-                      <circle r="2.4" fill="#1d3fbf">
+                      <circle r="2.4" fill="var(--signal)">
                         <animateMotion dur={`${l.dur}s`} repeatCount="indefinite" path={`M${l.x1} ${l.y1} L${l.x2} ${l.y2}`} />
                         <animate attributeName="opacity" values="0;1;0" dur={`${l.dur}s`} repeatCount="indefinite" />
                       </circle>
@@ -440,9 +440,9 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                 </span>
               </div>
               <GovRow label="PII scan" sub="Deterministic redaction pass" val="3 held" pct={12} color="var(--good)" tone="var(--good)" />
-              <GovRow label="Hallucination judge" sub="Claude Haiku · grounding check" val="low · 94%" pct={94} color="linear-gradient(90deg,var(--good),var(--blueprint))" tone="var(--warn)" />
+              <GovRow label="Hallucination judge" sub="Claude Haiku · grounding check" val="low · 94%" pct={94} color="linear-gradient(90deg,var(--good),var(--signal))" tone="var(--warn)" />
               <GovRow label="Escalated to human" sub="Juris Prime Legal · strict tier" val="6" valColor="var(--crit)" pct={22} color="var(--crit)" tone="var(--crit)" />
-              <GovRow label="Reply never dropped" sub="Silence-guarantee coverage" val="100%" valColor="var(--good)" pct={100} color="var(--good)" tone="var(--blueprint)" />
+              <GovRow label="Reply never dropped" sub="Silence-guarantee coverage" val="100%" valColor="var(--good)" pct={100} color="var(--good)" tone="var(--signal)" />
             </div>
           </div>
 
@@ -464,15 +464,15 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
               <svg className="area" viewBox="0 0 320 150" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stopColor="#1d3fbf" stopOpacity=".22" />
-                    <stop offset="1" stopColor="#1d3fbf" stopOpacity="0" />
+                    <stop offset="0" stopColor="var(--signal)" stopOpacity=".22" />
+                    <stop offset="1" stopColor="var(--signal)" stopOpacity="0" />
                   </linearGradient>
                 </defs>
                 <path d="M0 75 H320" stroke="rgba(22,22,15,.1)" />
                 <path d="M0 120 H320" stroke="rgba(22,22,15,.07)" />
                 <path d={area.fill} fill="url(#ag)" />
-                <path d={area.line} fill="none" stroke="#1d3fbf" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx={area.last[0]} cy={area.last[1]} r="3.5" fill="#1d3fbf" />
+                <path d={area.line} fill="none" stroke="var(--signal)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx={area.last[0]} cy={area.last[1]} r="3.5" fill="var(--signal)" />
               </svg>
               <div className="foot" style={{ marginTop: 12 }}>
                 <span>Mon</span>
@@ -581,7 +581,7 @@ function GovRow({
   return (
     <div className="gov-row">
       <div className="lbl">
-        <span className="ic" style={{ borderColor: "var(--line)" }}>
+        <span className="ic" style={{ borderColor: "var(--hairline)" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke={tone} strokeWidth="1.8">
             <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" />
           </svg>

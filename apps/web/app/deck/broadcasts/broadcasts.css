@@ -19,7 +19,7 @@
   letter-spacing: -0.01em;
   margin-bottom: 6px;
 }
-.bc-gate > p { font-size: 13.5px; color: var(--graphite); line-height: 1.6; max-width: 68ch; }
+.bc-gate > p { font-size: 13.5px; color: var(--slate); line-height: 1.6; max-width: 68ch; }
 
 .bc-gate ol {
   margin: 14px 0 4px;
@@ -28,10 +28,10 @@
   flex-direction: column;
   gap: 9px;
 }
-.bc-gate li { font-size: 13.5px; color: var(--graphite); line-height: 1.55; }
+.bc-gate li { font-size: 13.5px; color: var(--slate); line-height: 1.55; }
 .bc-gate li b { color: var(--ink); }
-.bc-gate li.done { color: var(--pencil); }
-.bc-gate li.done b { color: var(--graphite); }
+.bc-gate li.done { color: var(--mist); }
+.bc-gate li.done b { color: var(--slate); }
 
 .bc-out {
   display: inline-block;
@@ -40,7 +40,7 @@
   font-size: 10.5px;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
   text-decoration: none;
   border-bottom: 1px solid currentColor;
 }
@@ -52,8 +52,8 @@
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 14px;
-  border: 1px solid var(--line);
-  background: var(--vellum-card);
+  border: 1px solid var(--hairline);
+  background: var(--paper);
   border-radius: var(--r);
   padding: 16px 18px;
 }
@@ -64,7 +64,7 @@
   font-size: 9.5px;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 .bc-row select {
   font-family: var(--sans);
@@ -72,8 +72,8 @@
   color: var(--ink);
   padding: 10px 12px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--vellum);
+  border: 1px solid var(--hairline-strong);
+  background: var(--marble);
 }
 .bc-row select:disabled { opacity: .5; }
 
@@ -89,19 +89,19 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
-.bc-send:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.bc-send:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); }
 .bc-send:disabled { opacity: .4; cursor: not-allowed; }
 
-.bc-warn { margin-top: 9px; font-size: 12px; color: var(--pencil); }
+.bc-warn { margin-top: 9px; font-size: 12px; color: var(--mist); }
 
 .bc-ok {
   margin-top: 14px;
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--blueprint);
+  color: var(--signal-text);
   border: 1px solid rgba(47, 90, 138, .35);
   background: rgba(47, 90, 138, .06);
   border-radius: var(--r-sm);
@@ -124,10 +124,10 @@
   text-transform: uppercase;
   padding: 8px 14px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
   color: var(--ink);
   cursor: pointer;
 }
-.bc-sync:hover:not(:disabled) { border-color: var(--blueprint); color: var(--blueprint); }
+.bc-sync:hover:not(:disabled) { border-color: var(--signal); color: var(--signal-text); }
 .bc-sync:disabled { opacity: .45; cursor: default; }

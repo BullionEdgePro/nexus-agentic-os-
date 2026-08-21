@@ -15,7 +15,7 @@
   line-height: 1.5;
 }
 .kn-ok {
-  color: var(--blueprint);
+  color: var(--signal-text);
   border: 1px solid rgba(47, 90, 138, .35);
   background: rgba(47, 90, 138, .06);
 }
@@ -37,24 +37,24 @@
   text-transform: uppercase;
   padding: 7px 13px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
-  color: var(--graphite);
+  color: var(--slate);
   cursor: pointer;
 }
 .kn-modes button[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
 }
 
 .kn-add form {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 18px;
 }
 
@@ -64,7 +64,7 @@
   font-size: 9.5px;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .kn-add input,
@@ -74,13 +74,13 @@
   color: var(--ink);
   padding: 11px 13px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--vellum);
+  border: 1px solid var(--hairline-strong);
+  background: var(--marble);
   resize: vertical;
 }
 .kn-add input:focus-visible,
 .kn-add textarea:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 1px;
   border-color: transparent;
 }
@@ -95,10 +95,10 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
-.kn-submit:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.kn-submit:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); }
 .kn-submit:disabled { opacity: .45; cursor: default; }
 
 .kn-count {
@@ -106,7 +106,7 @@
   font-size: 10px;
   letter-spacing: .08em;
   text-transform: none;
-  color: var(--pencil);
+  color: var(--mist);
   margin-left: 8px;
 }
 
@@ -119,10 +119,10 @@
   grid-template-columns: 1fr auto auto;
   gap: 14px;
   align-items: start;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--hairline-strong);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 14px 16px;
 }
 /* A source that failed to index is not used at all, so it reads as a
@@ -137,11 +137,11 @@
   margin-top: 3px;
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--blueprint);
+  color: var(--signal-text);
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.kn-uri.plain { color: var(--pencil); }
+.kn-uri.plain { color: var(--mist); }
 .kn-uri:hover:not(.plain) { text-decoration: underline; }
 
 .kn-error { margin-top: 6px; font-size: 12px; color: var(--crit); line-height: 1.5; }
@@ -154,7 +154,7 @@
   white-space: nowrap;
 }
 .kn-passages,
-.kn-when { font-family: var(--mono); font-size: 10px; color: var(--pencil); }
+.kn-when { font-family: var(--mono); font-size: 10px; color: var(--mist); }
 
 .kn-remove,
 .kn-cancel {
@@ -164,9 +164,9 @@
   text-transform: uppercase;
   padding: 6px 12px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
-  color: var(--graphite);
+  color: var(--slate);
   cursor: pointer;
   align-self: center;
 }
@@ -180,9 +180,9 @@
   gap: 10px;
   margin-top: 4px;
   padding-top: 12px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
   font-size: 13px;
-  color: var(--graphite);
+  color: var(--slate);
   line-height: 1.5;
 }
 
@@ -195,7 +195,7 @@
   border-radius: 100px;
   border: 1px solid var(--crit);
   background: var(--crit);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
 .kn-danger:disabled { opacity: .5; cursor: default; }

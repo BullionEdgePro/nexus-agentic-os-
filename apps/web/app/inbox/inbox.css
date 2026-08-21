@@ -17,7 +17,7 @@
 }
 
 .ibx-col {
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--hairline);
   padding: 16px 14px;
   overflow-y: auto;
   min-height: 0;
@@ -28,7 +28,7 @@
   font-size: 9.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
   margin: 0 0 12px;
 }
 
@@ -52,12 +52,12 @@
   border-radius: var(--r-sm);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--graphite);
+  color: var(--slate);
   cursor: pointer;
 }
 
-.ibx-biz-btn:hover { background: var(--vellum-card); color: var(--ink); }
-.ibx-biz-btn.on { background: var(--ink); color: var(--vellum); }
+.ibx-biz-btn:hover { background: var(--paper); color: var(--ink); }
+.ibx-biz-btn.on { background: var(--ink); color: var(--marble); }
 
 /* --- conversation list --- */
 
@@ -74,8 +74,8 @@
   gap: 3px;
 }
 
-.ibx-convo:hover { background: var(--vellum-card); }
-.ibx-convo.on { background: var(--vellum-card); border-color: var(--line-strong); }
+.ibx-convo:hover { background: var(--paper); }
+.ibx-convo.on { background: var(--paper); border-color: var(--hairline-strong); }
 
 .ibx-convo-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
@@ -103,7 +103,7 @@
 
 .ibx-preview {
   font-size: 12px;
-  color: var(--pencil);
+  color: var(--mist);
   margin: 0;
   /* One line. A preview that wraps to three turns the list into a wall and
      costs the scannability the list exists for. */
@@ -129,7 +129,7 @@
   gap: 14px;
   padding-bottom: 12px;
   margin-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .ibx-who { font-family: var(--display); font-size: 17px; font-weight: 600; color: var(--ink); margin: 0; }
@@ -137,7 +137,7 @@
 .ibx-wa {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--pencil);
+  color: var(--mist);
   margin: 2px 0 0;
   font-variant-numeric: tabular-nums;
 }
@@ -150,7 +150,7 @@
   font-size: 9.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--graphite);
+  color: var(--slate);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -177,8 +177,8 @@
 /* Inbound sits left on the card ground; ours sits right in ink. Direction is
    carried by BOTH side and colour, so it survives being read in either theme
    and by anyone who cannot separate the two tones. */
-.ibx-bubble.in { background: var(--vellum-card); border: 1px solid var(--line); color: var(--ink); }
-.ibx-bubble.out { margin-left: auto; background: var(--ink); color: var(--vellum); }
+.ibx-bubble.in { background: var(--paper); border: 1px solid var(--hairline); color: var(--ink); }
+.ibx-bubble.out { margin-left: auto; background: var(--ink); color: var(--marble); }
 
 /* --- composer --- */
 
@@ -187,7 +187,7 @@
   gap: 8px;
   padding-top: 12px;
   margin-top: 12px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
 }
 
 .ibx-input {
@@ -197,12 +197,12 @@
   font-size: 13.5px;
   padding: 10px 12px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--vellum-card);
+  border: 1px solid var(--hairline-strong);
+  background: var(--paper);
   color: var(--ink);
 }
 
-.ibx-input::placeholder { color: var(--pencil); }
+.ibx-input::placeholder { color: var(--mist); }
 
 .ibx-send {
   font-family: var(--mono);
@@ -213,7 +213,7 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
 
@@ -223,11 +223,11 @@
 .ibx-send:focus-visible,
 .ibx-convo:focus-visible,
 .ibx-biz-btn:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
 
-.ibx-empty { font-size: 13px; color: var(--pencil); margin: 0; }
+.ibx-empty { font-size: 13px; color: var(--mist); margin: 0; }
 
 /* --- narrow --- */
 
@@ -242,7 +242,7 @@
     min-height: 100dvh;
   }
 
-  .ibx-col { border-right: none; border-bottom: 1px solid var(--line); }
+  .ibx-col { border-right: none; border-bottom: 1px solid var(--hairline); }
 
   .ibx-biz { overflow-x: auto; }
   .ibx-biz .ibx-list { flex-direction: row; gap: 6px; }
@@ -259,7 +259,7 @@
  * inbox is broken, which is a different and less useful claim.
  */
 .ibx-empty.ibx-failed {
-  color: var(--warn-fg, #8a6d00);
+  color: var(--warn);
   background: var(--warn-bg, rgba(184, 134, 11, 0.08));
   border-radius: 8px;
   padding: 12px;
@@ -270,7 +270,7 @@
   margin: 0 12px 8px;
   padding: 10px 12px;
   border-radius: 8px;
-  color: var(--warn-fg, #8a6d00);
+  color: var(--warn);
   background: var(--warn-bg, rgba(184, 134, 11, 0.08));
   line-height: 1.5;
 }

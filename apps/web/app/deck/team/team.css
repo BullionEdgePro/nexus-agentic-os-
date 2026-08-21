@@ -8,26 +8,26 @@
 
 .team-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .team-head h1 { font-family: var(--display); font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.02em; line-height: 1.1; text-wrap: balance; margin-top: 6px; }
-.team-root .eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--blueprint); }
+.team-root .eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--signal-text); }
 .team-lede { margin-top: 10px; max-width: 56ch; color: var(--ink-soft); }
 
 .team-back {
   font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--ink); text-decoration: none; border: 1px solid var(--line-strong);
+  color: var(--ink); text-decoration: none; border: 1px solid var(--hairline-strong);
   border-radius: 100px; padding: 8px 16px; white-space: nowrap;
 }
-.team-back:hover { border-color: var(--blueprint); color: var(--blueprint); }
+.team-back:hover { border-color: var(--signal); color: var(--signal-text); }
 
 /* ---------- business tabs ---------- */
 
-.team-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.team-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--hairline); padding-bottom: 14px; }
 .team-tabs button {
   font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
-  padding: 7px 14px; border-radius: 100px; border: 1px solid var(--line-strong);
-  background: transparent; color: var(--graphite); cursor: pointer;
+  padding: 7px 14px; border-radius: 100px; border: 1px solid var(--hairline-strong);
+  background: transparent; color: var(--slate); cursor: pointer;
 }
 .team-tabs button:hover { color: var(--ink); border-color: var(--ink-soft); }
-.team-tabs button.on { background: var(--ink); border-color: var(--ink); color: var(--vellum); }
+.team-tabs button.on { background: var(--ink); border-color: var(--ink); color: var(--marble); }
 
 /* ---------- messages ---------- */
 
@@ -39,11 +39,11 @@
 
 .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 22px; align-items: start; }
 
-.team-panel { background: var(--vellum-card); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+.team-panel { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r); padding: 22px; display: flex; flex-direction: column; gap: 16px; }
 .team-panel h2 { font-family: var(--display); font-size: 18px; letter-spacing: -0.01em; }
-.team-panel h3 { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--pencil); }
-.team-empty { color: var(--graphite); font-size: 14px; }
-.team-note { font-size: 12.5px; color: var(--graphite); border-top: 1px dashed var(--line-strong); padding-top: 12px; }
+.team-panel h3 { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--mist); }
+.team-empty { color: var(--slate); font-size: 14px; }
+.team-note { font-size: 12.5px; color: var(--slate); border-top: 1px dashed var(--hairline-strong); padding-top: 12px; }
 
 /* ---------- roster ---------- */
 
@@ -53,78 +53,78 @@
 .team-member {
   flex: 1; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px;
   text-align: left; padding: 11px 13px; border-radius: var(--r-sm);
-  border: 1px solid var(--line); background: transparent; cursor: pointer; min-width: 0;
+  border: 1px solid var(--hairline); background: transparent; cursor: pointer; min-width: 0;
 }
-.team-member:hover { border-color: var(--line-strong); }
-.team-member.on { border-color: var(--blueprint); background: var(--blueprint-soft); }
+.team-member:hover { border-color: var(--hairline-strong); }
+.team-member.on { border-color: var(--signal); background: var(--signal-soft); }
 .team-member .who { display: flex; flex-direction: column; min-width: 0; }
 .team-member .nm { font-weight: 500; font-size: 14px; }
-.team-member .rl { font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--pencil); }
-.team-member .wa { font-family: var(--mono); font-size: 10.5px; color: var(--graphite); white-space: nowrap; }
+.team-member .rl { font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--mist); }
+.team-member .wa { font-family: var(--mono); font-size: 10.5px; color: var(--slate); white-space: nowrap; }
 /* A filled node means the person is on and answering; hollow means their AI
    twin is covering. One filled state only, so the roster is scannable. */
-.team-member .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px var(--pencil); }
-.team-member .dot.live { background: var(--blueprint); box-shadow: none; }
+.team-member .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px var(--mist); }
+.team-member .dot.live { background: var(--signal); box-shadow: none; }
 
 .team-remove {
   font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
-  padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line);
-  background: transparent; color: var(--pencil); cursor: pointer;
+  padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--hairline);
+  background: transparent; color: var(--mist); cursor: pointer;
 }
 .team-remove:hover:not(:disabled) { color: var(--crit); border-color: rgba(162, 59, 46, .45); }
 .team-remove:disabled { opacity: .45; cursor: default; }
 /* Issuing a sign-in is a constructive action, so it must not borrow the
    destructive hover the Remove button uses. */
-.team-remove.alt:hover:not(:disabled) { color: var(--blueprint); border-color: var(--blueprint); }
+.team-remove.alt:hover:not(:disabled) { color: var(--signal-text); border-color: var(--signal); }
 
 /* ---------- issued credential ---------- */
 
 .cred {
-  border: 1px solid var(--blueprint); background: var(--blueprint-soft);
+  border: 1px solid var(--signal); background: var(--signal-soft);
   border-radius: var(--r-sm); padding: 16px; display: flex; flex-direction: column; gap: 12px;
 }
 .cred h3 { color: var(--ink); letter-spacing: .1em; }
 .cred dl { display: flex; flex-wrap: wrap; gap: 10px 28px; }
 .cred dl div { display: flex; flex-direction: column; gap: 3px; }
-.cred dt { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--graphite); }
+.cred dt { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--slate); }
 .cred dd { font-family: var(--mono); font-size: 14px; color: var(--ink); }
 /* The code is read aloud and typed by hand — give it room and let it be selected. */
 .cred dd.code { font-size: 19px; letter-spacing: .12em; font-weight: 600; user-select: all; }
-.cred p { font-size: 12.5px; color: var(--graphite); max-width: 46ch; }
+.cred p { font-size: 12.5px; color: var(--slate); max-width: 46ch; }
 
 /* ---------- add form ---------- */
 
-.team-form { display: flex; flex-direction: column; gap: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
-.team-form label { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--pencil); }
+.team-form { display: flex; flex-direction: column; gap: 13px; border-top: 1px solid var(--hairline); padding-top: 18px; }
+.team-form label { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--mist); }
 .team-form input {
   font-family: var(--sans); font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--ink);
-  padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--vellum);
+  padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--hairline-strong); background: var(--marble);
 }
-.team-form input:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 1px; border-color: transparent; }
-.team-form small { font-family: var(--sans); font-size: 11.5px; letter-spacing: 0; text-transform: none; color: var(--graphite); }
+.team-form input:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; border-color: transparent; }
+.team-form small { font-family: var(--sans); font-size: 11.5px; letter-spacing: 0; text-transform: none; color: var(--slate); }
 
 .team-root .btn {
   font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
   padding: 12px 18px; border-radius: 100px; border: 1px solid var(--ink);
-  background: var(--ink); color: var(--vellum); cursor: pointer; align-self: flex-start;
+  background: var(--ink); color: var(--marble); cursor: pointer; align-self: flex-start;
 }
-.team-root .btn:hover:not(:disabled) { background: var(--blueprint); border-color: var(--blueprint); }
+.team-root .btn:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); }
 .team-root .btn:disabled { opacity: .45; cursor: default; }
 .team-root .btn.small { padding: 9px 14px; font-size: 10.5px; }
 
 /* ---------- assigned customers ---------- */
 
 .cust-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.cust-list li { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.cust-list li { border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 14px; display: flex; flex-direction: column; gap: 9px; }
 .cust-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .cust-head .nm { font-weight: 500; }
-.cust-head .biz { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--pencil); white-space: nowrap; }
-.cust-last { font-size: 13px; color: var(--graphite); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cust-head .biz { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--mist); white-space: nowrap; }
+.cust-last { font-size: 13px; color: var(--slate); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cust-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .tag {
   font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
-  padding: 4px 9px; border-radius: 100px; border: 1px solid var(--line-strong); color: var(--graphite);
+  padding: 4px 9px; border-radius: 100px; border: 1px solid var(--hairline-strong); color: var(--slate);
 }
 .tag.bad { color: var(--crit); border-color: rgba(162, 59, 46, .45); }
 
@@ -132,33 +132,33 @@
    "needs attention" is legible without reading the number. */
 .tag.pri-urgent { color: var(--crit); border-color: rgba(162, 59, 46, .5); background: rgba(162, 59, 46, .07); }
 .tag.pri-high   { color: var(--warn); border-color: rgba(169, 118, 47, .5); }
-.tag.pri-normal { color: var(--graphite); }
-.tag.pri-low    { color: var(--pencil); }
+.tag.pri-normal { color: var(--slate); }
+.tag.pri-low    { color: var(--mist); }
 
 /* ---------- capturing a lead from a personal phone ---------- */
 
 .lead-form {
   display: flex; flex-direction: column; gap: 13px;
-  border-top: 1px solid var(--line); padding-top: 18px;
+  border-top: 1px solid var(--hairline); padding-top: 18px;
 }
-.lead-form label { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--pencil); }
+.lead-form label { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--mist); }
 .lead-form input,
 .lead-form textarea {
   font-family: var(--sans); font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--ink);
-  padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--vellum);
+  padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--hairline-strong); background: var(--marble);
   resize: vertical;
 }
 .lead-form input:focus-visible,
-.lead-form textarea:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 1px; border-color: transparent; }
-.lead-form small { font-family: var(--sans); font-size: 11.5px; letter-spacing: 0; text-transform: none; color: var(--graphite); }
-.lead-why { font-size: 12.5px; color: var(--graphite); max-width: 48ch; }
+.lead-form textarea:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; border-color: transparent; }
+.lead-form small { font-family: var(--sans); font-size: 11.5px; letter-spacing: 0; text-transform: none; color: var(--slate); }
+.lead-why { font-size: 12.5px; color: var(--slate); max-width: 48ch; }
 
-.lead-list { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+.lead-list { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--hairline); padding-top: 16px; }
 .lead-list ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.lead-list li { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px 13px; display: flex; flex-direction: column; gap: 5px; }
+.lead-list li { border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 11px 13px; display: flex; flex-direction: column; gap: 5px; }
 .lead-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .lead-head .nm { font-weight: 500; font-size: 14px; }
-.lead-note { font-size: 12.5px; color: var(--graphite); }
+.lead-note { font-size: 12.5px; color: var(--slate); }
 
 /* ============================================================
    Handover brief — what the agent already told this customer.
@@ -169,10 +169,10 @@
 
 .handover {
   margin: 14px 0 4px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--blueprint);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--signal);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 14px 16px;
 }
 
@@ -183,13 +183,13 @@
   font-size: 9.5px;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
 }
 
 .handover-close {
   border: 0;
   background: transparent;
-  color: var(--pencil);
+  color: var(--mist);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -240,14 +240,14 @@
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .handover-body { margin-top: 8px; font-size: 14.5px; line-height: 1.6; color: var(--ink); }
 
 /* The caveat is not decoration: the brief is generated, and an employee is
    about to act on it in front of a customer. */
-.handover-foot { margin-top: 9px; font-size: 12px; color: var(--pencil); line-height: 1.5; }
+.handover-foot { margin-top: 9px; font-size: 12px; color: var(--mist); line-height: 1.5; }
 
 /* ============================================================
    Rota editor
@@ -271,9 +271,9 @@
 }
 
 .rota {
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 14px 16px 16px;
   margin: 8px 0 4px;
 }
@@ -316,14 +316,14 @@
   font-size: 9px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .rota-tz input {
   font-family: var(--mono);
   font-size: 11px;
   padding: 5px 9px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   border-radius: 6px;
   background: transparent;
   color: var(--ink);
@@ -337,7 +337,7 @@
   align-items: center;
   gap: 12px;
   padding: 5px 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
 }
 
 .rota-dayname { flex: 0 0 34px; }
@@ -349,7 +349,7 @@
   font-family: var(--mono);
   font-size: 9.5px;
   letter-spacing: 0.07em;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .rota-window { display: inline-flex; align-items: center; gap: 5px; }
@@ -360,7 +360,7 @@
   width: 58px;
   text-align: center;
   padding: 4px 5px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   border-radius: 6px;
   background: transparent;
   color: var(--ink);
@@ -372,16 +372,16 @@
   font-family: var(--mono);
   font-size: 9px;
   font-style: normal;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .rota-x,
 .rota-add {
   font-family: var(--mono);
   font-size: 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
-  color: var(--pencil);
+  color: var(--mist);
   border-radius: 100px;
   cursor: pointer;
   padding: 3px 8px;
@@ -409,14 +409,14 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
 
 .rota-actions button.quiet {
   background: transparent;
-  color: var(--pencil);
-  border-color: var(--line-strong);
+  color: var(--mist);
+  border-color: var(--hairline-strong);
 }
 
 .rota-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -434,6 +434,6 @@
 .rota-actions button:focus-visible,
 .rota-add:focus-visible,
 .rota-x:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }

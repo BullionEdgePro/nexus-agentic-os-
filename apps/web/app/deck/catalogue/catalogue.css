@@ -15,10 +15,10 @@
 .mk-policy {
   margin: 16px 0 0;
   padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--blueprint);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--signal);
   border-radius: var(--r-sm);
-  background: var(--blueprint-soft);
+  background: var(--signal-soft);
   font-size: 13px;
   line-height: 1.6;
   color: var(--ink-soft);
@@ -35,9 +35,9 @@
 
 .mk-count {
   flex: 1 1 150px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 12px 14px;
 }
 .mk-count strong {
@@ -52,7 +52,7 @@
   display: block;
   margin-top: 3px;
   font-size: 11.5px;
-  color: var(--graphite);
+  color: var(--slate);
   line-height: 1.35;
 }
 .mk-count.live strong { color: var(--good); }
@@ -81,7 +81,7 @@
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: .04em;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .mk-group { margin-top: 8px; }
@@ -94,7 +94,7 @@
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
-  color: var(--graphite);
+  color: var(--slate);
 }
 
 .mk-list {
@@ -107,15 +107,15 @@
 .mk-item {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--hairline-strong);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 15px 17px;
 }
 /* Installed reads as taken, not as running — the border is ink, not the
    green this file refuses to use. */
-.mk-item.on { border-left-color: var(--blueprint); }
+.mk-item.on { border-left-color: var(--signal); }
 
 .mk-head {
   display: flex;
@@ -133,7 +133,7 @@
   flex: 0 0 auto;
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--pencil);
+  color: var(--mist);
   font-variant-numeric: tabular-nums;
 }
 
@@ -141,7 +141,7 @@
   margin: 7px 0 0;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--graphite);
+  color: var(--slate);
 }
 
 /* The contents, always visible. Not behind a disclosure: a person
@@ -150,9 +150,9 @@
 .mk-contents {
   margin-top: 11px;
   padding: 11px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-sm);
-  background: var(--vellum);
+  background: var(--marble);
 }
 
 .mk-body {
@@ -186,15 +186,15 @@
 }
 .mk-docs li { font-size: 12px; line-height: 1.45; }
 .mk-docs strong { display: block; color: var(--ink); }
-.mk-docs span { color: var(--graphite); }
+.mk-docs span { color: var(--slate); }
 
 .mk-note {
   margin: 9px 0 0;
   padding-top: 8px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
   font-size: 11.5px;
   line-height: 1.55;
-  color: var(--graphite);
+  color: var(--slate);
 }
 
 .mk-actions {
@@ -214,24 +214,24 @@
   letter-spacing: .09em;
   text-transform: uppercase;
   padding: 9px 13px;
-  border: 1px solid var(--blueprint);
+  border: 1px solid var(--signal);
   border-radius: var(--r-sm);
-  background: var(--blueprint);
-  color: var(--vellum);
+  background: var(--signal);
+  color: var(--marble);
   cursor: pointer;
 }
 .mk-actions button:disabled { opacity: .55; cursor: default; }
 
 .mk-actions .mk-remove {
-  border-color: var(--line-strong);
+  border-color: var(--hairline-strong);
   background: transparent;
-  color: var(--graphite);
+  color: var(--slate);
 }
 
 .mk-state {
   font-size: 11.5px;
   line-height: 1.4;
-  color: var(--graphite);
+  color: var(--slate);
 }
 
 .mk-buttons { display: flex; gap: 7px; flex: 0 0 auto; }
@@ -242,20 +242,20 @@
 .mk-said {
   margin: 10px 0 0;
   padding: 9px 11px;
-  border-left: 2px solid var(--blueprint);
-  background: var(--blueprint-soft);
+  border-left: 2px solid var(--signal);
+  background: var(--signal-soft);
   border-radius: var(--r-sm);
   font-size: 11.5px;
   line-height: 1.55;
   color: var(--ink-soft);
 }
 
-.mk-note a, .mk-banner a { color: var(--blueprint); }
+.mk-note a, .mk-banner a { color: var(--signal-text); }
 
 .mk-behind {
   margin: 10px 0 0;
   padding-top: 9px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
   font-size: 11.5px;
   line-height: 1.55;
   color: var(--warn);
@@ -273,14 +273,14 @@
   font-size: 10px;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
   font-weight: 400;
   padding: 0 10px 7px 0;
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--hairline-strong);
 }
 .mk-table td {
   padding: 9px 10px 9px 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
   color: var(--ink-soft);
   vertical-align: top;
 }

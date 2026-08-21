@@ -16,10 +16,10 @@
   font-size: 10.5px;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--graphite);
+  color: var(--slate);
   text-decoration: none;
 }
-.act-back:hover { color: var(--blueprint); }
+.act-back:hover { color: var(--signal-text); }
 
 .act-head { margin: 18px 0 6px; }
 .act-head h1 {
@@ -27,7 +27,7 @@
   font-size: clamp(26px, 4vw, 34px);
   letter-spacing: -0.02em;
 }
-.act-lede { font-size: 14px; color: var(--graphite); max-width: 62ch; line-height: 1.55; }
+.act-lede { font-size: 14px; color: var(--slate); max-width: 62ch; line-height: 1.55; }
 
 .act-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0 16px; }
 .act-tabs button {
@@ -37,23 +37,23 @@
   text-transform: uppercase;
   padding: 7px 12px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
-  color: var(--graphite);
+  color: var(--slate);
   cursor: pointer;
 }
 .act-tabs button[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
 }
 
 /* --- the roll of people --- */
 
 .act-table {
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   overflow-x: auto;
 }
 .act-table table { width: 100%; border-collapse: collapse; min-width: 700px; }
@@ -63,10 +63,10 @@
   font-size: 9.5px;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
   text-align: right;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
   white-space: nowrap;
 }
 .act-table th:first-child, .act-table td:first-child { text-align: left; }
@@ -75,7 +75,7 @@
   padding: 13px 14px;
   font-size: 13.5px;
   text-align: right;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -84,10 +84,10 @@
 
 .act-who { display: flex; flex-direction: column; gap: 2px; }
 .act-name { font-weight: 600; }
-.act-sub { font-family: var(--mono); font-size: 10px; color: var(--pencil); letter-spacing: .04em; }
+.act-sub { font-family: var(--mono); font-size: 10px; color: var(--mist); letter-spacing: .04em; }
 
 /* Zero is not the same as a number, and should not read like one. */
-.act-zero { color: var(--pencil); }
+.act-zero { color: var(--mist); }
 
 .act-flag {
   font-family: var(--mono);
@@ -96,8 +96,8 @@
   text-transform: uppercase;
   padding: 3px 7px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
-  color: var(--graphite);
+  border: 1px solid var(--hairline-strong);
+  color: var(--slate);
 }
 .act-flag.warn { border-color: rgba(162, 59, 46, .4); color: var(--crit); background: rgba(162, 59, 46, .06); }
 
@@ -108,7 +108,7 @@
   font-size: 10px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
   margin: 34px 0 12px;
 }
 
@@ -119,23 +119,23 @@
   gap: 14px;
   align-items: baseline;
   padding: 11px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-sm);
-  background: var(--vellum-card);
+  background: var(--paper);
   font-size: 13px;
 }
-.act-when { font-family: var(--mono); font-size: 10.5px; color: var(--pencil); font-variant-numeric: tabular-nums; }
-.act-detail { color: var(--graphite); }
+.act-when { font-family: var(--mono); font-size: 10.5px; color: var(--mist); font-variant-numeric: tabular-nums; }
+.act-detail { color: var(--slate); }
 .act-detail b { color: var(--ink); font-weight: 600; }
 .act-score { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 .act-empty {
-  border: 1px dashed var(--line-strong);
+  border: 1px dashed var(--hairline-strong);
   border-radius: var(--r);
   padding: 26px;
   text-align: center;
   font-size: 13.5px;
-  color: var(--graphite);
+  color: var(--slate);
 }
 
 .act-msg {
@@ -151,10 +151,10 @@
 
 .act-caveat {
   margin-top: 30px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
   padding-top: 14px;
   font-size: 12.5px;
-  color: var(--pencil);
+  color: var(--mist);
   line-height: 1.6;
   max-width: 70ch;
 }

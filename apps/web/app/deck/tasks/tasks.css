@@ -19,9 +19,9 @@
 
 .tk-count {
   flex: 1 1 130px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -44,7 +44,7 @@
   font-size: 9.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 /* The two states worth noticing, and only when they are non-zero — a permanent
@@ -58,9 +58,9 @@
 /* --- the form --- */
 
 .tk-new {
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 16px 18px 18px;
   margin: 22px 0 6px;
 }
@@ -90,7 +90,7 @@
   font-size: 9.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 .tk-row input,
@@ -99,8 +99,8 @@
   font-size: 13.5px;
   padding: 9px 11px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--vellum);
+  border: 1px solid var(--hairline-strong);
+  background: var(--marble);
   color: var(--ink);
   /* Without this a long placeholder forces the flex item wider than its basis
      and pushes the row off the page. */
@@ -112,7 +112,7 @@
 .tk-row select:focus-visible,
 .tk-new button:focus-visible,
 .tk-actions button:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
 
@@ -125,7 +125,7 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
 
@@ -145,17 +145,17 @@
   align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--hairline-strong);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 13px 15px;
 }
 
 /* State is carried by the left rule as well as by the words, so the shape of
    the list reads before any of it is actually read. */
 .tk-item.overdue { border-left-color: var(--crit); }
-.tk-item.closed { border-left-color: var(--line); opacity: 0.62; }
+.tk-item.closed { border-left-color: var(--hairline); opacity: 0.62; }
 .tk-item.closed .tk-title { text-decoration: line-through; text-decoration-thickness: 1px; }
 
 .tk-main { flex: 1 1 320px; min-width: 0; }
@@ -173,7 +173,7 @@
   font-family: var(--sans);
   font-size: 12.5px;
   line-height: 1.45;
-  color: var(--graphite);
+  color: var(--slate);
   margin: 5px 0 0;
   overflow-wrap: anywhere;
 }
@@ -188,13 +188,13 @@
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
-.tk-biz { color: var(--blueprint); }
-.tk-due { color: var(--graphite); }
+.tk-biz { color: var(--signal-text); }
+.tk-due { color: var(--slate); }
 .tk-due.late { color: var(--crit); }
-.tk-due.none { color: var(--pencil); }
+.tk-due.none { color: var(--mist); }
 .tk-done-by { color: var(--good); }
 
 .tk-actions { display: flex; gap: 7px; flex: 0 0 auto; }
@@ -206,11 +206,11 @@
   text-transform: uppercase;
   padding: 7px 13px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
   color: var(--ink);
   cursor: pointer;
   white-space: nowrap;
 }
 
-.tk-actions button.quiet { color: var(--pencil); }
+.tk-actions button.quiet { color: var(--mist); }

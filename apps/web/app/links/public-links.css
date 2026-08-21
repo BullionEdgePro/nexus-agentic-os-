@@ -9,7 +9,7 @@
  * windows, and the print rules at the foot are what make that work. */
 
 .pl-root {
-  background: var(--vellum);
+  background: var(--marble);
   color: var(--ink);
   min-height: 100vh;
   min-height: 100dvh;
@@ -31,7 +31,7 @@
   flex-direction: column;
   gap: 9px;
   padding-bottom: 22px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .pl-brand {
@@ -39,7 +39,7 @@
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
 }
 
 .pl-mast h1 {
@@ -50,7 +50,7 @@
   text-wrap: balance;
 }
 
-.pl-sub { color: var(--graphite); font-size: 15px; max-width: 60ch; line-height: 1.55; }
+.pl-sub { color: var(--slate); font-size: 15px; max-width: 60ch; line-height: 1.55; }
 
 .pl-error,
 .pl-missing {
@@ -63,15 +63,15 @@
   padding: 12px 15px;
 }
 
-.pl-missing { color: var(--graphite); border-color: var(--line); background: var(--vellum-card); }
+.pl-missing { color: var(--slate); border-color: var(--hairline); background: var(--paper); }
 .pl-missing strong { color: var(--ink); }
 
 .pl-list { display: flex; flex-direction: column; gap: 14px; margin-top: 26px; }
 
 .pl-card {
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   overflow: hidden;
 }
 
@@ -82,7 +82,7 @@
   gap: 14px;
   flex-wrap: wrap;
   padding: 15px 18px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .pl-card-head h2 { font-family: var(--display); font-size: 19px; font-weight: 600; }
@@ -90,7 +90,7 @@
 .pl-num {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--graphite);
+  color: var(--slate);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
@@ -102,8 +102,13 @@
 .pl-qr {
   flex: 0 0 170px;
   width: 170px;
+  /* Literal, and it must stay literal. This is the printable customer-facing
+     sheet and its codes get taped to windows: a QR must be black on white
+     whatever the interface is doing, because inverted, scanners refuse it and
+     it prints as a solid black square. A physical requirement, not a surface
+     colour, so it takes no token. */
   background: #ffffff;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
   padding: 6px;
   line-height: 0;
@@ -113,14 +118,14 @@
 
 .pl-detail { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 
-.pl-lede { font-size: 14px; color: var(--graphite); line-height: 1.5; max-width: 52ch; }
+.pl-lede { font-size: 14px; color: var(--slate); line-height: 1.5; max-width: 52ch; }
 
 .pl-url {
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink);
-  background: var(--vellum);
-  border: 1px solid var(--line-strong);
+  background: var(--marble);
+  border: 1px solid var(--hairline-strong);
   border-radius: 6px;
   padding: 9px 11px;
   display: block;
@@ -139,18 +144,18 @@
   border-radius: 100px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
 
 .pl-copy.done { background: var(--good); border-color: var(--good); color: #fff; }
-.pl-copy:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 2px; }
+.pl-copy:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 
 .pl-where {
   margin-top: 30px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hairline);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 22px 24px;
 }
 
@@ -159,15 +164,15 @@
   font-size: 10.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--blueprint);
+  color: var(--signal-text);
   margin-bottom: 14px;
 }
 
 .pl-where ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px; }
-.pl-where li { font-size: 14.5px; color: var(--graphite); line-height: 1.5; }
+.pl-where li { font-size: 14.5px; color: var(--slate); line-height: 1.5; }
 .pl-where li strong { color: var(--ink); font-weight: 600; }
 
-.pl-print { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); font-size: 13px; color: var(--pencil); }
+.pl-print { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--hairline); font-size: 13px; color: var(--mist); }
 
 /* --- print ---
    These codes get taped to windows. Each business on its own page, at a size a

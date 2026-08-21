@@ -23,7 +23,7 @@
   flex-direction: column;
   gap: 3px;
   padding-right: 14px;
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--hairline);
 }
 
 .bk-when strong {
@@ -31,7 +31,7 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--pencil);
+  color: var(--mist);
   font-weight: 400;
 }
 
@@ -54,7 +54,7 @@
   font-size: 9px;
   letter-spacing: 0.09em;
   font-style: normal;
-  color: var(--pencil);
+  color: var(--mist);
 }
 
 /* --- past appointments --- */
@@ -63,7 +63,7 @@
    actually happened has to have somewhere to look, and the answer is the point
    of the Attended / No show buttons on these rows. */
 .bk-item.bk-past { opacity: 0.7; }
-.bk-item.bk-past .bk-when span { color: var(--graphite); }
+.bk-item.bk-past .bk-when span { color: var(--slate); }
 
 /* --- assignment --- */
 
@@ -75,7 +75,7 @@
   letter-spacing: 0.06em;
   padding: 6px 9px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
   color: var(--ink);
   cursor: pointer;
@@ -83,7 +83,7 @@
 }
 
 .bk-actions select:focus-visible {
-  outline: 2px solid var(--blueprint);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
 
@@ -99,7 +99,7 @@
     gap: 8px;
     padding: 0 0 8px;
     border-right: none;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--hairline);
   }
   .bk-when span { font-size: 16px; }
   .bk-actions { justify-content: flex-start; }

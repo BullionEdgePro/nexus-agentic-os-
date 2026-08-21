@@ -14,7 +14,7 @@
   grid-template-columns: 212px minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--vellum);
+  background: var(--marble);
   color: var(--ink);
 }
 
@@ -71,7 +71,7 @@
     overflow-x: auto;
     overscroll-behavior-x: contain;
     border-right: none;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--hairline);
     padding: 8px 10px;
     /* Clears the home indicator on iOS, where a bottom bar otherwise sits
        underneath it and the last icon cannot be tapped. */
@@ -122,7 +122,7 @@
   width: auto;
   padding: 6px 8px 14px;
   margin-bottom: 6px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
   border-radius: 0;
   color: var(--ink);
 }

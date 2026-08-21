@@ -9,15 +9,15 @@
 .lk-list { display: flex; flex-direction: column; gap: 12px; margin-top: 22px; }
 
 .lk-item {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--blueprint);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--signal);
   border-radius: var(--r);
-  background: var(--vellum-card);
+  background: var(--paper);
   padding: 16px 18px;
 }
 /* A business with no number cannot be linked to; it reads as inactive rather
    than as an equal option. */
-.lk-item.off { border-left-color: var(--line-strong); opacity: .75; }
+.lk-item.off { border-left-color: var(--hairline-strong); opacity: .75; }
 
 .lk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .lk-head h2 { font-family: var(--display); font-size: 18px; letter-spacing: -0.01em; }
@@ -25,7 +25,7 @@
 .lk-number {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--pencil);
+  color: var(--mist);
   font-variant-numeric: tabular-nums;
 }
 
@@ -43,8 +43,8 @@
   font-size: 11px;
   line-height: 1.5;
   color: var(--ink);
-  background: var(--vellum);
-  border: 1px solid var(--line-strong);
+  background: var(--marble);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--r-sm);
   padding: 9px 11px;
   /* The URL is long and must not push the page sideways. */
@@ -62,12 +62,12 @@
   border-radius: var(--r-sm);
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: var(--vellum);
+  color: var(--marble);
   cursor: pointer;
 }
-.lk-url button:hover { background: var(--blueprint); border-color: var(--blueprint); }
+.lk-url button:hover { background: var(--signal); border-color: var(--signal); }
 
-.lk-note { margin-top: 9px; font-size: 12.5px; color: var(--graphite); line-height: 1.55; }
+.lk-note { margin-top: 9px; font-size: 12.5px; color: var(--slate); line-height: 1.55; }
 
 .lk-where { margin-top: 34px; }
 .lk-where ul {
@@ -76,15 +76,15 @@
   gap: 9px;
   padding-left: 20px;
 }
-.lk-where li { font-size: 13.5px; color: var(--graphite); line-height: 1.55; }
+.lk-where li { font-size: 13.5px; color: var(--slate); line-height: 1.55; }
 .lk-where li strong { color: var(--ink); }
 
 .lk-why {
   margin-top: 16px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
   padding-top: 14px;
   font-size: 12.5px;
-  color: var(--pencil);
+  color: var(--mist);
   line-height: 1.6;
   max-width: 72ch;
 }
@@ -102,7 +102,7 @@
   gap: 16px;
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hairline);
   flex-wrap: wrap;
 }
 
@@ -113,15 +113,22 @@
   flex: 0 0 auto;
   width: 132px;
   height: 132px;
+  /* Literal, and it must stay literal. A QR must be black on white whatever
+     the interface is doing: inverted, scanners refuse it and it prints as a
+     solid black square. That is a physical requirement, not a surface colour,
+     so it does not take a token -- var(--paper) resolves to #ffffff today,
+     which is exactly why tokenising it looked harmless and would have broken
+     every printed code the first time anyone added a dark theme.
+     Guarded by "the QR does not follow the theme". */
   background: #ffffff;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--r-sm);
   padding: 6px;
 }
 .lk-qr-img svg { width: 100%; height: 100%; display: block; }
 
 .lk-qr-side { flex: 1 1 220px; display: flex; flex-direction: column; gap: 10px; }
-.lk-qr-side p { font-size: 12.5px; color: var(--graphite); line-height: 1.55; }
+.lk-qr-side p { font-size: 12.5px; color: var(--slate); line-height: 1.55; }
 
 .lk-qr-side button {
   align-self: flex-start;
@@ -131,12 +138,12 @@
   text-transform: uppercase;
   padding: 8px 14px;
   border-radius: 100px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--hairline-strong);
   background: transparent;
   color: var(--ink);
   cursor: pointer;
 }
-.lk-qr-side button:hover { border-color: var(--blueprint); color: var(--blueprint); }
+.lk-qr-side button:hover { border-color: var(--signal); color: var(--signal-text); }
 
 /* Pointer to the shareable public version. Sits above "where to put it"
    because the first question an operator has is "how do I give this to the
@@ -144,9 +151,9 @@
 .lk-share {
   font-size: 13.5px;
   line-height: 1.55;
-  color: var(--graphite);
-  border-left: 3px solid var(--blueprint);
+  color: var(--slate);
+  border-left: 3px solid var(--signal);
   padding: 2px 0 2px 12px;
   margin-bottom: 20px;
 }
-.lk-share a { color: var(--blueprint); text-decoration: underline; text-underline-offset: 2px; }
+.lk-share a { color: var(--signal-text); text-decoration: underline; text-underline-offset: 2px; }
