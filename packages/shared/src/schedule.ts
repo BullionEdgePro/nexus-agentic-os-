@@ -54,6 +54,41 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
  * yet, and reporting that as a fault on every deploy would make the whole
  * signal worthless.
  */
+/**
+ * Whether this job has thrown RECENTLY, whatever it did afterwards.
+ *
+ * `isJobStalled` asks whether a job has stopped completing, and that catches a
+ * job which fails EVERY time -- its last_finished_at freezes and the window
+ * runs out. It cannot catch a job that fails INTERMITTENTLY: every success
+ * moves last_finished_at forward again, so the window never runs out and the
+ * failures are invisible.
+ *
+ * knowledge-reindex is exactly that shape. Measured on 2026-08-21: sixteen
+ * runs, TWO failures, and nothing on the platform ever said a word about
+ * either. Both were the tenant-scope assert firing inside the ingest path, and
+ * they were found by a person reading job_heartbeats by hand three days later.
+ *
+ * TWO WINDOWS, NOT ONE. A single window would retract the finding the moment
+ * the next run succeeded, which for an intermittent fault is precisely when it
+ * is still true -- the whole point is that it succeeds in between. Two gives a
+ * failure long enough on screen to be read, and lets a genuinely fixed job
+ * clear itself without anybody touching a row.
+ *
+ * `last_error` is deliberately sticky in the heartbeat -- it survives later
+ * successes so a job failing every other run cannot look green half the time --
+ * so the presence of an error says nothing about WHEN. This compares the
+ * timestamp instead, which is the only part that carries recency.
+ */
+export function hasJobFailedRecently(
+  job: ScheduledJob,
+  lastErrorAt: Date | null,
+  now: Date
+): boolean {
+  if (!lastErrorAt) return false;
+  const window = JOB_STALE_AFTER_SECONDS[job] * 1000 * 2;
+  return now.getTime() - lastErrorAt.getTime() <= window;
+}
+
 export function isJobStalled(
   job: ScheduledJob,
   lastFinishedAt: Date | null,

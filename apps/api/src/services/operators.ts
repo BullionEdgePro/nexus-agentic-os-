@@ -11,7 +11,7 @@ import {
 // the property that makes them cheap enough to run every ten minutes.
 import { scoreLead } from "@nexus/leads";
 import { JUDGE_UNAVAILABLE } from "@nexus/governance";
-import { isJobStalled, JOB_STALE_AFTER_SECONDS, type ScheduledJob } from "@nexus/shared";
+import { isJobStalled, hasJobFailedRecently, JOB_STALE_AFTER_SECONDS, type ScheduledJob } from "@nexus/shared";
 import { logger } from "../lib/logger.js";
 import { dispatchRaisedFindings } from "./alert-dispatch.js";
 
@@ -1595,6 +1595,95 @@ const agentUnavailable: Operator = {
  * Five of six is the honest coverage, and the sixth is named in the detail text
  * so whoever reads a finding also learns what this cannot tell them.
  */
+/**
+ * A job that runs and throws, which is not the same as a job that has stopped.
+ *
+ * ============================================================
+ * WHAT schedule-stalled CANNOT SEE
+ * ============================================================
+ *
+ * schedule-stalled judges last_finished_at, and last_finished_at only advances
+ * on success. That catches a job failing EVERY time: its finish freezes, the
+ * window runs out, the finding fires. It cannot catch a job failing
+ * INTERMITTENTLY, because every success moves the finish forward again and the
+ * window never runs out.
+ *
+ * knowledge-reindex is exactly that shape. Measured on 2026-08-21: sixteen
+ * runs, TWO failures, and nothing on this platform ever said a word about
+ * either. Both were the tenant-scope assert firing inside the ingest path, and
+ * both were found by somebody reading job_heartbeats by hand, three days after
+ * the fact. The consequence in between was silent: the knowledge base is
+ * refreshed from whatever survived, and a page that changed is answered from
+ * the old copy with a citation attached.
+ *
+ * ============================================================
+ * WHY THIS READS A TIMESTAMP AND NOT `last_error`
+ * ============================================================
+ *
+ * `last_error` is deliberately sticky -- the heartbeat keeps it through later
+ * successes so that a job failing every other run cannot look green half the
+ * time. That makes its PRESENCE useless as a signal of current health: it stays
+ * true forever after one historical failure, and reading it as "this job is
+ * broken" is a false alarm that can never be cleared.
+ *
+ * I made exactly that mistake before writing this. knowledge-reindex carried an
+ * error and read as broken; it had failed on the 18th, been fixed, and
+ * succeeded on every run since. What settled it was comparing last_error_at
+ * against last_finished_at, which is the only pair that carries recency.
+ */
+const jobFailing: Operator = {
+  slug: "job-failing",
+  title: "Scheduled work is throwing",
+  description:
+    "A background job is still running to schedule but has thrown recently. Nothing else reports this: the stalled check watches for work that stops, and a job that fails and then succeeds never stops — it just quietly does less than it should, and the platform keeps looking healthy.",
+  run: async (organizationId) => {
+    // Same shape as schedule-stalled, and for the same reason: these rows
+    // belong to no tenant, but the CONSEQUENCE is per tenant -- each business's
+    // knowledge stops being refreshed, each business's rollups drift.
+    const heartbeats = await listJobHeartbeats();
+    const now = new Date();
+
+    const failing = heartbeats.filter((beat) => {
+      if (beat.job === "operators") return false;
+      if (!hasJobFailedRecently(beat.job as ScheduledJob, beat.lastErrorAt ? new Date(beat.lastErrorAt) : null, now)) {
+        return false;
+      }
+      // A job that is failing OUTRIGHT is schedule-stalled's finding, not this
+      // one. Reporting both would put two rows on the deck for one fault and
+      // make fixing it retract only half of them.
+      return !isJobStalled(
+        beat.job as ScheduledJob,
+        beat.lastFinishedAt ? new Date(beat.lastFinishedAt) : null,
+        now,
+        new Date(Date.now() - process.uptime() * 1000)
+      );
+    });
+
+    return failing.map((beat) => {
+      const runs = Number(beat.runs ?? 0);
+      const failures = Number(beat.failures ?? 0);
+      const hours = beat.lastErrorAt
+        ? Math.round((now.getTime() - new Date(beat.lastErrorAt).getTime()) / 3_600_000)
+        : null;
+      return {
+        fingerprint: `job-failing:${beat.job}`,
+        severity: "warn" as const,
+        title: `${beat.job} is completing, but it threw ${hours === null ? "recently" : `${hours}h ago`}`,
+        detail:
+          `${failures} of ${runs} runs have failed. It is still finishing, so nothing else reports it — ` +
+          `the stalled check only watches for work that stops entirely, and a job that fails and then ` +
+          `succeeds never stops. It just does less than it should each time it throws.` +
+          (beat.lastError ? ` Last error: "${beat.lastError}".` : "") +
+          ` This clears itself once two of this job's intervals pass without another failure.`,
+        subjectKind: "job",
+        // No subjectId: a job is not a row. Keeping it null stops the deck
+        // building a link to a record that does not exist.
+        subjectId: null,
+      } satisfies FindingInput;
+    });
+  },
+};
+
 const scheduleStalled: Operator = {
   slug: "schedule-stalled",
   title: "Scheduled work has stopped running",
@@ -1662,6 +1751,10 @@ export const OPERATORS: Operator[] = [
   customerWaiting,
   agentUnavailable,
   scheduleStalled,
+  // Sits beside scheduleStalled because they split one question between them:
+  // that one watches for work that stops, this one for work that throws and
+  // carries on. Neither sees the other's case.
+  jobFailing,
   handoverAbandoned,
   deliveryFailing,
   retrievalUnavailable,

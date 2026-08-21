@@ -73,6 +73,10 @@ const WHERE: Record<string, Destination> = {
   // about the thing producing the findings, and the page it would link to is
   // the one already being read.
   "schedule-stalled": { screen: "operators" },
+  // Same answer and the same reason: the subject is a background job, not a
+  // row, and there is no screen that shows one. The finding carries the error
+  // itself, which is the thing somebody actually needs.
+  "job-failing": { screen: "operators" },
 };
 
 /**
