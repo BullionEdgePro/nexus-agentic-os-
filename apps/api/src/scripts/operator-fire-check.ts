@@ -295,6 +295,16 @@ const UNCOVERED: Record<string, string> = {
   "handover-abandoned": "fires in production",
   "schedule-stalled":
     "CANNOT be seeded here — it reads job_heartbeats through withAllTenants, which opens its own connection, so an uncommitted seed is invisible to it",
+  // Same obstacle as schedule-stalled above, and the same connection. Proven
+  // separately and more directly instead: a probe against production moved
+  // knowledge-reindex's last_error_at to an hour ago and confirmed it fires,
+  // aged it past two windows and confirmed it clears, then restored the row.
+  // That covers the case this gate cannot reach -- a job still finishing on
+  // schedule while throwing -- and also confirmed the finding stays SILENT for
+  // the real recovered row, which is the failure mode that would have made it
+  // a permanent red light.
+  "job-failing":
+    "CANNOT be seeded here for the same reason as schedule-stalled — job_heartbeats is read through withAllTenants on its own connection. Proven by probe against production instead: fires at 1h, clears past 36h, silent on the recovered row, restored after",
   // The two below are seedable in principle and are not seeded, for reasons
   // that are about the SEED being honest rather than about effort.
   "unowned-followup":
