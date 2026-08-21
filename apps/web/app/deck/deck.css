@@ -86,6 +86,12 @@
   --good: #0f7a56;
   --warn: #9c5d0f;
   --crit: #c4342a;
+  /* Severity tints, for the surface behind a severity, never for its text.
+     Each is its own hue at low alpha rather than a grey, so a warn row reads
+     as warm and a crit row as hot even before the label is read. */
+  --good-soft: rgba(15, 122, 86, 0.08);
+  --warn-soft: rgba(156, 93, 15, 0.09);
+  --crit-soft: rgba(196, 52, 42, 0.08);
 
   /* --- shape ---------------------------------------------- */
   --r: 16px;                  /* cards */
@@ -153,7 +159,7 @@
 }
 .deck-root .vignette {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background: radial-gradient(120% 90% at 50% -10%, transparent 55%, rgba(22, 22, 15, 0.05) 100%);
+  background: radial-gradient(120% 90% at 50% -10%, transparent 55%, rgba(71, 103, 136, 0.06) 100%);
 }
 
 /* ---- custom cursor: ink crosshair ---- */
@@ -554,12 +560,12 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: rgba(22, 22, 15, 0.55);
+  color: var(--slate);
   cursor: pointer;
 }
 .reveal svg { width: 17px; height: 17px; }
-.reveal:hover { color: rgba(22, 22, 15, 0.9); background: rgba(22, 22, 15, 0.06); }
-.reveal:focus-visible { outline: 2px solid #1d3fbf; outline-offset: 1px; }
+.reveal:hover { color: var(--ink); background: var(--pebble); }
+.reveal:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
 
 /* ============================================================
    ELEVATION

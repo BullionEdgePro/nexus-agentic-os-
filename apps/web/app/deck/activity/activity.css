@@ -80,7 +80,7 @@
   white-space: nowrap;
 }
 .act-table tbody tr:last-child td { border-bottom: 0; }
-.act-table tbody tr:hover { background: rgba(0, 0, 0, .02); }
+.act-table tbody tr:hover { background: var(--pebble); }
 
 .act-who { display: flex; flex-direction: column; gap: 2px; }
 .act-name { font-weight: 600; }

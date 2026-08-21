@@ -260,7 +260,7 @@
  */
 .ibx-empty.ibx-failed {
   color: var(--warn);
-  background: var(--warn-bg, rgba(184, 134, 11, 0.08));
+  background: var(--warn-soft);
   border-radius: 8px;
   padding: 12px;
   line-height: 1.5;
@@ -271,6 +271,6 @@
   padding: 10px 12px;
   border-radius: 8px;
   color: var(--warn);
-  background: var(--warn-bg, rgba(184, 134, 11, 0.08));
+  background: var(--warn-soft);
   line-height: 1.5;
 }
