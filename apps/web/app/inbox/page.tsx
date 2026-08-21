@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useInboxStore, BUSINESS_OPTIONS } from "@/lib/store";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
+import { ConversationCustody } from "./conversation-custody";
 import "./inbox.css";
 
 export default function InboxPage() {
@@ -166,14 +167,24 @@ export default function InboxPage() {
                 </h1>
                 <p className="ibx-wa">+{activeConversation.contactWaId}</p>
               </div>
-              <label className="ibx-handoff">
-                Human handoff
-                <input
-                  type="checkbox"
-                  checked={activeConversation.isHumanHandoff}
-                  onChange={(e) => setHumanHandoff(activeConversation.id, e.target.checked)}
+              {/* The checkbox shows one boolean; six different things in the
+                  platform can set it, and until migration 062 nothing recorded
+                  which. The history sits directly under the control it
+                  explains, because that is where the question gets asked. */}
+              <div className="ibx-handoff-block">
+                <label className="ibx-handoff">
+                  Human handoff
+                  <input
+                    type="checkbox"
+                    checked={activeConversation.isHumanHandoff}
+                    onChange={(e) => setHumanHandoff(activeConversation.id, e.target.checked)}
+                  />
+                </label>
+                <ConversationCustody
+                  key={activeConversation.id}
+                  conversationId={activeConversation.id}
                 />
-              </label>
+              </div>
             </header>
             {/* Keyed on the conversation so switching customers resets the
                 draft — without it, a half-typed follow-up for one person

@@ -5,6 +5,7 @@ import {
   insertOutboundMessage,
   pauseAiForContact,
   setConversationHandoff,
+  listCustody,
 } from "@nexus/db";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
@@ -16,6 +17,42 @@ conversationsRoute.get("/:id/messages", async (c) => {
   const conversationId = c.req.param("id");
   const messages = await getMessagesForConversation(conversationId);
   return c.json({ messages });
+});
+
+/**
+ * How this conversation has changed hands.
+ *
+ * Migration 062 started recording it; until this endpoint there was nowhere to
+ * read it except psql, which makes it a feature that writes and never answers.
+ *
+ * SEPARATE FROM /messages, not folded into it. The inbox loads messages on
+ * every conversation switch and this is opened deliberately, by somebody asking
+ * a question the messages do not answer -- who has this, and since when. Making
+ * every inbox click pay for a second query to serve the rare case would be the
+ * wrong trade.
+ *
+ * AN EMPTY LIST MEANS "NOT RECORDED", NEVER "NEVER HELD". Migration 062
+ * backfills nothing on purpose, so every conversation that changed hands before
+ * it has no history and cannot be given one honestly. The response says which
+ * of the two it is rather than leaving the caller to guess -- an absent record
+ * answering a question it was never asked is the defect this whole table exists
+ * to end, and it would be a poor joke to reintroduce it in the reader.
+ */
+conversationsRoute.get("/:id/custody", async (c) => {
+  const conversationId = c.req.param("id");
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  const events = await listCustody(conversationId);
+  return c.json({
+    events,
+    /**
+     * True when this conversation predates custody recording, so the client can
+     * say "not recorded" instead of drawing an empty timeline that reads as
+     * "the agent has always had this".
+     */
+    predatesRecording: events.length === 0,
+  });
 });
 
 // A human agent replies from the Unified Inbox. Per spec, once a human

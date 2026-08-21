@@ -61,6 +61,35 @@ export function getMessages(conversationId: string): Promise<{ messages: Message
   return request(`/api/conversations/${conversationId}/messages`);
 }
 
+/** How a conversation has changed hands between the agent and a person. */
+export interface CustodyEvent {
+  /** true = a person took it; false = it went back to the agent. */
+  held: boolean;
+  reason:
+    | "agent_escalated"
+    | "human_replied"
+    | "taken_by_employee"
+    | "manual_toggle"
+    | "stale_release";
+  /** Session subject or employee id. Null when the platform acted on its own. */
+  actor: string | null;
+  createdAt: string;
+}
+
+/**
+ * Fetched on demand, not with the messages.
+ *
+ * `predatesRecording` distinguishes "this conversation has never changed hands"
+ * from "it changed hands before anything was recording", which are opposite
+ * news. Migration 062 deliberately backfills nothing, so for older
+ * conversations the honest answer is that nobody knows.
+ */
+export function getCustody(
+  conversationId: string
+): Promise<{ events: CustodyEvent[]; predatesRecording: boolean }> {
+  return request(`/api/conversations/${conversationId}/custody`);
+}
+
 export function sendMessage(conversationId: string, text: string): Promise<{ message: MessageDto }> {
   return request(`/api/conversations/${conversationId}/messages`, {
     method: "POST",

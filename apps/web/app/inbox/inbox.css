@@ -274,3 +274,85 @@
   background: var(--warn-soft);
   line-height: 1.5;
 }
+
+/* ============================================================
+   CUSTODY
+   ============================================================
+   Who has held this conversation, sitting under the checkbox that
+   shows only whether somebody holds it now.
+
+   Quiet by construction. This answers a question asked rarely and
+   deliberately, so it must not compete with the thread beside it —
+   a link-weight toggle, and the list only when it is asked for.
+   ============================================================ */
+
+.ibx-handoff-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.ibx-custody-toggle {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--slate);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+  text-underline-offset: 3px;
+}
+
+.ibx-custody-toggle:hover { color: var(--signal-text); text-decoration-color: var(--signal); }
+
+.ibx-custody-note {
+  max-width: 40ch;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--slate);
+  text-align: right;
+}
+
+.ibx-custody-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-width: 46ch;
+  background: var(--pebble);
+  border-radius: var(--r-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ibx-custody-list li {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.45;
+  /* Held and released are the two states, and which one a row is matters more
+     than any other thing about it -- so it is carried by a rule down the side,
+     readable before the sentence is. */
+  border-left: 2px solid var(--hairline-strong);
+  padding-left: 9px;
+}
+
+.ibx-custody-list li.held { border-left-color: var(--warn); }
+.ibx-custody-list li.released { border-left-color: var(--good); }
+
+.ibx-custody-what { color: var(--ink); text-align: left; }
+
+.ibx-custody-when {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--slate);
+  font-variant-numeric: tabular-nums;
+}
