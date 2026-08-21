@@ -547,7 +547,7 @@ async function answerOneMessage(
       // Best-effort: failing to clear the flag must not stop the reply. The
       // worst case is that this runs again on the next message, which is
       // exactly what it is for.
-      await setConversationHandoff(conversationId, false).catch((err) => {
+      await setConversationHandoff(conversationId, false, "stale_release").catch((err) => {
         logger.error({ err, conversationId }, "Could not clear a stale handoff flag");
       });
       isHumanHandoff = false;
@@ -948,7 +948,7 @@ async function answerOneMessage(
     // Only pause the agent when somebody can take its place. Pausing with an
     // empty rota does not hand the conversation over — it ends it.
     if (shouldEscalate && canHandOver) {
-      await setConversationHandoff(conversationId, true);
+      await setConversationHandoff(conversationId, true, "agent_escalated");
       await publishInboxEvent({
         type: "handoff_changed",
         organizationId: organization.id,
@@ -1469,7 +1469,7 @@ async function flagHandoffBestEffort(organization: Organization, conversationId:
       return;
     }
 
-    await setConversationHandoff(conversationId, true);
+    await setConversationHandoff(conversationId, true, "agent_escalated");
     await publishInboxEvent({
       type: "handoff_changed",
       organizationId: organization.id,

@@ -98,14 +98,104 @@ export async function findConversationById(conversationId: string): Promise<Conv
   };
 }
 
+/**
+ * Why a conversation changed hands. See migration 062.
+ *
+ * Constrained rather than free text because code branches on it, and matched
+ * by a CHECK constraint so a value that only exists in TypeScript cannot be
+ * written.
+ */
+export type CustodyReason =
+  | "agent_escalated"
+  | "human_replied"
+  | "taken_by_employee"
+  | "manual_toggle"
+  | "stale_release";
+
+/**
+ * Hand a conversation to a person, or hand it back to the agent.
+ *
+ * THE REASON IS REQUIRED AND THE TRACE IS WRITTEN HERE, not at the call sites.
+ * Those two decisions are the entire point of migration 062: six callers used
+ * to flip this boolean and none of them recorded which one had, so the moment
+ * the flag went back to false the fact it had ever been held was gone.
+ *
+ * That absence cost an afternoon on 2026-08-20 -- a customer waiting 28 hours,
+ * a flag reading false, and a finding that said to check a reply pipeline which
+ * turned out to be working perfectly. The truth was a colleague who answered on
+ * the 10th and never came back.
+ *
+ * Putting the write here rather than in the callers means a seventh caller
+ * cannot forget it, and requiring `reason` means it cannot be added without
+ * saying why. An audit trail every caller has to remember is a convention, and
+ * this codebase has spent nine defects learning what a convention is worth.
+ *
+ * ONE STATEMENT, AND ONLY WHEN SOMETHING CHANGES. `is distinct from` makes the
+ * update a no-op when the flag already holds the value asked for, and the
+ * custody row is written from that same statement's output -- so a conversation
+ * held by a person does not accrue a row per inbound message, and the trace
+ * cannot disagree with the flag it describes.
+ */
 export async function setConversationHandoff(
   conversationId: string,
-  isHumanHandoff: boolean
+  isHumanHandoff: boolean,
+  reason: CustodyReason,
+  actor: string | null = null
 ): Promise<void> {
-  await getPool().query(`update conversations set is_human_handoff = $2 where id = $1`, [
-    conversationId,
-    isHumanHandoff,
-  ]);
+  await getPool().query(
+    `with changed as (
+       update conversations
+          set is_human_handoff = $2
+        where id = $1
+          and is_human_handoff is distinct from $2
+       returning id, organization_id
+     )
+     insert into conversation_custody (organization_id, conversation_id, held, reason, actor)
+     select organization_id, id, $2, $3, $4 from changed`,
+    [conversationId, isHumanHandoff, reason, actor]
+  );
+}
+
+export interface CustodyEvent {
+  held: boolean;
+  reason: CustodyReason;
+  actor: string | null;
+  createdAt: string;
+}
+
+/**
+ * How a conversation has changed hands, newest first.
+ *
+ * AN EMPTY HISTORY MEANS "NOT RECORDED", NEVER "NEVER HELD". Migration 062
+ * deliberately backfills nothing: every handover before it left no trace and
+ * there is nothing honest to reconstruct one from. Callers that read an empty
+ * list as "the agent has always had this" would be repeating the exact mistake
+ * -- an absent record answering a question it was never asked -- that this
+ * table exists to end.
+ */
+export async function listCustody(
+  conversationId: string,
+  limit = 20
+): Promise<CustodyEvent[]> {
+  const { rows } = await getPool().query<{
+    held: boolean;
+    reason: CustodyReason;
+    actor: string | null;
+    created_at: string;
+  }>(
+    `select held, reason, actor, created_at
+       from conversation_custody
+      where conversation_id = $1
+      order by created_at desc
+      limit $2`,
+    [conversationId, limit]
+  );
+  return rows.map((r) => ({
+    held: r.held,
+    reason: r.reason,
+    actor: r.actor,
+    createdAt: r.created_at,
+  }));
 }
 
 /** Pauses the AI agent for a contact for the given number of hours (default 24, per spec). */

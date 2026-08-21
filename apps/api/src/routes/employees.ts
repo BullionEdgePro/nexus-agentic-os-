@@ -473,7 +473,7 @@ conversationAssignmentRoute.post("/:conversationId/direct-contact", async (c) =>
   // Stop the AI before handing over, not after. Doing it in the other order
   // leaves a window where the employee has already messaged the customer and
   // the twin answers the same person again on the platform number.
-  await setConversationHandoff(conversationId, true);
+  await setConversationHandoff(conversationId, true, "taken_by_employee", employeeId);
   await pauseAiForContact(conversation.contactId);
 
   await publishInboxEvent({

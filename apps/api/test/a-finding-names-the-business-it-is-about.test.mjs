@@ -104,11 +104,27 @@ test("no migration after the derived RLS pass creates a table", () => {
   const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
   const rls = files.findIndex((f) => f.includes("rls-for-every-tenant-table"));
   assert.ok(rls > -1, "the derived RLS pass is missing");
+  // TIGHTENED, because the blanket ban was itself a proxy. What actually
+  // matters is that a table created after the pass is not left unprotected --
+  // not that no table is ever created again, which would freeze the schema.
+  // 062 creates conversation_custody and enables RLS with a policy in the same
+  // file, which satisfies the invariant the pass exists to hold.
+  //
+  // A check that forbids the safe case teaches people to delete the check.
   for (const file of files.slice(rls + 1)) {
     const sql = readFileSync(join(dir, file), "utf8");
-    assert.ok(
-      !/create table (if not exists )?[a-z_]+/i.test(sql),
-      `${file} creates a table after the derived RLS pass — move the pass to the end`
-    );
+    const created = [...sql.matchAll(/create table (?:if not exists )?([a-z_]+)/gi)].map((m) => m[1]);
+    for (const table of created) {
+      assert.match(
+        sql,
+        new RegExp(`alter table ${table}\\s+enable row level security`, "i"),
+        `${file} creates ${table} after the derived RLS pass without enabling RLS on it`
+      );
+      assert.match(
+        sql,
+        new RegExp(`create policy [a-z_]+ on ${table}`, "i"),
+        `${file} enables RLS on ${table} but defines no policy, so it denies everything`
+      );
+    }
   }
 });

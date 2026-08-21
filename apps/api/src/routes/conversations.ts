@@ -56,7 +56,9 @@ conversationsRoute.post("/:id/messages", async (c) => {
 
   await Promise.all([
     pauseAiForContact(conversation.contactId, 24),
-    setConversationHandoff(conversationId, true),
+    // A person typed to this customer, which is what takes the conversation --
+    // the flag is a consequence of the reply, not a separate decision.
+    setConversationHandoff(conversationId, true, "human_replied", body.senderId ?? null),
   ]);
 
   await publishInboxEvent({
@@ -91,7 +93,13 @@ conversationsRoute.patch("/:id/handoff", async (c) => {
   const conversation = await findConversationById(conversationId);
   if (!conversation) return c.json({ error: "Conversation not found" }, 404);
 
-  await setConversationHandoff(conversationId, body.isHumanHandoff);
+  // The only writer that can go either way, so it is the only one whose
+  // recorded `held` is not implied by its reason.
+  // Read straight off the context rather than through a helper this route does
+  // not have. Null when there is no session subject, which the column allows --
+  // an unattributed toggle is still worth more than no record of the toggle.
+  const actor = (c.get("scope") as { sub?: string } | undefined)?.sub ?? null;
+  await setConversationHandoff(conversationId, body.isHumanHandoff, "manual_toggle", actor);
   if (body.isHumanHandoff) {
     await pauseAiForContact(conversation.contactId, 24);
   }

@@ -46,9 +46,14 @@ test("a handoff nobody can take does not silence the agent", () => {
 test("the stale flag is cleared, so the row stops claiming a human is involved", () => {
   // Without this the release happens on every single message forever, and the
   // inbox keeps showing a conversation as human-handled that nobody is handling.
-  assert.match(GATE, /setConversationHandoff\(conversationId, false\)/);
+  // The reason became a required argument in migration 062: six writers used
+  // to flip this flag and none of them recorded which one had, so once it
+  // went back to false the fact it had ever been held was gone. This writer
+  // is the automatic one, and "stale_release" is what distinguishes it from a
+  // person handing the conversation back.
+  assert.match(GATE, /setConversationHandoff\(conversationId, false, "stale_release"\)/);
   // Best-effort: failing to clear must not cost the customer their reply.
-  assert.match(GATE, /setConversationHandoff\(conversationId, false\)\.catch\(/);
+  assert.match(GATE, /setConversationHandoff\([^)]*\)\.catch\(/);
 });
 
 test("a deliberate, time-boxed pause is left alone", () => {
