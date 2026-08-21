@@ -186,7 +186,14 @@ export async function listCustody(
     `select held, reason, actor, created_at
        from conversation_custody
       where conversation_id = $1
-      order by created_at desc
+      -- BY SEQUENCE, NOT BY TIMESTAMP. now() is frozen for a whole
+      -- transaction, so every row written inside one carries the identical
+      -- created_at and ordering by it is a coin flip. Measured against
+      -- production: three calls in one transaction came back in the wrong
+      -- order, and a history in the wrong order is worse than no history --
+      -- it is a confident wrong answer. See migration 063, and the same lesson
+      -- learned earlier in the customer-waiting operator's tiebreak.
+      order by seq desc
       limit $2`,
     [conversationId, limit]
   );

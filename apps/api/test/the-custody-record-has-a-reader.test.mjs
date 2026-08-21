@@ -98,3 +98,37 @@ test("the reader states what an empty history does not mean", () => {
   const doc = DB.slice(0, DB.indexOf("export async function listCustody")).slice(-900);
   assert.match(doc + reader.slice(0, 120), /NOT RECORDED/);
 });
+
+test("the history is ordered by insertion, not by timestamp", () => {
+  // FOUND BY MEASUREMENT, not by reading. Postgres freezes now() at the start
+  // of a transaction, so several custody rows written inside one carry the
+  // IDENTICAL created_at and `order by created_at desc` between them is a coin
+  // flip. A probe against production toggled, no-op'd and released a
+  // conversation in one transaction; the release was written last and came back
+  // second.
+  //
+  // A history in the wrong order is worse than no history: it is a confident
+  // wrong answer. This codebase already learned it once -- customer-waiting
+  // carries a paragraph headed "THE TIEBREAK IS NOT COSMETIC" about the same
+  // defect -- and the lesson did not travel to the next table that needed it.
+  const reader = DB.slice(DB.indexOf("export async function listCustody"));
+  const query = reader.slice(0, reader.indexOf("[conversationId"));
+  assert.match(query, /order by seq desc/);
+  assert.ok(
+    !/order by created_at/.test(query),
+    "a timestamp cannot order rows that share a transaction"
+  );
+
+  // And a tiebreak on id would be deterministic and still wrong: uuids are
+  // random, so it would give a stable arbitrary order rather than the real one.
+  assert.ok(!/order by[^`]*\bid\b/.test(query), "uuid order is arbitrary, not chronological");
+
+  const migration = read(
+    "packages",
+    "db",
+    "migrations",
+    "063-an-audit-log-needs-an-order-not-a-timestamp.sql"
+  );
+  assert.match(migration, /add column if not exists seq bigserial/);
+  assert.match(migration, /idx_conversation_custody_seq/);
+});
