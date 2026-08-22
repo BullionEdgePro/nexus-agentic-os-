@@ -60,9 +60,26 @@ const QUESTIONS: Question[] = [
       const { rows } = await getPool().query<{
         who: string;
         hours: string;
+        is_pitch: boolean;
       }>(
         `select coalesce(ct.display_name, '+' || ct.wa_id) as who,
-                round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as hours
+                round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as hours,
+                -- THE SAME SUPPRESSION THE DECK APPLIES, and it has to be the
+                -- same or this platform answers one question two ways.
+                --
+                -- customer-waiting sets cold pitches aside deliberately:
+                -- reporting a data broker as an ignored customer is the noise
+                -- that teaches somebody to stop reading the list. Without this,
+                -- the copilot said "1 person is waiting, 174 hours" for a
+                -- business whose deck correctly showed nothing -- and the
+                -- person reading them would have had to decide which to trust.
+                --
+                -- Carried as a flag rather than filtered in SQL, so the count
+                -- set aside can be stated rather than silently dropped.
+                exists (
+                  select 1 from lead_assessments la
+                   where la.conversation_id = c.id and la.category = 'inbound_pitch'
+                ) as is_pitch
            from conversations c
            join contacts ct on ct.id = c.contact_id
            join lateral (
@@ -80,18 +97,30 @@ const QUESTIONS: Question[] = [
         [organizationId]
       );
 
-      if (rows.length === 0) {
+      const waiting = rows.filter((row) => !row.is_pitch);
+      const pitches = rows.length - waiting.length;
+      // Said out loud rather than left as a quieter number. "Nobody is waiting"
+      // and "nobody is waiting, and three cold pitches were set aside" are
+      // different facts, and the second is the one that explains why a screen
+      // showing traffic can still be reporting nobody.
+      const asideNote =
+        pitches > 0
+          ? ` ${pitches} cold ${pitches === 1 ? "pitch was" : "pitches were"} set aside — the same ones the operators screen ignores.`
+          : "";
+
+      if (waiting.length === 0) {
         return {
-          answer: "Nobody is waiting for a reply right now — every conversation has been answered.",
-          rows: [],
+          answer:
+            "Nobody is waiting for a reply right now — every conversation has been answered." + asideNote,
+          rows: pitches > 0 ? [{ waiting: 0, pitchesSetAside: pitches }] : [],
         };
       }
-      const longest = rows[0];
+      const longest = waiting[0];
       return {
         answer:
-          `${rows.length} ${rows.length === 1 ? "person is" : "people are"} waiting for a reply. ` +
-          `The longest is ${longest.who}, ${longest.hours} hours.`,
-        rows: rows.map((row) => ({ who: row.who, hoursWaiting: Number(row.hours) })),
+          `${waiting.length} ${waiting.length === 1 ? "person is" : "people are"} waiting for a reply. ` +
+          `The longest is ${longest.who}, ${longest.hours} hours.` + asideNote,
+        rows: waiting.map((row) => ({ who: row.who, hoursWaiting: Number(row.hours) })),
       };
     },
   },
