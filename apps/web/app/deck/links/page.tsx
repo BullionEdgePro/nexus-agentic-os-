@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { getLinks, type BusinessLink } from "@/lib/api";
+import { getLinks, type BusinessLink, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
@@ -39,7 +39,7 @@ export default function LinksPage() {
       const data = await getLinks();
       setLinks(data.links);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the links.");
+      setError(readableError(err));
     } finally {
       setLoading(false);
     }

@@ -9,8 +9,7 @@ import {
   type QualityDay,
   type QualitySummary,
   type CopilotAnswer,
-  type EscalationHotspot,
-} from "@/lib/api";
+  type EscalationHotspot, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { BrainSection } from "./brain-section";
@@ -59,7 +58,7 @@ export default function QualityPage() {
       setSummary(data.summary);
       setHotspots(data.hotspots ?? []);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load quality data.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -76,7 +75,7 @@ export default function QualityPage() {
       await refreshQuality();
       await load(business);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not recompute.");
+      setError(readableError(err));
     } finally {
       setBusy(false);
     }
@@ -90,7 +89,7 @@ export default function QualityPage() {
     try {
       setReply(await askCopilot(business, question.trim()));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not answer that.");
+      setError(readableError(err));
     } finally {
       setAsking(false);
     }

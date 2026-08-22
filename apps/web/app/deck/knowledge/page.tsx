@@ -7,6 +7,7 @@ import {
   addKnowledge,
   removeKnowledge,
   type KnowledgeSource,
+  readableError,
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
@@ -323,9 +324,15 @@ function freshness(source: KnowledgeSource): string {
   return `indexed ${days} days ago`;
 }
 
-/** The server's reason, not a generic one — they call for different responses. */
-function readable(err: unknown): string {
-  if (!(err instanceof Error)) return "Something went wrong.";
-  const match = err.message.match(/\{"error":"(.+?)"\}/);
-  return match ? match[1] : err.message;
-}
+/**
+ * THE THIRD COPY, now deleted.
+ *
+ * readableError's own comment says it was "already written twice over on the
+ * way to being written a third time". This was the third. It also fell back to
+ * err.message, so on an unreachable API this page showed "Failed to fetch" and
+ * on a 403 it showed the whole transport string.
+ *
+ * Kept as an alias rather than rewritten at each call site: the name reads well
+ * where it is used, and one line here is cheaper than fourteen edits.
+ */
+const readable = readableError;

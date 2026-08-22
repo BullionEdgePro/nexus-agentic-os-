@@ -8,8 +8,7 @@ import {
   sendBroadcast,
   syncTemplates,
   type BroadcastTemplate,
-  type BroadcastSummary,
-} from "@/lib/api";
+  type BroadcastSummary, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -65,7 +64,7 @@ export default function BroadcastsPage() {
       setCanSend(data.canSend);
       setTemplateId(data.templates.find((t) => t.isApproved)?.id ?? "");
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load broadcasts.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -86,7 +85,7 @@ export default function BroadcastsPage() {
       setNotice(`Queued for ${enqueued} ${enqueued === 1 ? "contact" : "contacts"}.`);
       await load(business);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The send did not go through.");
+      setError(readableError(err));
     } finally {
       setBusy(false);
     }
@@ -103,7 +102,7 @@ export default function BroadcastsPage() {
       );
       await load(business);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reach Meta.");
+      setError(readableError(err));
     } finally {
       setBusy(false);
     }

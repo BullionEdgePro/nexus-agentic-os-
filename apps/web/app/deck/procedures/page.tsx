@@ -10,8 +10,7 @@ import {
   type ProcedureRecord,
   type ProcedureCounts,
   type InferenceReadiness,
-  type InferenceRunSummary,
-} from "@/lib/api";
+  type InferenceRunSummary, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { PhrasesSection } from "./phrases-section";
@@ -83,7 +82,7 @@ export default function ProceduresPage() {
       setReadiness(data.readiness);
       setIntents(data.intents);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load procedures.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -103,7 +102,7 @@ export default function ProceduresPage() {
       setLastRun(result.summary);
       await load(business);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not look for procedures.");
+      setError(readableError(err));
     } finally {
       setLooking(false);
     }
@@ -120,7 +119,7 @@ export default function ProceduresPage() {
       setEditing(null);
       await load(business);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update that procedure.");
+      setError(readableError(err));
     } finally {
       setBusyId(null);
     }
@@ -144,7 +143,7 @@ export default function ProceduresPage() {
       setNewIntent("");
       await load(business);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save that procedure.");
+      setError(readableError(err));
     } finally {
       setSaving(false);
     }

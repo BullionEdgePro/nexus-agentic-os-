@@ -9,8 +9,7 @@ import {
   type StoredForecast,
   type ScoredForecast,
   type ForecastAccuracy,
-  type MetricReadiness,
-} from "@/lib/api";
+  type MetricReadiness, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -75,7 +74,7 @@ export default function ForecastPage() {
       setAccuracy(data.accuracy);
       setRecent(data.recent);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load the forecast.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -102,7 +101,7 @@ export default function ForecastPage() {
       );
       await load(business);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not recompute.");
+      setError(readableError(err));
     } finally {
       setBusy(false);
     }

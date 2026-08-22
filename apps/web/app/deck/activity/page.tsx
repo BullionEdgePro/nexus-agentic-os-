@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
-import { getActivity, type EmployeeActivity, type ActivityEvent } from "@/lib/api";
+import { getActivity, type EmployeeActivity, type ActivityEvent, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -46,7 +46,7 @@ export default function ActivityPage() {
       setRows(data.employees);
       setEvents(data.events);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load activity.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }

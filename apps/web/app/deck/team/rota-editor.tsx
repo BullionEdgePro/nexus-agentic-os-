@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
-import { saveSchedule, type TeamMember, type TimeWindow, type WeeklySchedule, type Weekday } from "@/lib/api";
+import { saveSchedule, type TeamMember, type TimeWindow, type WeeklySchedule, type Weekday, readableError } from "@/lib/api";
 
 /**
  * The rota editor — the missing half of the employee layer.
@@ -180,7 +180,7 @@ export function RotaEditor({
       // The server validates properly and names the day and window; showing its
       // message verbatim is more useful than anything this component could
       // reconstruct from a status code.
-      setError(err instanceof Error ? err.message : "Could not save that rota.");
+      setError(readableError(err));
     } finally {
       setSaving(false);
     }

@@ -37,8 +37,23 @@ test("an unchanged re-index is reported as up to date, not as zero", () => {
 test("the server's own error reason is shown, not a generic one", () => {
   // "A blocked internal URL" and "the site is down" need different responses
   // from whoever pasted it.
-  assert.match(PAGE, /function readable/);
-  assert.match(PAGE, /err\.message\.match\(/);
+  // SAME INTENT, ONE FEWER COPY. This page carried its own `readable`, which
+  // was the third implementation of one idea -- readableError's own comment
+  // says it was "already written twice over on the way to being written a third
+  // time", and this was that third. It also fell back to err.message, so an
+  // unreachable API showed "Failed to fetch" here and a 403 showed the whole
+  // transport string.
+  //
+  // The shared helper still puts the server's own sentence first, which is what
+  // this test is actually about.
+  const API = read("apps", "web", "lib", "api.ts");
+  assert.match(PAGE, /const readable = readableError/);
+  // Plain substrings rather than a regex-of-a-regex. Asserting on an escaped
+  // pattern that itself contains escapes is how the previous two attempts at
+  // this line went wrong; what matters is that the helper reads the server's
+  // error field first, and that is visible without matching its syntax.
+  assert.ok(API.includes('"error"'), "the helper no longer looks for the server's error field");
+  assert.ok(API.includes("exec(raw)"), "the helper no longer parses the thrown message");
   assert.match(ROUTE, /UnsafeUrlError/);
 });
 

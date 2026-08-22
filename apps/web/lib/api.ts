@@ -37,12 +37,59 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * of one fact before: the nav rail and the API's operator-only list drifted
  * apart precisely because nothing connected them.
  */
-export function readableError(err: unknown): string {
+export function readableError(err: unknown, whenUnreachable?: string): string {
   const raw = err instanceof Error ? err.message : String(err);
+
+  // 401 IS DECIDED BEFORE THE SERVER'S OWN WORDS, and it is the only status
+  // that is. Auth middleware answers "Unauthorized" -- correct, terse, and
+  // useless to the person reading it, who needs to know their session lapsed
+  // and that signing in again fixes it. Every other status carries a message
+  // somebody wrote about the actual request, so there the server wins.
+  //
+  // FOUND BY DRIVING THE SCREEN, not by the unit test above it. That test
+  // passed an EMPTY body with the 401, so the branch order never came up, and
+  // the deck went on showing a bare "Unauthorized" while the suite was green.
+  if (/API 401 on /.test(raw)) return "Your session expired. Sign in again.";
+
+  // The API's own sentence, when it wrote one. Several routes go to real
+  // trouble over these and they are the best answer available.
   const match = /\{"error":"([^"]+)"\}/.exec(raw);
   if (match) return match[1];
-  if (raw.includes("API 401")) return "Your session expired. Sign in again.";
-  return "Could not reach the platform. Check the connection and try again.";
+
+  // A STATUS WE REACHED IS NOT A CONNECTION PROBLEM. Falling through to "check
+  // the connection" for a 403 sends somebody to reboot their router over a
+  // permissions error. The status is the one part of `request`'s message that
+  // always carries meaning, so it is read before anything is guessed.
+  const status = /API (\d{3}) on /.exec(raw);
+  if (status) {
+    const code = Number(status[1]);
+    // 401 is handled above, before the server's own wording, because the
+    // server's wording for it is always "Unauthorized".
+    if (code === 403) return "Your account cannot see this. Ask an admin to give you access.";
+    if (code === 404) return "That is not there any more. It may have been removed while this page was open.";
+    if (code === 409) return "Something changed while you were looking at it. Reload and try again.";
+    if (code === 429) return "Too many requests just now. Wait a moment and try again.";
+    if (code >= 500) return "The platform had a problem with that. It has been logged — try again shortly.";
+    return "The platform refused that request.";
+  }
+
+  // fetch() rejects with a bare TypeError when it cannot reach the host at all:
+  // no status, no body, and a message ("Failed to fetch", "NetworkError when
+  // attempting to fetch resource") that differs per browser and means nothing
+  // to the person reading it. This is the only branch where the connection is
+  // genuinely the thing to check.
+  //
+  // `whenUnreachable` OVERRIDES ONLY HERE, and that placement is the whole
+  // point. A caller knows which action it was attempting; it does not know
+  // better than the server why the server refused, so a caller-supplied
+  // sentence must never outrank the API's own or a status we actually reached.
+  //
+  // It earns its place where one error slot serves several actions. The
+  // follow-ups pane has a save and a close sharing one line, and "could not
+  // reach the platform" leaves the reader guessing which of the two they have
+  // just lost. Where a screen has one action, positional context already says
+  // it and this argument should be left off.
+  return whenUnreachable ?? "Could not reach the platform. Check the connection and try again.";
 }
 
 export function getOrganizations(): Promise<{ organizations: Organization[] }> {

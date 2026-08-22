@@ -5,8 +5,7 @@ import {
   getConversationTasks,
   createConversationTask,
   updateTask,
-  type TaskRecord,
-} from "@/lib/api";
+  type TaskRecord, readableError } from "@/lib/api";
 
 /**
  * Follow-ups, where they are actually noticed.
@@ -75,7 +74,7 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
       setOpen(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save that follow-up.");
+      setError(readableError(err, "Could not save that follow-up."));
     } finally {
       setBusy(false);
     }
@@ -87,7 +86,7 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
       await updateTask(task.id, { status: "done" });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not close that follow-up.");
+      setError(readableError(err, "Could not close that follow-up."));
     }
   }
 

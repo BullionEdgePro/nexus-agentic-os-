@@ -7,8 +7,7 @@ import {
   dismissFinding,
   restoreFinding,
   type OperatorFinding,
-  type OperatorInfo,
-} from "@/lib/api";
+  type OperatorInfo, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -136,7 +135,7 @@ export default function OperatorsPage() {
         alertsWarn: data.alertsIncludeWarnings,
       });
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load findings.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -169,7 +168,7 @@ export default function OperatorsPage() {
         else await dismissFinding(id);
         await load(business);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "That did not go through.");
+        setError(readableError(err));
       } finally {
         setBusy((prev) => {
           const next = new Set(prev);

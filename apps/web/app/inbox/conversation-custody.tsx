@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { getCustody, type CustodyEvent } from "@/lib/api";
+import { getCustody, type CustodyEvent, readableError } from "@/lib/api";
 
 /**
  * Who has held this conversation, and since when.
@@ -52,7 +52,7 @@ export function ConversationCustody({ conversationId }: { conversationId: string
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Could not load the history.",
+        message: readableError(err),
       });
     }
   }, [conversationId, state.kind]);

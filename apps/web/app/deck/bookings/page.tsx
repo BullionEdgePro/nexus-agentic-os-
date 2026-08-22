@@ -9,8 +9,7 @@ import {
   type BookingRecord,
   type BookingCounts,
   type BookingStatus,
-  type TeamMember,
-} from "@/lib/api";
+  type TeamMember, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -68,7 +67,7 @@ export default function BookingsPage() {
       setBookings(data.bookings);
       setCounts(data.counts);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load the diary.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -109,7 +108,7 @@ export default function BookingsPage() {
       // The 409 from a re-confirm that collided arrives here as its message.
       // Shown as-is: "that time has been given to somebody else since" is the
       // whole explanation, and wrapping it in "could not update" would bury it.
-      setError(err instanceof Error ? err.message : "Could not update that appointment.");
+      setError(readableError(err));
     }
   }
 
@@ -119,7 +118,7 @@ export default function BookingsPage() {
       await updateBooking(booking.id, { employeeId: employeeId || null });
       await load(business, status);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reassign that appointment.");
+      setError(readableError(err));
     }
   }
 

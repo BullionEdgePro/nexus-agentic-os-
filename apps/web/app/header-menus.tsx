@@ -10,8 +10,7 @@ import {
   type SearchHit,
   type Me,
   type TaskRecord,
-  type OperatorFinding,
-} from "@/lib/api";
+  type OperatorFinding, readableError } from "@/lib/api";
 import "./header-menus.css";
 
 /**
@@ -516,7 +515,7 @@ export function AccountMenu({ signedInAs }: { signedInAs: string }) {
     } catch (err) {
       // The API's messages are written for a person — an unusable number, a
       // non-https image address — so they are shown rather than replaced.
-      const raw = err instanceof Error ? err.message : "Could not save.";
+      const raw = readableError(err);
       setError(raw.replace(/^API \d+ on [^:]+: /, "").replace(/^\{"error":"|"\}$/g, ""));
     } finally {
       setSaving(false);

@@ -10,8 +10,7 @@ import {
   type TaskRecord,
   type TaskCounts,
   type TaskStatus,
-  type TeamMember,
-} from "@/lib/api";
+  type TeamMember, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -71,7 +70,7 @@ export default function TasksPage() {
       setTasks(data.tasks);
       setCounts(data.counts);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load follow-ups.");
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -134,7 +133,7 @@ export default function TasksPage() {
       setDraftOwner("");
       await load(business, status);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save that follow-up.");
+      setError(readableError(err));
     } finally {
       setSaving(false);
     }
@@ -146,7 +145,7 @@ export default function TasksPage() {
       await updateTask(task.id, { status: next });
       await load(business, status);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update that follow-up.");
+      setError(readableError(err));
     }
   }
 
