@@ -134,3 +134,25 @@ test("the note sits with the instructions, not with the facts", () => {
     "the procedure must stay nearest the customer's message"
   );
 });
+
+test("one staff answer per reply, not two", () => {
+  // The escalation path asked hasStaffOnShift for the SAME business in the SAME
+  // message, to decide whether to send the no_one_available phrase. That is a
+  // second round trip and, worse, a second source of truth: a shift boundary
+  // falling between the two calls would let the agent be told it may promise a
+  // colleague while the line below decides there is nobody — in one reply.
+  assert.match(PROCESSOR, /const canHandOver = shouldEscalate \? canPromiseAPerson : false;/);
+
+  // Still guarded on shouldEscalate, which is what keeps the ordinary path from
+  // resolving a phrase it will not send.
+  const line = PROCESSOR.slice(PROCESSOR.indexOf("const canHandOver"));
+  assert.match(line.slice(0, 120), /shouldEscalate \?/);
+});
+
+test("the two moments send different wording", () => {
+  // handing_over is "a colleague is coming". no_one_available is "nobody is,
+  // here is how to reach us". Collapsing them would put the wrong one in front
+  // of somebody at the worst moment.
+  assert.match(PROCESSOR, /resolvePhrase\(serving\.id, "handing_over", FALLBACK_REPLY\)/);
+  assert.match(PROCESSOR, /resolvePhrase\(serving\.id, "no_one_available", FALLBACK_REPLY_NO_STAFF\)/);
+});

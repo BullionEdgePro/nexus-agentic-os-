@@ -921,9 +921,16 @@ async function answerOneMessage(
     // failed lookup wrongly assumed empty would send a customer a weaker reply
     // and skip a handoff that was warranted; wrongly assumed staffed, it
     // behaves exactly as the system did before this change.
-    const canHandOver = shouldEscalate
-      ? await hasStaffOnShift(serving.id).catch(() => true)
-      : false;
+    // ONE ANSWER PER REPLY, not two. `canPromiseAPerson` asked this same
+    // question earlier in this same message, to decide whether the agent may
+    // promise anybody. Asking again here is a second round trip and, worse, a
+    // second source of truth: a shift boundary falling between the two calls
+    // would let the agent be told it may promise a colleague while this line
+    // decides there is nobody, in one reply.
+    //
+    // The `shouldEscalate` guard is kept because it is what makes the ordinary
+    // path -- every reply the agent actually answers -- cost nothing here.
+    const canHandOver = shouldEscalate ? canPromiseAPerson : false;
 
     // The business's own wording for whichever of the two moments this is,
     // falling back to the platform default. Resolved only when escalating, so
