@@ -1,4 +1,4 @@
-import { getPool, withServingTenant, withAllTenants } from "./client.js";
+import { getPool, withServingTenant } from "./client.js";
 
 /**
  * Appointments the agent can actually make.
@@ -404,45 +404,37 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
     // under Zipicka: the law firm's diary would be empty and a retailer's full
     // of consultations, with nothing anywhere reporting a fault.
     //
-    // AND THE READ ITSELF HAS TO WIDEN, which the paragraph above did not do.
+    // AND THE READ DOES NOT NEED TO WIDEN, which I got wrong on 2026-08-22 and
+    // am recording because the wrong version was deployed for twenty minutes.
     //
-    // It got the ATTRIBUTION right -- coalesce(routed, owner) -- and left the
-    // VISIBILITY scoped. On a shared number the conversation row belongs to the
-    // number's OWNER, and book_appointment calls this from inside
-    // withServingTenant(serving): under RLS the owner's conversation is not
-    // zero-error, it is zero ROWS, and this function then reported "that
-    // conversation does not exist".
+    // I probed the booking tools with a conversation that had no
+    // routed_organization_id, saw "that conversation does not exist", and read
+    // it as the eleventh instance of this codebase's shared-number defect. It
+    // is not. The conversations policy already carries
+    // `routed_organization_id::text = current_setting('app.current_org')`, so a
+    // conversation ROUTED to the serving business is visible to it -- and the
+    // switchboard routes every conversation it hands over. An unrouted
+    // conversation belonging to one business, with a booking requested for
+    // another, is a state the pipeline never produces and my probe invented.
     //
-    // WHAT THAT COST: every booking for the four businesses that do not own the
-    // number failed, always. Zero bookings have ever been made on this
-    // platform. The tool's catch-all turned the exception into
-    // reason:"unavailable" and discarded it, so the agent told the customer to
-    // expect a colleague instead -- a plausible sentence, produced by a total
-    // failure of the feature.
+    // Verified after correcting the probe: the booking is made, and a second
+    // attempt on the same slot is refused as fully_booked. It has worked all
+    // along.
     //
-    // Found on 2026-08-22 by running the tool handlers rather than the layer
-    // beneath them. `self-check` calls createBooking directly and passes,
-    // because it passes an organizationId and no conversation; the tests read
-    // the tool's source. Nothing exercised this line until something ran the
-    // chain a customer actually walks.
-    //
-    // SAFE TO WIDEN, and only because of the rule stated above: the business
-    // comes from the CONVERSATION, never from the caller. A caller handing over
-    // somebody else's conversation id still files the booking against that
-    // conversation's own business, which is where it belongs.
-    const { rows } = await withAllTenants(
-      "booking: the conversation belongs to the number's owner, the booking to the serving business",
-      () =>
-        getPool().query<{ organization_id: string; contact_id: string | null }>(
-          `select coalesce(routed_organization_id, organization_id) as organization_id, contact_id
-             from conversations where id = $1`,
-          [input.conversationId]
-        )
+    // The widening I briefly added would have been a permanent cross-tenant
+    // grant on this read, which is precisely what the withServingTenant comment
+    // in client.ts argues against: "the relationship is real for one statement;
+    // it should not become a permanent grant."
+    const { rows } = await getPool().query<{ organization_id: string; contact_id: string | null }>(
+      `select coalesce(routed_organization_id, organization_id) as organization_id, contact_id
+         from conversations where id = $1`,
+      [input.conversationId]
     );
-    // No longer "or is not visible from here" -- after the widening above,
-    // invisible is not one of the ways this can fail, and the half of that
-    // sentence that was doing the real work was the half nobody read.
-    if (!rows[0]) throw new Error("That conversation does not exist.");
+    // "or is not visible from here" is kept, and it is the accurate half: an
+    // unrouted conversation belonging to another business really is invisible
+    // rather than absent, and saying only "does not exist" would send the next
+    // person looking for a missing row.
+    if (!rows[0]) throw new Error("That conversation does not exist, or is not visible from here.");
     organizationId = rows[0].organization_id;
     contactId = contactId ?? rows[0].contact_id;
   }
