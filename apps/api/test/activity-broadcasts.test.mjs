@@ -336,11 +336,30 @@ test("the model never writes SQL", () => {
 });
 
 test("every copilot query is scoped to one organization", () => {
+  // TWO SHAPES COUNT AS SCOPED, and the second is not a loophole -- it is the
+  // only correct scoping for anything a shared number touches.
+  //
+  // `organization_id = $1` is right for rows a business owns outright: its
+  // knowledge, its bookings, its quality rollups.
+  //
+  // `coalesce(<x>_organization_id, organization_id) = $1` is right for
+  // conversations and findings, where five firms answer one number: the row is
+  // OWNED by the number's owner and BELONGS to whoever it was routed to. Using
+  // the plain form there would be the bug -- it would hand the owner every
+  // other firm's conversations and give the other four none of their own.
+  //
+  // Expressed as one optional paren rather than two alternatives: the string
+  // `organization_id) = $1` occurs only in the coalesce form. My first attempt
+  // at this used a word boundary and rejected `la.organization_id = $1` and
+  // `e.organization_id = $1` -- two queries that had been correct for weeks.
+  //
+  // What is still refused is a query with neither.
+  const scoped = /organization_id\)? = \$1/;
   const queries = COPILOT.match(/`select[\s\S]*?`/g) ?? [];
   assert.ok(queries.length >= 5, "expected several hand-written queries");
   for (const query of queries) {
     assert.ok(
-      /organization_id = \$1/.test(query),
+      scoped.test(query),
       `a copilot query is not tenant-scoped: ${query.slice(0, 90)}`
     );
   }

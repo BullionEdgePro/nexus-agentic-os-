@@ -48,6 +48,200 @@ interface Question {
 
 const QUESTIONS: Question[] = [
   {
+    id: "waiting_now",
+    describes:
+      "Whether anybody is waiting for a reply right now, and how long they have been waiting",
+    // NOT A WINDOW QUESTION. Every other entry here reports over `days`; this
+    // one is about this minute, so it ignores the parameter rather than
+    // pretending to honour it. "Nobody waited last week" is a different claim
+    // from "nobody is waiting now", and the second is the one somebody asking
+    // this wants.
+    run: async (organizationId) => {
+      const { rows } = await getPool().query<{
+        who: string;
+        hours: string;
+      }>(
+        `select coalesce(ct.display_name, '+' || ct.wa_id) as who,
+                round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as hours
+           from conversations c
+           join contacts ct on ct.id = c.contact_id
+           join lateral (
+             select sender_type, created_at from messages m
+              where m.conversation_id = c.id
+              order by m.created_at desc,
+                       case m.sender_type when 'contact' then 1 else 0 end
+              limit 1
+           ) last on true
+          where coalesce(c.routed_organization_id, c.organization_id) = $1
+            and c.status in ('open', 'pending')
+            and last.sender_type = 'contact'
+          order by last.created_at asc
+          limit 20`,
+        [organizationId]
+      );
+
+      if (rows.length === 0) {
+        return {
+          answer: "Nobody is waiting for a reply right now — every conversation has been answered.",
+          rows: [],
+        };
+      }
+      const longest = rows[0];
+      return {
+        answer:
+          `${rows.length} ${rows.length === 1 ? "person is" : "people are"} waiting for a reply. ` +
+          `The longest is ${longest.who}, ${longest.hours} hours.`,
+        rows: rows.map((row) => ({ who: row.who, hoursWaiting: Number(row.hours) })),
+      };
+    },
+  },
+  {
+    id: "needs_attention",
+    describes:
+      "What the platform's own checks are currently reporting about this business — problems, warnings, anything needing action",
+    // The operators deck in a sentence. Somebody who asks "is anything wrong"
+    // deserves the same answer the deck gives, without having to open it.
+    run: async (organizationId) => {
+      const { rows } = await getPool().query<{
+        severity: string;
+        title: string;
+        hours: string;
+      }>(
+        `select f.severity, f.title,
+                round(extract(epoch from (now() - f.first_seen_at)) / 3600.0, 1)::text as hours
+           from operator_findings f
+          where coalesce(f.serving_organization_id, f.organization_id) = $1
+            and f.resolved_at is null
+            and f.dismissed_at is null
+          order by case f.severity when 'urgent' then 0 when 'warn' then 1 else 2 end,
+                   f.first_seen_at asc
+          limit 20`,
+        [organizationId]
+      );
+
+      if (rows.length === 0) {
+        // Distinguished from "the checks are not running", which this query
+        // cannot see and must not imply. The deck says when the sweep last ran;
+        // this only reports what it found.
+        return {
+          answer:
+            "The checks are not reporting anything for this business at the moment. " +
+            "That is what the last sweep found — the operators screen says when it last ran.",
+          rows: [],
+        };
+      }
+      const urgent = rows.filter((row) => row.severity === "urgent").length;
+      return {
+        answer:
+          `${rows.length} thing${rows.length === 1 ? "" : "s"} needing attention` +
+          (urgent > 0 ? `, ${urgent} urgent` : "") +
+          `. The oldest: "${rows[0].title}", standing ${rows[0].hours} hours.`,
+        rows: rows.map((row) => ({
+          severity: row.severity,
+          finding: row.title,
+          hoursStanding: Number(row.hours),
+        })),
+      };
+    },
+  },
+  {
+    id: "knowledge_health",
+    describes:
+      "How much the agent has to answer from, whether any source is failing, and how current the pages are",
+    run: async (organizationId) => {
+      const { rows } = await getPool().query<{
+        sources: string;
+        failing: string;
+        chunks: string;
+        oldest_hours: string | null;
+      }>(
+        `select count(*)::text as sources,
+                count(*) filter (where s.status = 'failed')::text as failing,
+                (select count(*)::text from knowledge_chunks k
+                   join knowledge_sources ks on ks.id = k.source_id
+                  where ks.organization_id = $1) as chunks,
+                round(extract(epoch from (now() - min(s.last_checked_at))) / 3600.0, 1)::text
+                  as oldest_hours
+           from knowledge_sources s
+          where s.organization_id = $1`,
+        [organizationId]
+      );
+
+      const row = rows[0];
+      const sources = Number(row?.sources ?? 0);
+      if (sources === 0) {
+        // The one answer here that is genuinely alarming, and it would
+        // otherwise render as a tidy row of zeros.
+        return {
+          answer:
+            "This business has no knowledge sources at all, so the agent has nothing of its own " +
+            "to answer from and will refer almost everything to a colleague.",
+          rows: [{ sources: 0, passages: 0 }],
+        };
+      }
+      const failing = Number(row.failing);
+      return {
+        answer:
+          `${sources} source${sources === 1 ? "" : "s"} giving the agent ${row.chunks} passages to answer from` +
+          (failing > 0 ? `, of which ${failing} are failing to index` : ", none failing") +
+          (row.oldest_hours ? `. The least recently re-read was ${row.oldest_hours} hours ago.` : "."),
+        rows: [
+          {
+            sources,
+            passages: Number(row.chunks),
+            failing,
+            oldestCheckedHoursAgo: row.oldest_hours ? Number(row.oldest_hours) : null,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "appointments",
+    describes: "What is in the diary — appointments booked, upcoming, or cancelled",
+    run: async (organizationId, days) => {
+      const { rows } = await getPool().query<{
+        upcoming: string;
+        booked_recently: string;
+        cancelled: string;
+        next_at: string | null;
+      }>(
+        `select count(*) filter (where b.starts_at > now() and b.status = 'confirmed')::text as upcoming,
+                count(*) filter (where b.created_at > now() - ($2 || ' days')::interval)::text as booked_recently,
+                count(*) filter (where b.status = 'cancelled'
+                                   and b.updated_at > now() - ($2 || ' days')::interval)::text as cancelled,
+                min(b.starts_at) filter (where b.starts_at > now() and b.status = 'confirmed')::text as next_at
+           from bookings b
+          where b.organization_id = $1`,
+        [organizationId, String(days)]
+      );
+
+      const row = rows[0];
+      const upcoming = Number(row?.upcoming ?? 0);
+      const booked = Number(row?.booked_recently ?? 0);
+      if (upcoming === 0 && booked === 0) {
+        return {
+          answer: `Nothing in the diary — no appointments upcoming, and none booked in the last ${days} days.`,
+          rows: [{ upcoming: 0, bookedRecently: 0 }],
+        };
+      }
+      return {
+        answer:
+          `${upcoming} upcoming appointment${upcoming === 1 ? "" : "s"}, ${booked} booked in the last ${days} days` +
+          (Number(row.cancelled) > 0 ? `, ${row.cancelled} cancelled` : "") +
+          (row.next_at ? `. The next is ${row.next_at}.` : "."),
+        rows: [
+          {
+            upcoming,
+            bookedRecently: booked,
+            cancelled: Number(row.cancelled),
+            nextAt: row.next_at,
+          },
+        ],
+      };
+    },
+  },
+  {
     id: "conversation_volume",
     describes: "How many conversations or customer messages there were over a period",
     run: async (organizationId, days) => {
