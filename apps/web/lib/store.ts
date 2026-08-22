@@ -1,3 +1,4 @@
+import { readableError } from "./api";
 import { create } from "zustand";
 import type { BusinessSlug, ConversationSummary, MessageDto } from "@nexus/shared";
 import * as api from "./api";
@@ -69,7 +70,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       // is left as it is and the page refuses to draw it — emptying it here
       // would produce "No conversations yet", which is the answer this failure
       // must not be mistaken for.
-      set({ loadError: err instanceof Error ? err.message : "Could not load conversations." });
+      set({ loadError: readableError(err) });
     } finally {
       set({ isLoadingConversations: false });
     }
@@ -87,7 +88,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       // conversation's messages, which is what an unhandled rejection left on
       // screen: somebody else's customer under this customer's name, one click
       // away from a reply.
-      set({ loadError: err instanceof Error ? err.message : "Could not load this conversation." });
+      set({ loadError: readableError(err) });
     } finally {
       set({ isLoadingMessages: false });
     }
@@ -129,7 +130,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       // spinner, left the draft in the box and said nothing. Whoever typed it
       // has no way to tell that from a send that worked, and the customer is
       // waiting on a reply that does not exist.
-      set({ sendError: err instanceof Error ? err.message : "The message was not sent." });
+      set({ sendError: readableError(err, "The message was not sent.") });
       throw err;
     }
     get().appendMessage(conversationId, message);

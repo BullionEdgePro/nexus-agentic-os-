@@ -132,3 +132,38 @@ test("the history is ordered by insertion, not by timestamp", () => {
   assert.match(migration, /add column if not exists seq bigserial/);
   assert.match(migration, /idx_conversation_custody_seq/);
 });
+
+test("the actor reads as a sentence, not as a slot fill", () => {
+  // `"A colleague replied" + " by " + actor` produced "A colleague replied by
+  // atif@nexusagenticos.com", which is not English. It reads perfectly well in
+  // the source — the template and the variable are both correct — which is why
+  // it survived review and was only caught by looking at the rendered row.
+  const describe = COMPONENT.slice(COMPONENT.indexOf("function describe("));
+  const body = describe.slice(0, describe.indexOf("\n}"));
+  assert.ok(
+    !/replied\$\{by\}/.test(body),
+    "the actor is being infixed into the verb phrase again"
+  );
+  assert.match(body, /const by = event\.actor \? ` — \$\{event\.actor\}` : ""/);
+});
+
+test("two events an hour apart do not render a day apart", () => {
+  // The boundary was 48h, so a real history showed "47h ago" directly above
+  // "2d ago" for events sixty minutes apart. Past a day, days is the unit
+  // anybody actually thinks in.
+  const when = COMPONENT.slice(COMPONENT.indexOf("function when("));
+  const body = when.slice(0, when.indexOf("\n}"));
+  assert.match(body, /hours < 24/);
+  assert.ok(!/hours < 48/.test(body), "the boundary is back at two days");
+  assert.match(body, /days === 1 \? "yesterday"/);
+});
+
+test("the follow-ups pane cannot take the conversation down with it", () => {
+  // Its own comment promises a failed fetch will not disturb the messages, and
+  // the try/catch delivers that for a fetch that FAILED. A 200 with an
+  // unexpected shape sets tasks to undefined, and the very next line filters
+  // it — which throws during render and blanks the whole inbox.
+  const pane = read("apps", "web", "app", "inbox", "conversation-tasks.tsx");
+  assert.match(pane, /setTasks\(data\.tasks \?\? \[\]\)/);
+  assert.match(pane, /tasks\.filter\(/, "the line that throws is still there to be protected");
+});

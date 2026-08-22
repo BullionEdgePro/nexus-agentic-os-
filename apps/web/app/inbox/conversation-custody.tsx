@@ -106,14 +106,17 @@ export function ConversationCustody({ conversationId }: { conversationId: string
  * nobody did it.
  */
 function describe(event: CustodyEvent): string {
-  const by = event.actor ? ` by ${event.actor}` : "";
+  // THE ACTOR IS APPENDED, NOT INFIXED. Building "A colleague replied" + " by
+  // X" produced "A colleague replied by atif@…", which is not a sentence. Seen
+  // on screen; it reads fine in the source, which is exactly why it survived.
+  const by = event.actor ? ` — ${event.actor}` : "";
   switch (event.reason) {
     case "agent_escalated":
       return "The agent handed this to a person and paused itself";
     case "human_replied":
-      return `A colleague replied${by}, which takes the conversation`;
+      return `A colleague replied, which takes the conversation${by}`;
     case "taken_by_employee":
-      return `Taken${by}`;
+      return `Taken by a colleague${by}`;
     case "manual_toggle":
       return event.held ? `Handed to a person${by}` : `Given back to the agent${by}`;
     case "stale_release":
@@ -132,6 +135,10 @@ function when(iso: string): string {
   const minutes = Math.round(ms / 60000);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+  // The boundary is a day, not two. At 48h a real history rendered "47h ago"
+  // directly above "2d ago" for two events ONE HOUR APART, which reads as a
+  // far bigger gap than it is. Past a day, days is the unit anybody thinks in.
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "yesterday" : `${days}d ago`;
 }

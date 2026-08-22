@@ -24,14 +24,31 @@ const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..", "..", "web");
 const API = readFileSync(join(web, "lib", "api.ts"), "utf8");
 
+/**
+ * Every source file that could put words in front of a person.
+ *
+ * .ts AS WELL AS .tsx, AND lib/ AS WELL AS app/. The first version took only
+ * .tsx under app/, which is where components live -- and the inbox does not
+ * fetch from a component. It fetches through lib/store.ts, so all three of its
+ * error slots were invisible to the sweep AND to this check, and the inbox went
+ * on showing "Failed to fetch" with the suite green.
+ *
+ * A check scoped to where you expect the bug is a check that finds the bugs you
+ * expected.
+ */
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name === ".next") continue;
     const p = join(dir, entry.name);
     if (entry.isDirectory()) walk(p, out);
-    else if (entry.name.endsWith(".tsx")) out.push(p);
+    else if (/\.tsx?$/.test(entry.name)) out.push(p);
   }
   return out;
+}
+
+/** app/ and lib/ both. The API client itself is the one file exempt below. */
+function sources() {
+  return [...walk(join(web, "app")), ...walk(join(web, "lib"))];
 }
 
 /**
@@ -118,8 +135,11 @@ test("only a genuine unreachable host mentions the connection", () => {
 test("no screen surfaces a raw error message any more", () => {
   // The shape that made the written fallbacks dead code.
   const offenders = [];
-  for (const file of walk(join(web, "app"))) {
+  for (const file of sources()) {
     const src = readFileSync(file, "utf8");
+    // lib/api.ts is where readableError itself unwraps the Error, which is the
+    // one place this shape is the right code rather than the bug.
+    if (file.endsWith(join("lib", "api.ts"))) continue;
     if (/err instanceof Error \? err\.message/.test(src)) {
       offenders.push(file.slice(web.length + 1));
     }
@@ -143,9 +163,11 @@ test("every screen that catches an error routes it through the helper", () => {
   // through the helper would be worse, not better — it already has the parsed
   // body, and the helper would only get a string to re-parse.
   const offenders = [];
-  for (const file of walk(join(web, "app"))) {
+  for (const file of sources()) {
+    if (file.endsWith(join("lib", "api.ts"))) continue;
     const src = readFileSync(file, "utf8");
-    const usesSharedClient = /from "@\/lib\/api"/.test(src);
+    // Either import form: components use the alias, lib/ uses a relative path.
+    const usesSharedClient = /from "@\/lib\/api"|from "\.\/api"/.test(src);
     const surfaces = /set(Error|LoadError|SendError)\(/.test(src) || /kind: "error"/.test(src);
     if (usesSharedClient && surfaces && !src.includes("readableError")) {
       offenders.push(file.slice(web.length + 1));

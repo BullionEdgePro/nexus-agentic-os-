@@ -40,7 +40,16 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
   const load = useCallback(async () => {
     try {
       const data = await getConversationTasks(conversationId);
-      setTasks(data.tasks);
+      // `?? []` because the catch below only covers a fetch that FAILED. A 200
+      // carrying an unexpected shape sets state to undefined, and the next line
+      // of this component does tasks.filter(...) -- which throws during render
+      // and takes the whole inbox down, conversation and all.
+      //
+      // That is the exact outcome the comment below rules out, arriving through
+      // the one door the try/catch does not cover. Found when a stubbed reply
+      // returned the wrong payload for this URL: the messages vanished, the
+      // list vanished, and the screen went white.
+      setTasks(data.tasks ?? []);
     } catch {
       // Silent. A failed follow-up fetch must not put an error banner over a
       // live customer conversation — the messages are what this screen is for.
