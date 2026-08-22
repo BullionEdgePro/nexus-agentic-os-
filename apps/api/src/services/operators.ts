@@ -3,6 +3,7 @@ import {
   listOrganizations,
   reconcileFindings,
   listJobHeartbeats,
+  countKnowledgeSourcesAcrossPlatform,
   withTenant,
   type FindingInput,
   type RaisedFinding,
@@ -11,7 +12,14 @@ import {
 // the property that makes them cheap enough to run every ten minutes.
 import { scoreLead } from "@nexus/leads";
 import { JUDGE_UNAVAILABLE } from "@nexus/governance";
-import { isJobStalled, hasJobFailedRecently, JOB_STALE_AFTER_SECONDS, type ScheduledJob } from "@nexus/shared";
+import {
+  isJobStalled,
+  hasJobFailedRecently,
+  knowledgeRefreshBoundHours,
+  knowledgeRefreshCapacityPerDay,
+  JOB_STALE_AFTER_SECONDS,
+  type ScheduledJob,
+} from "@nexus/shared";
 import { logger } from "../lib/logger.js";
 import { dispatchRaisedFindings } from "./alert-dispatch.js";
 
@@ -434,6 +442,96 @@ const unownedFollowUp: Operator = {
  * than it should have been, which is the shape of failure this whole document
  * is about.
  */
+/**
+ * The knowledge base is ageing faster than it is being refreshed.
+ *
+ * ============================================================
+ * THE FAILURE NOTHING ELSE WATCHES
+ * ============================================================
+ *
+ * `broken-knowledge` watches sources marked FAILED. `schedule-stalled` watches
+ * the re-index stopping. `job-failing` watches it throwing. All three were
+ * green on 2026-08-22 while 20 of juris-prime-legal's 25 pages were over a day
+ * old, because none of them watches the outcome those three exist to protect:
+ * whether the pages the agent answers from are actually current.
+ *
+ * The starvation is silent by construction. The sweep takes the twenty stalest
+ * sources across the platform every six hours -- eighty a day against
+ * sixty-five sources, so it keeps up today with headroom. One more business
+ * with a forty-page site removes that headroom, and nothing about onboarding a
+ * business announces that the refresh has stopped covering everybody. Every
+ * source still says `indexed`, every job still reports success, and each reply
+ * is built from a progressively older copy of the page WITH A CITATION
+ * ATTACHED, which is the failure retrieval was built to avoid.
+ *
+ * ============================================================
+ * THE THRESHOLD IS DERIVED, NOT CHOSEN
+ * ============================================================
+ *
+ * A source becomes eligible at KNOWLEDGE_STALE_AFTER_HOURS and then waits up to
+ * one interval for the next run, so the designed worst case is threshold +
+ * interval -- 30 hours. Measured the day this was written, the oldest source on
+ * production was 28.5 hours: INSIDE the bound, and a threshold picked by eye
+ * would very likely have sat below it and fired on a healthy platform.
+ *
+ * Doubled, so a single missed cycle is not an alarm. The point is a sweep that
+ * has stopped covering the estate, not one that ran late once.
+ */
+const knowledgeNotRefreshing: Operator = {
+  slug: "knowledge-not-refreshing",
+  title: "The agent is answering from stale pages",
+  description:
+    "This business's knowledge sources are older than the refresh schedule should ever leave them. Nothing else reports it: the sources are not failing, the job is not stopped and it is not throwing — there are simply more pages on the platform than the sweep can revisit, so the oldest ones keep ageing and every answer is built from a copy that has drifted.",
+  run: async (organizationId) => {
+    const boundHours = knowledgeRefreshBoundHours() * 2;
+
+    const { rows } = await getPool().query<{
+      oldest_hours: string;
+      stale: string;
+      total: string;
+    }>(
+      `select round(extract(epoch from (now() - min(last_checked_at))) / 3600.0, 1)::text as oldest_hours,
+              count(*) filter (where last_checked_at < now() - ($2 || ' hours')::interval)::text as stale,
+              count(*)::text as total
+         from knowledge_sources
+        where organization_id = $1
+          and last_checked_at is not null`,
+      [organizationId, String(boundHours)]
+    );
+
+    const row = rows[0];
+    const stale = Number(row?.stale ?? 0);
+    if (stale === 0) return [];
+
+    // Platform-wide, so it is the same number in every business's finding --
+    // and that is the point: this is not that business's fault and cannot be
+    // fixed inside it.
+    const capacity = knowledgeRefreshCapacityPerDay();
+    const estate = await countKnowledgeSourcesAcrossPlatform();
+
+    return [
+      {
+        fingerprint: "knowledge-not-refreshing",
+        severity: "warn" as const,
+        title: `${stale} of this business's pages have not been re-read in ${Math.round(Number(row?.oldest_hours ?? 0))} hours`,
+        detail:
+          `The re-index should never leave a page older than ${knowledgeRefreshBoundHours()} hours. ` +
+          `Nothing is failing — every source still reports as indexed and the job is running — ` +
+          `there are simply ${estate} pages on the platform and the sweep can revisit ${capacity} a day. ` +
+          (estate > capacity
+            ? `That is more than it can cover, so the oldest pages will keep ageing until either the ` +
+              `schedule runs more often or fewer pages are tracked.`
+            : `That is within capacity, so this is more likely a run that failed or a site that stopped ` +
+              `responding — check the re-index job.`) +
+          ` Until it clears, answers about these pages are written from a copy that may have moved on, ` +
+          `and the reply still cites them.`,
+        subjectKind: "organization",
+        subjectId: null,
+      } satisfies FindingInput,
+    ];
+  },
+};
+
 const brokenKnowledge: Operator = {
   slug: "broken-knowledge",
   title: "Knowledge source failing",
@@ -1762,6 +1860,10 @@ export const OPERATORS: Operator[] = [
   overdueFollowUp,
   unownedFollowUp,
   brokenKnowledge,
+  // Beside brokenKnowledge because they divide one question: that one asks
+  // whether a source FAILED, this one whether the ones that succeeded are
+  // still current. A page can be perfectly indexed and a week out of date.
+  knowledgeNotRefreshing,
   thinKnowledge,
   judgeOffline,
   procedureAwaitingReview,

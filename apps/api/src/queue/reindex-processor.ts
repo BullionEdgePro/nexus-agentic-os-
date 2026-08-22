@@ -1,10 +1,18 @@
 import { findStaleSources, markSourceFailed, ingestUrlSet } from "@nexus/knowledge";
 import { logger } from "../lib/logger.js";
 import { withJobHeartbeat, withAllTenants, withTenant } from "@nexus/db";
+import { KNOWLEDGE_SOURCES_PER_RUN, KNOWLEDGE_STALE_AFTER_HOURS } from "@nexus/shared";
 
-/** Bounded per cycle — see findStaleSources for why quota makes this matter. */
-const SOURCES_PER_RUN = 20;
-const STALE_AFTER_HOURS = 24;
+/**
+ * Bounded per cycle — see findStaleSources for why quota makes this matter.
+ *
+ * Both now come from @nexus/shared, because the operator that watches whether
+ * this sweep is KEEPING UP has to derive its threshold from the same two
+ * numbers. A local copy here and a threshold there would agree until the day
+ * somebody tuned one of them.
+ */
+const SOURCES_PER_RUN = KNOWLEDGE_SOURCES_PER_RUN;
+const STALE_AFTER_HOURS = KNOWLEDGE_STALE_AFTER_HOURS;
 
 /**
  * Refresh knowledge sources whose content may have moved on.

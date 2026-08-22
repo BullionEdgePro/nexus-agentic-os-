@@ -49,9 +49,16 @@ BODY=$(git log -1 --format=%b)
 # github.com, so ask the credential manager directly.
 GIT="git -c credential.helper= -c credential.helper=manager"
 
-if [ -d "$WORK/.git" ]; then
+# ASK GIT, DO NOT LOOK FOR A DIRECTORY. `[ -d "$WORK/.git" ]` was the first
+# version and it is not the same question: an interrupted clone leaves a .git
+# directory that exists and is not a repository, so the test passed, the fetch
+# ran, and the whole deploy stopped on "fatal: not a git repository" with a
+# perfectly good checkout sitting next to it. Happened once, cost a deploy.
+if $GIT -C "$WORK" rev-parse --git-dir >/dev/null 2>&1; then
   $GIT -C "$WORK" fetch -q origin main && $GIT -C "$WORK" reset -q --hard origin/main || exit 1
 else
+  # Covers "not there at all" and "there but broken" with the same branch,
+  # which is the point of asking git rather than the filesystem.
   rm -rf "$WORK"
   $GIT clone -q "$REMOTE" "$WORK" || exit 1
 fi

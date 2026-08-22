@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants } from "./client.js";
 
 /**
  * Storage and reconciliation for operator findings (F8).
@@ -510,4 +510,30 @@ export async function lastSeenByOperator(
     [organizationId ?? null]
   );
   return Object.fromEntries(rows.map((row) => [row.operator, row.last_seen_at]));
+}
+
+/**
+ * How many knowledge sources the whole platform tracks.
+ *
+ * SELF-WRAPPING, like listJobHeartbeats, and for the same reason: the caller is
+ * an operator running inside one business's transaction, and the number it
+ * needs is deliberately not that business's. Opening the cross-tenant scope
+ * here rather than at the call site keeps the operator from nesting one scope
+ * inside another, and makes the cross-tenant read a property of this function
+ * that can be read once instead of a habit every caller has to remember.
+ *
+ * Used by knowledge-not-refreshing to say WHY a business's pages are ageing:
+ * the sweep revisits a fixed number a day, so once the estate outgrows that,
+ * the oldest pages age without limit and no single business can fix it.
+ */
+export async function countKnowledgeSourcesAcrossPlatform(): Promise<number> {
+  return withAllTenants(
+    "knowledge-not-refreshing: the estate is a platform-wide number by definition",
+    async () => {
+      const { rows } = await getPool().query<{ n: string }>(
+        `select count(*)::text as n from knowledge_sources`
+      );
+      return Number(rows[0]?.n ?? 0);
+    }
+  );
 }

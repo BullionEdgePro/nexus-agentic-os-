@@ -55,6 +55,61 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
  * signal worthless.
  */
 /**
+ * The knowledge re-index's own contract, beside the schedule that drives it.
+ *
+ * These two numbers used to live only in reindex-processor.ts, where nothing
+ * else could see them -- so any check on whether the refresh was KEEPING UP had
+ * to hardcode a threshold and hope it still matched. Here they are the single
+ * definition, and the bound below is derived rather than guessed.
+ */
+export const KNOWLEDGE_STALE_AFTER_HOURS = 24;
+export const KNOWLEDGE_SOURCES_PER_RUN = 20;
+
+/**
+ * How often the re-index actually runs. THE definition -- reindex-queue.ts
+ * imports this to register the repeat, so the schedule and anything judging it
+ * cannot disagree.
+ *
+ * Written out rather than inferred from JOB_STALE_AFTER_SECONDS. That tolerance
+ * happens to be three intervals for this job, and dividing by three to recover
+ * the interval would be reading a coincidence as a contract -- the tolerances
+ * above are explicitly "roughly three intervals for the frequent jobs and a
+ * generous margin for the daily ones", so the ratio is not one for every job
+ * and is not promised for any of them.
+ */
+export const KNOWLEDGE_REINDEX_INTERVAL_HOURS = 6;
+
+/**
+ * The oldest a source should ever get, if the sweep is keeping up.
+ *
+ * A source becomes ELIGIBLE at KNOWLEDGE_STALE_AFTER_HOURS and can then wait up
+ * to one whole interval for the next run to pick it up. So the designed worst
+ * case is threshold + interval -- 30 hours today -- and anything at or under
+ * that is the system working, not a fault.
+ *
+ * Measured on production 2026-08-22: the oldest source was 28.5 hours, which is
+ * inside this bound. An alarm set below it would have fired on a healthy
+ * platform, which is how an alarm gets ignored.
+ */
+export function knowledgeRefreshBoundHours(): number {
+  return KNOWLEDGE_STALE_AFTER_HOURS + KNOWLEDGE_REINDEX_INTERVAL_HOURS;
+}
+
+/**
+ * How many sources the schedule can refresh in a day.
+ *
+ * The bound above only holds while the queue can drain. 20 sources every six
+ * hours is 80 a day; past that, the oldest sources age without limit and every
+ * reply is built from a progressively older copy of the page, with a citation
+ * attached. There are 65 sources today, so there is headroom -- but one more
+ * business with a forty-page site removes it, and nothing about that arrival
+ * would announce itself.
+ */
+export function knowledgeRefreshCapacityPerDay(): number {
+  return KNOWLEDGE_SOURCES_PER_RUN * (24 / KNOWLEDGE_REINDEX_INTERVAL_HOURS);
+}
+
+/**
  * Whether this job has thrown RECENTLY, whatever it did afterwards.
  *
  * `isJobStalled` asks whether a job has stopped completing, and that catches a

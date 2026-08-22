@@ -309,6 +309,14 @@ const UNCOVERED: Record<string, string> = {
   // that are about the SEED being honest rather than about effort.
   "unowned-followup":
     "suppressed by design for a business with no staff, so seeding it against a business whose roster is empty would assert the wrong behaviour",
+  // Seedable in principle -- back-date a source's last_checked_at -- and not
+  // seeded, because the seed would have to reach past the 60-hour derived
+  // threshold on a REAL source, and a probe that ages production knowledge is a
+  // probe that can leave the agent citing a stale page if it fails to roll back.
+  // Proven by probe against production instead: silent at the measured 28.5h,
+  // fires at 80h, restored.
+  "knowledge-not-refreshing":
+    "not seeded here — the seed would have to back-date a real source past the derived 60h threshold, and a probe that ages production knowledge can leave the agent citing a stale page if its rollback fails. Proven by probe instead: silent at the measured 28.5h, fires at 80h, row restored",
   "thin-knowledge":
     "counts chunks against a floor, and the probe source seeded for broken-knowledge would move that count — the two would test each other rather than themselves",
   "reengagement-candidate":

@@ -48,6 +48,10 @@ const WHERE: Record<string, Destination> = {
   "broken-knowledge": { screen: "knowledge" },
   "thin-knowledge": { screen: "knowledge" },
   "retrieval-unavailable": { screen: "knowledge" },
+  // The Knowledge screen lists the sources and when each was last read, which
+  // is the thing this finding is about -- even though the fix is usually the
+  // schedule rather than any one source.
+  "knowledge-not-refreshing": { screen: "knowledge" },
 
   // How the agent answers.
   "procedure-awaiting-review": { screen: "procedures" },

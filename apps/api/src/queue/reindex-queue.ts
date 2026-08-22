@@ -1,4 +1,5 @@
 import { Queue } from "bullmq";
+import { KNOWLEDGE_REINDEX_INTERVAL_HOURS } from "@nexus/shared";
 import { getRedisConnection } from "./queue.js";
 
 // BullMQ rejects queue names containing ":" — hyphens only (see queue.ts).
@@ -7,7 +8,10 @@ export const KNOWLEDGE_REINDEX_QUEUE = "knowledge-reindex";
 /** Stable id so re-scheduling on every boot replaces rather than duplicates. */
 const REPEAT_JOB_ID = "knowledge-reindex-cycle";
 
-const EVERY_SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+// FROM THE SHARED DEFINITION, not a second copy. The operator that judges
+// whether the refresh is keeping up derives its bound from the same constant --
+// two independent "6"s would drift the first time somebody changed one.
+const EVERY_SIX_HOURS_MS = KNOWLEDGE_REINDEX_INTERVAL_HOURS * 60 * 60 * 1000;
 
 let queue: Queue | undefined;
 export function getReindexQueue(): Queue {
