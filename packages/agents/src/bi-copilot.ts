@@ -1,5 +1,6 @@
 import { completeText } from "./anthropic-text.js";
 import { getPool } from "@nexus/db";
+import { scoreLead } from "@nexus/leads";
 
 /**
  * Ask a question about a business in plain language.
@@ -60,30 +61,15 @@ const QUESTIONS: Question[] = [
       const { rows } = await getPool().query<{
         who: string;
         hours: string;
-        is_pitch: boolean;
+        last_body: string | null;
       }>(
         `select coalesce(ct.display_name, '+' || ct.wa_id) as who,
                 round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as hours,
-                -- THE SAME SUPPRESSION THE DECK APPLIES, and it has to be the
-                -- same or this platform answers one question two ways.
-                --
-                -- customer-waiting sets cold pitches aside deliberately:
-                -- reporting a data broker as an ignored customer is the noise
-                -- that teaches somebody to stop reading the list. Without this,
-                -- the copilot said "1 person is waiting, 174 hours" for a
-                -- business whose deck correctly showed nothing -- and the
-                -- person reading them would have had to decide which to trust.
-                --
-                -- Carried as a flag rather than filtered in SQL, so the count
-                -- set aside can be stated rather than silently dropped.
-                exists (
-                  select 1 from lead_assessments la
-                   where la.conversation_id = c.id and la.category = 'inbound_pitch'
-                ) as is_pitch
+                last.body as last_body
            from conversations c
            join contacts ct on ct.id = c.contact_id
            join lateral (
-             select sender_type, created_at from messages m
+             select sender_type, created_at, body from messages m
               where m.conversation_id = c.id
               order by m.created_at desc,
                        case m.sender_type when 'contact' then 1 else 0 end
@@ -97,12 +83,37 @@ const QUESTIONS: Question[] = [
         [organizationId]
       );
 
-      const waiting = rows.filter((row) => !row.is_pitch);
+      // COLD PITCHES ARE SET ASIDE, the same way customer-waiting sets them
+      // aside — or this platform answers one question two ways, and whoever
+      // reads both has to pick which to trust with nothing to pick on.
+      //
+      // SCORED FROM THE MESSAGE, NOT READ FROM lead_assessments, and the
+      // difference is the whole reason this comment exists. My first attempt
+      // added `exists (select 1 from lead_assessments ...)` to the query above
+      // and it silently did nothing: on a shared number the assessment belongs
+      // to the NUMBER'S OWNER while the conversation SERVES this business, so
+      // scoped here the row is invisible. Not an error — zero rows, `exists`
+      // false, every pitch reported as a waiting customer. Written by somebody
+      // who had spent the week cataloguing the other ten instances of it.
+      //
+      // The second attempt widened the read with withAllTenants and the
+      // copilot's own tenant guard refused it, correctly: every query in this
+      // file is scoped, that is the feature's security premise, and "bounded by
+      // application logic" is not something a guard can check.
+      //
+      // So it uses what the serving business CAN see. The message body is
+      // visible to it (migration 054), and scoreLead is the same pure,
+      // rules-based scorer customer-waiting falls back to when no assessment
+      // exists. Same verdict, no widening, nothing to exempt.
+      const isPitch = (body: string | null) =>
+        Boolean(body) && scoreLead({ text: body as string }).category === "inbound_pitch";
+
+      const waiting = rows.filter((row) => !isPitch(row.last_body));
       const pitches = rows.length - waiting.length;
       // Said out loud rather than left as a quieter number. "Nobody is waiting"
-      // and "nobody is waiting, and three cold pitches were set aside" are
-      // different facts, and the second is the one that explains why a screen
-      // showing traffic can still be reporting nobody.
+      // and "nobody is waiting, and one cold pitch was set aside" are different
+      // facts, and the second explains why a business with traffic on its
+      // screen still reports nobody waiting.
       const asideNote =
         pitches > 0
           ? ` ${pitches} cold ${pitches === 1 ? "pitch was" : "pitches were"} set aside — the same ones the operators screen ignores.`
