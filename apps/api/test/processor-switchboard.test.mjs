@@ -183,6 +183,11 @@ mock.module("@nexus/agents", {
     // supplied one would test a code path the assertions do not check.
     recallContact: async () => null,
     describeOpenFollowUps: () => null,
+    // The reply path asks this when nobody is on the rota. These fixtures mock
+    // hasStaffOnShift to true, so it is never called — the stub exists because
+    // this mock replaces the whole module and a missing name is an import
+    // failure, not a quiet undefined.
+    describeNobodyToEscalateTo: () => "",
     // These fixtures have no appointments, so the honest stub is "no note". A
     // mock that invented one would exercise a branch these assertions never
     // check and quietly change what the agent was asked.

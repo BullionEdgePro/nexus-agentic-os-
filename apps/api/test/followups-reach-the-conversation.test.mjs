@@ -196,12 +196,18 @@ test("a follow-up lookup cannot delay or break a customer's reply", () => {
 test("memory, obligations, appointments and the procedure stay separate notes", () => {
   // Different kinds of fact carrying different cautions — what we know about
   // someone, what we owe them and must not claim to have done, what is already
-  // agreed and must not be double-booked, and (F10) the order to work in, which
-  // is not a source of facts at all. Merged, it would be unclear which warning
-  // governs which part.
+  // agreed and must not be double-booked, (F10) the order to work in, which is
+  // not a source of facts at all, and whether there is anybody to hand over to,
+  // which overrides an instruction the system prompt gives unconditionally.
+  // Merged, it would be unclear which warning governs which part.
+  //
+  // FIVE NOW, NOT FOUR. The comment above is the invariant; the list below is
+  // what currently satisfies it, and pinning the exact array is deliberate —
+  // reordering it is a one-character edit whose effect on the reply nobody
+  // would see in a diff.
   assert.match(
     PROCESSOR,
-    /const notes = \[\s*recalled \? recallNote\(recalled\) : null,\s*owedNote,\s*bookedNote,\s*procedure\?\.note \?\? null,\s*\]/
+    /const notes = \[\s*recalled \? recallNote\(recalled\) : null,\s*owedNote,\s*bookedNote,[\s\S]*?canPromiseAPerson \? null : describeNobodyToEscalateTo\(\),\s*procedure\?\.note \?\? null,\s*\]/
   );
   assert.match(PROCESSOR, /function recallNote\(recalled: string\): string/);
 });

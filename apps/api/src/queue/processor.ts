@@ -45,6 +45,7 @@ import {
   describeOpenFollowUps,
   upcomingBookingsNote,
   classifyIntent,
+  describeNobodyToEscalateTo,
 } from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
@@ -781,10 +782,37 @@ async function answerOneMessage(
     // The procedure goes LAST, nearest the customer's message. The other three
     // are context to hold in mind; this one is an instruction about what to do
     // next, and instructions belong closest to the thing they act on.
+    // CAN THIS REPLY PROMISE A PERSON? Asked with the SAME function the
+    // escalation itself uses, so the agent's words and the platform's behaviour
+    // cannot disagree. `hasActiveEmployees` would be the wrong question: a firm
+    // with staff who are all off-shift still cannot take a handover tonight,
+    // and flagHandoffBestEffort checks presence, not employment.
+    //
+    // NO withServingTenant HERE, and it took an existing test to notice. The
+    // widening is INSIDE hasStaffOnShift -- the Scoped-inner pattern -- and
+    // wrapping it again is a no-op at best: a withTenant nested in a withTenant
+    // deliberately reuses the outer context, which is the very bug the comment
+    // on that function is about. I reached for the wrapper by matching the
+    // SHAPE of the defect class without checking whether this function already
+    // handled it, and the only thing it achieved was moving the .catch off the
+    // call it guards. `a failed staff lookup assumes there IS somebody` failed
+    // on exactly that.
+    //
+    // FAILURE-SOFT IN THE SAME DIRECTION AS THE ESCALATION. On error assume
+    // somebody IS there, exactly as flagHandoffBestEffort does: a transient
+    // database blip must not make five agents start telling customers there is
+    // nobody to help them.
+    const canPromiseAPerson = await hasStaffOnShift(serving.id).catch(() => true);
+
     const notes = [
       recalled ? recallNote(recalled) : null,
       owedNote,
       bookedNote,
+      // Nearest the customer's message after the procedure, because like the
+      // procedure it is an instruction about what to do rather than a fact to
+      // hold in mind -- and it overrides an instruction the system prompt gives
+      // unconditionally.
+      canPromiseAPerson ? null : describeNobodyToEscalateTo(),
       procedure?.note ?? null,
     ].filter((note): note is string => note !== null);
 

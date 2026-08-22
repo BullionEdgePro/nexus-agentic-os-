@@ -194,3 +194,74 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
     return EMPTY("The summary could not be generated just now.", history.length, followUps);
   }
 }
+
+/**
+ * What the agent may promise when there is nobody to hand over to.
+ *
+ * ============================================================
+ * THE PROMISE AND THE PLATFORM DISAGREED
+ * ============================================================
+ *
+ * ABR's system prompt says, of an arrest or a detention: "tell them the firm
+ * will be alerted immediately and escalate". The reply path then reaches
+ * `flagHandoffBestEffort`, finds nobody on the rota, logs
+ *
+ *     "Not pausing the agent — no active staff, so a handoff would abandon
+ *      this conversation rather than transfer it"
+ *
+ * and returns. No handoff, no inbox event, and — with no alert destination
+ * configured — no notification of any kind. The warning goes to a container log
+ * that is erased on the next deploy.
+ *
+ * So on 2026-08-22 a dry run put "My brother has been arrested in Dubai" to
+ * ABR's live agent and got back: "I'm flagging this as urgent so the firm is
+ * alerted immediately." Nobody would have been alerted. The customer, whose
+ * brother is in police custody, would have stopped looking for help.
+ *
+ * The governance judge passed it, correctly and uselessly: it checks claims
+ * against the RETRIEVED KNOWLEDGE, and "the firm is alerted" is a claim about
+ * the platform, which is not in any passage it reads.
+ *
+ * ============================================================
+ * WHY THIS IS A NOTE AND NOT A PROMPT EDIT
+ * ============================================================
+ *
+ * The prompt is the tenant's own words about their own firm and is right about
+ * what they want. What changed is a fact the prompt cannot know: whether anyone
+ * is on the rota RIGHT NOW. Editing five prompts would encode a Tuesday
+ * afternoon into text that outlives it, and would still be wrong every evening.
+ *
+ * It says what is true rather than only forbidding the false thing. A customer
+ * in an emergency needs somewhere to go, and "the office is open Monday to
+ * Saturday 09:00-18:00" is already in the prompt — so the instruction is to
+ * point at it, not merely to stop promising.
+ */
+/*
+ * NO PARAMETER, AND THAT IS A FINDING RATHER THAN A SHORTCUT. The first version
+ * took an office number to pass through. There is nowhere to get one:
+ * `Organization` carries an id, a slug, a name, two Meta ids and a timezone,
+ * and nothing that a customer could dial. That absence is the same one ABR's
+ * `no_one_available` phrase is blocked on — it still contains
+ * {{office_number}} because the value does not exist anywhere in this platform.
+ *
+ * So the note points the agent at what IT already has. Every system prompt
+ * carries the firm's own contact details in the tenant's own words (ABR's names
+ * the building and the opening hours), which is a better answer than a field
+ * this platform would have had to invent.
+ */
+export function describeNobodyToEscalateTo(): string {
+  return [
+    "PLATFORM STATE — nobody is on the rota for this business right now.",
+    "",
+    "You must NOT say the firm, the team or a colleague has been alerted, notified,",
+    "flagged or told. No notification will be sent. Saying otherwise leaves somebody",
+    "waiting for a call that is not coming, and in an urgent matter that is the",
+    "worst thing you can do.",
+    "",
+    "You may still take their details and say a colleague will follow up. For",
+    "anything urgent, give them the direct contact details for this business from",
+    "your own instructions — the address, the phone number, the opening hours,",
+    "whichever you have — and tell them to use it now rather than wait for a reply",
+    "here.",
+  ].join("\n");
+}
