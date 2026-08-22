@@ -1,0 +1,124 @@
+/* ============================================================
+   FAILURE STATES
+   ============================================================
+
+   Shared by the deck boundary, the inbox boundary, the 404 and the
+   last-resort global boundary — so that whatever goes wrong, it goes
+   wrong in the same voice. Four differently-styled apologies would
+   themselves suggest four different products.
+
+   QUIET, NOT ALARMING. Nothing here is on fire: a screen failed to
+   draw, the data behind it is untouched, and every other screen still
+   works. Red would say otherwise, and this system spends its saturated
+   colour on severity — an error page is not a severity.
+   ============================================================ */
+
+.err-root {
+  display: grid;
+  place-items: center;
+  padding: 64px 24px;
+  min-height: 60vh;
+}
+
+.err-card {
+  max-width: 62ch;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  box-shadow: var(--lift-sm);
+  padding: 32px;
+}
+
+.err-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 10px;
+}
+
+.err-head {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.25;
+  color: var(--ink);
+  text-wrap: balance;
+  margin-bottom: 14px;
+}
+
+.err-body {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--slate);
+  margin-bottom: 12px;
+}
+
+.err-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* SPECIFICITY, NOT COLOUR. deck.css carries `.deck-root a { color: inherit }`
+   at (0,1,1), which outranks a bare `.err-btn` at (0,1,0) — so the primary
+   action rendered as navy text on a navy fill, contrast 1.00, completely
+   invisible. Only the 404 exposed it: the other boundaries make their primary
+   action a <button>, which that rule never touches, so three of the four looked
+   perfect.
+
+   Scoping these under .deck-root takes them to (0,2,0) and settles it. Measured
+   after: 0 failures on both the boundary and the 404. */
+
+.deck-root .err-btn {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--marble);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.deck-root .err-btn:hover { background: var(--signal); border-color: var(--signal); }
+
+.deck-root .err-btn.ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+.deck-root .err-btn.ghost:hover {
+  background: var(--pebble);
+  border-color: var(--signal);
+  color: var(--signal-text);
+}
+
+.deck-root .err-btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+/* The digest is the only developer-facing string on the page, and it is here
+   so somebody can quote it rather than describe it. Set in mono because it is
+   an identifier and will be copied character by character. */
+.err-ref {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--slate);
+}
+
+.err-ref code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--pebble);
+  border-radius: var(--r-xs);
+  padding: 2px 6px;
+  color: var(--ink);
+}
