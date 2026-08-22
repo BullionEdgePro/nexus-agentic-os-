@@ -16,6 +16,7 @@
  * removes it before exiting — including on failure.
  */
 import { pathToFileURL } from "node:url";
+import { PHRASE_MOMENTS, unfilledPlaceholders } from "@nexus/shared";
 import {
   getPool,
   withTenant,
@@ -36,6 +37,7 @@ import {
   createBooking,
   setBookingStatus,
   findNumberOwner,
+  getActivePhrase,
   listUpcomingBookingsForContact,
   SlotTakenError,
 } from "@nexus/db";
@@ -446,6 +448,69 @@ async function checkUnauthenticatedSignIn(organizationId: string) {
   }
 }
 
+/**
+ * Can each business's own wording be read from the transaction that sends it?
+ *
+ * WHAT IS AT STAKE. When the agent escalates, the customer receives either the
+ * business's authored phrase or the platform's generic fallback, and the ONLY
+ * thing standing between them is that `getActivePhrase` widens at the read.
+ * Five firms share one number, so this is asked about the SERVING business from
+ * inside the NUMBER OWNER's transaction: unscoped, RLS returns no rows, and the
+ * caller cannot tell "this firm has written nothing" from "this firm's words
+ * are invisible from here". The fallback goes out, reads perfectly well, and is
+ * not what the firm wrote.
+ *
+ * NOT HYPOTHETICAL. `getActivePhrase` is one of the nine original instances of
+ * that defect on this platform. It was fixed at the read; nothing has ever
+ * checked that it stayed fixed, and the fix is one deleted wrapper away from
+ * being undone with no test failing.
+ *
+ * IT ALSO CHECKS THE WORDING IS SENDABLE. A phrase carrying an unfilled
+ * {{placeholder}} reaches the customer exactly as written. The activation route
+ * refuses to switch one on -- but a phrase already active when a placeholder is
+ * introduced by an edit elsewhere would not pass back through that guard.
+ */
+async function checkPhrasesReachTheCustomer(ownerId: string) {
+  console.log("\nAuthored wording (read as the reply path reads it)");
+
+  const businesses = await withAllTenants("self-check: every business's wording", () =>
+    listOrganizations()
+  );
+
+  // One transaction, the owner's, exactly as the reply pipeline holds it.
+  await withTenant(ownerId, async () => {
+    let anyActive = false;
+
+    for (const business of businesses) {
+      for (const moment of PHRASE_MOMENTS) {
+        const phrase = await getActivePhrase(business.id, moment).catch(() => null);
+        if (!phrase) continue;
+        anyActive = true;
+
+        check(
+          `${business.slug}/${moment} is readable from the owner's transaction`,
+          phrase.body.trim().length > 0,
+          `${phrase.body.slice(0, 44)}…`
+        );
+        check(
+          `${business.slug}/${moment} has nothing left to fill in`,
+          unfilledPlaceholders(phrase.body).length === 0,
+          unfilledPlaceholders(phrase.body).join(", ") || "no placeholders"
+        );
+      }
+    }
+
+    // A silent pass is the failure this whole function exists to prevent: if
+    // the widening broke, every read above returns null and the loop asserts
+    // nothing at all while reporting no problem.
+    check(
+      "at least one business's wording was found",
+      anyActive,
+      anyActive ? "found" : "NONE — either nothing is active anywhere, or the read stopped widening"
+    );
+  });
+}
+
 async function main() {
   console.log("Nexus self-check — live database\n");
 
@@ -761,6 +826,7 @@ async function main() {
 
   await checkUnauthenticatedSignIn(zipicka.id);
   await checkBookingRoundTrip(zipicka.id);
+  await checkPhrasesReachTheCustomer(zipicka.id);
 
   console.log(
     failures === 0
