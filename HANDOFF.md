@@ -1,26 +1,41 @@
 # Nexus Agentic OS — Session Handoff
 
-**Started 13 August 2026, current as of 17 August 2026.** Everything below was measured on the live
+**Started 13 August 2026, current as of 22 August 2026.** Everything below was measured on the live
 system, not inferred. Production: `nexusagenticos.com`, VPS `srv1859576` (`200.141.5.204`), deploy
 dir `/opt/nexus`.
+
+> **This file was four days and 196 tests out of date before 22 August.** It read "820 passing" and
+> "nothing is pending on the code" while sixteen commits had landed since. That is the same defect
+> the whole platform is written against — a stale record answering a question as though it were
+> current — and it is worse here than anywhere, because this is the file somebody reads to decide
+> what to do next. Re-measure the table below before trusting it; every number in it came from the
+> live system on the date in this line.
 
 ---
 
 ## Current status — read this first
 
-**Five things are pending on a person, and one customer is owed a reply. Nothing is pending on the code.**
+**Everything outstanding is pending on a person. One customer has now been owed a reply for three days.**
 
 | | |
 |---|---|
-| Deployed | 6/6 containers up, health 200. The commit hash that used to sit here went stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
-| Migrations | through **051**, every one verified by its effect in the database, not by a log |
-| Tests | **820** passing, typecheck and `next build` clean |
-| Operators | **16**, sweeping every 10 minutes. **1 standing finding**, and it is a real one — `customer-waiting` on a contact ignored since 17 Aug (see below). Since 050, "0 findings" finally means something: `GET /health/jobs` says whether the sweep ran |
-| Features | 7 of 15 (5 ✅ + 2 🟢 — F5 and F13 both closed 17 Aug), per `ARCHITECTURE-ABOS.md` §6, which is the only per-feature table to trust; the rest partial, several deliberately so |
+| Deployed | 6/6 containers up. The commit hash goes stale within the day — read it with `git -C /opt/nexus log -1` rather than from this table |
+| Migrations | through **063**, every one verified by its effect in the database, not by a log |
+| Tests | **1016** passing, typecheck and `next build` clean |
+| Operators | **20**, sweeping every 10 minutes. **5 standing findings**, all real — see below |
+| Gates | **ten**, in one command via `./scripts/verify-all.sh` — all PASS. Added since the 17th: `build-check` (is the running image the current commit?), `schema-drift-check` (has every migration actually reached production?), `deep-link-check` (does a published wa.me link route to the business that published it?) |
 | Governance | evaluating 1:1 with every AI reply |
 | Backups | nightly, restore-verified, rotating — **still local-disk only** |
-| Gates | **seven**, run 18 Aug in one command via `./scripts/verify-all.sh` — **all PASS**: `schema-check`, `shared-number-check`, `rls-preflight`, `rls-verify`, `operator-fire-check`, `self-check`, `retrieval-check` (18/18; 13/18 on the keyword fallback). The order in that script is deliberate — see OPERATIONS |
-| Live counts | 6 catalogue items published, **0 installed**; 3 phrases active; **0 procedures**, so no customer has met one |
+| Alerting | built, and **silent**: `OPERATOR_ALERT_WEBHOOK_URL` is unset, so no finding has ever reached anybody who was not looking at the screen. The operators deck now says so in as many words rather than showing a quiet list |
+| Live counts | 65 knowledge sources, all `indexed`; 3 phrases active; **0 procedures**, **0 bookings**, **0 tasks** — no customer has met any of them |
+
+**The five standing findings, all true:**
+
+| operator | n | oldest | what it means |
+|---|---|---|---|
+| `customer-waiting` | 1 | 68h | A colleague replied on the 10th and never came back. The agent is no longer paused, so this customer's NEXT message gets answered — but this one never will, because the reply path runs on inbound webhooks and never revisits a backlog |
+| `booking-without-anyone` | 3 | 44h | ABR, Juris Prime Legal and SFS have the booking tool on with nobody on a rota. Measured: 0 offerable slots each. Customers are offered a call back that nobody is rostered to make |
+| `wording-awaiting-review` | 1 | 45h | ABR's `no_one_available` phrase still contains `{{office_number}}` and cannot be activated until that value exists |
 
 **What still needs running, in priority order:**
 
@@ -80,71 +95,40 @@ three false "successes". SSH cannot do this.
 ## 2. Deploying
 
 Two repos. Local `C:\CLAUDE CODE` (monorepo, `nexus-agentic-os/` subdir) pushes to `kova-audio`.
-The VPS pulls from a **flat** repo: `github.com/BullionEdgePro/nexus-agentic-os-` (trailing dash).
+The VPS pulls from a **flat** repo: `github.com/BullionEdgePro/nexus-agentic-os-` (trailing dash) —
+flat because `/opt/nexus/docker-compose.prod.yml` has to sit at `/opt/nexus`, not one level down.
 
 ```bash
-# 1. commit + push the monorepo
-git -C "C:/CLAUDE CODE" push origin main
-
-# 2. mirror the subtree into the flat repo
-NAO=<working copy of nexus-agentic-os->
-git -C "$NAO" rm -rq --cached .
-find "$NAO" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-git -C "C:/CLAUDE CODE" archive HEAD:nexus-agentic-os | tar -x -C "$NAO"
-git -C "$NAO" add -A
-# 2b. THE EXEC BIT DOES NOT SURVIVE THIS. `git rm --cached .` empties the index,
-#     tar on Windows drops the mode, and `add` re-records 644 because
-#     core.fileMode is false here.
-#
-#     THIS STEP USED TO NAME ONE FILE and there are four. It was written when
-#     backup-db.sh was the only executable in the tree; pre-commit.sh,
-#     githooks/pre-commit and verify-all.sh were added after it and inherited
-#     nothing. Following it literally on 2026-08-19 demoted all three to 644 —
-#     including verify-all.sh, which is how the ten gates are run on the VPS.
-#     DERIVED FROM THE SOURCE TREE, not the mirror's. Reading the MIRROR's HEAD
-#     was the first version and it is subtly wrong in one direction: it can only
-#     re-assert bits on files the mirror already had, so a NEW executable is
-#     recorded 644 on the commit that introduces it and stays that way. Caught
-#     the same day it was written, by adding build-check.sh and deploy.sh.
-git -C "C:/CLAUDE CODE" ls-tree -r HEAD:nexus-agentic-os | awk '$1=="100755"{print $4}' |
-  while read -r f; do git -C "$NAO" update-index --chmod=+x "$f"; done
-#     Then confirm, because this failure is silent until something will not run:
-git -C "$NAO" diff --cached --summary | grep "mode change" && echo "STILL DEMOTED"
-git -C "$NAO" commit -m "..."
-
-# 3. THIS is the part that breaks: gh is logged in as Rancho-Felipe, which has
-#    no write access to BullionEdgePro, and it hijacks all github.com auth.
-git -C "$NAO" -c credential.helper= -c credential.helper=manager push origin main
-
-# 4. on the VPS — ONE COMMAND, and it builds web too
-cd /opt/nexus && ./scripts/deploy.sh
-#
-#    This step used to read `build api worker`, and `web` was left to whoever
-#    remembered it. Every gate talks to the API, so a forgotten web build is a
-#    deploy where all ten gates pass and the deck still shows the previous
-#    revision. deploy.sh pulls, exports GIT_COMMIT, builds all three, restarts,
-#    and runs build-check on itself rather than assuming it worked.
+cd nexus-agentic-os && ./scripts/mirror.sh
+ssh root@200.141.5.204 'cd /opt/nexus && ./scripts/deploy.sh'
+ssh root@200.141.5.204 'cd /opt/nexus && ./scripts/verify-all.sh'
 ```
 
-A fresh clone of the mirror also needs `git config user.email/user.name`, or the commit fails
-with "Author identity unknown".
+**This used to be thirty lines of hand-run git and it is now one script**, written on 21 August
+after the fourth hand-run cost twenty minutes reconstructing the first three from a transcript. The
+detail below is what that script now does for you; it is kept because every line of it was learned
+by getting it wrong, and because the script has to keep being right about them.
 
-**Step 2b is not housekeeping.** `scripts/backup-db.sh` is the only mode-755 file in the tree, the
-monorepo records it correctly, and the mirror loses it on every rebuild — checked again on 17
-August, and it had flipped back to 644. A `chmod +x` done on the server instead creates a permanent
-local mode diff, which makes `git pull` print "Aborting" while HEAD stays put; that is how a deploy
-once reported success and ran the previous script. Verify with `ls -l` on the VPS, not with the push
-output.
-
-**Migrations run as `nexus`, not `postgres`** (that role does not exist):
-
-```bash
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U nexus -d nexus -v ON_ERROR_STOP=1 < packages/db/migrations/0NN-x.sql
-```
-
-Never read the exit code through a pipe — `... | tail -3; echo $?` reports the exit code of
-`tail`, so a failed migration prints `0`. Redirect to a file and echo `$?` directly.
+* **It mirrors the COMMIT, never the working tree.** `git archive HEAD:` cannot pick up an
+  uncommitted edit, a `node_modules`, a `.next` or a `.env`, because none of them are in the
+  commit — and the mirror is public. Copying the working tree is how a secret ships.
+* **It refuses to run on a dirty tree.** Mirroring HEAD while the disk says something else deploys
+  a commit behind and passes all ten gates doing it. The first run of the script refused because of
+  the script itself, which is the check working.
+* **It re-asserts the exec bit from the SOURCE tree.** `core.fileMode` is false on the dev machine
+  and tar drops the mode, so `add -A` re-records whatever the mirror already had: existing
+  executables keep 755 by luck, and a NEW executable is recorded 644 on the commit that introduces
+  it. `mirror.sh` shipped 644 for exactly that reason — it was the newest script, so it had no
+  prior mode to inherit, and it ran anyway from Git Bash while being broken for anyone on Linux.
+  Deriving from the source tree rather than the mirror's HEAD matters: reading the mirror can only
+  re-assert bits on files it already has, which is the same blind spot one step along. It now also
+  REFUSES the push if anything was demoted, because this failure is silent until something will not
+  run — on 19 August, following the manual steps literally demoted `verify-all.sh`, which is how
+  the ten gates are run on the VPS.
+* **Deletions propagate.** Unpacking an archive over a populated clone adds and overwrites but
+  never removes, so a deleted migration would live on in production forever.
+* **`gh` is logged in as a different account on this machine** and hijacks github.com auth, so the
+  script asks the credential manager directly rather than letting gh answer.
 
 ## 3. Verification — run these, trust nothing else
 
@@ -153,15 +137,29 @@ cd /opt/nexus && docker compose -f docker-compose.prod.yml exec -T worker \
   npx tsx apps/api/src/scripts/<gate>.ts
 ```
 
+**Run them all in one command — `./scripts/verify-all.sh` — rather than one at a time.** The order
+in that script is deliberate; see OPERATIONS.
+
 | Gate | Asserts |
 |---|---|
-| `self-check` | The shipped features still work end to end, against the real database |
+| `build-check` | The three running images were built FROM the current commit. An unstamped or stale image is one nobody can tell the age of, and every other gate below would pass against it |
 | `schema-check` | Every previously-unrun query plans against the real schema |
-| `rls-verify` | Policies on; other tenants hidden; own rows not hidden |
+| `schema-drift-check` | Every migration on disk has actually reached production. There is no migration ledger — they are applied by hand as the owner — so the only honest answer is to build the schema the repo describes in a throwaway database and diff it |
+| `shared-number-check` | The five businesses sharing one number each see their own data and nobody else's |
+| `deep-link-check` | A published `wa.me` link routes to the business that published it, against the LIVE registry |
 | `rls-preflight` | Every path carries a tenant context; auth routes establish their own |
+| `rls-verify` | Policies on; other tenants hidden; own rows not hidden |
+| `operator-fire-check` | Every operator either fires against seeded conditions or is listed as uncovered WITH a reason. "Neither covered nor listed" is a failure — it caught `job-failing` on 21 August |
+| `self-check` | The shipped features still work end to end, against the real database |
 | `retrieval-check` | 18 probes each find their page in the top 3 |
 
-Last full run **17 August 2026, on the deployed `b93dafb`: all five PASS** — 18/18 retrieval probes
+**Last full run 22 August 2026 on the deployed `307f68d`: all ten PASS.** 1016 tests locally,
+typecheck and `next build` clean, 6/6 containers up.
+
+The paragraph below is kept for the method rather than the status — the numbers in it are from
+17 August, when there were five gates.
+
+Previous full run **17 August 2026, on the deployed `b93dafb`: all five PASS** — 18/18 retrieval probes
 found their page in the top 3, RLS still hiding other tenants while showing Zipicka its own 13
 contacts, and every previously-unrun query planning against the real schema. 6/6 containers up, 726
 tests locally, typecheck clean. (The previous run recorded here was 15 Aug, after F10, at 638
@@ -374,6 +372,90 @@ a fraction.
 operation — no error, no alert, dashboards green. The sign-in that had never worked, a governance
 judge dead behind a defaulted setting, Lorem ipsum indexed as knowledge, a permission file that
 read correctly and parsed to nothing. All were found by verifying the produced result.
+
+## 18–22 August — what the deck learned to say, and what it stopped saying
+
+Twenty commits. Almost none of them added a capability; nearly all of them removed a way for this
+platform to be confidently wrong. That is the theme, and it is worth stating because the diff looks
+like polish and is not.
+
+### The deck could not be trusted about itself
+
+* **A finding said what was wrong and gave no way to reach it.** Findings are now clickable, keyed
+  on the OPERATOR rather than the subject — ten of the sixteen carried `subjectKind:
+  "organization"` and the screen you fix them on is different every time. The subject says what a
+  finding is about; only the operator says what you would do about it.
+* **A fresh sweep and a short list say nothing about whether anybody is TOLD.** The dispatcher had
+  shipped and nothing on the deck mentioned it. Measured before it existed: `broken-knowledge`
+  stood 4.7 hours on average across twenty-eight findings, and a knowledge outage that took 53 of
+  one firm's 72 passages offline stood sixteen. All detected inside ten minutes. None reached
+  anybody. The deck now says so; the destination is still unset.
+* **A finding nobody can act on teaches people to ignore findings.** Findings can be ACCEPTED —
+  still true, still reconciled, still counted, in their own bucket away from the badge that means
+  "this needs you". The correctness question was the lifetime: an acceptance lapses under the same
+  predicate that resets a finding's age, so accepting "no staff" today cannot silence the same
+  finding next March. Both plausible mutations were introduced and both were caught.
+* **The finding offered two explanations and the truth was a third.** `customer-waiting` branched
+  on one boolean and told the reader to check a reply pipeline that was working perfectly. Measured
+  the same day: three waiting conversations, three different causes, one sentence between them. It
+  now distinguishes four, and "the platform is broken" is the FALLBACK rather than the default —
+  it used to be what you got whenever the flag was false, which is most of the time.
+* **A finding asserted a customer experience nobody had checked.** `booking-without-anyone` claimed
+  customers were told nobody is available. Running the real path against all three flagged
+  businesses: zero slots, and zero slots is not a refusal — the tool tells the agent to offer a
+  callback. The finding stands; its reason moved.
+
+### Two operators for failures nothing was watching
+
+* **`job-failing`.** `schedule-stalled` judges `last_finished_at`, which only advances on success —
+  so it catches a job failing EVERY time and never one failing intermittently. `knowledge-reindex`
+  is exactly that shape: sixteen runs, two failures, and nothing ever said a word. It reads
+  `last_error_at`, never `last_error`, because the message is deliberately sticky and its presence
+  would be a red light nobody could clear.
+* **`knowledge-not-refreshing`.** Three operators watch the knowledge pipeline and all three were
+  green while 20 of one firm's 25 pages were over a day old: a page can be perfectly `indexed` and
+  a week out of date. The threshold is derived from the schedule (24h eligibility + 6h interval =
+  30h, doubled), not chosen — the oldest source measured 28.5h, and a threshold picked by eye would
+  have fired on a healthy platform.
+
+### A conversation changing hands is now an event
+
+Six writers flipped `is_human_handoff` and none of them recorded which. Once it flipped back, the
+fact it had ever been held was gone — which cost an afternoon on the 20th chasing a working reply
+pipeline. The reason is a REQUIRED argument and the trace is written inside the setter, so a
+seventh writer cannot be added without saying why and cannot forget to leave one. Nothing is
+backfilled: an empty history means "not recorded", never "never held", and the reader says so.
+
+**Migration 063 exists because the probe that was meant to confirm this found a bug in it.**
+`order by created_at desc` is wrong for an audit log — Postgres freezes `now()` per transaction, so
+rows written together share a timestamp and order between them is a coin flip. The same lesson is
+already written down in `customer-waiting`'s tiebreak comment and had not travelled.
+
+### The console was redesigned, and I had never seen it
+
+The theme moved from warm vellum-and-ink to navy on cool marble ("Instrument Face"). Every colour
+was measured against the worst ground it sits on: contrast failures went 27 → 0.
+
+Then — and this is the part worth keeping — I signed into a LOCAL dev server with the documented
+dev secret and actually looked at the screens, which I had never been able to do. It found, in
+order: six CSS declarations that had been dead since the day they shipped (`--ink-1`/`--ink-3`
+never existed, so the Accept button had been inheriting its parent's colour); 61 hand-written
+old-palette colours across 15 files that a token retarget cannot reach; the operators deck stating
+"no alert destination is set" from its own initial value before any data had arrived; "Failed to
+fetch" shown to shop owners on 27 screens plus a store the sweep for it had missed; and no error
+boundary anywhere in the app, so any render error produced a blank white page.
+
+Three of those were found only because a unit test had passed vacuously or a check had been scoped
+to where I expected the bug. The general lesson is in the commit messages and worth repeating: a
+check scoped to where you expect the bug finds the bugs you expected.
+
+### Deploy
+
+`scripts/mirror.sh` now exists. The two-repo deploy — monorepo subdirectory to the flat repo the
+VPS clones — had been hand-run three times and was written down nowhere; the fourth cost twenty
+minutes reconstructing it from a transcript. It mirrors the COMMIT, never the working tree, and
+refuses to run on a dirty tree.
+
 
 ## 6. Next session — written 15 August, and everything in it has since happened
 

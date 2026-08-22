@@ -85,6 +85,36 @@ if [ -n "$GONE" ]; then
 fi
 
 git -C "$WORK" add -A
+
+# THE EXEC BIT DOES NOT SURVIVE THE UNPACK, and this script was its own proof.
+#
+# core.fileMode is false on the machine this runs from, and tar drops the mode
+# on Windows, so `add -A` re-records whatever the mirror already had. Existing
+# executables therefore keep 755 BY LUCK -- nothing here preserved them, they
+# were simply never changed. A NEW executable is recorded 644 on the commit that
+# introduces it and stays that way forever.
+#
+# mirror.sh itself shipped 644 in both repos for exactly this reason: it was the
+# newest script, so it was the one file with no prior mode to inherit. It ran
+# anyway from Git Bash, which honours the filesystem rather than the index, and
+# would have failed with "Permission denied" for anyone who cloned on Linux.
+#
+# DERIVED FROM THE SOURCE TREE, not the mirror's HEAD. Reading the mirror can
+# only re-assert bits on files it already has, which is the same blind spot one
+# level along. HANDOFF §2 documents this trap; following it by hand on
+# 2026-08-19 demoted verify-all.sh, which is how the ten gates are run.
+git -C "$MONO" ls-tree -r "HEAD:$SUB" | awk '$1=="100755"{print $4}' |
+  while read -r f; do
+    [ -n "$f" ] && git -C "$WORK" update-index --chmod=+x -- "$f" 2>/dev/null
+  done
+
+# Silent until something will not run, so say it now rather than on the VPS.
+if git -C "$WORK" diff --cached --summary | grep -q "mode change .* => 100644"; then
+  echo "REFUSING: something executable was demoted to 644 in the mirror."
+  git -C "$WORK" diff --cached --summary | grep "mode change"
+  exit 1
+fi
+
 if git -C "$WORK" diff --cached --quiet; then
   echo "Mirror already matches $SRC. Nothing to push."
   exit 0

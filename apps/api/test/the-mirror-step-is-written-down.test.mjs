@@ -13,6 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -65,4 +66,45 @@ test("DEPLOY.md points at the script", () => {
   // The document that explains the two-repo split is where somebody looks when
   // they need to bridge it.
   assert.match(DEPLOY, /mirror\.sh/);
+});
+
+test("the exec bit is re-asserted from the source tree", () => {
+  // core.fileMode is false on the dev machine and tar drops the mode, so
+  // `add -A` re-records whatever the mirror already had. Existing executables
+  // keep 755 BY LUCK -- nothing preserved them, they were simply never changed
+  // -- and a NEW executable is recorded 644 on the commit that introduces it.
+  //
+  // mirror.sh was its own proof: it shipped 644 in both repos because it was
+  // the newest script and had no prior mode to inherit. It ran anyway from Git
+  // Bash, which honours the filesystem rather than the index, and would have
+  // failed with "Permission denied" for anyone who cloned on Linux.
+  assert.match(MIRROR, /ls-tree -r "HEAD:\$SUB"[\s\S]*?100755/);
+  assert.match(MIRROR, /update-index --chmod=\+x/);
+
+  // FROM THE SOURCE, NOT THE MIRROR. Reading the mirror's HEAD can only
+  // re-assert bits on files it already has, which is the same blind spot one
+  // step along -- a new executable still lands 644.
+  const block = MIRROR.slice(MIRROR.indexOf("THE EXEC BIT DOES NOT SURVIVE"));
+  const cmd = block.slice(0, block.indexOf("update-index"));
+  assert.match(cmd, /git -C "\$MONO" ls-tree/);
+  assert.ok(!/git -C "\$WORK" ls-tree/.test(cmd), "it is reading the mirror's own modes again");
+});
+
+test("a demoted executable stops the push", () => {
+  // Silent until something will not run. On 2026-08-19 the manual steps
+  // demoted verify-all.sh, which is how the ten gates are run on the VPS.
+  assert.match(MIRROR, /mode change .* => 100644/);
+  const guard = MIRROR.slice(MIRROR.indexOf("REFUSING: something executable"));
+  assert.match(guard.slice(0, guard.indexOf("fi")), /exit 1/);
+});
+
+test("mirror.sh is itself executable", () => {
+  // The bug that produced the guard above. Asserted on the recorded mode,
+  // because that is the thing that was wrong -- the file was runnable on the
+  // machine that wrote it the entire time.
+  const mode = execSync('git ls-files -s -- nexus-agentic-os/scripts/mirror.sh', {
+    cwd: join(root, ".."),
+    encoding: "utf8",
+  }).trim();
+  assert.match(mode, /^100755 /, `mirror.sh is recorded as ${mode.split(" ")[0]}`);
 });
