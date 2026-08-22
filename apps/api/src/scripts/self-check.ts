@@ -35,6 +35,7 @@ import {
   getDisplayNumbers,
   createBooking,
   setBookingStatus,
+  findNumberOwner,
   listUpcomingBookingsForContact,
   SlotTakenError,
 } from "@nexus/db";
@@ -45,7 +46,10 @@ import {
   buildDirectContact,
   resolvePresence,
 } from "@nexus/employees";
-import { classifyBusiness, buildDeepLink, findAvailableSlots } from "@nexus/agents";
+import { classifyBusiness, buildDeepLink, findAvailableSlots,
+  checkAvailabilityTool,
+  bookAppointmentTool,
+} from "@nexus/agents";
 import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
 import { searchKnowledge } from "@nexus/knowledge";
 
@@ -249,6 +253,106 @@ async function checkBookingRoundTrip(organizationId: string) {
       upcoming.some((booking) => booking.subject === PROBE_BOOKING_SUBJECT),
       `${upcoming.length} upcoming`
     );
+
+    // ------------------------------------------------------------------
+    // THE TOOL HANDLERS, which nothing has ever run.
+    // ------------------------------------------------------------------
+    //
+    // Everything above calls createBooking directly, with an organizationId and
+    // no conversation, inside the business's OWN context. A customer produces
+    // none of that. What a customer produces is the model calling
+    // `check_availability` and then `book_appointment`, from inside the NUMBER
+    // OWNER's transaction, against a conversation routed to the serving
+    // business — and those handlers parse the model's arguments, open
+    // withServingTenant, resolve the slot and decide what to report back.
+    //
+    // Between them, `bookings-are-real` reads the tool's SOURCE and the block
+    // above exercises the layer BENEATH it. Nothing ran the layer in the
+    // middle, on a platform with zero bookings, for the feature this product
+    // leads with.
+    //
+    // THE ROUTED CONVERSATION IS THE POINT. A probe that leaves
+    // routed_organization_id null makes a shape the switchboard never produces:
+    // the conversations policy allows the serving business to see a conversation
+    // ROUTED to it, so an unrouted one is correctly invisible and the booking is
+    // correctly refused. I read that refusal as a defect on 2026-08-22 and
+    // shipped a fix for it before rereading the policy. This section exists
+    // partly so nobody repeats that from scratch.
+    // This function is handed an id, not the row. The owner is resolved from
+    // the business's phone number, so both are looked up together and once.
+    const organization = await withAllTenants("self-check: the business being probed", async () =>
+      (await listOrganizations()).find((candidate) => candidate.id === organizationId) ?? null
+    );
+    const owner = organization
+      ? await withAllTenants("self-check: number owner", () =>
+          findNumberOwner(organization.whatsappPhoneNumberId)
+        )
+      : null;
+    if (owner && organization) {
+      const toolStart = new Date(Date.now() + 96 * 3_600_000);
+      toolStart.setUTCMinutes(0, 0, 0);
+
+      await withTenant(owner.id, async () => {
+        const { rows: conv } = await getPool().query<{ id: string }>(
+          `insert into conversations (organization_id, contact_id, routed_organization_id)
+           values ($1, $2, $3) returning id`,
+          [owner.id, contactId, organizationId]
+        );
+
+        const ctx = {
+          organizationId,
+          businessSlug: organization.slug,
+          contactWaId: PROBE_WA_ID,
+          employeeId: null,
+          contactId,
+          conversationId: conv[0].id,
+        };
+
+        const offered = (await checkAvailabilityTool.handler({}, ctx as never)) as {
+          slots?: Array<{ startsAt: string }>;
+        };
+        check(
+          "check_availability offers slots through the tool, in the owner's transaction",
+          Array.isArray(offered.slots) && offered.slots.length > 0,
+          `${offered.slots?.length ?? 0} offered`
+        );
+
+        if (offered.slots?.length) {
+          const booked = (await bookAppointmentTool.handler(
+            { startsAt: offered.slots[0].startsAt, subject: PROBE_BOOKING_SUBJECT },
+            ctx as never
+          )) as { booked?: boolean; reason?: string };
+          check(
+            "book_appointment takes a slot check_availability just offered",
+            booked.booked === true,
+            booked.booked ? "booked" : `refused: ${booked.reason}`
+          );
+
+          // The same slot twice. This is the guarantee the exclusion constraint
+          // exists for, reached through the tool rather than around it.
+          const again = (await bookAppointmentTool.handler(
+            { startsAt: offered.slots[0].startsAt, subject: PROBE_BOOKING_SUBJECT },
+            ctx as never
+          )) as { booked?: boolean; reason?: string };
+          check(
+            "and refuses to take it a second time",
+            again.booked === false,
+            again.booked ? "DOUBLE BOOKED" : `refused: ${again.reason}`
+          );
+        }
+
+        // The conversation is the probe's own and is removed with it. The
+        // bookings it made carry PROBE_BOOKING_SUBJECT and are swept by the
+        // finally below, which deletes by subject rather than by an id a
+        // failure may have prevented being assigned.
+        await getPool()
+          .query(`delete from conversations where id = $1`, [conv[0].id])
+          .catch(() => undefined);
+      });
+    } else {
+      check("check_availability offers slots through the tool, in the owner's transaction", false,
+        "no number owner resolved — this business's phone number maps to nobody");
+    }
   } finally {
     // By SUBJECT and by wa_id, never by an id a failure may have prevented
     // being assigned — the lesson schema-check's cleanup is written around. A
