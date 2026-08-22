@@ -57,8 +57,8 @@
   margin-top: 20px;
   font-size: 13.5px;
   color: var(--crit);
-  border: 1px solid rgba(162, 59, 46, 0.35);
-  background: rgba(162, 59, 46, 0.06);
+  border: 1px solid rgba(196, 52, 42, 0.35);
+  background: rgba(196, 52, 42, 0.06);
   border-radius: var(--r);
   padding: 12px 15px;
 }

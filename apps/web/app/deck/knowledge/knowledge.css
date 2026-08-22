@@ -21,8 +21,8 @@
 }
 .kn-warn {
   color: var(--crit);
-  border: 1px solid rgba(162, 59, 46, .4);
-  background: rgba(162, 59, 46, .07);
+  border: 1px solid rgba(196, 52, 42, .4);
+  background: rgba(196, 52, 42, .07);
 }
 
 /* --- add --- */

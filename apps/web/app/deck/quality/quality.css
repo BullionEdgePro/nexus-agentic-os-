@@ -232,17 +232,17 @@
 }
 /* Only ever when non-zero. A permanent red panel reading "0 never classified"
    would make the one state worth noticing invisible when it arrives. */
-.br-count.bad { border-color: rgba(162, 59, 46, .45); background: rgba(162, 59, 46, .06); }
+.br-count.bad { border-color: rgba(196, 52, 42, .45); background: rgba(196, 52, 42, .06); }
 .br-count.bad strong { color: var(--crit); }
-.br-count.live { border-color: rgba(63, 107, 74, .38); background: rgba(63, 107, 74, .06); }
+.br-count.live { border-color: rgba(15, 122, 86, .38); background: rgba(15, 122, 86, .06); }
 .br-count.live strong { color: var(--good); }
 
 .br-defect {
   margin: 12px 0 0;
   padding: 11px 13px;
-  border: 1px solid rgba(162, 59, 46, .34);
+  border: 1px solid rgba(196, 52, 42, .34);
   border-radius: var(--r-sm);
-  background: rgba(162, 59, 46, .05);
+  background: rgba(196, 52, 42, .05);
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--ink-soft);

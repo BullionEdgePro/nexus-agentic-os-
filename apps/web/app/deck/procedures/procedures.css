@@ -46,9 +46,9 @@
 
 /* Only when non-zero. A permanent green panel reading "0 shaping replies" would
    make the one state on this page with consequences invisible when it arrives. */
-.pr-count.live { border-color: rgba(63, 107, 74, 0.38); background: rgba(63, 107, 74, 0.06); }
+.pr-count.live { border-color: rgba(15, 122, 86, 0.38); background: rgba(15, 122, 86, 0.06); }
 .pr-count.live strong { color: var(--good); }
-.pr-count.warn { border-color: rgba(169, 118, 47, 0.38); background: rgba(169, 118, 47, 0.07); }
+.pr-count.warn { border-color: rgba(156, 93, 15, 0.38); background: rgba(156, 93, 15, 0.07); }
 .pr-count.warn strong { color: var(--warn); }
 
 /* --- run it now --- */
@@ -192,8 +192,8 @@
   white-space: nowrap;
 }
 
-.pr-pill.on { border-color: rgba(63, 107, 74, 0.45); color: var(--good); background: rgba(63, 107, 74, 0.07); }
-.pr-pill.operator { border-color: rgba(29, 63, 191, 0.35); color: var(--signal-text); background: var(--signal-soft); }
+.pr-pill.on { border-color: rgba(15, 122, 86, 0.45); color: var(--good); background: rgba(15, 122, 86, 0.07); }
+.pr-pill.operator { border-color: rgba(0, 107, 255, 0.35); color: var(--signal-text); background: var(--signal-soft); }
 /* From the catalogue: distinct from both neighbours on purpose. Not the
    blueprint of "written here", because nobody at this business wrote it; not
    the plain pill of "suggested", because it was not drawn from this business's
@@ -224,9 +224,9 @@
 
 .pr-proposal {
   margin: 14px 0 0;
-  border: 1px dashed rgba(169, 118, 47, 0.5);
+  border: 1px dashed rgba(156, 93, 15, 0.5);
   border-radius: var(--r);
-  background: rgba(169, 118, 47, 0.05);
+  background: rgba(156, 93, 15, 0.05);
   padding: 12px 14px;
 }
 
@@ -327,9 +327,9 @@
 .ph-warn {
   margin: 14px 0 0;
   padding: 11px 13px;
-  border: 1px solid rgba(162, 59, 46, .34);
+  border: 1px solid rgba(196, 52, 42, .34);
   border-radius: var(--r-sm);
-  background: rgba(162, 59, 46, .05);
+  background: rgba(196, 52, 42, .05);
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--ink-soft);
@@ -374,7 +374,7 @@
   background: var(--marble);
   padding: 12px 13px;
 }
-.ph-item.on { border-color: rgba(63, 107, 74, .45); background: rgba(63, 107, 74, .05); }
+.ph-item.on { border-color: rgba(15, 122, 86, .45); background: rgba(15, 122, 86, .05); }
 
 /* Shown as the customer will read it: plain, unstyled, no ellipsis. */
 .ph-body { font-size: 13px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }

@@ -63,9 +63,9 @@
 .mk-banner {
   margin: 18px 0 0;
   padding: 13px 15px;
-  border: 1px solid rgba(169, 118, 47, .38);
+  border: 1px solid rgba(156, 93, 15, .38);
   border-radius: var(--r-sm);
-  background: rgba(169, 118, 47, .07);
+  background: rgba(156, 93, 15, .07);
 }
 .mk-banner strong { font-size: 13.5px; color: var(--ink); }
 .mk-banner p {

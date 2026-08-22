@@ -97,8 +97,8 @@
   padding: 2px 6px;
   border-radius: 100px;
   color: var(--warn);
-  border: 1px solid rgba(169, 118, 47, 0.4);
-  background: rgba(169, 118, 47, 0.08);
+  border: 1px solid rgba(156, 93, 15, 0.4);
+  background: rgba(156, 93, 15, 0.08);
 }
 
 .ibx-preview {

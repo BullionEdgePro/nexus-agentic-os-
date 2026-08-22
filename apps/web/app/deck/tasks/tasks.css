@@ -50,9 +50,9 @@
 /* The two states worth noticing, and only when they are non-zero — a permanent
    red panel reading "0 overdue" trains an operator to stop seeing red. The
    page applies these classes conditionally for that reason. */
-.tk-count.bad { border-color: rgba(162, 59, 46, 0.38); background: rgba(162, 59, 46, 0.06); }
+.tk-count.bad { border-color: rgba(196, 52, 42, 0.38); background: rgba(196, 52, 42, 0.06); }
 .tk-count.bad strong { color: var(--crit); }
-.tk-count.warn { border-color: rgba(169, 118, 47, 0.38); background: rgba(169, 118, 47, 0.07); }
+.tk-count.warn { border-color: rgba(156, 93, 15, 0.38); background: rgba(156, 93, 15, 0.07); }
 .tk-count.warn strong { color: var(--warn); }
 
 /* --- the form --- */

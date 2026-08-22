@@ -130,7 +130,7 @@
 
 .fc-backtest.warn {
   border-left-color: var(--warn);
-  background: rgba(169, 118, 47, 0.07);
+  background: rgba(156, 93, 15, 0.07);
 }
 
 .fc-backtest p {
@@ -180,7 +180,7 @@
   left: 22%;
   right: 22%;
   background: var(--signal-soft);
-  border: 1px solid rgba(29, 63, 191, 0.35);
+  border: 1px solid rgba(0, 107, 255, 0.35);
   border-radius: var(--r-sm);
 }
 

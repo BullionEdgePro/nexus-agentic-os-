@@ -106,10 +106,18 @@ test("no stylesheet reaches for pure black or the old warm ground", () => {
   // check here has failed to tell a quotation from a use. A rule about what the
   // code does must read the code.
   //
+  // THE RGBA FORMS TOO, added after the hex-only version missed 61 of them
+  // across 15 files. A palette retarget moves tokens; it cannot move a colour
+  // written out by hand, and an old tint is invisible in review because it is a
+  // plausible shade of the RIGHT HUE -- brick under crimson, ochre under amber,
+  // blueprint under signal. The giveaway was the severity pill on the operators
+  // deck rendering a crimson glyph on a brick background, and it was found by
+  // looking at the rendered page, not at the source.
+  //
   // @media print is exempt and is the one honest exception in this codebase:
   // black ink on white paper is correct, and those pages get printed.
   const banned =
-    /#000000\b|#000\b|rgba\(0,\s*0,\s*0|#efeee6|#f7f6f0|#1d3fbf|#16160f|#9a9b8c|#5b5c50|rgba\(22,\s*22,\s*15|rgba\(239,\s*238,\s*230/i;
+    /#000000\b|#000\b|rgba\(0,\s*0,\s*0|#efeee6|#f7f6f0|#1d3fbf|#16160f|#9a9b8c|#5b5c50|rgba\(22,\s*22,\s*15|rgba\(239,\s*238,\s*230|rgba\(\s*162,\s*59,\s*46|rgba\(\s*169,\s*118,\s*47|rgba\(\s*63,\s*107,\s*74|rgba\(\s*29,\s*63,\s*191/i;
   const offenders = [];
   for (const f of walk(join(web, "app")).filter((x) => x.endsWith(".css"))) {
     const raw = readFileSync(f, "utf8");

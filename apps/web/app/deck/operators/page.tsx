@@ -84,12 +84,26 @@ export default function OperatorsPage() {
   const [sweep, setSweep] = useState<{
     lastSweptAt: string | null;
     stalled: boolean;
-    alerts: boolean;
+    /**
+     * THREE STATES, NOT TWO.
+     *
+     * `false` used to mean both "we asked, and nothing is configured" and "we
+     * have not asked yet". The render could not tell them apart, so on a failed
+     * load — and for the whole first paint — the page stated flatly that no
+     * alert destination was set. It did not know that. It was printing its own
+     * initial value as a finding.
+     *
+     * Which is the failure this page's own comment warns about two branches
+     * further down: falling through to a confident empty state when the truth
+     * is that nobody could ask. `null` is that truth, and it renders as
+     * nothing.
+     */
+    alerts: boolean | null;
     alertsWarn: boolean;
   }>({
     lastSweptAt: null,
     stalled: false,
-    alerts: false,
+    alerts: null,
     alertsWarn: false,
   });
   const [business, setBusiness] = useState<BusinessSlug | "">("");
@@ -401,9 +415,15 @@ export default function OperatorsPage() {
           </section>
         ) : null}
 
-        <p className={sweep.alerts ? "op-alerts" : "op-alerts off"}>
-          {describeAlerts(sweep.alerts, sweep.alertsWarn)}
-        </p>
+        {/* Only once a load has actually answered. Before that this said "no
+            alert destination is set" from its own initial value, on every first
+            paint and on every failed load — a default wearing the shape of a
+            fact, on the one screen whose entire premise is not doing that. */}
+        {sweep.alerts === null ? null : (
+          <p className={sweep.alerts ? "op-alerts" : "op-alerts off"}>
+            {describeAlerts(sweep.alerts, sweep.alertsWarn)}
+          </p>
+        )}
 
         <section className="op-roster">
           <h2 className="act-sub-head">What is being watched</h2>
