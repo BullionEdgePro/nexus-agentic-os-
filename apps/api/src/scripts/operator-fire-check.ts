@@ -400,6 +400,25 @@ async function main() {
 
     try {
       await withTenant(org.id, async () => {
+        // WHAT THIS OPERATOR ALREADY SAYS ABOUT THIS BUSINESS, before anything
+        // is seeded.
+        //
+        // `operator.run` returns every finding for the business, real ones
+        // included, and this check used to assert on found[0] -- whichever came
+        // first. So a case could pass on a finding its seed had nothing to do
+        // with, and one did for weeks: wording-awaiting-review's seed was being
+        // suppressed on every run (ABR already had an active phrase for that
+        // moment) while ABR's genuine unreviewed phrase kept the check green.
+        // It only surfaced on 22 August, an hour after that real phrase was
+        // fixed -- which is the worst possible moment to discover an alarm was
+        // never being tested.
+        //
+        // Taken FIRST, before the probe contact and conversation exist, because
+        // those are seeded data too and an operator could legitimately fire on
+        // them.
+        const before = await operator.run(org.id);
+        const known = new Set(before.map((finding) => finding.fingerprint));
+
         const { rows: contact } = await getPool().query<{ id: string }>(
           `insert into contacts (organization_id, wa_id, display_name)
            values ($1, $2, 'Operator fire check')
@@ -414,12 +433,17 @@ async function main() {
 
         await testCase.seed(org.id, conversation[0].id, contact[0].id);
 
-        const found = await operator.run(org.id);
-        const problem = malformed(found[0]) ?? testCase.expect?.(found[0]) ?? null;
+        // ONLY WHAT THE SEED CAUSED. The question this gate asks is "does this
+        // alarm fire", and the only honest evidence is a finding that was not
+        // there a moment ago. Anything already standing is somebody else's.
+        const after = await operator.run(org.id);
+        const fresh = after.filter((finding) => !known.has(finding.fingerprint));
+
+        const problem = malformed(fresh[0]) ?? testCase.expect?.(fresh[0]) ?? null;
         report(
           problem === null,
           testCase.slug,
-          problem ?? `raised "${found[0].title}" (${found[0].severity})`
+          problem ?? `raised "${fresh[0].title}" (${fresh[0].severity})`
         );
 
         throw new RolledBack();
