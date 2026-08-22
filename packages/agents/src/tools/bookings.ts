@@ -237,6 +237,19 @@ export const bookAppointmentTool: ToolDefinition = {
             "and offer one of the alternatives. Do not say the appointment was made.",
         };
       }
+      // THE CATCH-ALL DISCARDED THE ERROR, and that is how a total failure of
+      // this feature stayed invisible. Every booking on the shared number threw
+      // "that conversation does not exist", this branch turned it into a
+      // plausible sentence about a colleague following up, and zero bookings
+      // were ever made without one line anywhere saying why.
+      //
+      // The reply to the customer is unchanged -- it is the right thing to say
+      // when a booking cannot be recorded. What changes is that the reason now
+      // exists somewhere a person can find it.
+      console.error(
+        `book_appointment failed for organization ${ctx.organizationId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return {
         booked: false,
         reason: "unavailable",
