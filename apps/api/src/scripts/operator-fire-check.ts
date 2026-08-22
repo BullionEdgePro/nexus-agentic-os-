@@ -217,6 +217,33 @@ const CASES: Case[] = [
     // nothing told them. This proves the finding names the missing value rather
     // than only saying something is wrong.
     seed: async (organizationId) => {
+      // STAND DOWN WHATEVER IS LIVE FOR THIS MOMENT FIRST.
+      //
+      // The operator suppresses a draft when the business already has an active
+      // phrase for the same moment -- correctly, because that makes the draft a
+      // discarded one and reporting it is noise. This check seeds against
+      // organizations[0], which is ABR, and ABR has had an active
+      // `handing_over` since 17 August. So this seed has been suppressed every
+      // time it has ever run.
+      //
+      // IT PASSED ANYWAY, ON SOMEBODY ELSE'S FINDING. ABR genuinely had an
+      // unreviewed `no_one_available` carrying {{office_number}}, so the
+      // operator produced a finding on every run and this check counted it as
+      // proof that its own seed worked. The moment that real condition was
+      // fixed -- 22 August, the number filled in and the phrase switched on --
+      // the check failed, and what it had actually been proving became clear.
+      //
+      // A gate that passes on production data it did not create is not testing
+      // its alarm; it is observing one. Only two moments exist and this
+      // business now has both live, so there is no free moment to pick: the
+      // seed has to make the condition rather than find it. Safe because the
+      // whole check runs inside a transaction that is rolled back, so this
+      // never reaches a customer.
+      await getPool().query(
+        `update agent_phrases set is_active = false
+          where organization_id = $1 and moment = 'handing_over' and is_active`,
+        [organizationId]
+      );
       await getPool().query(
         `insert into agent_phrases (organization_id, moment, language, body, source, is_active)
          values ($1, 'handing_over', 'en',
