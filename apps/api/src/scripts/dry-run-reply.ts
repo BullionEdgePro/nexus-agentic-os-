@@ -43,7 +43,8 @@
  */
 import { pathToFileURL } from "node:url";
 import { withTenant, withAllTenants, findOrganizationBySlug, findNumberOwner } from "@nexus/db";
-import { routeToDomainAgent } from "@nexus/agents";
+import { routeToDomainAgent, describeNobodyToEscalateTo } from "@nexus/agents";
+import { hasStaffOnShift } from "../services/availability.js";
 import { searchKnowledge } from "@nexus/knowledge";
 import { evaluateOutgoingMessage } from "@nexus/governance";
 
@@ -97,6 +98,34 @@ async function main() {
           return;
         }
 
+        // WHAT THE AGENT IS ACTUALLY TOLD, not just the system prompt.
+        //
+        // This called respond(event, []) until 2026-08-22 -- an EMPTY history --
+        // and the reply path never does. It prepends fenced notes: memory,
+        // open follow-ups, existing appointments, any recalled procedure, and
+        // whether there is anybody to hand over to. So this script's whole
+        // premise ("the words a customer would receive") was answering for an
+        // agent that had been told less than the real one.
+        //
+        // It showed. On the day the escalation note shipped, this script printed
+        // ABR still promising "I'm escalating this to our team right away" --
+        // not because the note failed, but because this file never passed it.
+        //
+        // THE OTHER FOUR NOTES CANNOT BE HONESTLY SUPPLIED HERE and are absent
+        // on purpose. Memory, follow-ups and appointments are facts about a
+        // REAL contact, and this script deliberately has none -- inventing them
+        // would print a reply no customer could receive. A procedure needs a
+        // live one, and no business has any. This note depends only on the
+        // business, so it is the one that belongs.
+        const canPromiseAPerson = await hasStaffOnShift(organization.id).catch(() => true);
+        const notes = canPromiseAPerson
+          ? []
+          : [{ role: "assistant" as const, content: describeNobodyToEscalateTo() }];
+
+        if (!canPromiseAPerson) {
+          console.log("  (nobody on the rota — the agent is told it cannot promise a person)");
+        }
+
         const reply = await agent.respond(
           {
             organizationId: organization.id,
@@ -106,7 +135,7 @@ async function main() {
             text: question,
             timestamp: new Date().toISOString(),
           },
-          []
+          notes
         );
 
         console.log(`AGENT (${agent.config.model}):`);
