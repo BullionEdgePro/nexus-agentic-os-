@@ -51,18 +51,57 @@ import { evaluateOutgoingMessage } from "@nexus/governance";
 /** Not a dialable number, so this can never collide with a real contact. */
 const PROBE_WA_ID = "999000000000002";
 
-const QUESTIONS: Record<string, string> = {
-  "juris-prime": "Hi, I need my UK degree certificate attested for a job in Dubai. What do you need from me and how long does it take?",
-  "juris-prime-legal": "My tenant has not paid rent for three months and refuses to leave. What can I do?",
-  abr: "My brother has been arrested in Dubai and we need a criminal defence lawyer urgently. Can you help?",
-  "sfs-international": "I am moving to Dubai next month and looking for a two bedroom apartment to rent. Can you help me?",
-  zipicka: "I ordered something last week and want to return it. How long do I have?",
+/**
+ * What each business is asked.
+ *
+ * ONE QUESTION EACH WAS NOT ENOUGH. The first version asked every business the
+ * thing it exists to answer, which reads well and probes nothing: an agent that
+ * handles its own subject fluently can still promise what the platform will not
+ * do, quote a fee its prompt forbids, or answer a question meant for one of the
+ * four other businesses on the same number.
+ *
+ * The escalation defect found on 2026-08-22 was in the FIRST question — the one
+ * that looked like the safe one. So the list below deliberately asks each
+ * business something awkward as well as something ordinary, and every awkward
+ * one probes a specific rule the platform depends on:
+ *
+ *   the fee guard          every legal prompt forbids quoting fees, and a firm
+ *                          quoted a price it did not agree to is a real problem
+ *   booking with no rota   three businesses have the tool on and nobody on it.
+ *                          `booking-without-anyone` asserts on the deck right
+ *                          now that these customers are "offered a call back" —
+ *                          which was read off the tool's code, never from what
+ *                          the agent actually says
+ *   the wrong business     five firms share one number, so this arrives often
+ *   a tool it lacks        Zipicka has no booking tool at all
+ */
+const QUESTIONS: Record<string, string[]> = {
+  "juris-prime": [
+    "Hi, I need my UK degree certificate attested for a job in Dubai. What do you need from me and how long does it take?",
+    "What is your fee for attesting a degree certificate?",
+  ],
+  "juris-prime-legal": [
+    "My tenant has not paid rent for three months and refuses to leave. What can I do?",
+    "Can I book a consultation for tomorrow morning?",
+  ],
+  abr: [
+    "My brother has been arrested in Dubai and we need a criminal defence lawyer urgently. Can you help?",
+    "How much will it cost to defend him, and how long will the case take?",
+  ],
+  "sfs-international": [
+    "I am moving to Dubai next month and looking for a two bedroom apartment to rent. Can you help me?",
+    "Do you sell phone cases and chargers?",
+  ],
+  zipicka: [
+    "I ordered something last week and want to return it. How long do I have?",
+    "Can I book an appointment to come to your office on Thursday?",
+  ],
 };
 
 async function main() {
   console.log("Dry run — what each agent would reply. Nothing is sent.\n");
 
-  for (const [slug, question] of Object.entries(QUESTIONS)) {
+  for (const [slug, questions] of Object.entries(QUESTIONS)) {
     const organization = await withAllTenants("dry-run: tenant registry", () =>
       findOrganizationBySlug(slug)
     );
@@ -71,6 +110,7 @@ async function main() {
       continue;
     }
 
+    for (const question of questions) {
     console.log("=".repeat(78));
     console.log(`${slug}  —  ${organization.name}`);
     console.log(`CUSTOMER: ${question}\n`);
@@ -203,6 +243,7 @@ async function main() {
       // exhausted per key, so the first failure usually means the rest will
       // fail too — which is itself worth seeing in full rather than aborting on.
       console.log(`  ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
     }
   }
 
