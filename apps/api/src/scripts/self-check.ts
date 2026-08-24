@@ -332,10 +332,36 @@ async function checkBookingRoundTrip(organizationId: string) {
 
           // The same slot twice. This is the guarantee the exclusion constraint
           // exists for, reached through the tool rather than around it.
-          const again = (await bookAppointmentTool.handler(
-            { startsAt: offered.slots[0].startsAt, subject: PROBE_BOOKING_SUBJECT },
-            ctx as never
-          )) as { booked?: boolean; reason?: string };
+          // THE GUARANTEE IS PER PERSON, NOT PER SLOT, and asserting the slot
+          // version made this gate wrong for a day.
+          //
+          // It used to book once more and require a refusal. That is only the
+          // right question when the business has exactly one bookable person.
+          // The section ABOVE this one creates its own bookable employee — "Self
+          // Check Bookable" — and does not remove it until the whole round trip
+          // finishes, so while this runs, zipicka has two. The second booking
+          // went to the second person, which is CORRECT, and the gate reported
+          // DOUBLE BOOKED. The tool was right and the check was wrong.
+          //
+          // It also only failed on some days: the probe slot is 96 hours out, so
+          // whether the probe employee is on shift then depends on what weekday
+          // that lands on. A gate that passes on Tuesday and fails on Thursday
+          // for no change in the code is worse than one that fails always.
+          //
+          // So it asks the real question. Book that same time until the diary
+          // refuses, and require two things: that it DOES eventually refuse, and
+          // that no two bookings ever went to the same person. That holds for
+          // one employee and for five, and does not care who else is on the rota.
+          const attempts: Array<{ booked?: boolean; reason?: string; with?: string }> = [];
+          for (let attempt = 0; attempt < 8; attempt++) {
+            const result = (await bookAppointmentTool.handler(
+              { startsAt: offered.slots[0].startsAt, subject: PROBE_BOOKING_SUBJECT },
+              ctx as never
+            )) as { booked?: boolean; reason?: string; with?: string };
+            attempts.push(result);
+            if (result.booked !== true) break;
+          }
+          const again = attempts[attempts.length - 1];
           // WHAT THE DIARY ACTUALLY HOLDS, asked of the database rather than
           // inferred from the tool's answer. "DOUBLE BOOKED" on its own is a
           // finding nobody can act on: it does not say whether the second
@@ -360,11 +386,24 @@ async function checkBookingRoundTrip(organizationId: string) {
             .join(", ");
 
           check(
-            "and refuses to take it a second time",
+            "the diary eventually refuses that time",
             again.booked === false,
             again.booked
-              ? `DOUBLE BOOKED — ${held.length} bookings now hold that slot: ${describeHeld}`
-              : `refused: ${again.reason}`
+              ? `NEVER REFUSED after ${attempts.length} attempts — ${held.length} bookings hold that slot: ${describeHeld}`
+              : `refused after ${attempts.length - 1} taken: ${again.reason}`
+          );
+
+          // The guarantee itself. One person, one appointment at a time — and
+          // an unassigned booking counts as a failure of it, because the
+          // exclusion constraint is declared WHERE employee_id IS NOT NULL and
+          // would not stop a second one.
+          const assigned = held.map((row) => row.employee_id);
+          check(
+            "and nobody was booked twice for it",
+            assigned.length === new Set(assigned).size && !assigned.includes(null),
+            assigned.includes(null)
+              ? "a booking was made with NOBODY assigned, which the exclusion constraint does not cover"
+              : `${held.length} booking(s), ${new Set(assigned).size} distinct people: ${describeHeld}`
           );
         }
 
