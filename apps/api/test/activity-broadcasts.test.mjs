@@ -577,6 +577,33 @@ test("every header control has a destination or an action", () => {
     assert.ok(topbar.includes(control), `${control} missing from the header`);
   }
 
+  // AND NOTHING ELSE, which is the half the four names above cannot cover.
+  //
+  // Those four assert that the controls we know about are present. The claim in
+  // this test's name is the other direction — that everything in the header
+  // does something — and a fifth component added tomorrow would satisfy every
+  // assertion here while being pure decoration. The tenant switcher, banned two
+  // lines below, is exactly that mistake having already happened once.
+  //
+  // An allow-list, so a new control fails until somebody says what answers it.
+  // BrandMark is the logo and does nothing by itself, which is fine: it sits
+  // INSIDE the brand anchor asserted above, so the destination is the link
+  // around it. Verified at deck-console.tsx:309-311 rather than assumed --
+  // its first run flagged it, and "add it to the list" would have been the
+  // wrong reflex if it had been floating loose in the header.
+  const KNOWN = new Set(["HeaderSearch", "WorkMenu", "NotificationsMenu", "AccountMenu", "BrandMark"]);
+  const rendered = new Set();
+  for (const m of topbar.matchAll(/<([A-Z][A-Za-z0-9]*)/g)) rendered.add(m[1]);
+  assert.ok(rendered.size >= 4, `only ${rendered.size} components found in the topbar — the slice is wrong`);
+
+  for (const component of rendered) {
+    assert.ok(
+      KNOWN.has(component),
+      `<${component}> is in the header and is not one of the controls known to do something. ` +
+        `A control returns when something answers it — add it here once it does.`
+    );
+  }
+
   // The dead controls must not come back as decoration. Search DID come back —
   // with an endpoint behind it — which is the standard: a control returns when
   // something answers it.

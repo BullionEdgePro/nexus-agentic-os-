@@ -28,6 +28,31 @@ const GLOBAL = read("app", "global-error.tsx");
 const NOT_FOUND = read("app", "not-found.tsx");
 const TOKENS = read("app", "deck", "deck.css");
 
+/**
+ * Every error boundary in the app, found on disk.
+ *
+ * The three content tests below iterated [["deck", DECK], ["inbox", INBOX],
+ * ["global", GLOBAL]] — the same hand-written population the coverage test
+ * above was rewritten to stop using, three tests later in the same file. A
+ * boundary added tomorrow would be REQUIRED to exist by one test here and
+ * checked by none of the others, which is the worse half: a boundary that
+ * renders error.message at a customer is the defect this file is named for.
+ */
+function everyBoundary() {
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name === "error.tsx" || entry.name === "global-error.tsx") {
+        found.push([full.slice(join(web, "app").length + 1).split("\\").join("/"), readFileSync(full, "utf8")]);
+      }
+    }
+  };
+  walk(join(web, "app"));
+  return found;
+}
+
 test("every area with its own shell has its own boundary", () => {
   // DERIVED, NOT LISTED, and the distinction is the whole point of this rewrite.
   //
@@ -77,7 +102,9 @@ test("no boundary shows the reader the error message", () => {
   // error.message names components and properties. It is written for whoever
   // wrote the code, and putting it in front of a person is the same mistake as
   // "Failed to fetch" — which took a whole pass to undo.
-  for (const [name, src] of [["deck", DECK], ["inbox", INBOX], ["global", GLOBAL]]) {
+  const boundaries = everyBoundary();
+  assert.ok(boundaries.length >= 3, `only ${boundaries.length} boundaries found — the walk is broken`);
+  for (const [name, src] of boundaries) {
     assert.ok(
       !/\{error\.message\}/.test(src),
       `the ${name} boundary renders error.message at somebody`
@@ -90,7 +117,9 @@ test("no boundary shows the reader the error message", () => {
 test("each offers the digest, which is the part worth quoting", () => {
   // A short server-assigned id: meaningless alone, exact in a log search. It is
   // the difference between "a screen broke" and a report somebody can action.
-  for (const [name, src] of [["deck", DECK], ["inbox", INBOX], ["global", GLOBAL]]) {
+  const boundaries = everyBoundary();
+  assert.ok(boundaries.length >= 3, `only ${boundaries.length} boundaries found — the walk is broken`);
+  for (const [name, src] of boundaries) {
     assert.match(src, /error\.digest/, `the ${name} boundary offers nothing to quote`);
   }
 });
