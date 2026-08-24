@@ -103,6 +103,59 @@ export const CLASSES = [
   },
 
   {
+    id: "an-error-collapsed-into-a-value-that-reads-as-a-fact",
+    signals: ["catch(() =>", "fail open", "fail closed", "could not check", "reads as a fact"],
+    title: "A caught error becoming a value indistinguishable from a real answer",
+    mechanism:
+      "`.catch(() => null)`, `.catch(() => [])`, `.catch(() => 0)`. The failure stops being a " +
+      "failure and becomes a FACT: nothing found, nobody waiting, nothing owed, no queue " +
+      "failing. Nothing downstream can tell it from the real thing, and the screen or the " +
+      "reply states it with the same confidence either way. This is the same confusion as " +
+      "the eleven-instance RLS class one layer up — there, zero rows meant 'this business " +
+      "has nothing configured'; here, a caught error means it.",
+    instances: 3,
+    evidence: [
+      {
+        sha: null,
+        note:
+          "the reply path's sticky routing: findOrganizationById(...).catch(() => null) made " +
+          "a transient database error identical to 'this business is gone', so one hiccup " +
+          "re-triaged a live conversation onto whichever business the customer's next " +
+          "sentence mentioned — and logged 'no longer active', a cause it could not know",
+      },
+      {
+        sha: null,
+        note:
+          "/health/jobs: readQueueHealth(...).catch(() => []) emptied `failing` and " +
+          "`backedUp`, so a Redis outage — the one fault that stops every queue at once — " +
+          "answered a monitor with ok:true",
+      },
+      {
+        sha: null,
+        note:
+          "the handover brief: listOpenTasksForConversation(...).catch(() => []) rendered as " +
+          "no outstanding promises, on the one lookup its own comment says is fetched first " +
+          "so commitments survive every other failure",
+      },
+    ],
+    coverage: {
+      kind: "none",
+      whyUncoverable:
+        "The deliberate ones and the defects are TEXTUALLY IDENTICAL. A sweep on 2026-08-24 " +
+        "found twelve of these on the paths that matter and nine were correct, each with the " +
+        "direction argued in place: hasStaffOnShift().catch(() => true) assumes somebody IS " +
+        "there, because a database blip must not make five agents start telling customers " +
+        "nobody can help them. What separates a decision from a defect is whether the " +
+        "fallback is later PRESENTED AS A FACT, and no scanner can see that. " +
+        "THE RECIPE: when the fallback value would be indistinguishable from a real answer, " +
+        "carry a second field saying which it was, and surface it where the reader is — " +
+        "`queuesUnreadable` in the health JSON, `followUpsUnavailable` rendered as 'this is " +
+        "not the same as none', `lookupFailed` deciding a branch. Deciding a direction is " +
+        "not enough on its own; the direction has to be legible to whoever acts on it.",
+    },
+  },
+
+  {
     id: "a-claim-satisfied-by-prose",
     signals: ["matched the comment", "own doc comment", "comments stripped", "satisfied by prose"],
     title: "An assertion about source text, decided by a comment rather than by code",

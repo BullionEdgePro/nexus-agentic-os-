@@ -48,7 +48,7 @@ Four pieces, and each one is only worth having because of the next.
 
 | | |
 |---|---|
-| `scripts/recurrence/register.mjs` | The memory. Nine classes, each with its mechanism, instance count, evidence, and what catches it |
+| `scripts/recurrence/register.mjs` | The memory. Ten classes, each with its mechanism, instance count, evidence, and what catches it |
 | `scripts/recurrence/detectors/` | The scanners. Run on every commit, not on the days somebody remembers |
 | `apps/api/test/the-same-mistake-twice.test.mjs` | The teeth |
 | `scripts/recurrence-harvest.mjs` | The observer. Reads git history, reports where the register has decayed, **proposes and never writes** |
@@ -111,7 +111,7 @@ markers like `export async function ${fn}` looped over a list of real names.
 Six false alarms out of seven teaches people to ignore the seventh, which was
 the live defect. It now skips template literals and says how many it skipped.
 
-## The pattern under three of the nine
+## The pattern under three of the ten
 
 Three classes here are the same sentence in different clothes: **the bug is
 rarely the assertion, it is the population.**
@@ -132,6 +132,32 @@ whatever defines it, then assert the derived set is non-empty and still holds
 what you expected.** The second half matters as much as the first — a
 derivation that silently returns nothing is the same defect wearing a better
 coat.
+
+## The other pattern, and the one that costs more
+
+Three classes are "the population was smaller than the reader thinks". Four are
+now a different sentence: **an error became a value that reads as a fact.**
+
+- zero rows under RLS meaning "this business has nothing configured" — eleven times
+- a caught error becoming `null`, and a live conversation re-routed by a database blip
+- a caught error becoming `[]`, and a monitor told the schedule is healthy
+- a caught error becoming `[]`, and a colleague told nothing was promised
+
+The first is the platform's signature defect and the other three are the same
+confusion in application code. What makes them expensive is that the wrong
+answer is *well-formed*: no exception, no empty screen, no red test — just a
+confident statement that happens to be false.
+
+A sweep of twelve such catches on the paths that matter found nine correct, each
+with its direction argued in place. So the recipe is not "stop catching":
+
+> When the fallback value would be indistinguishable from a real answer, carry a
+> second field saying which it was, and **surface it where the reader is.**
+
+`queuesUnreadable` in the health JSON. `followUpsUnavailable` rendered as "this
+is not the same as none". `lookupFailed` deciding a branch rather than logging a
+guess. Choosing a direction is not enough on its own — the direction has to be
+legible to whoever acts on it.
 
 ## Why this is a test and not an eleventh gate
 
