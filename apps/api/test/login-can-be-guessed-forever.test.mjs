@@ -21,7 +21,8 @@
 // so that door was already closed and this does not reopen it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { withoutComments } from "../../../scripts/recurrence/source.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -32,8 +33,49 @@ const THROTTLE = read("apps", "api", "src", "lib", "login-throttle.ts");
 const ADMIN = read("apps", "api", "src", "routes", "admin-auth.ts");
 const EMPLOYEE = read("apps", "api", "src", "routes", "employee-auth.ts");
 
-test("both unauthenticated sign-in paths are throttled", () => {
-  for (const [name, src] of [["admin", ADMIN], ["employee", EMPLOYEE]]) {
+/**
+ * Every route that checks a secret, found rather than listed.
+ *
+ * This test named admin-auth.ts and employee-auth.ts until 2026-08-24, which
+ * covered both sign-in paths that exist and NOTHING ELSE. A third one -- a
+ * customer portal, an API key exchange, a password reset that confirms the old
+ * password -- would have been added, been unthrottled, and left this test
+ * green, because the test knew only the two routes somebody had already
+ * thought about.
+ *
+ * The population is derived from the thing that actually matters: a handler
+ * comparing a caller-supplied secret against a stored hash. Both verifiers here
+ * are deliberate, named, single-purpose functions, so looking for the call is
+ * looking for the property.
+ */
+const VERIFIERS = ["verifySecret(", "verifyAccessCode(", "timingSafeEqual("];
+
+function credentialRoutes() {
+  const dir = join(here, "..", "src", "routes");
+  const found = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".ts")) continue;
+    const src = readFileSync(join(dir, file), "utf8");
+    // withoutComments rather than an inline pair of regexes: a comment naming
+    // a verifier must not make a route look like it checks one, and every
+    // attempt to write that stripping inline in this repository has lost an
+    // escape in transit.
+    const code = withoutComments(src);
+    if (VERIFIERS.some((verifier) => code.includes(verifier))) found.push([file, src]);
+  }
+  return found;
+}
+
+test("every route that checks a secret is throttled", () => {
+  const routes = credentialRoutes();
+  // Both known sign-in paths must be among them, or the scan has stopped
+  // finding what it is for and everything below is vacuous.
+  const names = routes.map(([file]) => file).sort();
+  assert.deepEqual(names, ["admin-auth.ts", "employee-auth.ts"],
+    `the credential-route scan found ${names.join(", ") || "nothing"} — if a new sign-in path was ` +
+    `added, throttle it and add it here; if a verifier was renamed, update VERIFIERS`);
+
+  for (const [name, src] of routes) {
     assert.match(src, /const source = clientKey\(c\.req\.raw\.headers\);/, `${name} reads no source`);
     assert.match(src, /if \(await loginBlocked\(source\)\) \{/, `${name} does not check the throttle`);
     assert.match(src, /429/, `${name} does not refuse with 429`);
