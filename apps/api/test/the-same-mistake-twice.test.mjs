@@ -31,7 +31,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -120,6 +120,54 @@ test("a detector named by the register actually exists", () => {
       `${cls.id} claims detector "${cls.coverage.name}", which is not in scripts/recurrence/detectors. ` +
         `A register that claims coverage it does not have is worse than one that admits the gap.`
     );
+  }
+});
+
+test("coverage that names a test or a gate names one that exists", () => {
+  // The detector case was already checked. The other two were not, and a
+  // register can claim coverage it does not have just as easily by naming a
+  // deleted test as by naming a missing detector -- more easily, in fact,
+  // because a detector is code somebody runs and a name in a note is not.
+  //
+  // This matters most for the class with eleven instances, whose coverage is a
+  // runtime gate and a source-level test rather than a detector, and which is
+  // therefore the entry this suite was checking least.
+  const VERIFY = readFileSync(join(here, "..", "..", "..", "scripts", "verify-all.sh"), "utf8");
+  const gates = VERIFY.slice(VERIFY.indexOf("GATES=("), VERIFY.indexOf(")", VERIFY.indexOf("GATES=(")));
+
+  for (const cls of CLASSES) {
+    if (cls.coverage.kind === "test") {
+      const path = join(here, "..", "..", "..", ...cls.coverage.name.split("/"));
+      assert.ok(
+        existsSync(path),
+        `${cls.id} claims coverage by the test ${cls.coverage.name}, which does not exist`
+      );
+    }
+    if (cls.coverage.kind === "runtime-gate") {
+      assert.ok(
+        gates.includes(cls.coverage.name),
+        `${cls.id} claims coverage by the gate ${cls.coverage.name}, which verify-all.sh does not run`
+      );
+    }
+  }
+});
+
+test("a class whose note names another check names a real one", () => {
+  // The eleven-instance class is covered by two things and can only record one
+  // in `kind`, so the second lives in prose. Prose is where a claim goes to stop
+  // being checked -- so any *.test.mjs or *-check named in a coverage note has
+  // to exist too.
+  const root = join(here, "..", "..", "..");
+  for (const cls of CLASSES) {
+    const note = cls.coverage.note ?? cls.coverage.whyUncoverable ?? "";
+    for (const m of note.matchAll(/\b([a-z0-9-]+(?:\.test\.mjs|-check))\b/g)) {
+      const named = m[1];
+      const found =
+        existsSync(join(root, "apps", "api", "test", named)) ||
+        existsSync(join(root, "scripts", `${named}.sh`)) ||
+        existsSync(join(root, "apps", "api", "src", "scripts", `${named}.ts`));
+      assert.ok(found, `${cls.id}'s coverage note names ${named}, and nothing by that name exists`);
+    }
   }
 });
 

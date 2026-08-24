@@ -76,9 +76,29 @@ export const CLASSES = [
       kind: "runtime-gate",
       name: "shared-number-check",
       note:
-        "Probes each known call site twice — scoped to the business, then through the reply " +
-        "path's real shape — and compares. It cannot see a call site nobody has added to it, " +
-        "which is how the tenth and eleventh instances still happened after it existed.",
+        "TWO THINGS COVER THIS, and an earlier version of this entry named only the first, " +
+        "which understated the coverage and — worse — pointed the next reader at work " +
+        "already done. " +
+        "(1) shared-number-check probes each known call site twice, scoped to the business " +
+        "and then through the reply path's real shape, and compares. It cannot see a call " +
+        "site nobody has added to it, which is how the tenth and eleventh instances happened " +
+        "after it existed. " +
+        "(2) every-agent-read-widens-itself.test.mjs is the SOURCE-LEVEL half, and the " +
+        "stronger of " +
+        "the two: every exported reader in @nexus/db that the agent packages can reach and " +
+        "that filters on organization_id must widen AT THE READ rather than trust its " +
+        "callers. Exemptions are a written list with a stated reason each, and it is " +
+        "mutation-tested — the scan is re-run with the widening textually removed and must " +
+        "find the readers again. " +
+        "WHAT NEITHER SEES is a query written inline outside packages/db, which is exactly " +
+        "where the eleventh instance was: getPool().query in bi-copilot.ts, not a db reader " +
+        "at all. Measured 2026-08-24: eight such files outside packages/db. Four widen. The " +
+        "other four — knowledge ingest and manage, lead capture, and the operator sweep — " +
+        "were checked one by one and NONE IS ON THE CUSTOMER REPLY PATH, which is the only " +
+        "place the owner/serving mismatch arises; the nearest, ingestUrlSet, is reached by " +
+        "the reindex job, which does not run in a number owner's transaction. So the gap is " +
+        "real and currently empty. A detector for it would today scan two files that already " +
+        "widen, which is why there is not one.",
     },
   },
 
@@ -287,8 +307,17 @@ export const CLASSES = [
       "Writing a file through a quoted heredoc removes one backslash level. Regexes arrive " +
       "with `\\s` collapsed to `s` and `\\1` collapsed to a literal control character. The " +
       "file is written successfully and the program is silently wrong.",
-    instances: 5,
+    instances: 6,
     evidence: [
+      {
+        sha: null,
+        note:
+          "the sixth, 2026-08-24, is the one that changed this entry: a regex written with " +
+          "backslash-b arrived as the BYTE 0x08, so it required a backspace character, matched " +
+          "nothing, and its negated assertion passed for ever. Two live instances were found " +
+          "by scanning for it -- the register's own honesty check, and the guard against an " +
+          "unguarded tenant cast in an RLS policy, which had never once run",
+      },
       {
         sha: null,
         note:
@@ -297,17 +326,20 @@ export const CLASSES = [
       },
     ],
     coverage: {
-      kind: "none",
-      whyUncoverable:
-        "The defect is in the transport between an editing tool and the disk, not in " +
-        "anything this repository contains. By the time a file exists to scan, the damage " +
-        "is indistinguishable from a typo — and the tree is scanned by node, which reports " +
-        "the resulting regex as invalid or, worse, accepts it. The mitigation is not a " +
-        "detector: write escape-bearing files with a tool that does not re-escape, and " +
-        "read back what landed. What DID catch the most recent one was the pre-commit " +
-        "hook running the WORKSPACE typecheck: a single-package typecheck had already " +
-        "passed over it, which is its own small lesson about checking the part you " +
-        "changed rather than the whole.",
+      kind: "detector",
+      name: "a-control-character-in-source",
+      note:
+        "HALF THE CLASS, and the half that matters. This entry said `none` and gave a reason, " +
+        "which was true of the damage that leaves valid-looking source: \s collapsing to s " +
+        "produces a working regex that is merely wrong, and no scanner can know it was not " +
+        "intended. But when the eaten escape was \b, \f, \v or \0 the result is a BYTE with " +
+        "no business in source, which cannot be typed by accident and is trivial to find. It " +
+        "is also the more dangerous half: a mangled character class usually breaks loudly, " +
+        "while a control character silently makes a pattern unmatchable and every assertion " +
+        "built on it green. Its first run found two, both years-of-green-tests shaped. What " +
+        "remains uncoverable is the quiet collapse, and the mitigation for that is unchanged: " +
+        "write escape-bearing files with a tool that does not re-escape, and read back what " +
+        "landed.",
     },
   },
 ];

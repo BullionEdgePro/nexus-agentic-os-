@@ -206,9 +206,25 @@ test("no policy casts the tenant setting to uuid", () => {
   // not true.
   assert.match(CAST_FIX, /nullif\(current_setting\('app\.current_org', true\), ''\)::uuid = any \(served_organization_ids\)/);
   const policy = CAST_FIX.slice(CAST_FIX.indexOf("create policy contacts_tenant_isolation"));
+  // NO REGEX HERE, and that is the point of this rewrite.
+  //
+  // This assertion was written as /[^f]\bcurrent_setting.../ and shipped with a
+  // literal BACKSPACE character where the \b belonged -- one escaping level eaten
+  // in transit. The pattern then required a 0x08 byte before current_setting,
+  // which no policy has ever contained, so .test() was always false, the
+  // negation was always true, and THE GUARD AGAINST AN UNGUARDED TENANT CAST
+  // NEVER ONCE RAN. Found 2026-08-24 by scanning source for control characters.
+  //
+  // Rewritten as string work: delete every occurrence of the GUARDED form, then
+  // any cast still standing is an unguarded one. It says the same thing, cannot
+  // be silently disarmed by an escape, and reads as what it means.
+  const GUARDED = "nullif(current_setting('app.current_org', true), '')::uuid";
+  const RAW = "current_setting('app.current_org', true)::uuid";
+  assert.ok(policy.includes(GUARDED), "the guarded form is not in the policy at all");
   assert.ok(
-    !/[^f]current_setting\('app\.current_org', true\)::uuid/.test(policy),
-    "an unguarded cast of the tenant setting is the defect"
+    !policy.split(GUARDED).join("").includes(RAW),
+    "an unguarded cast of the tenant setting is the defect: inside withAllTenants the" +
+      " setting is '' and the cast raises invalid input syntax for type uuid"
   );
 });
 
