@@ -35,6 +35,7 @@ import {
   withAllTenants,
   getPool,
   TENANT_SCOPED_TABLES,
+  policyFaults,
 } from "@nexus/db";
 
 /**
@@ -160,49 +161,55 @@ async function main(): Promise<void> {
 
   // ---- no write policy is wider than the read it belongs to ----
   //
-  // The shared number makes three tables deliberately asymmetric: a business
-  // may READ a conversation routed to it, and may not WRITE it. `contacts`,
-  // `conversations` and `conversation_metrics` all carry a widened USING and a
-  // narrow WITH CHECK, and the migrations that did it are asserted in the unit
-  // suite by name.
+  // The shared number makes three tables deliberately asymmetric: a business may
+  // READ a conversation routed to it, and may not WRITE it. The migrations that
+  // did that are asserted in the unit suite BY NAME, and schema-drift-check
+  // proves production matches the repository — which says nothing about whether
+  // the repository is right. A table added tomorrow whose WITH CHECK was copied
+  // from its widened USING would pass every gate here.
   //
-  // BY NAME is the gap this closes. Those tests read the migrations somebody
-  // remembered; schema-drift-check proves production matches the repository,
-  // which says nothing about whether the repository is right. A table added
-  // tomorrow with `with check` copied from the widened `using` would pass every
-  // gate here and let a serving business write rows into the number owner's
-  // tenant — rows the owner can see, did not make, and cannot tell apart.
-  //
-  // Checked as an INVARIANT over every policy rather than a list: a write
-  // predicate must not admit a row the read predicate would hide. Postgres
-  // cannot answer implication in general, so this asks the specific question
-  // that matters here — the write must not mention a column the read uses to
-  // widen. `routed_organization_id` is that column and the only one so far.
+  // The RULE lives in policyFault, a pure function, and the suite proves it
+  // against policies that are genuinely too wide. It cannot be proved here:
+  // this script connects as nexus_app, which owns no tables and holds no CREATE
+  // — rls-preflight asserts exactly that — so the gate cannot build a bad
+  // policy to catch, and building one on the live conversations table to watch
+  // this go red would be an outage with a good intention.
   console.log(String.fromCharCode(10) + "Writes are no wider than reads");
-  const { rows: asymmetric } = await withAllTenants("rls-verify: policy shape", () =>
-    getPool().query<{ tbl: string; policy: string; widener: string | null }>(
-      `select tablename as tbl, policyname as policy,
-              case when with_check like '%routed_organization_id%'
-                   then 'routed_organization_id' end as widener
+  const { rows: policies } = await withAllTenants("rls-verify: policy shape", () =>
+    getPool().query<{
+      table: string;
+      policy: string;
+      qual: string | null;
+      with_check: string | null;
+      command: string;
+    }>(
+      `select tablename as table, policyname as policy, qual, with_check, cmd as command
          from pg_policies
         where schemaname = 'public'
-          and cmd in ('ALL', 'INSERT', 'UPDATE')
-          and (with_check is null or with_check like '%routed_organization_id%')
-        order by tablename`
+        order by tablename, policyname`
     )
   );
-  if (asymmetric.length === 0) {
+
+  // Non-empty, so a query that returned nothing cannot read as a clean result.
+  line(
+    policies.length > 0,
+    "policies readable",
+    policies.length > 0 ? `${policies.length} examined` : "NONE — pg_policies returned nothing"
+  );
+
+  const faults = policyFaults(
+    policies.map((row) => ({
+      table: row.table,
+      policy: row.policy,
+      qual: row.qual,
+      withCheck: row.with_check,
+      command: row.command,
+    }))
+  );
+  if (faults.length === 0) {
     line(true, "every write policy", "narrow — none admits a row its read widens to");
   } else {
-    for (const row of asymmetric) {
-      line(
-        false,
-        row.tbl,
-        row.widener
-          ? `${row.policy} lets a serving business WRITE rows it may only read`
-          : `${row.policy} has no WITH CHECK: writes are unconstrained`
-      );
-    }
+    for (const fault of faults) line(false, fault.table, `${fault.policy} ${fault.reason}`);
   }
 
   // ---- 3 & 4. do they filter, and do they let work through ----
