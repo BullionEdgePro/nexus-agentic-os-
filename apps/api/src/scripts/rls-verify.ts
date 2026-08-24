@@ -158,6 +158,53 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---- no write policy is wider than the read it belongs to ----
+  //
+  // The shared number makes three tables deliberately asymmetric: a business
+  // may READ a conversation routed to it, and may not WRITE it. `contacts`,
+  // `conversations` and `conversation_metrics` all carry a widened USING and a
+  // narrow WITH CHECK, and the migrations that did it are asserted in the unit
+  // suite by name.
+  //
+  // BY NAME is the gap this closes. Those tests read the migrations somebody
+  // remembered; schema-drift-check proves production matches the repository,
+  // which says nothing about whether the repository is right. A table added
+  // tomorrow with `with check` copied from the widened `using` would pass every
+  // gate here and let a serving business write rows into the number owner's
+  // tenant — rows the owner can see, did not make, and cannot tell apart.
+  //
+  // Checked as an INVARIANT over every policy rather than a list: a write
+  // predicate must not admit a row the read predicate would hide. Postgres
+  // cannot answer implication in general, so this asks the specific question
+  // that matters here — the write must not mention a column the read uses to
+  // widen. `routed_organization_id` is that column and the only one so far.
+  console.log(String.fromCharCode(10) + "Writes are no wider than reads");
+  const { rows: asymmetric } = await withAllTenants("rls-verify: policy shape", () =>
+    getPool().query<{ tbl: string; policy: string; widener: string | null }>(
+      `select tablename as tbl, policyname as policy,
+              case when with_check like '%routed_organization_id%'
+                   then 'routed_organization_id' end as widener
+         from pg_policies
+        where schemaname = 'public'
+          and cmd in ('ALL', 'INSERT', 'UPDATE')
+          and (with_check is null or with_check like '%routed_organization_id%')
+        order by tablename`
+    )
+  );
+  if (asymmetric.length === 0) {
+    line(true, "every write policy", "narrow — none admits a row its read widens to");
+  } else {
+    for (const row of asymmetric) {
+      line(
+        false,
+        row.tbl,
+        row.widener
+          ? `${row.policy} lets a serving business WRITE rows it may only read`
+          : `${row.policy} has no WITH CHECK: writes are unconstrained`
+      );
+    }
+  }
+
   // ---- 3 & 4. do they filter, and do they let work through ----
   const organizations = await withAllTenants("rls-verify: tenants", () => listOrganizations());
   if (organizations.length < 2) {
