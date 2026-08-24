@@ -108,6 +108,28 @@ services:
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
     command: ["npx", "tsx", "apps/api/src/worker.ts"]
     restart: unless-stopped
+    # NINETY SECONDS, AND THE DEFAULT WAS TEN.
+    #
+    # worker.ts closes every BullMQ worker on SIGTERM, and close() waits for the
+    # job in flight to finish. Docker then gives it ten seconds before SIGKILL,
+    # and the platform's own numbers say that is not enough: across the replies
+    # measured on 2026-08-24 the AVERAGE took 10.2 seconds and the slowest took
+    # 27.0 -- a model call, a retrieval and a send to Meta, end to end.
+    #
+    # So a deploy landing while somebody is being answered killed the job
+    # mid-flight. That is worse than it sounds, because the retry does not fix
+    # it: the inbound message is already recorded, so recordInboundMessage
+    # returns a null id, the processor correctly reads that as a webhook replay
+    # and returns -- and the reply that was interrupted is never sent. The
+    # customer gets silence, the job completes green, and only the
+    # customer-waiting operator notices, two hours later.
+    #
+    # Ninety gives the slowest observed reply better than three times its
+    # measured worst case. It does not cover a hard crash or an OOM kill, which
+    # drop the message the same way; that needs the retry to ask "has a reply
+    # gone out" rather than "have I seen this message", and it is a change to
+    # the reply path rather than a line of compose.
+    stop_grace_period: 90s
     # Same as api, and this is the one that matters most: the reply pipeline,
     # the operators and every scheduled job log here. See the note above.
     logging:
