@@ -16,7 +16,7 @@
 // answer would otherwise be about a build nobody had established the age of.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -30,18 +30,58 @@ const CHECK = read("scripts", "build-check.sh");
 const DEPLOY = read("scripts", "deploy.sh");
 
 test("every image stamps the commit it was built from", () => {
-  for (const file of ["Dockerfile.api", "Dockerfile.web"]) {
+  // Dockerfiles found, not listed. build-check compares the commit each running
+  // image reports against HEAD, and an image that does not carry one reports
+  // "unknown" -- which the gate reads as a stale build it cannot identify. A
+  // third Dockerfile added tomorrow would have escaped a two-name list.
+  const dockerfiles = readdirSync(root).filter((f) => f.startsWith("Dockerfile"));
+  assert.ok(dockerfiles.length >= 2, `only ${dockerfiles.length} Dockerfiles found in ${root}`);
+
+  for (const file of dockerfiles) {
     const df = read(file);
     assert.match(df, /ARG GIT_COMMIT=unknown/, `${file} must accept the commit`);
     assert.match(df, /ENV NEXUS_COMMIT=\$GIT_COMMIT/, `${file} must expose it at runtime`);
   }
 });
 
-test("all three services pass the argument through", () => {
-  // Three, not two. api and worker share Dockerfile.api and are separate
-  // services, and web is the one the old deploy command left out.
-  const occurrences = COMPOSE.split("GIT_COMMIT: ${GIT_COMMIT:-unknown}").length - 1;
-  assert.equal(occurrences, 3, "api, worker and web must each pass GIT_COMMIT");
+/** Compose services that build an image, with their block, read from the file. */
+function builtServices() {
+  const lines = COMPOSE.split(String.fromCharCode(10));
+  const services = [];
+  let current = null;
+  let inServices = false;
+
+  for (const line of lines) {
+    if (/^services:/.test(line)) { inServices = true; continue; }
+    if (!inServices) continue;
+    if (/^[a-zA-Z]/.test(line)) { inServices = false; continue; }  // left the services block
+
+    const header = /^ {2}([a-z][a-z0-9_-]*):\s*$/.exec(line);
+    if (header) {
+      current = { name: header[1], body: "" };
+      services.push(current);
+      continue;
+    }
+    if (current) current.body += line + String.fromCharCode(10);
+  }
+  return services.filter((service) => /^\s+build:/m.test(service.body));
+}
+
+test("every service that builds an image passes the commit through", () => {
+  // A COUNT OF THREE used to stand here, which could only catch somebody
+  // REMOVING a service -- and would go red for the safe change of adding one.
+  // api and worker share Dockerfile.api and are separate services; web is the
+  // one the old deploy command left out, which is why this test exists at all.
+  const services = builtServices();
+  assert.ok(services.length >= 3, `only ${services.length} building services parsed from compose`);
+
+  for (const service of services) {
+    assert.ok(
+      service.body.includes("GIT_COMMIT"),
+      `the ${service.name} service builds an image and does not pass GIT_COMMIT — its image will ` +
+        `report "unknown" and build-check cannot tell whether it is current`
+    );
+  }
 });
 
 test("no build block declares args twice", () => {

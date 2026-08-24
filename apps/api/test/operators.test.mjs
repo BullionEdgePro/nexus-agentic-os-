@@ -28,11 +28,60 @@ const PAGE = read("apps", "web", "app", "deck", "operators", "page.tsx");
 // 1. The blocker is answered by construction
 // ============================================================
 
+/** Every module the sweep imports from, read from its own import statements. */
+function sweepImports(src) {
+  const out = new Set();
+  const NEEDLE = 'from "';
+  let at = src.indexOf(NEEDLE);
+  while (at !== -1) {
+    const from = at + NEEDLE.length;
+    const to = src.indexOf('"', from);
+    if (to !== -1) out.add(src.slice(from, to));
+    at = src.indexOf(NEEDLE, at + 1);
+  }
+  return [...out].sort();
+}
+
 test("no operator calls a model", () => {
   // ARCHITECTURE §2.3 blocked F8 on "event-triggered or paid inference?",
   // because agents polling a model bill by tenant AND by time on a deployment
   // whose agents run on a free tier. Every operator is SQL. That does not
   // decide the question — it removes the need to decide it before shipping.
+  //
+  // AN ALLOW-LIST OF IMPORTS, not a denylist of SDK names. This checked for
+  // GoogleGenAI, generateContent, GEMINI_API_KEY and ANTHROPIC — four spellings
+  // of the two vendors used on the day it was written. OpenAI, Mistral, a
+  // self-hosted endpoint, or a local helper named `ask()` would all have passed
+  // it, and so would `import { routeToDomainAgent } from "@nexus/agents"`,
+  // which is this repository's own front door to a model.
+  //
+  // The same inversion governance/policy.ts made for tenants: an allow-list is
+  // wrong in the safe direction. A new import here fails until somebody looks
+  // at it, and looking at it is the entire point.
+  const ALLOWED = new Set([
+    "@nexus/db",
+    "@nexus/leads",
+    "@nexus/governance",
+    "@nexus/shared",
+    "../lib/logger.js",
+    "./alert-dispatch.js",
+  ]);
+
+  const imports = sweepImports(OPERATORS);
+  assert.ok(imports.length >= 4, `only ${imports.length} imports parsed — the scan is probably broken`);
+
+  for (const module of imports) {
+    assert.ok(
+      ALLOWED.has(module),
+      `operators.ts imports ${module}, which is not on the allow-list. If it reaches a model — ` +
+        `directly or through @nexus/agents — the sweep bills by tenant and by time, every ten ` +
+        `minutes, which is the question ARCHITECTURE §2.3 deferred rather than answered. Add it ` +
+        `here only after checking it does not.`
+    );
+  }
+
+  // The denylist is kept as well: it costs nothing and it catches a model
+  // reached without an import, which the allow-list above cannot see.
   for (const forbidden of [/GoogleGenAI/, /generateContent/, /GEMINI_API_KEY/, /ANTHROPIC/]) {
     assert.ok(!forbidden.test(OPERATORS), `operators must not reach for ${forbidden}`);
   }
