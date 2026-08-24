@@ -257,6 +257,54 @@ export const CLASSES = [
   },
 
   {
+    id: "an-assertion-over-a-hand-written-population",
+    signals: ["hard-coded", "every reachable", "population", "derived", "by name"],
+    title: 'A test that says "every X" while iterating a list somebody typed',
+    mechanism:
+      "The assertion is right and the population is hand-written, so the test is true of the " +
+      "members somebody had already thought about and silent about the one added tomorrow. It " +
+      "reads as broad coverage and is narrow coverage, and unlike a wrong assertion it never " +
+      "goes red to say so.",
+    instances: 3,
+    evidence: [
+      {
+        sha: null,
+        note:
+          "login-can-be-guessed-forever read admin-auth.ts and employee-auth.ts BY NAME. A " +
+          "third route checking a secret would have been unthrottled and left it green",
+      },
+      {
+        sha: null,
+        note:
+          "what-is-running-is-what-is-committed asserted the gate list had exactly ten " +
+          "entries, which could only ever catch somebody ADDING a gate — the safe change — " +
+          "while a typo in the list passed and failed at 3am with 'no such file'",
+      },
+      {
+        sha: null,
+        note:
+          'a-blank-page-is-the-worst-answer said "every reachable area has a boundary" and ' +
+          "iterated four paths. Its wording also implied four areas were at fault that were " +
+          "not, so the list and the sentence quietly disagreed",
+      },
+    ],
+    coverage: {
+      kind: "none",
+      whyUncoverable:
+        "A literal list is not a defect. Most of the 1051 tests here iterate one and are " +
+        "right to — a detector would have to know that a particular list SHOULD have been " +
+        "derived, which is a judgement about intent, and it would flag hundreds of correct " +
+        "tests to find the next one of these. " +
+        "THE RECIPE IS THE MITIGATION, and all three fixes used it unchanged: derive the " +
+        "population from whatever actually defines it — the filesystem, the router mounts, " +
+        "the middleware list — then assert the derived set is non-empty AND still contains " +
+        "the members you expected. The second half is what makes it safe: a derivation that " +
+        "silently returns nothing is the vacuous-loop failure wearing a better coat, and " +
+        "this repository has shipped that one too.",
+    },
+  },
+
+  {
     id: "a-css-token-that-does-not-exist",
     signals: ["does not exist renders as nothing", "custom property", "var(--", "css token"],
     title: "A `var(--token)` naming a custom property nothing defines",

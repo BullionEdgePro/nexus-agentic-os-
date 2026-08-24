@@ -48,7 +48,7 @@ Four pieces, and each one is only worth having because of the next.
 
 | | |
 |---|---|
-| `scripts/recurrence/register.mjs` | The memory. Eight classes, each with its mechanism, instance count, evidence, and what catches it |
+| `scripts/recurrence/register.mjs` | The memory. Nine classes, each with its mechanism, instance count, evidence, and what catches it |
 | `scripts/recurrence/detectors/` | The scanners. Run on every commit, not on the days somebody remembers |
 | `apps/api/test/the-same-mistake-twice.test.mjs` | The teeth |
 | `scripts/recurrence-harvest.mjs` | The observer. Reads git history, reports where the register has decayed, **proposes and never writes** |
@@ -110,6 +110,28 @@ The detector's own first run reported seven findings, six of them false —
 markers like `export async function ${fn}` looped over a list of real names.
 Six false alarms out of seven teaches people to ignore the seventh, which was
 the live defect. It now skips template literals and says how many it skipped.
+
+## The pattern under three of the nine
+
+Three classes here are the same sentence in different clothes: **the bug is
+rarely the assertion, it is the population.**
+
+- an assertion satisfied by a comment rather than by code
+- an extraction whose marker no longer matches, so the loop runs zero times
+- a test that says "every X" while iterating a list somebody typed
+
+None of them is a wrong claim. Each is a right claim about a smaller set than
+the reader believes, and none of them can go red to say so. Between them they
+account for every silent-green defect found in this repository: a security
+guard that never ran, an ordering assertion reporting `-1 < 20538`, two sign-in
+routes standing in for all of them, and "every reachable area" meaning four
+paths.
+
+The recipe that fixed all three is one line: **derive the population from
+whatever defines it, then assert the derived set is non-empty and still holds
+what you expected.** The second half matters as much as the first — a
+derivation that silently returns nothing is the same defect wearing a better
+coat.
 
 ## Why this is a test and not an eleventh gate
 
