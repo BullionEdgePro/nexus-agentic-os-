@@ -271,6 +271,17 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
               this person is about to contradict if they don't see them. They
               also render when the summary failed entirely, which is exactly
               when someone is most likely to message cold. */}
+          {brief.brief.followUpsUnavailable && (
+            <div className="handover-owed">
+              <p className="handover-owed-label">
+                Outstanding promises could not be checked
+              </p>
+              <p className="handover-owed-note">
+                This is not the same as none. Open the thread before you reply — there may be
+                something we have already committed to.
+              </p>
+            </div>
+          )}
           {brief.brief.openFollowUps.length > 0 && (
             <div className="handover-owed">
               <p className="handover-owed-label">

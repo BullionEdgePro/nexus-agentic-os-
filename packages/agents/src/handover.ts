@@ -36,6 +36,15 @@ export interface HandoverBrief {
   /** How many turns it was built from, so a thin brief is visibly thin. */
   turnsConsidered: number;
   /**
+   * True when the follow-up lookup FAILED, as distinct from finding nothing.
+   *
+   * `openFollowUps: []` used to mean both. A colleague taking a conversation
+   * over reads an empty list as "nothing is owed here" — which is the one
+   * thing this brief exists to tell them, and the one thing a failed query
+   * cannot honestly say.
+   */
+  followUpsUnavailable: boolean;
+  /**
    * What we still owe this customer, STRUCTURED — never passed through the
    * model.
    *
@@ -55,11 +64,17 @@ export interface HandoverBrief {
   openFollowUps: OpenFollowUp[];
 }
 
-const EMPTY = (reason: string, turns = 0, followUps: OpenFollowUp[] = []): HandoverBrief => ({
+const EMPTY = (
+  reason: string,
+  turns = 0,
+  followUps: OpenFollowUp[] = [],
+  followUpsUnavailable = false
+): HandoverBrief => ({
   summary: null,
   unavailableReason: reason,
   turnsConsidered: turns,
   openFollowUps: followUps,
+  followUpsUnavailable,
 });
 
 /**
@@ -141,24 +156,35 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
   // promise reaches the employee even when there is no transcript to read, no
   // API key configured, or the model is down. The commitments are the part
   // somebody is about to act on; the prose is the convenience.
-  const followUps = (await listOpenTasksForConversation(conversationId).catch(() => []))
-    .map(toFollowUp);
+  //
+  // A FAILED LOOKUP IS NOT AN EMPTY ONE, and `.catch(() => [])` made them the
+  // same value — which inverted the paragraph above. The commitments are the
+  // part somebody is about to act on, so the one failure that must never be
+  // silent is this one: a colleague reading an empty list concludes nothing is
+  // owed, picks the conversation up, and does not make the call we promised.
+  let followUps: OpenFollowUp[] = [];
+  let followUpsUnavailable = false;
+  try {
+    followUps = (await listOpenTasksForConversation(conversationId)).map(toFollowUp);
+  } catch {
+    followUpsUnavailable = true;
+  }
 
   let history: Awaited<ReturnType<typeof loadRecentHistory>>;
   try {
     history = await loadRecentHistory(conversationId, 30);
   } catch {
-    return EMPTY("Could not read the conversation history.", 0, followUps);
+    return EMPTY("Could not read the conversation history.", 0, followUps, followUpsUnavailable);
   }
 
   if (history.length === 0) {
     // Not a failure. A conversation with no messages is a real state, and
     // saying "nothing has been said yet" is more useful than an error.
-    return EMPTY("Nothing has been said in this conversation yet.", 0, followUps);
+    return EMPTY("Nothing has been said in this conversation yet.", 0, followUps, followUpsUnavailable);
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return EMPTY("Summaries are not configured on this deployment.", history.length, followUps);
+    return EMPTY("Summaries are not configured on this deployment.", history.length, followUps, followUpsUnavailable);
   }
 
   const transcript = history
@@ -179,19 +205,20 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
       maxTokens: 400,
     });
     const summary = (drafted ?? "").trim();
-    if (!summary) return EMPTY("The summary came back empty.", history.length, followUps);
+    if (!summary) return EMPTY("The summary came back empty.", history.length, followUps, followUpsUnavailable);
 
     return {
       summary,
       unavailableReason: null,
       turnsConsidered: history.length,
       openFollowUps: followUps,
+      followUpsUnavailable,
     };
   } catch {
     // Deliberately swallowed. The caller is mid-handoff and the employee is
     // waiting; surfacing this as an error would fail the operation that matters
     // for the sake of the one that does not.
-    return EMPTY("The summary could not be generated just now.", history.length, followUps);
+    return EMPTY("The summary could not be generated just now.", history.length, followUps, followUpsUnavailable);
   }
 }
 

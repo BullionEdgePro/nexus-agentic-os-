@@ -219,6 +219,17 @@
   margin: 0 0 6px;
 }
 
+/* The "could not be checked" note. Same warn rail as the list it stands in for,
+   because it carries the same weight: a colleague is about to reply without
+   knowing what was promised. Body colour rather than warn, so the rail and the
+   label do the alarming and the sentence stays readable. */
+.handover-owed-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--slate);
+}
+
 .handover-owed ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 
 .handover-owed li {

@@ -172,7 +172,18 @@ test("the check that comes from outside is a different route from the liveness p
   // verdict so nothing that treats a non-2xx as "restart this" is given a
   // reason to.
   assert.match(INDEX, /app\.get\("\/health\/jobs"/);
-  assert.match(INDEX, /ok: stalled\.length === 0/);
+  // Whitespace collapsed, because this pinned the expression as CONTIGUOUS
+  // TEXT and went red when a fourth condition made it wrap. What matters is
+  // what ok is computed from, not how it is laid out.
+  const flat = INDEX.replace(/\s+/g, " ");
+  assert.ok(flat.includes("ok: stalled.length === 0"), "ok must be derived from the stalled list");
+  // And from whether the queue half could be read at all: "I could not
+  // check" is not "nothing is wrong", and a monitor must not be told they
+  // are the same. Before this, a Redis outage came back ok:true.
+  assert.ok(
+    flat.includes("!queuesUnreadable"),
+    "ok must be false when the queue half could not be read"
+  );
   assert.ok(
     !/\/health\/jobs[\s\S]{0,2000}c\.json\([^)]*\},\s*5\d\d\)/.test(INDEX),
     "the jobs endpoint must not return a non-2xx status"

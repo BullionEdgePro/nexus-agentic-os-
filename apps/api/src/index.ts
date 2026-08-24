@@ -204,18 +204,41 @@ app.get("/health/jobs", async (c) => {
     // that STARTED; this records work sitting unprocessed or set aside after
     // every retry. `bull:knowledge-reindex:failed` held twenty such jobs on 18
     // August and nothing had ever looked at it.
-    const queues = await readQueueHealth(
-      Object.fromEntries(beats.map((beat) => [beat.job, beat.lastFinishedAt]))
-    ).catch(() => []);
+    // NOT `.catch(() => [])`, which is what this was and which reported the
+    // opposite of the truth. An empty queue list makes `failing` and `backedUp`
+    // empty too, so a Redis outage — the one thing that would stop every queue
+    // at once — came back as ok:true with nothing listed. A monitor reads that
+    // as a healthy schedule.
+    //
+    // The catch below already decided the principle for the heartbeat half: "A
+    // failure here is itself worth reporting rather than hiding behind a 500."
+    // This half was hiding it.
+    let queues: Awaited<ReturnType<typeof readQueueHealth>> = [];
+    let queuesUnreadable = false;
+    try {
+      queues = await readQueueHealth(
+        Object.fromEntries(beats.map((beat) => [beat.job, beat.lastFinishedAt]))
+      );
+    } catch (err) {
+      queuesUnreadable = true;
+      logger.error({ err }, "Could not read queue health — reporting not-ok rather than empty");
+    }
     const failing = queues.filter((q) => q.failing).map((q) => q.queue);
     const backedUp = queues.filter((q) => q.backedUp).map((q) => q.queue);
 
     const stalled = jobs.filter((job) => job.stalled).map((job) => job.job);
     return c.json({
-      ok: stalled.length === 0 && failing.length === 0 && backedUp.length === 0,
+      // `queuesUnreadable` is part of ok deliberately: "I could not check" is
+      // not "nothing is wrong", and the two must not answer a monitor alike.
+      ok:
+        stalled.length === 0 &&
+        failing.length === 0 &&
+        backedUp.length === 0 &&
+        !queuesUnreadable,
       stalled,
       failing,
       backedUp,
+      queuesUnreadable,
       jobs,
       queues,
     });

@@ -325,6 +325,14 @@ export interface HandoverBrief {
     isOverdue: boolean;
     owner: string | null;
   }>;
+  /**
+   * The follow-up lookup FAILED, as distinct from finding nothing.
+   *
+   * An empty list and a failed query used to be the same value, and the panel
+   * below simply rendered nothing for both — so a colleague read "no
+   * commitments" off a query that never answered.
+   */
+  followUpsUnavailable: boolean;
 }
 
 export function takeToOwnWhatsApp(

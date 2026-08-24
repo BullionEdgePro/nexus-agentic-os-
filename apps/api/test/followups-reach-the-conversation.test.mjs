@@ -137,8 +137,29 @@ test("follow-ups are fetched before anything that can fail, and survive it", () 
 });
 
 test("the fetch cannot fail the handoff", () => {
-  // The employee taking the conversation is the operation that matters.
-  assert.match(HANDOVER, /listOpenTasksForConversation\(conversationId\)\.catch\(\(\) => \[\]\)/);
+  // The employee taking the conversation is the operation that matters, so a
+  // failed follow-up lookup must not throw.
+  //
+  // THE PROPERTY, NOT THE SPELLING. This pinned the literal
+  // `.catch(() => [])`, and went red when that became a try/catch that also
+  // records the failure -- a change that strengthens exactly what this test is
+  // named for. An assertion that breaks when its own subject improves is
+  // pinning an implementation.
+  const fn = HANDOVER.slice(HANDOVER.indexOf("export async function buildHandoverBrief"));
+  const fetchAt = fn.indexOf("listOpenTasksForConversation(conversationId)");
+  assert.notEqual(fetchAt, -1, "the follow-up fetch is no longer recognisable");
+
+  const guard = fn.slice(0, fetchAt);
+  assert.ok(
+    guard.includes("try {") || fn.slice(fetchAt, fetchAt + 200).includes(".catch("),
+    "the follow-up lookup must be guarded — a failure here must not fail the handoff"
+  );
+  // And the guard must not swallow it into an empty list, which reads to the
+  // colleague as "nothing is owed".
+  assert.ok(
+    fn.includes("followUpsUnavailable"),
+    "a failed lookup must be distinguishable from finding nothing"
+  );
 });
 
 test("they are never passed through the summariser", () => {

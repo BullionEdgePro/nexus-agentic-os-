@@ -137,18 +137,48 @@ test("the shared Redis connection is not closed underneath the process", () => {
 });
 
 test("the endpoint reports it, and a queue problem makes ok false", () => {
-  assert.match(INDEX, /readQueueHealth\([\s\S]{0,120}?\)\.catch\(\(\) => \[\]\)/);
-  assert.match(INDEX, /ok: stalled\.length === 0 && failing\.length === 0 && backedUp\.length === 0/);
+  // Collapsed, and checked as a PROPERTY rather than as a spelling. Both
+  // assertions here pinned exact source text: `.catch(() => [])` on the
+  // readQueueHealth call, and the ok expression on one line. Both went red
+  // when that catch was replaced by a try that also reports the failure --
+  // which is the very thing this test is named for. An assertion that breaks
+  // when its subject improves is pinning an implementation.
+  const flat = INDEX.replace(/\s+/g, " ");
+
+  assert.ok(flat.includes("readQueueHealth("), "the endpoint no longer reads queue health");
+  assert.ok(
+    flat.includes("ok: stalled.length === 0 && failing.length === 0 && backedUp.length === 0"),
+    "ok must still fall to false on a stalled job, a failing queue or a backed-up one"
+  );
+
+  // AND ON NOT BEING ABLE TO LOOK. `.catch(() => [])` used to make an
+  // unreadable queue list indistinguishable from a healthy one -- empty
+  // failing, empty backedUp, ok:true -- so a Redis outage, the single fault
+  // that would stop every queue at once, reported a healthy schedule.
+  assert.ok(
+    flat.includes("!queuesUnreadable"),
+    "a queue list that could not be read must make ok false, not empty"
+  );
 
   // Named lists rather than a bare boolean: a monitor should be able to say
   // WHICH queue without a second request.
-  assert.match(INDEX, /failing,\s*\n\s*backedUp,/);
+  assert.ok(flat.includes("failing, backedUp,"), "the endpoint must name the queues");
 });
 
 test("reading queue health cannot take the endpoint down", () => {
   // Redis being unreachable is itself worth reporting, and reporting it as a
   // 500 would read as "the API is down" when the API is the part still working.
-  const route = INDEX.slice(INDEX.indexOf('app.get("/health/jobs"'));
-  assert.match(route, /readQueueHealth\([\s\S]{0,120}?\)\.catch/);
-  assert.match(route, /catch \(err\) \{[\s\S]*?ok: false/);
+  // The anchor is CHECKED, not trusted. The first version of this line looked
+  // for a single quote where index.ts uses a double one, so indexOf returned
+  // -1, slice(-1) handed back the last character of the file, and the
+  // assertions below ran against one byte. That is the -1 class this suite has
+  // a detector for -- which cannot see it here, because the argument is
+  // computed rather than a literal on a whole-file binding.
+  const at = INDEX.indexOf(String.fromCharCode(34) + "/health/jobs");
+  assert.notEqual(at, -1, "the /health/jobs route is no longer recognisable in index.ts");
+  const route = INDEX.slice(at);
+  const flat = route.replace(/\s+/g, " ");
+  assert.ok(flat.includes("try {") && flat.includes("readQueueHealth("),
+    "the queue read must be guarded so an outage does not take the endpoint down");
+  assert.ok(flat.includes("ok: false"), "the outer failure must still answer with ok:false");
 });
