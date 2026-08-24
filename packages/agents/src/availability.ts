@@ -1,5 +1,5 @@
 import { listEmployees, listBookingsInWindow } from "@nexus/db";
-import { isScheduledThroughout } from "@nexus/employees";
+import { isScheduledAt, isScheduledThroughout } from "@nexus/employees";
 import type { Employee } from "@nexus/shared";
 
 /**
@@ -220,4 +220,63 @@ export function describeSlot(startsAt: string, timezone: string): string {
     // implying a local time we cannot compute.
     return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   }
+}
+
+/**
+ * Is there anybody at this business who is EVER on the rota?
+ *
+ * ============================================================
+ * WHY THIS EXISTS
+ * ============================================================
+ *
+ * Not "is a slot free" — that is `findAvailableSlots`, and a business whose week
+ * is fully booked should keep its booking tools and say so. This is the flatter
+ * question underneath it: has this business ever said when anyone works?
+ *
+ * On 2026-08-24 three of the four businesses with `book_appointment` enabled
+ * could not answer it yes. ABR and Juris Prime Legal have no employees at all;
+ * SFS International has three, none with a single day on a rota. `updateEmployeeSchedule`
+ * notes why that happens — `createEmployee` takes no rota, so every employee ever
+ * made through the product arrives with `working_hours = '{}'`, and an empty rota
+ * is deliberately read as never working.
+ *
+ * The operators had already reported it, per business, since 20 August: "The
+ * agent offers appointments nobody can take." Nothing acted on it, because the
+ * only thing that could act on it was the business setting a rota.
+ *
+ * Meanwhile the model was still being handed `book_appointment` and
+ * `check_availability` in its tool schema. `check_availability` answers honestly
+ * when it is finally called — "Nobody is scheduled to be available in the next
+ * week" — but by then the agent has already offered to look, and a customer of a
+ * law firm reads that answer as a firm with a full diary rather than one that has
+ * never configured a rota. Worse, a tool in the schema is a capability the model
+ * can announce BEFORE calling anything.
+ *
+ * This is the same rule the escalation path already follows through
+ * `describeNobodyToEscalateTo`: do not offer what nobody will do. The difference
+ * is that this one can be enforced by not handing over the tool at all, which is
+ * stronger than a note asking the model to be careful.
+ *
+ * ONE NOTION OF A WORKING WEEK, NOT TWO. It asks `isScheduledAt` — the same
+ * function `findAvailableSlots` and `hasStaffOnShift` read — across the same
+ * seven-day window bookings are offered in, rather than inspecting the jsonb for
+ * emptiness. A rota of `{"mon": []}` is not empty and is also not a rota, and
+ * only the schedule reader knows that.
+ */
+export async function hasAnyoneOnARota(organizationId: string, from: Date = new Date()): Promise<boolean> {
+  // listEmployees already filters to active people and already widens itself
+  // for the serving business, which is why this does neither. Both matter: a
+  // second is_active filter here would imply the first is not trusted, and a
+  // plain read would be the twelfth instance of the shared-number trap.
+  const active = await listEmployees(organizationId);
+  if (active.length === 0) return false;
+
+  const HORIZON_DAYS = 7;
+  const STEP_MS = 30 * 60_000;
+  const end = from.getTime() + HORIZON_DAYS * 24 * 3_600_000;
+  for (let t = from.getTime(); t < end; t += STEP_MS) {
+    const when = new Date(t);
+    if (active.some((employee: Employee) => isScheduledAt(employee, when))) return true;
+  }
+  return false;
 }

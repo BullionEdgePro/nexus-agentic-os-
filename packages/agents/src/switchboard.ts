@@ -13,6 +13,7 @@ import { composeTwinSystemPrompt } from "@nexus/employees";
 // after this. Migration 030 rewrites them; a row still naming a Gemini model
 // would fail at request time with a 404 on every message that tenant receives.
 import { AnthropicDomainAgent } from "./domain-agent.js";
+import { hasAnyoneOnARota } from "./availability.js";
 import type { ConversationTurn, DomainAgent } from "./types.js";
 
 interface AgentConfigRow {
@@ -51,6 +52,55 @@ function toAgentConfig(row: AgentConfigRow): AgentConfig {
 export type AgentTenant = Pick<Organization, "id" | "slug">;
 
 /**
+ * Tools the business cannot actually perform, removed before the model sees them.
+ *
+ * A tool in the schema is a capability the model can announce, and it announces
+ * them before it calls them: "let me check the diary for you" is said first and
+ * discovered to be pointless second. `check_availability` does answer honestly
+ * when it finally runs — "Nobody is scheduled to be available in the next week" —
+ * but a customer of a law firm reads that as a full diary, not as a business that
+ * has never set a rota.
+ *
+ * On 2026-08-24 that was three of the four businesses with booking enabled. The
+ * operators had been saying so per business since 20 August.
+ *
+ * Withholding the tool rather than adding a note to the prompt, because the two
+ * are not equally strong: a note asks the model to be careful, and an absent
+ * tool cannot be called or advertised at all. Same rule the escalation path
+ * follows in `describeNobodyToEscalateTo` — do not offer what nobody will do.
+ */
+const TOOLS_NEEDING_A_ROTA = new Set(["check_availability", "book_appointment"]);
+
+async function withoutUnperformableTools(config: AgentConfig, organizationId: string): Promise<AgentConfig> {
+  if (!config.tools.some((tool) => TOOLS_NEEDING_A_ROTA.has(tool))) return config;
+
+  // Only asked when a booking tool is configured, so a business that never had
+  // one pays nothing for this. Failing OPEN — a rota lookup that throws leaves
+  // the tools in place — because the cost of being wrong the other way is an
+  // agent that silently stops being able to book for a business that can.
+  const anyone = await hasAnyoneOnARota(organizationId).catch(() => true);
+  if (anyone) return config;
+
+  return { ...config, tools: config.tools.filter((tool) => !TOOLS_NEEDING_A_ROTA.has(tool)) };
+}
+
+/**
+ * The tools this business's agent would actually be given, right now.
+ *
+ * Exported so a diagnostic can ask the question without constructing an agent
+ * and a model client to observe one array. `self-check` uses it to assert the
+ * property that matters -- booking is offered if and only if somebody is on a
+ * rota -- from inside the OWNER's transaction, which is where the rota read is
+ * one plain query away from being the twelfth instance of the shared-number
+ * trap.
+ */
+export async function effectiveToolsFor(tenant: AgentTenant): Promise<string[] | null> {
+  const config = await loadActiveAgentConfig(tenant.id);
+  if (!config) return null;
+  return (await withoutUnperformableTools(config, tenant.id)).tools;
+}
+
+/**
  * Switchboard: LangGraph node 1. Loads the tenant's active Domain Agent.
  * Raw-API mode today (no graph runtime); swap this function's body for a
  * LangGraph StateGraph node if multi-step routing state is later needed.
@@ -58,7 +108,7 @@ export type AgentTenant = Pick<Organization, "id" | "slug">;
 export async function routeToDomainAgent(tenant: AgentTenant): Promise<DomainAgent | null> {
   const config = await loadActiveAgentConfig(tenant.id);
   if (!config) return null;
-  return new AnthropicDomainAgent(config, tenant.slug);
+  return new AnthropicDomainAgent(await withoutUnperformableTools(config, tenant.id), tenant.slug);
 }
 
 /**
@@ -77,7 +127,7 @@ export async function routeToEmployeeTwin(
   if (!config) return null;
 
   if (!employee || !employee.twinEnabled) {
-    return new AnthropicDomainAgent(config, tenant.slug);
+    return new AnthropicDomainAgent(await withoutUnperformableTools(config, tenant.id), tenant.slug);
   }
 
   const twinConfig: AgentConfig = {
@@ -91,7 +141,11 @@ export async function routeToEmployeeTwin(
     ragCollection: employee.knowledgeCollection ?? config.ragCollection,
   };
 
-  return new AnthropicDomainAgent(twinConfig, tenant.slug, employee.id);
+  return new AnthropicDomainAgent(
+    await withoutUnperformableTools(twinConfig, tenant.id),
+    tenant.slug,
+    employee.id
+  );
 }
 
 /**

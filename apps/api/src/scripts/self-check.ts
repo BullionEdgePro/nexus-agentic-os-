@@ -49,6 +49,8 @@ import {
   resolvePresence,
 } from "@nexus/employees";
 import { classifyBusiness, buildDeepLink, findAvailableSlots,
+  hasAnyoneOnARota,
+  effectiveToolsFor,
   checkAvailabilityTool,
   bookAppointmentTool,
 } from "@nexus/agents";
@@ -571,6 +573,47 @@ async function checkPhrasesReachTheCustomer(ownerId: string) {
       "at least one business's wording was found",
       anyActive,
       anyActive ? "found" : "NONE — either nothing is active anywhere, or the read stopped widening"
+    );
+  });
+
+  // ---------- what the model is allowed to offer ----------
+  //
+  // READ FROM THE OWNER'S TRANSACTION, deliberately, because that is where the
+  // reply path asks it and because the rota lookup underneath is one plain read
+  // away from being the twelfth instance of the shared-number trap. If
+  // listEmployees ever stops widening, every SERVING business reports an empty
+  // rota, silently loses its booking tools, and the only visible symptom is an
+  // agent that has quietly stopped offering appointments.
+  //
+  // The assertion is a CONSISTENCY one, not an absolute: a business is allowed
+  // to have a rota and allowed not to. What it is not allowed to do is be handed
+  // a tool it cannot perform.
+  console.log("\nWhat the agent is allowed to offer (read as the reply path reads it)");
+  await withTenant(ownerId, async () => {
+    let sawBoth = 0;
+    for (const business of businesses) {
+      const offered = await effectiveToolsFor({ id: business.id, slug: business.slug }).catch(() => null);
+      if (!offered) continue;
+      const canBook = offered.includes("book_appointment") || offered.includes("check_availability");
+      const rota = await hasAnyoneOnARota(business.id).catch(() => null);
+      if (rota !== null) sawBoth++;
+
+      check(
+        `${business.slug}: booking is offered only if somebody is on a rota`,
+        canBook === (rota === true),
+        rota
+          ? canBook
+            ? "has a rota, keeps booking"
+            : "HAS A ROTA BUT LOST ITS BOOKING TOOLS — the rota read is probably not widening"
+          : canBook
+            ? "NO ROTA BUT STILL OFFERS BOOKING — the agent can promise an appointment nobody can take"
+            : "no rota, booking withheld"
+      );
+    }
+    check(
+      "the rota was readable at all from the owner's transaction",
+      sawBoth > 0,
+      sawBoth > 0 ? `${sawBoth} business(es) answered` : "NONE — the read is throwing, and every check above is vacuous"
     );
   });
 }

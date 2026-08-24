@@ -167,3 +167,23 @@ export function lineAt(src, offset) {
 export function relative(path) {
   return path.slice(REPO_ROOT.length + 1).split("\\").join("/");
 }
+
+/**
+ * The comments of `src` as READABLE PROSE: gutter removed, whitespace collapsed.
+ *
+ * `commentsOf` returns comments verbatim, which is right for asking whether an
+ * exact token appears in one. It is wrong for asking whether a SENTENCE does.
+ * Block comments here are wrapped at 80 columns with a ` * ` gutter, so a
+ * sentence spanning two lines reads as "The * agent offers..." once the newline
+ * is collapsed, and a plain `includes` misses it — which is how the first
+ * version of the test that needed this failed, twice, on prose that was there.
+ *
+ * A test that goes red for reformatting is a test people delete.
+ */
+export function proseOf(src) {
+  return commentsOf(src)
+    .replace(/^[ \t]*(\/\*+|\*+\/|\*)/gm, " ")
+    .replace(/^[ \t]*\/\//gm, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

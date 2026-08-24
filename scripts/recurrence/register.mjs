@@ -269,12 +269,12 @@ export const CLASSES = [
       "Writing a file through a quoted heredoc removes one backslash level. Regexes arrive " +
       "with `\\s` collapsed to `s` and `\\1` collapsed to a literal control character. The " +
       "file is written successfully and the program is silently wrong.",
-    instances: 4,
+    instances: 5,
     evidence: [
       {
         sha: null,
         note:
-          "recurring across sessions; twice while building this loop, which is how the " +
+          "recurring across sessions; three times in this one -- it is how the detector's own path resolution came to be three levels too deep, and it later turned a newline escape in a console.log into a literal line break that only the workspace typecheck caught. Not confined to regexes: ANY escape " +
           "detector's own path resolution came to be three levels too deep",
       },
     ],
@@ -285,8 +285,11 @@ export const CLASSES = [
         "anything this repository contains. By the time a file exists to scan, the damage " +
         "is indistinguishable from a typo — and the tree is scanned by node, which reports " +
         "the resulting regex as invalid or, worse, accepts it. The mitigation is not a " +
-        "detector: write regex-bearing files with a tool that does not re-escape, and read " +
-        "back what landed.",
+        "detector: write escape-bearing files with a tool that does not re-escape, and " +
+        "read back what landed. What DID catch the most recent one was the pre-commit " +
+        "hook running the WORKSPACE typecheck: a single-package typecheck had already " +
+        "passed over it, which is its own small lesson about checking the part you " +
+        "changed rather than the whole.",
     },
   },
 ];
