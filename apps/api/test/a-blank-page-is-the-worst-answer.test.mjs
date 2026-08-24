@@ -14,7 +14,7 @@
 // the screens were the one place it had not been made.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -28,13 +28,47 @@ const GLOBAL = read("app", "global-error.tsx");
 const NOT_FOUND = read("app", "not-found.tsx");
 const TOKENS = read("app", "deck", "deck.css");
 
-test("every reachable area has a boundary", () => {
-  for (const f of [
-    ["app", "deck", "error.tsx"],
-    ["app", "inbox", "error.tsx"],
-    ["app", "global-error.tsx"],
-    ["app", "not-found.tsx"],
-  ]) {
+test("every area with its own shell has its own boundary", () => {
+  // DERIVED, NOT LISTED, and the distinction is the whole point of this rewrite.
+  //
+  // This asserted "every reachable area has a boundary" while iterating four
+  // hard-coded paths — the two areas somebody had already thought about, plus
+  // the two roots. A new area added tomorrow would have no boundary and this
+  // would stay green saying "every".
+  //
+  // The rule it stands for is narrower than "every route" and is worth stating
+  // exactly: a segment with its OWN layout.tsx renders its own shell, and an
+  // error that escapes to global-error.tsx replaces the root layout and takes
+  // that shell with it. So an area with a layout needs a boundary beside it.
+  // An area without one is already rendering inside the root layout and loses
+  // nothing extra, which is why admin, login, links and privacy do not have
+  // boundaries and are not faulted for it.
+  const layouts = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(join(dir, entry.name));
+      else if (entry.name === "layout.tsx") layouts.push(dir);
+    }
+  };
+  walk(join(web, "app"));
+
+  // The root layout's boundary is global-error.tsx, which is a different file
+  // by Next's own contract rather than an exception being made here.
+  const root = join(web, "app");
+  const areas = layouts.filter((dir) => dir !== root);
+
+  assert.ok(areas.length >= 2, `only ${areas.length} areas with their own layout found — did the walk break?`);
+
+  for (const area of areas) {
+    assert.ok(
+      existsSync(join(area, "error.tsx")),
+      `${area.slice(web.length + 1)} has its own layout and no error.tsx beside it: an error ` +
+        `there falls through to global-error, which replaces the root layout and takes this ` +
+        `area's shell with it`
+    );
+  }
+
+  for (const f of [["app", "global-error.tsx"], ["app", "not-found.tsx"]]) {
     assert.ok(existsSync(join(web, ...f)), `${f.join("/")} is missing`);
   }
 });

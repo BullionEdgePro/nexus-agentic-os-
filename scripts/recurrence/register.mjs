@@ -41,7 +41,7 @@
  * ============================================================
  *
  *   detector      a scanner in this directory, run by the gate on every commit
- *   runtime-gate  one of the ten gates in verify-all.sh, run against production
+ *   runtime-gate  one of the eleven gates in verify-all.sh, run against production
  *   test          an ordinary test that happens to close the class
  *   compiler      the build genuinely cannot produce the defect
  *   none          nothing catches it. Allowed ONLY with `whyUncoverable`
