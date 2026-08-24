@@ -158,6 +158,7 @@ test("a class whose note names another check names a real one", () => {
   // being checked -- so any *.test.mjs or *-check named in a coverage note has
   // to exist too.
   const root = join(here, "..", "..", "..");
+  let namesChecked = 0;
   for (const cls of CLASSES) {
     const note = cls.coverage.note ?? cls.coverage.whyUncoverable ?? "";
     for (const m of note.matchAll(/\b([a-z0-9-]+(?:\.test\.mjs|-check))\b/g)) {
@@ -166,9 +167,21 @@ test("a class whose note names another check names a real one", () => {
         existsSync(join(root, "apps", "api", "test", named)) ||
         existsSync(join(root, "scripts", `${named}.sh`)) ||
         existsSync(join(root, "apps", "api", "src", "scripts", `${named}.ts`));
+      namesChecked++;
       assert.ok(found, `${cls.id}'s coverage note names ${named}, and nothing by that name exists`);
     }
   }
+
+  // THE LOOP RAN. Every assertion above lives inside it, so zero iterations is a
+  // green test that examined nothing — which is precisely how this test shipped
+  // the first time: its pattern held a raw backspace byte, matched nothing, and
+  // passed. The rest of this suite already guards its loops this way; a survey
+  // on 2026-08-24 found 1043 tests and exactly one unguarded loop with in-body
+  // assertions, which was this one.
+  assert.ok(
+    namesChecked > 0,
+    "no coverage note names a test or a gate, so this test checked nothing at all"
+  );
 });
 
 test("every class carries evidence rather than a recollection", () => {
