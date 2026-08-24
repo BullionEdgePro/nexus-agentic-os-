@@ -16,7 +16,7 @@
 // answer would otherwise be about a build nobody had established the age of.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -79,7 +79,24 @@ test("build-check runs first", () => {
   assert.equal(listed[0], "build-check",
     "a gate that passes against a stale build has verified the stale build");
   assert.ok(listed.includes("schema-drift-check"));
-  assert.equal(listed.length, 10);
+
+  // EVERY LISTED GATE CAN ACTUALLY RUN, instead of a hard-coded count.
+  //
+  // The count was 10 and adding an eleventh gate failed this test, which is a
+  // tripwire doing its job -- but the only thing it could catch was somebody
+  // adding a gate, which is the safe change. A typo in the list passes a count
+  // and then fails at 3am with "no such file", and the run reports a broken
+  // gate as a broken deploy.
+  //
+  // So it checks the property the count was standing in for: nothing is listed
+  // here that verify-all cannot execute.
+  const runnable = (gate) =>
+    existsSync(join(root, "scripts", `${gate}.sh`)) ||
+    existsSync(join(root, "apps", "api", "src", "scripts", `${gate}.ts`));
+  for (const gate of listed) {
+    assert.ok(runnable(gate), `verify-all lists ${gate}, and neither scripts/${gate}.sh nor apps/api/src/scripts/${gate}.ts exists`);
+  }
+  assert.ok(listed.length >= 10, `gates were removed: ${listed.length} left`);
 });
 
 test("the deploy script builds web too", () => {
