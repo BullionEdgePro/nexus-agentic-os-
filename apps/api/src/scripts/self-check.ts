@@ -336,10 +336,35 @@ async function checkBookingRoundTrip(organizationId: string) {
             { startsAt: offered.slots[0].startsAt, subject: PROBE_BOOKING_SUBJECT },
             ctx as never
           )) as { booked?: boolean; reason?: string };
+          // WHAT THE DIARY ACTUALLY HOLDS, asked of the database rather than
+          // inferred from the tool's answer. "DOUBLE BOOKED" on its own is a
+          // finding nobody can act on: it does not say whether the second
+          // booking went to the same person (the constraint failed), to a
+          // different person (the business has more than one and the slot was
+          // genuinely still free), or to nobody at all (employee_id null, which
+          // the exclusion constraint deliberately does not cover).
+          const { rows: held } = await getPool().query<{
+            employee_id: string | null;
+            who: string | null;
+            status: string;
+          }>(
+            `select b.employee_id, e.full_name as who, b.status
+               from bookings b
+               left join employees e on e.id = b.employee_id
+              where b.subject = $1 and b.starts_at = $2::timestamptz
+              order by b.created_at`,
+            [PROBE_BOOKING_SUBJECT, offered.slots[0].startsAt]
+          );
+          const describeHeld = held
+            .map((row) => `${row.who ?? "NOBODY"}${row.status === "confirmed" ? "" : ` (${row.status})`}`)
+            .join(", ");
+
           check(
             "and refuses to take it a second time",
             again.booked === false,
-            again.booked ? "DOUBLE BOOKED" : `refused: ${again.reason}`
+            again.booked
+              ? `DOUBLE BOOKED — ${held.length} bookings now hold that slot: ${describeHeld}`
+              : `refused: ${again.reason}`
           );
         }
 
