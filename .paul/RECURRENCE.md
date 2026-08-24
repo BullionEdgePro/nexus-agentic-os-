@@ -48,7 +48,7 @@ Four pieces, and each one is only worth having because of the next.
 
 | | |
 |---|---|
-| `scripts/recurrence/register.mjs` | The memory. Six classes, each with its mechanism, instance count, evidence, and what catches it |
+| `scripts/recurrence/register.mjs` | The memory. Seven classes, each with its mechanism, instance count, evidence, and what catches it |
 | `scripts/recurrence/detectors/` | The scanners. Run on every commit, not on the days somebody remembers |
 | `apps/api/test/the-same-mistake-twice.test.mjs` | The teeth |
 | `scripts/recurrence-harvest.mjs` | The observer. Reads git history, reports where the register has decayed, **proposes and never writes** |
@@ -69,6 +69,40 @@ and zero checks look identical from outside, and the prose detector shipped its
 first version resolving every path three levels too deep: it reported a clean
 tree while checking two assertions out of 219. Silent under-coverage, in the
 scanner written to find silent under-coverage.
+
+## What it found on its second day
+
+The loop is worth having only if it finds things, so: it did, on the first
+extension of it.
+
+`an-extraction-that-found-nothing` asks whether the markers these tests search
+for are still in the files they search. 244 distinct markers, 198 of them
+bounding a slice, ten guarding against -1. One was stale:
+
+`handover-brief.test.mjs` asserted that the AI is paused BEFORE the handover
+summary is built. Its own comment says why — "ordering is the whole safety
+property", because a slow or failing model must not delay the pause or the
+employee's link. It searched for `await setConversationHandoff(conversationId,
+true)`. That call gained a required `reason` argument in `ae0ec7024`, so the
+marker stopped matching, and the assertion became:
+
+```
+-1 < 20538   ->   true
+```
+
+Not merely unchecked. **Actively reporting that the property held.** It would
+have passed with the handoff after the brief, or with the handoff deleted
+outright. 1034 tests stayed green over it.
+
+The repair does not just correct the marker — a bare `indexOf` is what disarmed
+it, so the test now asserts the marker was found before comparing, and matches
+the call rather than the call plus its arguments. Verified by swapping the two
+calls in the route: green before the repair, red after.
+
+The detector's own first run reported seven findings, six of them false —
+markers like `export async function ${fn}` looped over a list of real names.
+Six false alarms out of seven teaches people to ignore the seventh, which was
+the live defect. It now skips template literals and says how many it skipped.
 
 ## Why this is a test and not an eleventh gate
 

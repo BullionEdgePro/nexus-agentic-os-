@@ -114,6 +114,49 @@ export const CLASSES = [
   },
 
   {
+    id: "an-extraction-that-found-nothing",
+    signals: ["indexof", "extraction", "marker", "vacuous", "tautolog"],
+    title: "A test searching source for a marker the source no longer contains",
+    mechanism:
+      "indexOf does not throw. It returns -1, and -1 is a perfectly good number to carry " +
+      "on with. A slice bounded by it becomes the LAST CHARACTER of the file, so every " +
+      "assertion about that 'function body' passes for free; and an ordering comparison " +
+      "becomes `-1 < something`, which is TRUE — the property is not merely unchecked, the " +
+      "test actively reports that it holds.",
+    instances: 3,
+    evidence: [
+      {
+        sha: "ae0ec7024",
+        note:
+          "setConversationHandoff gained a required reason argument, so handover-brief's " +
+          "ordering assertion — 'ordering is the whole safety property', says its own " +
+          "comment — became -1 < 20538 and would have passed with the handoff deleted",
+      },
+      {
+        sha: null,
+        note:
+          "244 distinct markers are searched across these tests; 198 bound a slice and ten " +
+          "guard against -1. The class is the shape of the technique, not one mistake",
+      },
+      {
+        sha: null,
+        note:
+          "same family as a-claim-satisfied-by-prose: a source-scanning test that goes green " +
+          "without checking anything, which has now happened in both of its two forms",
+      },
+    ],
+    coverage: {
+      kind: "detector",
+      name: "an-extraction-that-found-nothing",
+      note:
+        "Checks 252 markers against the files they are searched in. It skips markers built " +
+        "from template literals, whose value is only known at run time — its first version " +
+        "did not, and reported seven findings of which six were false. Six false alarms out " +
+        "of seven teaches people to ignore the seventh, which was the live defect.",
+    },
+  },
+
+  {
     id: "a-pipeline-that-swallows-its-failure",
     signals: ["pipefail", "swallow", "exit code", "red tests", "| grep"],
     title: "A pipeline's exit status read without pipefail, reporting a failure as success",

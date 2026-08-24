@@ -22,9 +22,25 @@ test("the brief is built after the handoff has committed", () => {
   // matters: the AI being paused and the employee getting their link.
   const route = ROUTE.slice(ROUTE.indexOf("Conversation taken to an employee's own WhatsApp"));
   assert.match(route, /const brief = await buildHandoverBrief\(conversationId\)/);
+  // `at` rather than a bare indexOf, because a bare indexOf disarmed this
+  // assertion for days and nothing said so. It searched for
+  // `await setConversationHandoff(conversationId, true)`; that call gained a
+  // required `reason` argument in ae0ec7024, the marker stopped matching, and
+  // the comparison became `-1 < 20538` — TRUE. It would have passed with the
+  // handoff after the brief, or with the handoff deleted outright, which is the
+  // exact failure the test exists to prevent. 1034 tests stayed green.
+  //
+  // The markers are also shortened to the call rather than the call plus its
+  // arguments. What this test cares about is which of the two runs first; the
+  // argument list is somebody else's business and was never part of the claim.
+  const at = (marker) => {
+    const i = ROUTE.indexOf(marker);
+    assert.notEqual(i, -1, `employees.ts no longer contains ${marker} — this test is not testing anything`);
+    return i;
+  };
+
   assert.ok(
-    ROUTE.indexOf("await setConversationHandoff(conversationId, true)") <
-      ROUTE.indexOf("await buildHandoverBrief(conversationId)"),
+    at("await setConversationHandoff(") < at("await buildHandoverBrief("),
     "the handoff must be committed before the summary is attempted"
   );
 });
