@@ -1170,8 +1170,34 @@ async function resolveServingOrganization(ctx: {
   // Already triaged. Routing is sticky: re-classifying every message would let
   // one off-topic word move a live conversation, and its governance, mid-thread.
   if (state?.routedOrganizationId) {
-    const routed = await findOrganizationById(state.routedOrganizationId).catch(() => null);
+    // A FAILED LOOKUP IS NOT EVIDENCE THE BUSINESS IS GONE, and the two used to
+    // be the same value here. `.catch(() => null)` made a transient database
+    // error indistinguishable from "no such organization", so a hiccup on this
+    // one read would re-triage a live conversation — moving it, and its
+    // governance, to whichever business the customer's next sentence happened
+    // to mention. That is precisely what the stickiness above exists to
+    // prevent, and the warning it logged said "no longer active", asserting a
+    // cause the code could not know.
+    //
+    // Separated, so each gets the answer it deserves: a business that is really
+    // gone re-triages, and a read that failed keeps the conversation where it
+    // is. Serving the owner when we cannot load the routed business is what
+    // commitRoute already does for the identical situation a few lines down —
+    // wrong-but-answering beats silence, and it beats moving somebody.
+    let routed: Awaited<ReturnType<typeof findOrganizationById>> = null;
+    let lookupFailed = false;
+    try {
+      routed = await findOrganizationById(state.routedOrganizationId);
+    } catch (err) {
+      lookupFailed = true;
+      logger.error(
+        { conversationId: ctx.conversationId, routedOrganizationId: state.routedOrganizationId, err },
+        "Could not load the business this conversation is routed to — serving the number owner rather than re-triaging"
+      );
+    }
     if (routed) return { kind: "serve", organization: routed };
+    if (lookupFailed) return { kind: "serve", organization: ctx.owner };
+
     logger.warn(
       { conversationId: ctx.conversationId, routedOrganizationId: state.routedOrganizationId },
       "Conversation was routed to an organization that is no longer active — re-triaging"
