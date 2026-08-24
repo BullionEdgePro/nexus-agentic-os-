@@ -77,9 +77,56 @@ test("the pooled table has no free-text column", () => {
   }
 });
 
-test("every stored aggregate corresponds to an allow-listed field", () => {
-  // The table's columns and governance's SHAREABLE list have to stay in step,
-  // or the allow-list stops describing what actually crosses the boundary.
+/** The pooled table's columns, name and declared type, read from its migration. */
+function pooledColumns() {
+  const open = MIGRATION.indexOf("create table if not exists shared_patterns (");
+  const close = MIGRATION.indexOf(");", open);
+  const body = MIGRATION.slice(MIGRATION.indexOf("(", open) + 1, close);
+  const columns = [];
+  for (const raw of body.split(String.fromCharCode(10))) {
+    const line = raw.trim();
+    if (!line || line.startsWith("--") || line.startsWith("primary key")) continue;
+    const parts = line.replace(",", " ").split(/\s+/).filter(Boolean);
+    if (parts.length < 2) continue;
+    columns.push({ name: parts[0], type: parts[1].toLowerCase() });
+  }
+  return columns;
+}
+
+test("nothing but counts and allow-listed identity crosses the tenant boundary", () => {
+  // THE DIRECTION THAT MATTERS, and the one this test used to have backwards.
+  //
+  // It asserted four named fields were ON the SHAREABLE list, which is the safe
+  // direction: those four are there, they were there when somebody typed them,
+  // and nothing about that check moves if a fifth column appears. The danger is
+  // the opposite one -- a column added to the pooled table that carries
+  // something the allow-list never sanctioned. This table has no
+  // organization_id and no RLS by design, so a text column on it is one
+  // business's words readable by all five.
+  //
+  // The rule is the table's own comment: "Counts only -- nothing that could
+  // reconstruct a conversation." So every column must be a number or a
+  // timestamp, unless its NAME is on SHAREABLE, which is how intent_category
+  // and language are allowed to be text.
+  const columns = pooledColumns();
+  assert.ok(columns.length >= 8, `only ${columns.length} columns parsed from migration 020`);
+
+  const NUMERIC = ["integer", "numeric", "bigint", "smallint", "real", "double", "timestamptz", "boolean"];
+  for (const column of columns) {
+    const isCount = NUMERIC.some((type) => column.type.startsWith(type));
+    if (isCount) continue;
+    assert.ok(
+      REDACT.includes(`"${column.name}"`),
+      `shared_patterns.${column.name} is ${column.type} and is not on the SHAREABLE allow-list. ` +
+        `This table has no organization_id and no RLS: a text column here is one business's ` +
+        `words readable by the other four.`
+    );
+  }
+});
+
+test("the four fields the pool is built from are still allow-listed", () => {
+  // Kept from the original, because the check above would also pass if somebody
+  // emptied SHAREABLE and removed the text columns. Both directions, cheaply.
   for (const field of ["intent_category", "language", "message_count", "resolution_seconds"]) {
     assert.ok(REDACT.includes(`"${field}"`), `${field} should be on the SHAREABLE list`);
   }
