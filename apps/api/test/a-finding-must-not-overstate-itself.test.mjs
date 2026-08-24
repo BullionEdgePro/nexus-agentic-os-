@@ -61,11 +61,36 @@ test("the finding does not claim customers are turned away", () => {
 });
 
 test("it names the consequence that does happen", () => {
-  // A callback promise made by a business with nobody on the rota. That is the
-  // real cost, and it is the one a reader can act on.
+  // THE CONSEQUENCE MOVED AGAIN on 2026-08-24, and this test moved with it.
+  //
+  // It used to be a callback promise from a business with nobody to make the
+  // call. That was true while the agent still held the booking tools and
+  // check_availability turned an empty diary into a follow-up offer. It no
+  // longer holds them: a business with nobody on a rota has book_appointment
+  // and check_availability withheld before the model ever sees them.
+  //
+  // So the finding now describes THIS PLATFORM'S OWN BEHAVIOUR, which is
+  // checkable, rather than a customer experience, which is what got this
+  // finding rewritten the first time.
   const source = operatorSource();
-  assert.match(source, /offered a call back instead/);
-  assert.match(source, /nobody to make that call/);
+  assert.match(source, /withholds booking from it entirely/);
+  assert.match(source, /switches itself back on/);
+  assert.ok(
+    !/offered a call back instead/.test(source),
+    "the tools are withheld now, so no callback is offered by the booking path at all"
+  );
+});
+
+test("the claim that booking is withheld is true of the code that withholds it", () => {
+  // The finding tells a business the platform has switched its booking off.
+  // That is a strong claim to make to somebody about their own product, and it
+  // is only worth making while the switchboard actually does it.
+  const switchboard = read("packages", "agents", "src", "switchboard.ts");
+  const from = switchboard.indexOf("async function withoutUnperformableTools");
+  assert.notEqual(from, -1, "the filter the finding describes no longer exists");
+  const fn = switchboard.slice(from, from + 800);
+  assert.match(fn, /hasAnyoneOnARota\(/);
+  assert.match(fn, /filter\(/);
 });
 
 test("both wordings agree with each other", () => {
@@ -82,6 +107,9 @@ test("both wordings agree with each other", () => {
     !/nobody is available/i.test(description),
     "the roster description still carries the overstated wording"
   );
-  assert.match(description, /promise to call back/);
-  assert.ok(source.includes("call back"), "the detail and the description disagree");
+  assert.match(description, /withholds the booking tools/);
+  assert.ok(
+    source.includes("withholds booking from it entirely"),
+    "the detail and the description disagree about what the platform does"
+  );
 });

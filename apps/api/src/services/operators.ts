@@ -831,9 +831,9 @@ const PROCEDURE_REVIEW_DAYS = 7;
  */
 const bookingWithoutAnyone: Operator = {
   slug: "booking-without-anyone",
-  title: "The agent offers appointments nobody can take",
+  title: "Booking is configured, and switched off because nobody is on a rota",
   description:
-    "This business's agent can book appointments, but no member of staff has working hours — so the diary can never offer a time, and every appointment request turns into a promise to call back.",
+    "This business's agent is configured to book appointments, but no member of staff has working hours — so the diary can never offer a time. The platform withholds the booking tools rather than let the agent offer what nobody can take, and gives them back as soon as somebody is on the rota.",
   run: async (organizationId) => {
     const { rows } = await getPool().query<{ id: string; staff: string }>(
       `select ac.id,
@@ -865,11 +865,16 @@ const bookingWithoutAnyone: Operator = {
       return {
         fingerprint: "booking-without-anyone",
         severity: "warn" as const,
-        title: "The agent offers appointments nobody can take",
+        title: "Booking is configured, and switched off because nobody is on a rota",
+        // WHAT THE PLATFORM DOES, not what the customer experiences. The
+        // earlier wording of this finding asserted a customer experience
+        // nobody had measured and had to be corrected once already; the
+        // sentences below describe only this platform's own behaviour, which
+        // is checkable from the code that performs it.
         detail:
           staff > 0
-            ? `Your agent can book appointments and ${staff === 1 ? "your one member of staff has" : `all ${staff} of your staff have`} no working hours set, so the diary can never offer a time. Every customer who asks for an appointment is offered a call back instead — and with nobody on the rota, there is also nobody to make that call. Set working hours on the Team screen, or switch the booking tool off so the agent stops offering appointments at all.`
-            : "Your agent can book appointments and this business has no active staff, so the diary can never offer a time. Every customer who asks for an appointment is offered a call back instead — and with no staff, there is also nobody to make that call. Add someone on the Team screen, or switch the booking tool off so the agent stops offering appointments at all.",
+            ? `Your agent is set up to book appointments, and ${staff === 1 ? "your one member of staff has" : `all ${staff} of your staff have`} no working hours set — so the diary can never offer a time. Rather than let the agent offer appointments nobody can take, the platform withholds booking from it entirely: it will not offer or take an appointment for you at all. Set working hours on the Team screen and booking switches itself back on.`
+            : "Your agent is set up to book appointments and this business has no active staff — so the diary can never offer a time. Rather than let the agent offer appointments nobody can take, the platform withholds booking from it entirely: it will not offer or take an appointment for you at all. Add someone on the Team screen and give them working hours, and booking switches itself back on.",
         subjectKind: "agent_config",
         subjectId: row.id,
       } satisfies FindingInput;
