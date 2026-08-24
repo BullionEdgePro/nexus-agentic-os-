@@ -306,8 +306,18 @@ the owner their product was half-finished when it is not.
 | **Waiting on a person** | The four website edits, `rclone` credentials, the admin password reset, and an alert destination. None needs engineering, and the first of them is the only thing that moves the actual constraint |
 
 **The constraint is not engineering.** As of this revision: 0 bookings, 0 tasks,
-0 procedures, 0 broadcasts ever sent, and inbound traffic that stopped on 20
-August. The defects found in the week to 22 August — an agent promising an alert
+0 procedures, and 0 broadcasts ever sent.
+
+**Corrected 2026-08-24:** this paragraph said "inbound traffic stopped on 20
+August", and it had not. Three messages have arrived since, the most recent at
+03:30 today, and the agent answered two of them. Every one was a cold pitch from
+a property-data broker — which is why the correction matters in both directions:
+the reply path is demonstrably alive and correctly told a spammer this is not
+something it can help with, and the LAST GENUINE CUSTOMER ENQUIRY was still 19
+August. The true statement is narrower and worse than the false one: it is not
+that nothing arrives, it is that nothing a business would want arrives.
+
+The defects found in the week to 22 August — an agent promising an alert
 nobody would send, six CSS declarations dead since the day they shipped, a gate
 passing on somebody else's finding, an eleventh instance of the shared-number
 trap in code written that hour — were all found by probing, not by a customer

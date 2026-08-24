@@ -145,9 +145,21 @@ async function checkBookingRoundTrip(organizationId: string) {
       jobTitle: "Diagnostic",
       timezone: "Asia/Dubai",
     });
-    // No writer exists for working_hours in packages/db — schedules are set by
-    // hand today — so the probe's is set here directly rather than pretending
-    // an API for it exists.
+    // Raw SQL on purpose, and NOT for the reason this comment used to give.
+    //
+    // It said "no writer exists for working_hours in packages/db — schedules are
+    // set by hand today", which was true when written and has not been since
+    // `updateEmployeeSchedule` shipped. A stale comment in a diagnostic is worse
+    // than none: the operators tell three businesses to set working hours on the
+    // Team screen, and anyone reading this would have concluded that screen
+    // could not do it. It can — `apps/web/app/deck/team/rota-editor.tsx`, via
+    // PATCH on the employees route.
+    //
+    // The probe still writes directly because `updateEmployeeSchedule` takes an
+    // already-validated WeeklySchedule from `parseWeeklySchedule` at the route,
+    // and a diagnostic that went through the validator would be testing the
+    // validator rather than the diary. The 24/7 rota below is deliberately not
+    // a realistic one.
     await getPool().query(`update employees set working_hours = $2::jsonb where id = $1`, [
       created.id,
       JSON.stringify(ALWAYS),
