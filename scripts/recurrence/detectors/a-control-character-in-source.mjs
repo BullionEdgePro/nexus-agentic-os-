@@ -50,10 +50,14 @@
  *
  * So: not the whole class, and the register says which part.
  */
-import { REPO_ROOT, lineAt, read, relative, walk } from "../source.mjs";
+import { REPO_ROOT, lineAt, read, relative, walk, withoutComments } from "../source.mjs";
 import { join } from "node:path";
 
 export const id = "a-control-character-in-source";
+
+// Built from its code point so this file cannot become an instance of the thing
+// it detects. The first version of the message below was exactly that.
+const BS = String.fromCharCode(92);
 
 const EXTENSIONS = [".ts", ".tsx", ".mjs", ".js", ".sh", ".sql", ".css"];
 
@@ -66,6 +70,51 @@ const NAMES = {
   0x0c: "FORM FEED (\\f)", 0x1b: "ESC", 0x7f: "DEL",
 };
 
+/**
+ * The same damage one step later: an escape that survives into the FILE and
+ * becomes a control character only when the program runs.
+ *
+ * Inside a template literal a lone `\b` is the BACKSPACE ESCAPE, so
+ * `new RegExp(`\b${name}\b`)` is handed two 0x08 bytes and matches nothing. The
+ * other classes fail differently and just as quietly: `\d`, `\w` and `\s` are
+ * unrecognised escapes in a string literal and simply LOSE THEIR BACKSLASH, so
+ * the pattern quietly means the letter.
+ *
+ * Found 2026-08-24 in queue-health, where it made "every queue this platform
+ * runs is watched" unable to match any queue name at all. A regex needs `\\b`
+ * in a template literal, or no template literal.
+ *
+ * There is no legitimate use of the single-escaped form here, which is why this
+ * is worth flagging on sight rather than measuring first.
+ */
+function templateRegexEscapes(src) {
+  // COMMENTS FIRST. This detector's own header quotes the broken pattern as an
+  // example, and its first run duly reported itself. Prose that mentions a
+  // regex is not a regex.
+  src = withoutComments(src);
+  const out = [];
+  const NEEDLE = "new RegExp(";
+  const TICK = String.fromCharCode(96);
+  let at = src.indexOf(NEEDLE);
+  while (at !== -1) {
+    const seg = src.slice(at, at + 400);
+    const open = seg.indexOf(TICK);
+    if (open >= 0 && open < 30) {
+      const close = seg.indexOf(TICK, open + 1);
+      const literal = close === -1 ? seg.slice(open + 1) : seg.slice(open + 1, close);
+      const single = [];
+      for (const cls of ["b", "d", "w", "s", "S", "D", "W", "B"]) {
+        const one = String.fromCharCode(92) + cls;
+        const two = String.fromCharCode(92, 92) + cls;
+        if (literal.includes(one) && !literal.includes(two)) single.push(one);
+      }
+      if (single.length > 0) out.push({ at, classes: single });
+    }
+    at = src.indexOf(NEEDLE, at + 1);
+  }
+  return out;
+}
+
 export function detect() {
   const findings = [];
   let checked = 0;
@@ -76,6 +125,19 @@ export function detect() {
     )) {
       checked++;
       const src = read(file);
+
+      for (const escape of templateRegexEscapes(src)) {
+        findings.push({
+          where: `${relative(file)}:${lineAt(src, escape.at)}`,
+          what:
+            `builds a regex from a template literal containing ${escape.classes.join(", ")}. ` +
+            "In a template literal those are STRING escapes, not regex ones: " +
+            BS + "b becomes a backspace byte, and " + BS + "d, " + BS + "w, " + BS +
+            "s lose their backslash entirely. The pattern matches something other than " +
+            "what it says, usually nothing. Double the backslash, or drop the template literal.",
+        });
+      }
+
       FORBIDDEN.lastIndex = 0;
       const seen = new Set();
       for (const m of src.matchAll(FORBIDDEN)) {

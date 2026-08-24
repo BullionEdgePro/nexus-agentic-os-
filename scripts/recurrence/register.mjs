@@ -355,8 +355,17 @@ export const CLASSES = [
       "Writing a file through a quoted heredoc removes one backslash level. Regexes arrive " +
       "with `\\s` collapsed to `s` and `\\1` collapsed to a literal control character. The " +
       "file is written successfully and the program is silently wrong.",
-    instances: 7,
+    instances: 8,
     evidence: [
+      {
+        sha: null,
+        note:
+          "the eighth, 2026-08-24, is a NEW SHAPE and the detector grew to match it: the " +
+          "escape survived into the file and became a control character only at RUN TIME. " +
+          "Inside a template literal a lone backslash-b is the backspace escape, so a regex " +
+          "built that way was handed 0x08 and matched no queue name at all -- while the test " +
+          "said every queue this platform runs is watched",
+      },
       {
         sha: null,
         note:

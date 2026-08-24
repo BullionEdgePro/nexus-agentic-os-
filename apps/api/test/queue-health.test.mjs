@@ -21,28 +21,71 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { walk } from "../../../scripts/recurrence/source.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
+const ROOT = join(here, "..", "..", "..");
+const read = (...p) => readFileSync(join(ROOT, ...p), "utf8");
 
 const HEALTH = read("apps", "api", "src", "queue", "queue-health.ts");
 const INDEX = read("apps", "api", "src", "index.ts");
 const strip = (t) => t.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, " ").replace(/^[ \t]*\/\/[^\n]*/gm, " ");
 
+/**
+ * Every queue constant this workspace declares, found rather than listed.
+ *
+ * Plain string scanning, no regex: "export const " followed by a token ending
+ * in _QUEUE. Regexes written into this repository keep arriving with an
+ * escaping level missing, and there is nothing here a regex would do better.
+ */
+function declaredQueues() {
+  const names = new Set();
+  const NEEDLE = "export const ";
+  for (const dir of ["packages", "apps"]) {
+    for (const file of walk(join(ROOT, dir), (name) => name.endsWith(".ts"))) {
+      const src = readFileSync(file, "utf8");
+      let at = src.indexOf(NEEDLE);
+      while (at !== -1) {
+        const from = at + NEEDLE.length;
+        let to = from;
+        while (to < src.length && /[A-Za-z0-9_]/.test(src[to])) to++;
+        const token = src.slice(from, to);
+        if (token.endsWith("_QUEUE")) names.add(token);
+        at = src.indexOf(NEEDLE, at + 1);
+      }
+    }
+  }
+  return [...names].sort();
+}
+
 test("every queue this platform runs is watched", () => {
-  // Listed from the exported constants rather than as strings, so a renamed
-  // queue is a compile error and a new one is a visible omission.
-  for (const name of [
-    "INBOUND_WEBHOOK_QUEUE",
-    "BROADCAST_SEND_QUEUE",
-    "OPERATORS_QUEUE",
-    "QUALITY_ROLLUP_QUEUE",
-    "TEMPLATE_SYNC_QUEUE",
-    "KNOWLEDGE_REINDEX_QUEUE",
-    "PROCEDURE_INFERENCE_QUEUE",
-    "FORECAST_QUEUE",
-  ]) {
-    assert.match(HEALTH, new RegExp(`\\b${name}\\b`), `${name} is not in the watched list`);
+  // DERIVED, NOT LISTED. This iterated eight names typed into the test, under a
+  // comment claiming "a new one is a visible omission" -- which it was not: a
+  // ninth queue declared tomorrow would simply not appear here, and the health
+  // endpoint would go on reporting eight green queues while the ninth failed
+  // silently. The list happened to be complete on 2026-08-24; that is luck
+  // holding a promise the test could not keep.
+  const queues = declaredQueues();
+
+  // Non-empty AND plausible: a derivation that silently finds nothing is the
+  // same defect in better clothes, and this repository has shipped that too.
+  assert.ok(
+    queues.length >= 8,
+    `only ${queues.length} queue constants found (${queues.join(", ")}) — the scan is probably broken`
+  );
+
+  for (const name of queues) {
+    // includes, not a RegExp. The line this replaces built one from a template
+    // literal, and inside a template literal a lone backslash-b is the BACKSPACE
+    // ESCAPE -- so new RegExp received two control characters and matched
+    // nothing. Every metacharacter class has this problem in a template
+    // literal: backslash-d, -w and -s are unrecognised escapes and simply lose
+    // their backslash. A constant named in SCREAMING_SNAKE needs no word
+    // boundary anyway.
+    assert.ok(
+      HEALTH.includes(name),
+      name + " is declared and not in the watched list"
+    );
   }
 });
 
