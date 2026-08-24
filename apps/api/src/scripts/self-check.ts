@@ -598,15 +598,21 @@ async function checkPhrasesReachTheCustomer(ownerId: string) {
       const rota = await hasAnyoneOnARota(business.id).catch(() => null);
       if (rota !== null) sawBoth++;
 
+      // AN IMPLICATION, NOT AN EQUIVALENCE, and the first version of this got
+      // that wrong on its first run against production. It required that a
+      // business WITH a rota must offer booking, and failed zipicka -- which
+      // sells things, has never had a booking tool configured, and is entirely
+      // correct not to. Offering booking requires a rota. Having a rota
+      // requires nothing.
       check(
         `${business.slug}: booking is offered only if somebody is on a rota`,
-        canBook === (rota === true),
-        rota
-          ? canBook
-            ? "has a rota, keeps booking"
-            : "HAS A ROTA BUT LOST ITS BOOKING TOOLS — the rota read is probably not widening"
-          : canBook
-            ? "NO ROTA BUT STILL OFFERS BOOKING — the agent can promise an appointment nobody can take"
+        !canBook || rota === true,
+        canBook
+          ? rota
+            ? "has a rota, offers booking"
+            : "NO ROTA BUT STILL OFFERS BOOKING — the agent can promise an appointment nobody can take"
+          : rota
+            ? "has a rota, does not offer booking — which is a configuration choice, not a fault"
             : "no rota, booking withheld"
       );
     }
