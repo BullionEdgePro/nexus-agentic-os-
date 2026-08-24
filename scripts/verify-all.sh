@@ -43,6 +43,13 @@
 #   depend on entirely — if a tag stops routing, those links publish and every
 #   customer still lands in the triage menu, which looks like the edits failed.
 #
+#   backup-check near the end, because it is the only gate that says nothing
+#   about whether this deploy works. It answers a different question -- whether
+#   the thing that gets you back if it does not is still standing -- and that
+#   question was previously asked by nobody at all: backup-db.sh restores every
+#   dump into a scratch database and writes the result to a log no script, gate
+#   or endpoint had ever opened.
+#
 #   retrieval-check last because it is the slow one — one embedding request per
 #   probe, eighteen today — and because a provider outage makes it fail for a
 #   reason that has nothing to do with the deploy being verified.
@@ -68,6 +75,7 @@ GATES=(
   rls-verify
   operator-fire-check
   self-check
+  backup-check
   retrieval-check
 )
 
@@ -100,7 +108,7 @@ for gate in "${GATES[@]}"; do
   # separately is a gate that gets run on the days somebody has time, which is
   # the reason this file exists at all -- so it runs here, with a special case,
   # rather than in a paragraph of prose.
-  if [ "$gate" = "schema-drift-check" ] || [ "$gate" = "build-check" ]; then
+  if [ "$gate" = "schema-drift-check" ] || [ "$gate" = "build-check" ] || [ "$gate" = "backup-check" ]; then
     "./scripts/${gate}.sh" > "$OUT_DIR/${gate}.out" 2>&1
   else
     $COMPOSE exec -T worker npx tsx "apps/api/src/scripts/${gate}.ts" > "$OUT_DIR/${gate}.out" 2>&1
