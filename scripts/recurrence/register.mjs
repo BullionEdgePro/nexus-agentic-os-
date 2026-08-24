@@ -307,8 +307,16 @@ export const CLASSES = [
       "Writing a file through a quoted heredoc removes one backslash level. Regexes arrive " +
       "with `\\s` collapsed to `s` and `\\1` collapsed to a literal control character. The " +
       "file is written successfully and the program is silently wrong.",
-    instances: 6,
+    instances: 7,
     evidence: [
+      {
+        sha: null,
+        note:
+          "the seventh, 2026-08-24, in a route-authorisation checker: a pattern built with " +
+          "new RegExp and a template literal arrived with its parenthesis unescaped and its " +
+          "newlines literal. Rewritten with plain string operations and no regex at all, " +
+          "which is the only mitigation that has never failed",
+      },
       {
         sha: null,
         note:
