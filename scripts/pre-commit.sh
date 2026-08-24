@@ -41,8 +41,20 @@ PROJECT="$ROOT/nexus-agentic-os"
 
 # Staged code, this project only. The monorepo holds several other applications
 # and their commits are none of this hook's business.
+#
+# SHELL SCRIPTS COUNT, and they were left out until 2026-08-24 for a reason that
+# turned out to be wrong. The narrowness above is deliberate — a hook that runs a
+# minute of checks on a documentation edit is a hook people disable — and .sh
+# looked like it belonged with the prose.
+#
+# It does not. On 2026-08-24 a commit staging exactly two shell scripts added an
+# eleventh gate to verify-all.sh, and a test asserting there were ten went red.
+# This hook skipped that commit entirely and the red test went out. The scripts
+# in here are checked BY the suite — the gate list, pipefail, the deploy
+# sequence, the mirror's exec bits all have tests reading them — so a change to
+# one is a change the suite has an opinion about. That is the whole criterion.
 staged="$(git diff --cached --name-only --diff-filter=ACM \
-  | grep -E '^nexus-agentic-os/.*\.(ts|tsx|mjs|js)$' || true)"
+  | grep -E '^nexus-agentic-os/.*\.(ts|tsx|mjs|js|sh)$' || true)"
 
 if [ -z "$staged" ]; then
   exit 0

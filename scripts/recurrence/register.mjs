@@ -164,11 +164,17 @@ export const CLASSES = [
       "Without `set -o pipefail` a pipeline exits with its LAST command's status. " +
       "`npm test | grep fail` succeeds exactly when the tests failed, and `... | tail -3; " +
       "echo $?` prints tail's zero over a migration that did not run.",
-    instances: 4,
+    instances: 5,
     evidence: [
       { sha: null, note: "a migration whose failure `| tail -3` hid; DEPLOY.md warns about it" },
       { sha: "8079a35a2", note: "three times in one day, by the author of two of the warnings" },
       { sha: "6ee31a56f", note: "the pre-commit hook exists because of that day" },
+      {
+        sha: null,
+        note:
+          "and a fifth on 2026-08-24, within an hour of this detector shipping: npm test " +
+          "piped to grep, grep found the word fail, and && committed a red suite",
+      },
     ],
     coverage: {
       kind: "detector",
@@ -176,7 +182,12 @@ export const CLASSES = [
       note:
         "Every script here sets pipefail today, held up by whoever last remembered. A " +
         "convention that has already failed four times is not a control. It cannot see a " +
-        "command typed at a prompt, which is where all four instances actually happened.",
+        "command typed at a prompt, which is where all five instances actually happened. " +
+        "Two things now attack that half. scripts/check.sh prints four lines and its own " +
+        "exit code, so there is no reason left to pipe npm test at all -- the same fix " +
+        "verify-all.sh made for the eleven-command verification: MAKE THE RIGHT THING THE " +
+        "SHORT THING. And the pre-commit hook now fires on .sh too, which is precisely what " +
+        "it did not do on the day the fifth instance got through.",
     },
   },
 
@@ -189,7 +200,7 @@ export const CLASSES = [
       "reports on the wrong row, on its own leftover fixture, or on a shape the real system " +
       "never produces — and it says PASS or FAIL with the same confidence either way. Every " +
       "instance here was found by reading the gate, never by the gate.",
-    instances: 4,
+    instances: 5,
     evidence: [
       { sha: "e1b369d93", note: "operator-fire-check was green on a finding its seed had not caused" },
       { sha: "dbb0ab053", note: "and then asserted on whichever finding came back first" },
@@ -201,6 +212,13 @@ export const CLASSES = [
           "— its own probe employee, created by the section above it. It asserted the slot " +
           "cannot be taken twice; the guarantee is that a PERSON cannot be. It also only " +
           "failed on some weekdays, the probe slot being 96 hours out",
+      },
+      {
+        sha: null,
+        note:
+          "fifth the next day, in the check written to verify the fix for the fourth: it " +
+          "asserted booking is offered IF AND ONLY IF somebody is on a rota, and failed a " +
+          "shop that sells things and correctly offers none. An implication, not an equivalence",
       },
     ],
     coverage: {
