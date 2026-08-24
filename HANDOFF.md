@@ -113,7 +113,7 @@ by getting it wrong, and because the script has to keep being right about them.
   uncommitted edit, a `node_modules`, a `.next` or a `.env`, because none of them are in the
   commit — and the mirror is public. Copying the working tree is how a secret ships.
 * **It refuses to run on a dirty tree.** Mirroring HEAD while the disk says something else deploys
-  a commit behind and passes all ten gates doing it. The first run of the script refused because of
+  a commit behind and passes all eleven gates doing it. The first run of the script refused because of
   the script itself, which is the check working.
 * **It re-asserts the exec bit from the SOURCE tree.** `core.fileMode` is false on the dev machine
   and tar drops the mode, so `add -A` re-records whatever the mirror already had: existing
@@ -124,7 +124,7 @@ by getting it wrong, and because the script has to keep being right about them.
   re-assert bits on files it already has, which is the same blind spot one step along. It now also
   REFUSES the push if anything was demoted, because this failure is silent until something will not
   run — on 19 August, following the manual steps literally demoted `verify-all.sh`, which is how
-  the ten gates are run on the VPS.
+  the eleven gates are run on the VPS.
 * **Deletions propagate.** Unpacking an archive over a populated clone adds and overwrites but
   never removes, so a deleted migration would live on in production forever.
 * **`gh` is logged in as a different account on this machine** and hijacks github.com auth, so the
