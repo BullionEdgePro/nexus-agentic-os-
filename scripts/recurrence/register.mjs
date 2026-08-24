@@ -181,6 +181,44 @@ export const CLASSES = [
   },
 
   {
+    id: "a-gate-that-passes-on-the-wrong-thing",
+    signals: ["fire check", "dry run", "gate was wrong", "somebody else's finding", "self-check"],
+    title: "A gate whose verdict comes from something other than the property it names",
+    mechanism:
+      "A gate that fails loudly is easy. A gate that answers a NEARBY question is not: it " +
+      "reports on the wrong row, on its own leftover fixture, or on a shape the real system " +
+      "never produces — and it says PASS or FAIL with the same confidence either way. Every " +
+      "instance here was found by reading the gate, never by the gate.",
+    instances: 4,
+    evidence: [
+      { sha: "e1b369d93", note: "operator-fire-check was green on a finding its seed had not caused" },
+      { sha: "dbb0ab053", note: "and then asserted on whichever finding came back first" },
+      { sha: "08d6fe386", note: "the dry run answered for an agent told less than the real one" },
+      {
+        sha: "6effc4cc7",
+        note:
+          "self-check reported DOUBLE BOOKED for a booking that went to a second free person " +
+          "— its own probe employee, created by the section above it. It asserted the slot " +
+          "cannot be taken twice; the guarantee is that a PERSON cannot be. It also only " +
+          "failed on some weekdays, the probe slot being 96 hours out",
+      },
+    ],
+    coverage: {
+      kind: "none",
+      whyUncoverable:
+        "Whether an assertion is about the right thing is a semantic question, and nothing " +
+        "in a scanner can answer it — the code is well-formed, the assertion runs, and both " +
+        "the true and the false version compile and pass. What DOES work is cheap and is " +
+        "written down here because it resolved the fourth instance in a single run: make " +
+        "the failure message carry the evidence rather than the verdict. 'DOUBLE BOOKED' " +
+        "cost a day of guessing; '2 bookings hold that slot: Ralph Ivan Simeon, Self Check " +
+        "Bookable' named the cause in one line, and it was the gate's own fixture. A gate " +
+        "that states what it saw can be argued with. One that states only its conclusion " +
+        "cannot.",
+    },
+  },
+
+  {
     id: "a-css-token-that-does-not-exist",
     signals: ["does not exist renders as nothing", "custom property", "var(--", "css token"],
     title: "A `var(--token)` naming a custom property nothing defines",

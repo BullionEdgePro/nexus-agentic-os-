@@ -48,7 +48,7 @@ Four pieces, and each one is only worth having because of the next.
 
 | | |
 |---|---|
-| `scripts/recurrence/register.mjs` | The memory. Seven classes, each with its mechanism, instance count, evidence, and what catches it |
+| `scripts/recurrence/register.mjs` | The memory. Eight classes, each with its mechanism, instance count, evidence, and what catches it |
 | `scripts/recurrence/detectors/` | The scanners. Run on every commit, not on the days somebody remembers |
 | `apps/api/test/the-same-mistake-twice.test.mjs` | The teeth |
 | `scripts/recurrence-harvest.mjs` | The observer. Reads git history, reports where the register has decayed, **proposes and never writes** |
@@ -61,8 +61,15 @@ Anything else fails the suite.
 
 `whyUncoverable` is not an escape hatch to be filled in with "hard". It is for
 classes whose artifact does not exist in this repository — a mistake made at a
-shell prompt leaves nothing here to scan. One class uses it today, and what it
-says is a claim that will be read by whoever hits that class next.
+shell prompt leaves nothing here to scan, and for classes that are semantic
+rather than syntactic. Two classes use it today, and what they say is a claim
+that will be read by whoever hits that class next.
+
+The second one earns its keep by naming the practice that DOES work where a
+detector cannot: **make the failure message carry the evidence, not the
+verdict.** `DOUBLE BOOKED` cost a day of guessing at a booking defect that was
+not one. `2 bookings hold that slot: Ralph Ivan Simeon, Self Check Bookable`
+named the cause in a single run — the gate's own fixture.
 
 The gate also asserts that each detector **examined something**. Zero findings
 and zero checks look identical from outside, and the prose detector shipped its
