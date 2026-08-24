@@ -72,7 +72,21 @@ app.use("/api/metrics/*", operatorOnly);
 // every other business's staff as well.
 app.use("/api/activity", operatorOnly);
 app.use("/api/activity/*", operatorOnly);
+// BOTH FORMS, and the wildcard is the load-bearing one. Measured against this
+// Hono version on 2026-08-24: a mount at "/api/links" runs for that exact path
+// and for NOTHING BENEATH IT -- a request to /api/links/anything executed no
+// middleware at all -- while a mount at "/api/metrics/*" covers the bare path as
+// well as its children. So a bare-only mount is the one shape that leaves a
+// future sibling endpoint unprotected, and links was the only one that had it.
+//
+// Nothing was exposed: linksRoute defines only "/". But the comment above claims
+// these checks are applied at the mount SO A NEW ENDPOINT IS SCOPED BY DEFAULT,
+// and for this prefix that was not true. The next person to add
+// linksRoute.get("/:id") would have published the deep-link registry to any
+// authenticated employee, on a platform where employees belong to five different
+// companies.
 app.use("/api/links", operatorOnly);
+app.use("/api/links/*", operatorOnly);
 app.use("/api/quality", operatorOnly);
 app.use("/api/quality/*", operatorOnly);
 app.use("/api/broadcasts", operatorOnly);
