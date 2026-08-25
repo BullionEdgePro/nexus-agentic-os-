@@ -183,6 +183,22 @@
   padding: 0;
   border-radius: 50%;
   font-size: 0;
+  /* Amber, not red. The base .badge is --crit, which was the only colour this
+     dot had — so "three info findings arrived" looked exactly like "somebody
+     has been waiting five days". Warn is the honest weight for "something new
+     since you looked". */
+  background: var(--warn);
+}
+
+/* Red is reserved for the one that will not go away on its own: an URGENT
+   finding nobody has accepted. Unlike the amber dot it does not clear when the
+   panel is opened, because opening a panel is not dealing with what is in it —
+   only a dismissal is, and a dismissal lapses if the finding does. */
+.deck-root .badge.dot-only.urgent {
+  background: var(--crit);
+  /* A hairline ring so it reads as deliberate on the pale topbar rather than as
+     a rendering artefact at 7px. */
+  box-shadow: 0 0 0 2px var(--paper);
 }
 
 /* --- account --- */

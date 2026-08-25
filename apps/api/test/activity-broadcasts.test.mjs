@@ -562,7 +562,21 @@ test("no header badge shows a number the server did not send", () => {
   // To-do shows a count; Activity shows a dot. Both render only when there is
   // something to report — a badge showing 0 is decoration.
   assert.match(MENUS, /\{due \? <span className="badge">/);
-  assert.match(MENUS, /\{fresh\.length \? <span className="badge dot-only"/);
+  // The DOT'S CONDITION, not its exact JSX. This matched
+  // `{fresh.length ? <span className="badge dot-only"` verbatim and went red
+  // when the dot learned to appear for an urgent finding nobody has accepted —
+  // an improvement, since one glance at the panel used to silence a customer
+  // who had been waiting five days. What this test is about is that a badge
+  // renders only when there is something to report, which is still true.
+  const flat = MENUS.replace(/\s+/g, " ");
+  assert.ok(
+    flat.includes("{nagging.length || fresh.length ? ("),
+    "the activity dot must render for unaccepted urgency or for novelty, and for nothing else"
+  );
+  assert.ok(
+    !flat.includes("<span className=\"badge dot-only\" />"),
+    "an unconditional dot is decoration"
+  );
 });
 
 test("every header control has a destination or an action", () => {

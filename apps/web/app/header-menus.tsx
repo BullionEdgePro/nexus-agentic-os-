@@ -322,6 +322,30 @@ export function NotificationsMenu() {
     [findings, seenAt]
   );
 
+  /**
+   * Urgent, open, and nobody has said they are dealing with it.
+   *
+   * SEEN IS NOT THE SAME AS ANSWERED, and this badge treated them as one thing.
+   * `fresh` is "raised since you last opened this panel", and `seenAt` is set on
+   * OPEN — so a single glance marked everything currently there as seen, for
+   * ever, on that machine. An urgent finding then stops being mentioned while
+   * remaining completely unactioned.
+   *
+   * That is not hypothetical. On 2026-08-24 one urgent finding had been open
+   * since the 19th — a customer waiting 116 hours for a person — and the bell
+   * was dark, because the panel had been opened at some point in between.
+   *
+   * The platform already has an honest signal for "somebody is dealing with
+   * this": the dismissal, which is explicit, carries a reason, and LAPSES the
+   * moment the finding does. A localStorage timestamp from one glance is not
+   * that. So urgent findings nag until they are dismissed or resolved, and
+   * `fresh` goes on doing its narrower job for everything else.
+   */
+  const nagging = useMemo(
+    () => findings.filter((f) => f.severity === "urgent" && !f.dismissedAt),
+    [findings]
+  );
+
   function openAndMarkSeen() {
     const next = !open;
     setOpen(next);
@@ -340,20 +364,41 @@ export function NotificationsMenu() {
         className="icon-btn"
         onClick={openAndMarkSeen}
         aria-expanded={open}
-        title={fresh.length ? `${fresh.length} new since you last looked` : "Activity"}
+        title={
+          nagging.length
+            ? `${nagging.length} urgent, not yet accepted` +
+              (fresh.length ? ` · ${fresh.length} new since you last looked` : "")
+            : fresh.length
+              ? `${fresh.length} new since you last looked`
+              : "Activity"
+        }
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
           <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7Z" />
           <path d="M10 20a2 2 0 0 0 4 0" />
         </svg>
-        {fresh.length ? <span className="badge dot-only" aria-hidden="true" /> : null}
+        {nagging.length || fresh.length ? (
+          // Urgent gets its own colour. A dot that means "something new" and a
+          // dot that means "somebody has been waiting five days" should not be
+          // the same dot.
+          <span
+            className={nagging.length ? "badge dot-only urgent" : "badge dot-only"}
+            aria-hidden="true"
+          />
+        ) : null}
       </button>
 
       {open ? (
         <div className="hm-panel">
           <div className="hm-head">
             <strong>Activity</strong>
-            <span>{fresh.length ? `${fresh.length} new` : "nothing new"}</span>
+            <span>
+              {nagging.length
+                ? `${nagging.length} urgent`
+                : fresh.length
+                  ? `${fresh.length} new`
+                  : "nothing new"}
+            </span>
           </div>
 
           {findings.length === 0 ? (
