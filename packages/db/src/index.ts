@@ -15,6 +15,7 @@ export * from "./tenant-context.js";
 export * from "./quality.js";
 export * from "./shared-brain.js";
 export * from "./contact-memory.js";
+export * from "./contacts.js";
 export * from "./onboarding.js";
 export * from "./tasks.js";
 export * from "./bookings.js";

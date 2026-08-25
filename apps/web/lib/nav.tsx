@@ -104,6 +104,19 @@ export const NAV: NavItem[] = [
     // own business inside the route, exactly as follow-ups does.
   },
   {
+    href: "/deck/customers",
+    label: "Customers",
+    // ONE person, where Team is two. The distinction the icons carry is the one
+    // this deck was missing entirely until the screen existed: the people you
+    // serve, as against the people who serve them.
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <circle cx="12" cy="8" r="3.4" />
+        <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/team",
     label: "Team",
     icon: (

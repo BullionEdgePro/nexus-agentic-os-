@@ -53,6 +53,15 @@ const TAB_API = {
   // to their own business.
   "/deck/board": "/api/tasks",
   "/deck/bookings": "/api/bookings",
+  // Customers. Addressed per organization deliberately rather than through a
+  // bare /api/contacts scoped in the handler: every row is a real person, so
+  // the :slug puts requireTenantScope in front of the read rather than
+  // leaving the only thing between two law firms sharing a phone number to a
+  // check somebody has to remember to write.
+  //
+  // Not operator-only. An employee answering a customer needs to know who
+  // they are talking to, and the route pins them to their own business.
+  "/deck/customers": "/api/organizations/",
   "/deck/team": "/api/organizations/",
   "/deck/knowledge": "/api/organizations/",
   // Addressed per organization, exactly like Knowledge, and reachable by an

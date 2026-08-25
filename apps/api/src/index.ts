@@ -8,6 +8,7 @@ import { conversationsRoute } from "./routes/conversations.js";
 import { broadcastsRoute } from "./routes/broadcasts.js";
 import { metricsRoute } from "./routes/metrics.js";
 import { knowledgeRoute } from "./routes/knowledge.js";
+import { contactsRoute } from "./routes/contacts.js";
 import { employeesRoute, conversationAssignmentRoute } from "./routes/employees.js";
 import { employeeAuthRoute } from "./routes/employee-auth.js";
 import { adminAuthRoute } from "./routes/admin-auth.js";
@@ -266,6 +267,10 @@ app.route("/api/organizations", organizationsRoute);
 // Same mount point: knowledge is addressed per organization
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.
 app.route("/api/organizations", knowledgeRoute);
+
+// Customers, on the same mount for the same reason: a :slug puts every read
+// behind requireTenantScope, and these rows are people.
+app.route("/api/organizations", contactsRoute);
 app.route("/api/organizations", employeesRoute);
 // Procedural memory, addressed per organization for the same reason knowledge
 // is: it is that business's own material, and mounting it here means the tenant

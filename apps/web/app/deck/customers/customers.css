@@ -1,0 +1,274 @@
+/* The customer record.
+ *
+ * Every colour is a deck token. The one place this screen departs from the
+ * others is the memory block, which is deliberately given more weight than
+ * anything around it: it is the only text on the deck that this platform wrote
+ * about a person rather than recorded them saying.
+ */
+
+.cu-search {
+  display: grid;
+  gap: 4px;
+  max-width: 340px;
+}
+
+.cu-search span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+.cu-search input {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.cu-note {
+  margin: 0;
+  color: var(--mist);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 66ch;
+}
+
+.cu-err {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--crit);
+  background: var(--pebble);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.cu-err-load {
+  padding: 20px;
+}
+
+.cu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.cu-row {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.cu-row:hover {
+  border-color: var(--hairline-strong);
+}
+
+.cu-name {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.cu-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--mist);
+}
+
+.cu-pri {
+  padding: 2px 7px;
+  border-radius: 100px;
+  border: 1px solid var(--hairline-strong);
+  color: var(--slate);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.cu-pri.urgent,
+.cu-pri.high {
+  border-color: var(--crit);
+  color: var(--crit);
+}
+
+.cu-pri.none {
+  border-style: dashed;
+  color: var(--faint);
+}
+
+/* Not a warning. That this platform holds something about a person is a plain
+   fact, and the person scanning for it is usually acting on their request. */
+.cu-rem {
+  color: var(--signal);
+}
+
+.cu-out {
+  color: var(--warn);
+}
+
+.cu-when {
+  color: var(--faint);
+}
+
+.cu-detail {
+  margin-top: 6px;
+  padding: 16px;
+  background: var(--marble);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  display: grid;
+  gap: 10px;
+}
+
+.cu-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cu-detail-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.cu-detail h3 {
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mist);
+  font-weight: 400;
+}
+
+.cu-detail-meta {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mist);
+}
+
+.cu-close {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 5px 11px;
+  border-radius: 100px;
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--mist);
+  cursor: pointer;
+}
+
+/* The one block on this deck written BY the platform ABOUT a person, so it is
+   set as prose rather than as data. */
+.cu-mem {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--signal);
+  border-radius: var(--r-sm);
+}
+
+.cu-mem-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  max-width: 70ch;
+}
+
+.cu-mem-meta {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--mist);
+}
+
+.cu-forget {
+  justify-self: start;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 100px;
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--mist);
+  cursor: pointer;
+}
+
+.cu-forget:hover:not(:disabled) {
+  border-color: var(--crit);
+  color: var(--crit);
+}
+
+.cu-forget:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cu-convos,
+.cu-leads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.cu-convos li,
+.cu-leads li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 10px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--slate);
+}
+
+.cu-status {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mist);
+}
+
+.cu-status.open {
+  color: var(--signal);
+}
+
+.cu-convos a {
+  margin-left: auto;
+  color: var(--ink);
+}

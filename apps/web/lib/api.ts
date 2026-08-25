@@ -1169,6 +1169,73 @@ export interface NotReportedConversation {
   classified: boolean;
 }
 
+export interface ContactSummary {
+  id: string;
+  waId: string;
+  displayName: string | null;
+  leadScore: number | null;
+  leadPriority: string | null;
+  leadCategory: string | null;
+  lastMessageAt: string | null;
+  conversations: number;
+  /** This platform holds a remembered summary about them. */
+  remembered: boolean;
+  optedOut: boolean;
+}
+
+export interface ContactDetail extends ContactSummary {
+  servedBy: string[];
+  leadHistory: Array<{ id: string; score: number; priority: string; category: string; createdAt: string }>;
+  conversationList: Array<{
+    id: string;
+    status: string;
+    openedAt: string;
+    lastMessageAt: string | null;
+    messages: number;
+  }>;
+  openFollowUps: number;
+  bookings: number;
+}
+
+/** What this platform has remembered about somebody, in its own words. */
+export interface ContactMemoryView {
+  summary: string;
+  sourceMessages: number;
+  lastSeenAt: string | null;
+  updatedAt: string;
+}
+
+export function getContacts(
+  orgSlug: BusinessSlug,
+  search?: string
+): Promise<{ contacts: ContactSummary[] }> {
+  const q = search ? `?q=${encodeURIComponent(search)}` : "";
+  return request(`/api/organizations/${orgSlug}/contacts${q}`);
+}
+
+export function getContact(
+  orgSlug: BusinessSlug,
+  contactId: string
+): Promise<{ contact: ContactDetail; memory: ContactMemoryView | null }> {
+  return request(`/api/organizations/${orgSlug}/contacts/${contactId}`);
+}
+
+/**
+ * Erase what is held about somebody.
+ *
+ * The memory, not the person: their conversations are the business's own
+ * record of what was said. `hadMemory: false` means there was nothing to
+ * erase, which is the state the caller asked for and not a failure.
+ */
+export function forgetContactMemory(
+  orgSlug: BusinessSlug,
+  contactId: string
+): Promise<{ ok: true; hadMemory: boolean }> {
+  return request(`/api/organizations/${orgSlug}/contacts/${contactId}/memory`, {
+    method: "DELETE",
+  });
+}
+
 export function getNotReported(): Promise<{ conversations: NotReportedConversation[] }> {
   return request("/api/operators/not-reported");
 }
