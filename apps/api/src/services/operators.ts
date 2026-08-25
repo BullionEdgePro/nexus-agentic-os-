@@ -187,146 +187,255 @@ function describeOutcome(outcome: string): string {
   }
 }
 
+/**
+ * Every conversation whose last word was the customer's, older than the warn
+ * threshold -- optionally including the ones the pitch rule silences.
+ *
+ * Pulled out of the operator on 2026-08-25 so that the operator and the view
+ * of what it SUPPRESSED read the same rows through the same predicate. Two
+ * copies would be two things watching one table, and the day they drifted the
+ * deck would report nothing suppressed while something was.
+ */
+export async function unansweredConversations(
+  organizationId: string,
+  includeSuppressed: boolean
+) {
+  const { rows } = await getPool().query<{
+    conversation_id: string;
+    serving_organization_id: string;
+    contact_name: string | null;
+    wa_id: string;
+    waited_hours: string;
+    is_human_handoff: boolean;
+    last_body: string | null;
+    has_assessment: boolean;
+    is_pitch: boolean;
+    a_human_spoke_before: boolean;
+    recorded_outcome: string | null;
+  }>(
+    `select c.id as conversation_id,
+            -- WHO THIS CUSTOMER IS ACTUALLY WAITING ON. All five businesses
+            -- answer on one number, so a routed conversation is owned by the
+            -- number's owner and this operator can only see it from the
+            -- owner's transaction. Two findings on production named Zipicka
+            -- for customers of SFS International and Juris Prime; the second
+            -- of those IS the seventeen-hour silence. See migration 053.
+            coalesce(c.routed_organization_id, c.organization_id) as serving_organization_id,
+            ct.display_name as contact_name,
+            ct.wa_id,
+            round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as waited_hours,
+            c.is_human_handoff,
+            last.body as last_body,
+            exists (
+              select 1 from lead_assessments la where la.conversation_id = c.id
+            ) as has_assessment,
+            -- Distinct from has_assessment: "scored at all" and "scored AS a
+            -- pitch" are different facts, and only the second one silences.
+            exists (
+              select 1 from lead_assessments la
+               where la.conversation_id = c.id and la.category = 'inbound_pitch'
+            ) as is_pitch,
+            -- DID A COLLEAGUE EVER SPEAK HERE?
+            --
+            -- handover-abandoned deliberately excludes any conversation where
+            -- a human has spoken, because its subject is a promise nobody
+            -- came to. That leaves the half-abandoned case -- a colleague
+            -- answered once and then went quiet -- belonging to no operator
+            -- at all, and arriving here with the handoff flag since cleared.
+            exists (
+              select 1 from messages m
+               where m.conversation_id = c.id and m.sender_type = 'human_agent'
+            ) as a_human_spoke_before,
+            -- WHAT THE REPLY PATH SAID ABOUT *THIS* MESSAGE.
+            --
+            -- Bounded to outcomes recorded at or after the unanswered message
+            -- arrived. Without that bound this picks up the outcome of a
+            -- PREVIOUS exchange and reports it as the reason for this
+            -- silence -- which is the same class of mistake as the sentence
+            -- this whole change exists to remove, produced by a sloppier
+            -- query. Null means nothing accounted for the message at all.
+            (
+              select cm.reply_outcome
+                from conversation_metrics cm
+               where cm.conversation_id = c.id
+                 and cm.reply_outcome is not null
+                 and cm.recorded_at >= last.created_at
+               order by cm.recorded_at asc
+               limit 1
+            ) as recorded_outcome
+       from conversations c
+       join contacts ct on ct.id = c.contact_id
+       join lateral (
+         select sender_type, created_at, body
+           from messages m
+          where m.conversation_id = c.id
+          -- THE TIEBREAK IS NOT COSMETIC.
+          --
+          -- created_at is not unique. An agent reply generated in response to
+          -- an inbound message can land on the identical microsecond, and
+          -- "order by created_at desc limit 1" then picks between them
+          -- arbitrarily. This operator's very first run on production
+          -- reported a customer as ignored when the triage reply had in fact
+          -- gone out at the same instant — a false positive produced by a
+          -- coin flip, on exactly the kind of alert that has to be trusted.
+          --
+          -- Ordering outbound first on a tie is the correct reading, not just
+          -- a deterministic one: an outbound message sharing a timestamp with
+          -- an inbound one was written in reply to it, so it came after.
+          order by m.created_at desc,
+                   case when m.direction = 'outbound' then 0 else 1 end
+          limit 1
+       ) last on true
+      where c.organization_id = $1
+        and c.status in ('open', 'pending')
+        -- The last thing said was said BY THE CUSTOMER. That is what makes
+        -- this "waiting" rather than "quiet".
+        and last.sender_type = 'contact'
+        and last.created_at < now() - ($2 || ' hours')::interval
+        -- Cold pitches are not customers kept waiting.
+        --
+        -- The lead scorer already classifies "somebody selling TO us" as
+        -- inbound_pitch, and this platform receives a steady trickle of them.
+        -- Reporting an unanswered sales pitch as an ignored customer is the
+        -- noise that teaches an operator to stop reading the list.
+        --
+        -- Keyed on that AFFIRMATIVE classification, deliberately — not on a
+        -- score of zero or a low priority. A genuine customer writing in a
+        -- language the scorer does not speak also scores zero and floors at
+        -- low (ARCHITECTURE §9.5), and suppressing them would hide exactly
+        -- the customer least able to chase us.
+        --
+        -- A conversation with NO assessment at all is not filtered here. It
+        -- is scored below instead — see the note on the .filter().
+        -- $3 KEEPS the pitches instead of dropping them, which is how the
+        -- "not reported" view sees what this operator chose to silence.
+        -- One query rather than two: a second copy of this predicate is
+        -- two things watching one table, and the day they disagree the
+        -- deck says nothing was suppressed while something was.
+        and (
+          $3::boolean
+          or not exists (
+            select 1 from lead_assessments la
+             where la.conversation_id = c.id
+               and la.category = 'inbound_pitch'
+          )
+        )`,
+    [organizationId, String(WAITING_WARN_HOURS), includeSuppressed]
+  );
+  return rows;
+}
+
+/**
+ * Does this look like somebody selling TO us rather than a customer?
+ *
+ * THE DECISION THAT SILENCES A CONVERSATION, named once and exported so the
+ * screen showing what was silenced cannot disagree with the operator doing
+ * the silencing.
+ *
+ * A stored classification beats one recomputed from a single message, so a
+ * conversation that HAS an assessment is taken at its word. Where none was
+ * ever recorded -- every conversation predating lead scoring being wired into
+ * the pipeline -- the scorer is asked directly. It is pure, rules-based and
+ * costs no model call, and it gives the verdict it would have given at the
+ * time. Scored on the LAST inbound message, because that is the one that has
+ * gone unanswered: a pitch that opened with "hello" is still a pitch by the
+ * message it ends on.
+ *
+ * Worth stating plainly, because it is the sharpest edge in this file: this
+ * decides which unanswered customers are NEVER reported, and it is made by a
+ * rules scorer whose accuracy nothing measured until F3's labels existed. A
+ * wrong "true" here is a real customer waiting for ever with the deck silent,
+ * which is why the suppression is now shown rather than merely applied.
+ */
+export function looksLikeAnInboundPitch(row: {
+  is_pitch: boolean;
+  has_assessment: boolean;
+  last_body: string | null;
+}): boolean {
+  if (row.is_pitch) return true;
+  if (row.has_assessment || !row.last_body) return false;
+  return scoreLead({ text: row.last_body }).category === "inbound_pitch";
+}
+
+/**
+ * The unanswered conversations this platform decided NOT to tell anybody about.
+ *
+ * An empty findings list must not read as good news unless it IS good news,
+ * and until now "nothing is waiting" and "two people are waiting and we judged
+ * them salesmen" looked identical from every screen. The judgement happened in
+ * a filter in memory, every ten minutes, and left no trace.
+ */
+export async function unansweredButNotReportedFor(organizationId: string) {
+  const rows = await unansweredConversations(organizationId, true);
+  return rows.filter(looksLikeAnInboundPitch).map((row) => ({
+    conversationId: row.conversation_id,
+    servingOrganizationId: row.serving_organization_id,
+    who: row.contact_name ?? `+${row.wa_id}`,
+    waitedHours: Number(row.waited_hours),
+    // The customer's own words, trimmed. This is the evidence for the
+    // judgement, and without it "we think this is a pitch" is unreviewable.
+    excerpt: (row.last_body ?? "").slice(0, 140),
+    // Which of the two routes silenced it, because they need different
+    // answers: a stored classification is wrong in the data, a recomputed one
+    // is wrong in the rules.
+    classified: row.is_pitch,
+  }));
+}
+/**
+ * What every business's sweep chose not to report, in one list.
+ *
+ * Per business and inside that business's own transaction, exactly as the
+ * sweep runs -- because the query is keyed on the number's OWNER and a routed
+ * conversation is visible only inside the owner's turn. Asking this
+ * cross-tenant would return the rows and lose which business each belongs to,
+ * which is the mistake migration 053 exists to record.
+ */
+export async function unansweredButNotReported(): Promise<
+  Array<Awaited<ReturnType<typeof unansweredButNotReportedFor>>[number] & { businessSlug: string }>
+> {
+  const organizations = await listOrganizations();
+  const slugById = new Map(organizations.map((o) => [o.id, o.slug]));
+  const out = [];
+
+  for (const organization of organizations) {
+    try {
+      const rows = await withTenant(organization.id, () =>
+        unansweredButNotReportedFor(organization.id)
+      );
+      for (const row of rows) {
+        out.push({
+          ...row,
+          // The SERVING business, the same way a finding names it. Labelling
+          // these with the number's owner would tell somebody to chase the
+          // wrong firm -- the precise defect measured on 2026-08-19.
+          businessSlug: slugById.get(row.servingOrganizationId) ?? organization.slug,
+        });
+      }
+    } catch (err) {
+      // One business failing must not empty the list for the rest. An empty
+      // list here reads as "nothing was suppressed", which is the sentence
+      // this whole view exists to stop being said falsely.
+      logger.warn({ organizationId: organization.id, err }, "Could not read suppressed conversations");
+    }
+  }
+
+  return out.sort((a, b) => b.waitedHours - a.waitedHours);
+}
 const customerWaiting: Operator = {
   slug: "customer-waiting",
   title: "Customer waiting",
   description:
     "Someone messaged and nothing has gone back. Normally the agent answers in seconds, so each finding works out which of four things happened — a handover nobody picked up, a colleague who replied and then stopped, a deliberate silence the agent recorded, or a message the reply path never accounted for at all.",
   run: async (organizationId) => {
-    const { rows } = await getPool().query<{
-      conversation_id: string;
-      serving_organization_id: string;
-      contact_name: string | null;
-      wa_id: string;
-      waited_hours: string;
-      is_human_handoff: boolean;
-      last_body: string | null;
-      has_assessment: boolean;
-      a_human_spoke_before: boolean;
-      recorded_outcome: string | null;
-    }>(
-      `select c.id as conversation_id,
-              -- WHO THIS CUSTOMER IS ACTUALLY WAITING ON. All five businesses
-              -- answer on one number, so a routed conversation is owned by the
-              -- number's owner and this operator can only see it from the
-              -- owner's transaction. Two findings on production named Zipicka
-              -- for customers of SFS International and Juris Prime; the second
-              -- of those IS the seventeen-hour silence. See migration 053.
-              coalesce(c.routed_organization_id, c.organization_id) as serving_organization_id,
-              ct.display_name as contact_name,
-              ct.wa_id,
-              round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as waited_hours,
-              c.is_human_handoff,
-              last.body as last_body,
-              exists (
-                select 1 from lead_assessments la where la.conversation_id = c.id
-              ) as has_assessment,
-              -- DID A COLLEAGUE EVER SPEAK HERE?
-              --
-              -- handover-abandoned deliberately excludes any conversation where
-              -- a human has spoken, because its subject is a promise nobody
-              -- came to. That leaves the half-abandoned case -- a colleague
-              -- answered once and then went quiet -- belonging to no operator
-              -- at all, and arriving here with the handoff flag since cleared.
-              exists (
-                select 1 from messages m
-                 where m.conversation_id = c.id and m.sender_type = 'human_agent'
-              ) as a_human_spoke_before,
-              -- WHAT THE REPLY PATH SAID ABOUT *THIS* MESSAGE.
-              --
-              -- Bounded to outcomes recorded at or after the unanswered message
-              -- arrived. Without that bound this picks up the outcome of a
-              -- PREVIOUS exchange and reports it as the reason for this
-              -- silence -- which is the same class of mistake as the sentence
-              -- this whole change exists to remove, produced by a sloppier
-              -- query. Null means nothing accounted for the message at all.
-              (
-                select cm.reply_outcome
-                  from conversation_metrics cm
-                 where cm.conversation_id = c.id
-                   and cm.reply_outcome is not null
-                   and cm.recorded_at >= last.created_at
-                 order by cm.recorded_at asc
-                 limit 1
-              ) as recorded_outcome
-         from conversations c
-         join contacts ct on ct.id = c.contact_id
-         join lateral (
-           select sender_type, created_at, body
-             from messages m
-            where m.conversation_id = c.id
-            -- THE TIEBREAK IS NOT COSMETIC.
-            --
-            -- created_at is not unique. An agent reply generated in response to
-            -- an inbound message can land on the identical microsecond, and
-            -- "order by created_at desc limit 1" then picks between them
-            -- arbitrarily. This operator's very first run on production
-            -- reported a customer as ignored when the triage reply had in fact
-            -- gone out at the same instant — a false positive produced by a
-            -- coin flip, on exactly the kind of alert that has to be trusted.
-            --
-            -- Ordering outbound first on a tie is the correct reading, not just
-            -- a deterministic one: an outbound message sharing a timestamp with
-            -- an inbound one was written in reply to it, so it came after.
-            order by m.created_at desc,
-                     case when m.direction = 'outbound' then 0 else 1 end
-            limit 1
-         ) last on true
-        where c.organization_id = $1
-          and c.status in ('open', 'pending')
-          -- The last thing said was said BY THE CUSTOMER. That is what makes
-          -- this "waiting" rather than "quiet".
-          and last.sender_type = 'contact'
-          and last.created_at < now() - ($2 || ' hours')::interval
-          -- Cold pitches are not customers kept waiting.
-          --
-          -- The lead scorer already classifies "somebody selling TO us" as
-          -- inbound_pitch, and this platform receives a steady trickle of them.
-          -- Reporting an unanswered sales pitch as an ignored customer is the
-          -- noise that teaches an operator to stop reading the list.
-          --
-          -- Keyed on that AFFIRMATIVE classification, deliberately — not on a
-          -- score of zero or a low priority. A genuine customer writing in a
-          -- language the scorer does not speak also scores zero and floors at
-          -- low (ARCHITECTURE §9.5), and suppressing them would hide exactly
-          -- the customer least able to chase us.
-          --
-          -- A conversation with NO assessment at all is not filtered here. It
-          -- is scored below instead — see the note on the .filter().
-          and not exists (
-            select 1 from lead_assessments la
-             where la.conversation_id = c.id
-               and la.category = 'inbound_pitch'
-          )`,
-      [organizationId, String(WAITING_WARN_HOURS)]
-    );
+    const rows = await unansweredConversations(organizationId, false);
 
     return rows
-      .filter((row) => {
-        // SUPPRESSION KEYED ON A SIGNAL THAT MAY NEVER HAVE BEEN RECORDED.
-        //
-        // The clause above asks whether an `inbound_pitch` assessment exists.
-        // For every conversation that predates lead scoring being wired into the
-        // pipeline, none does — and "no assessment" then reads as "not a pitch".
-        //
-        // That is how this operator's only open urgent finding on production
-        // came to be a data broker: *"Latest Owner, buyer and investor data
-        // available… Do you need a database?"*, reported as a customer ignored
-        // for 260.8 hours. The suppression was correct and simply had nothing
-        // to act on, which is the same shape as every other defect in §8 — the
-        // absence of a record reading as a negative answer.
-        //
-        // So when there is no assessment, ask the scorer directly. It is pure
-        // and rules-based, costs no model call, and gives the same verdict it
-        // would have given at the time. Scored on the LAST inbound message
-        // because that is the one that has gone unanswered — a pitch that
-        // opened with "hello" is still a pitch by the message it ends on.
-        //
-        // Conversations that DO have an assessment are left to the SQL: a
-        // stored classification beats one recomputed from a single message.
-        if (row.has_assessment || !row.last_body) return true;
-        return scoreLead({ text: row.last_body }).category !== "inbound_pitch";
-      })
+      // The pitch rule, named once in `looksLikeAnInboundPitch` and shared
+      // with the view of what it silenced. It used to be written out here,
+      // where nothing else could see the judgement or count how often it was
+      // made -- so "nothing is waiting" and "two people are waiting and we
+      // judged them salesmen" were indistinguishable from every screen.
+      .filter((row) => !looksLikeAnInboundPitch(row))
       .map((row) => {
       const hours = Number(row.waited_hours);
       const who = row.contact_name ?? `+${row.wa_id}`;
@@ -1541,14 +1650,23 @@ const handoverAbandoned: Operator = {
     );
 
     return rows
-      .filter((row) => {
-        // And the same fallback, for the same reason: conversations predating
-        // lead scoring carry no assessment, and "no assessment" must not read
-        // as "not a pitch". Scored on the customer's last message, which is the
-        // one the promise was made about.
-        if (row.has_assessment || !row.last_body) return true;
-        return scoreLead({ text: row.last_body }).category !== "inbound_pitch";
-      })
+      // THE SAME DECISION AS customer-waiting, and now literally the same
+      // function. It was a second copy of the fallback until 2026-08-25 --
+      // identical reasoning, identical code, two places to keep right. The
+      // day they drifted, one operator would silence a conversation the other
+      // reported, and nothing would say which was correct.
+      //
+      // is_pitch is false by construction here: the query above already
+      // excludes anything carrying that classification, so the only judgement
+      // left for this to make is the re-read one.
+      .filter(
+        (row) =>
+          !looksLikeAnInboundPitch({
+            is_pitch: false,
+            has_assessment: row.has_assessment,
+            last_body: row.last_body,
+          })
+      )
       .map((row) => {
         const hours = Number(row.paused_hours);
         const who = row.contact_name ?? `+${row.wa_id}`;

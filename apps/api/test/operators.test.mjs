@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { operatorBody } from "../../../scripts/recurrence/source.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
@@ -195,10 +196,12 @@ test("unowned follow-ups stay silent for a business with no staff", () => {
 });
 
 test("a waiting customer is one finding, not one per message they sent", () => {
-  const fn = OPERATORS.slice(
-    OPERATORS.indexOf("const customerWaiting"),
-    OPERATORS.indexOf("const overdueFollowUp")
-  );
+  // Through operatorBody rather than a raw slice: customer-waiting's query
+  // moved into a shared reader on 2026-08-25 so the operator and the view of
+  // what it SUPPRESSES could not drift apart, and a slice that stops at the
+  // next `const` stopped seeing the SQL. The property is unchanged.
+  const fn = operatorBody(OPERATORS, "customer-waiting");
+  assert.ok(fn, "customer-waiting is gone");
   assert.ok(fn.length > 400, "the operator slice must not be empty");
   assert.match(fn, /fingerprint: row\.conversation_id/);
   // And it is genuinely "waiting": the last thing said was said by them.
@@ -216,10 +219,9 @@ test("the last message is chosen deterministically, not by a coin flip", () => {
   // Outbound-first on a tie is the correct reading, not merely a stable one: an
   // outbound message sharing a timestamp with an inbound one was written in
   // reply to it, so it came after.
-  const fn = OPERATORS.slice(
-    OPERATORS.indexOf("const customerWaiting"),
-    OPERATORS.indexOf("const overdueFollowUp")
-  );
+  // operatorBody, not a raw slice: the query moved into a shared reader so
+  // the operator and the view of what it suppresses cannot drift apart.
+  const fn = operatorBody(OPERATORS, "customer-waiting");
   assert.match(
     fn,
     /order by m\.created_at desc,\s*\n\s*case when m\.direction = 'outbound' then 0 else 1 end/
@@ -231,10 +233,9 @@ test("a cold sales pitch is not a customer kept waiting", () => {
   // an unanswered pitch as an ignored customer is the noise that teaches an
   // operator to stop reading the list — and both findings on the first real
   // sweep were of this kind.
-  const fn = OPERATORS.slice(
-    OPERATORS.indexOf("const customerWaiting"),
-    OPERATORS.indexOf("const overdueFollowUp")
-  );
+  // operatorBody, not a raw slice: the query moved into a shared reader so
+  // the operator and the view of what it suppresses cannot drift apart.
+  const fn = operatorBody(OPERATORS, "customer-waiting");
   assert.match(fn, /la\.category = 'inbound_pitch'/);
   // Keyed on that affirmative classification, NOT on a zero score or a low
   // priority. A real customer writing in a language the scorer does not speak
@@ -465,12 +466,18 @@ test("an abandoned handover is watched, and customer-waiting cannot see it", () 
   assert.match(body, /severity: "urgent" as const/);
   assert.ok(!/WAITING_WARN|"warn"/.test(body), "there is no gentle version of this");
 
-  // Same pitch suppression as customer-waiting, including the scoreLead
-  // fallback for conversations predating lead scoring — without it the two cold
-  // pitches among the four would be reported as abandoned customers, which is
-  // the noise that teaches somebody to stop reading the list.
+  // Same pitch suppression as customer-waiting, including the fallback for
+  // conversations predating lead scoring — without it the two cold pitches
+  // among the four would be reported as abandoned customers, which is the noise
+  // that teaches somebody to stop reading the list.
+  //
+  // Asserted as the SHARED decision rather than an inlined scoreLead call.
+  // Until 2026-08-25 this operator carried its own copy — identical reasoning,
+  // identical code, two places to keep right — and the day they drifted, one
+  // operator would have silenced a conversation the other reported with nothing
+  // to say which was correct.
   assert.match(body, /category = 'inbound_pitch'/);
-  assert.match(body, /scoreLead\(\{ text: row\.last_body \}\)\.category !== "inbound_pitch"/);
+  assert.match(body, /!looksLikeAnInboundPitch\(\{/);
 
   // Calls no model.
   assert.ok(!/anthropic|generateText|embed|gemini/i.test(body), "operators must not call a model");

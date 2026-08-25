@@ -1152,6 +1152,27 @@ export interface DismissalHorizonOption {
  * the server refuses a length it does not know, so a screen offering one from
  * memory is a screen that can be told no.
  */
+/**
+ * An unanswered conversation the checks chose not to report.
+ *
+ * Shown, rather than merely applied, because "nobody is waiting" and "two
+ * people are waiting and we judged them salesmen" must not look the same.
+ */
+export interface NotReportedConversation {
+  conversationId: string;
+  businessSlug: string;
+  who: string;
+  waitedHours: number;
+  /** Their own words. The evidence for the judgement, without which it is unreviewable. */
+  excerpt: string;
+  /** true = a stored classification; false = the scorer re-read it just now. */
+  classified: boolean;
+}
+
+export function getNotReported(): Promise<{ conversations: NotReportedConversation[] }> {
+  return request("/api/operators/not-reported");
+}
+
 export function getDismissalHorizons(): Promise<{ horizons: DismissalHorizonOption[] }> {
   return request("/api/operators/dismissal-horizons");
 }

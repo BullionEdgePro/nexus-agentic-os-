@@ -5,6 +5,8 @@ import type { BusinessSlug } from "@nexus/shared";
 import {
   getFindings,
   getDismissalHorizons,
+  getNotReported,
+  type NotReportedConversation,
   dismissFinding,
   restoreFinding,
   type DismissalHorizonOption,
@@ -100,6 +102,16 @@ export default function OperatorsPage() {
   /** The finding whose "how long for" choice is open, if any. */
   const [choosing, setChoosing] = useState<string | null>(null);
   /**
+   * Unanswered conversations the checks decided not to report.
+   *
+   * Kept apart from `findings` deliberately: these are NOT findings, and
+   * folding them in would undo the suppression this screen is only trying to
+   * make visible. The point is that somebody can audit the judgement, not
+   * that the judgement is reversed.
+   */
+  const [notReported, setNotReported] = useState<NotReportedConversation[]>([]);
+  const [showNotReported, setShowNotReported] = useState(false);
+  /**
    * The lengths on offer, from the server.
    *
    * Seeded with the same three the server has so the button works on the first
@@ -185,6 +197,14 @@ export default function OperatorsPage() {
    * A failure sets `error`, not `loadError`: the screen is still correct, and
    * blanking it would lose the finding the message is about.
    */
+  useEffect(() => {
+    // Operator-only on the server; an employee simply gets nothing, which is
+    // the right shape here -- this list carries other firms' customers.
+    getNotReported()
+      .then((data) => setNotReported(data.conversations))
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     getDismissalHorizons()
       .then((data) => {
@@ -481,6 +501,67 @@ export default function OperatorsPage() {
               <p className="op-note">
                 Still true and still watched. They do not raise alerts and are not counted above,
                 and any that goes away and comes back arrives un-accepted.
+              </p>
+            )}
+          </section>
+        ) : null}
+
+        {/* WHAT WAS DELIBERATELY NOT REPORTED.
+
+            An empty findings list must not read as good news unless it IS
+            good news, and until now "nobody is waiting" and "two people are
+            waiting and we judged them salesmen" looked identical from here.
+
+            The judgement is made by a rules scorer, on the last message the
+            customer sent. It is usually right and it is not checked by
+            anything at the moment it is made -- so the excerpt is shown, and
+            it is the whole point of the row. */}
+        {notReported.length > 0 ? (
+          <section className="op-dismissed op-quiet">
+            <button
+              type="button"
+              className="op-dismissed-toggle"
+              onClick={() => setShowNotReported((v) => !v)}
+              aria-expanded={showNotReported}
+            >
+              {notReported.length === 1
+                ? "1 unanswered conversation was not reported"
+                : `${notReported.length} unanswered conversations were not reported`}
+              <span aria-hidden="true">{showNotReported ? " ▾" : " ▸"}</span>
+            </button>
+            {showNotReported ? (
+              <ul className="op-list op-list-quiet">
+                {notReported.map((row) => (
+                  <li className="op-item accepted" key={row.conversationId}>
+                    <div className="op-main">
+                      <p className="op-title">
+                        {row.who} — waiting {Math.round(row.waitedHours)}h, read as a sales pitch
+                      </p>
+                      {/* THEIR OWN WORDS. Without this the row asserts a
+                          judgement and gives nothing to check it against. */}
+                      <p className="op-excerpt">“{row.excerpt}”</p>
+                      <p className="op-meta">
+                        <span className="op-biz">{row.businessSlug}</span>
+                        <span>
+                          {row.classified
+                            ? "classified when it arrived"
+                            : "re-read just now — never scored at the time"}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="op-side">
+                      <a className="op-accept" href="/inbox">
+                        Open inbox
+                      </a>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="op-note">
+                Somebody messaged, nothing went back, and the checks judged them to be selling
+                rather than buying — so no alert was raised. Open the list to see what they
+                actually said.
               </p>
             )}
           </section>

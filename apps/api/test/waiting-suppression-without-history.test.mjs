@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { scoreLead } from "@nexus/leads";
+import { looksLikeAnInboundPitch } from "../src/services/operators.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OPERATORS = readFileSync(
@@ -38,11 +39,39 @@ test("the scorer recognises these as pitches, so the fallback has something to s
 });
 
 test("a conversation with no assessment is scored rather than assumed innocent", () => {
+  // CALLED rather than matched. This asserted the inlined source shape until
+  // 2026-08-25, when the decision moved into `looksLikeAnInboundPitch` so that
+  // customer-waiting, handover-abandoned and the view of what they SUPPRESS
+  // could not drift apart. Matching source went red on a change that altered
+  // nothing about the behaviour — so it now checks the behaviour.
   assert.match(OPERATORS, /has_assessment/);
-  assert.match(OPERATORS, /if \(row\.has_assessment \|\| !row\.last_body\) return true;/);
-  assert.match(
-    OPERATORS,
-    /scoreLead\(\{ text: row\.last_body \}\)\.category !== "inbound_pitch"/
+
+  assert.equal(
+    looksLikeAnInboundPitch({
+      is_pitch: false,
+      has_assessment: false,
+      last_body: "Latest owner, buyer and investor data available. Do you need a database?",
+    }),
+    true,
+    "an unscored pitch must be silenced, not assumed innocent"
+  );
+
+  assert.equal(
+    looksLikeAnInboundPitch({
+      is_pitch: false,
+      has_assessment: false,
+      last_body: "Do you attest degree certificates, and how much is it?",
+    }),
+    false,
+    "an unscored genuine enquiry must still be reported"
+  );
+
+  // And "no assessment" alone is never enough to silence: without a body there
+  // is nothing to judge, and silence on no evidence would be the wrong
+  // direction to be generous in.
+  assert.equal(
+    looksLikeAnInboundPitch({ is_pitch: false, has_assessment: false, last_body: null }),
+    false
   );
 });
 

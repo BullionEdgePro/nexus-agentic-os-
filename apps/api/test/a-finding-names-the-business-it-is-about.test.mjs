@@ -25,6 +25,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { operatorBody } from "../../../scripts/recurrence/source.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..", "..");
@@ -33,13 +34,18 @@ const read = (...p) => readFileSync(join(root, ...p), "utf8");
 const OPERATORS = read("apps", "api", "src", "services", "operators.ts");
 const DB = read("packages", "db", "src", "operators.ts");
 
-/** One operator's definition, so an assertion cannot match its neighbour. */
+/**
+ * One operator's definition, and anything it hands its query off to.
+ *
+ * Shared rather than written here: this same slice lives in two test files,
+ * and both went red on the same extraction because neither followed the
+ * handoff. See `operatorBody` for why following one level is the right
+ * answer rather than banning the extraction.
+ */
 function operator(slug) {
-  const marker = `slug: "${slug}"`;
-  const start = OPERATORS.lastIndexOf("const ", OPERATORS.indexOf(marker));
-  assert.ok(start > -1, `${slug} not found`);
-  const next = OPERATORS.indexOf("\nconst ", start + 1);
-  return next === -1 ? OPERATORS.slice(start) : OPERATORS.slice(start, next);
+  const body = operatorBody(OPERATORS, slug);
+  assert.ok(body, `${slug} not found`);
+  return body;
 }
 
 test("both per-conversation operators resolve the serving business", () => {

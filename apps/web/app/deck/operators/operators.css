@@ -306,3 +306,20 @@
   font-size: 9.5px;
   color: var(--mist);
 }
+
+/* Quieter than the accepted list: these are not findings, and styling them
+   like one would undo the suppression this section only makes visible. */
+.op-quiet {
+  opacity: 0.92;
+}
+
+/* The customer's own words — the evidence for a judgement the platform made
+   automatically, and the only thing on the row that lets somebody check it. */
+.op-excerpt {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--slate);
+  max-width: 70ch;
+  font-style: italic;
+}

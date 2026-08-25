@@ -14,7 +14,7 @@ import {
   dismissalHorizon,
 } from "@nexus/db";
 import { isJobStalled } from "@nexus/shared";
-import { OPERATORS } from "../services/operators.js";
+import { OPERATORS, unansweredButNotReported } from "../services/operators.js";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 import { alertTarget } from "../services/alert-dispatch.js";
@@ -192,6 +192,37 @@ async function handleDismissal(
 }
 
 /** The lengths on offer, from the rules themselves rather than typed twice. */
+/**
+ * The unanswered conversations this platform decided NOT to report.
+ *
+ * ============================================================
+ * WHY AN EMPTY LIST HAD TO STOP BEING TWO DIFFERENT FACTS
+ * ============================================================
+ *
+ * customer-waiting drops anything that looks like somebody selling TO us,
+ * and it is right to: reporting an unanswered sales pitch as an ignored
+ * customer is the noise that teaches a person to stop reading the list.
+ *
+ * But the judgement happened in a filter in memory, every ten minutes, and
+ * left no trace. "Nobody is waiting" and "two people are waiting and we
+ * judged them salesmen" were indistinguishable from every screen -- and the
+ * judgement is made by a rules scorer whose accuracy nothing measured until
+ * lead labels existed. A wrong call there is a real customer waiting for ever
+ * with the deck silent, and it would never surface, because the finding is
+ * retracted rather than raised.
+ *
+ * OPERATOR-ONLY. Each row carries a customer's name and their own words, so
+ * this is the same class of read as the inbox, and an employee session has no
+ * business seeing another firm's suppressed conversations.
+ */
+operatorsRoute.get("/not-reported", async (c) => {
+  const scope = scopeOf(c);
+  if (scope.role !== "operator") {
+    return c.json({ error: "Not available to this account." }, 403);
+  }
+  return c.json({ conversations: await unansweredButNotReported() });
+});
+
 operatorsRoute.get("/dismissal-horizons", (c) => c.json({ horizons: DISMISSAL_HORIZONS }));
 
 operatorsRoute.post("/findings/:id/dismiss", async (c) => {

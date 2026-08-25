@@ -187,3 +187,49 @@ export function proseOf(src) {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/**
+ * One operator's definition, plus the body of any shared reader it hands off to.
+ *
+ * ============================================================
+ * WHY THE HANDOFF HAS TO BE FOLLOWED
+ * ============================================================
+ *
+ * Several tests assert properties of an operator's SQL by slicing from its
+ * `const` to the next one. That works while every operator inlines its own
+ * query, and silently stops working the moment one is extracted -- the slice
+ * comes back without the SQL and the assertion fails as though the property
+ * were gone.
+ *
+ * Two test files went red that way on 2026-08-25, when customer-waiting's query
+ * moved into `unansweredConversations` so that the operator and the view of
+ * what it SUPPRESSES would read the same rows through the same predicate. The
+ * property was untouched; only its address moved.
+ *
+ * Both were right to go red -- a slice that quietly finds less is exactly the
+ * "gate that passes on the wrong thing" this register already tracks. But a
+ * checker that treats "extracted" as "deleted" pushes people to keep queries
+ * inlined, which is how two copies of one predicate get written, which is the
+ * defect the extraction was undoing. So it follows one level, and lives here
+ * rather than being pasted into each file, because this repository has already
+ * paid for two copies of a helper more than once.
+ */
+export function operatorBody(source, slug, readers = ["unansweredConversations"]) {
+  const marker = `slug: "${slug}"`;
+  const at = source.indexOf(marker);
+  if (at === -1) return null;
+  const start = source.lastIndexOf("const ", at);
+  if (start === -1) return null;
+
+  const next = source.indexOf("\nconst ", start + 1);
+  let body = next === -1 ? source.slice(start) : source.slice(start, next);
+
+  for (const reader of readers) {
+    if (!body.includes(`${reader}(`)) continue;
+    const readerAt = source.indexOf(`export async function ${reader}(`);
+    if (readerAt === -1) continue;
+    const ends = source.indexOf("\nexport ", readerAt + 1);
+    body += ends === -1 ? source.slice(readerAt) : source.slice(readerAt, ends);
+  }
+  return body;
+}
