@@ -58,6 +58,8 @@ import {
   createTask,
   createBooking,
   upsertInferredProcedure,
+  AUTO_REVIEWER,
+  AUTO_ACTIVATION_FLOOR,
 } from "@nexus/db";
 import { JUDGE_UNAVAILABLE } from "@nexus/governance";
 import { OPERATORS } from "../services/operators.js";
@@ -263,6 +265,34 @@ const CASES: Case[] = [
         steps: [{ text: "Operator fire check — not a real procedure." }],
         derivedFromCount: 5,
       });
+    },
+  },
+  {
+    slug: "procedure-switched-on",
+    // The announcement half of F14's automatic action, and the reason this
+    // gate demanded it: an operator that reports "the agent is following a
+    // method nobody approved" is worthless if it cannot fire.
+    //
+    // Seeded by hand rather than through setProcedureActive, because that
+    // writer refuses to activate a procedure whose situation already has an
+    // active one, and the probe must not depend on what this business happens
+    // to have live. What the operator reads is the row: active, and reviewed by
+    // the automation's own marker.
+    seed: async (organizationId) => {
+      const written = await upsertInferredProcedure({
+        organizationId,
+        intentCategory: "fire_check_auto_probe",
+        language: "en",
+        steps: [{ text: "Operator fire check — not a real procedure." }],
+        derivedFromCount: AUTO_ACTIVATION_FLOOR,
+      });
+      if (!written.procedureId) return;
+      await getPool().query(
+        `update procedures
+            set is_active = true, reviewed_at = now(), reviewed_by = $2
+          where id = $1 and organization_id = $3`,
+        [written.procedureId, AUTO_REVIEWER, organizationId]
+      );
     },
   },
   {
