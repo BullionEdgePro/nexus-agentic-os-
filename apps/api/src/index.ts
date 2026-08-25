@@ -9,6 +9,7 @@ import { broadcastsRoute } from "./routes/broadcasts.js";
 import { metricsRoute } from "./routes/metrics.js";
 import { knowledgeRoute } from "./routes/knowledge.js";
 import { contactsRoute } from "./routes/contacts.js";
+import { agentRoute } from "./routes/agent.js";
 import { employeesRoute, conversationAssignmentRoute } from "./routes/employees.js";
 import { employeeAuthRoute } from "./routes/employee-auth.js";
 import { adminAuthRoute } from "./routes/admin-auth.js";
@@ -271,6 +272,10 @@ app.route("/api/organizations", knowledgeRoute);
 // Customers, on the same mount for the same reason: a :slug puts every read
 // behind requireTenantScope, and these rows are people.
 app.route("/api/organizations", contactsRoute);
+
+// What the agent is told to be. Same mount, and operator-only inside: an edit
+// here changes what the company says to every customer, with no review step.
+app.route("/api/organizations", agentRoute);
 app.route("/api/organizations", employeesRoute);
 // Procedural memory, addressed per organization for the same reason knowledge
 // is: it is that business's own material, and mounting it here means the tenant

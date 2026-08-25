@@ -128,6 +128,20 @@ export const NAV: NavItem[] = [
     ),
   },
   {
+    href: "/deck/agent",
+    label: "How it behaves",
+    // Beside Knowledge and How we answer, because the three together are what
+    // shapes a reply: what it is told to be, what it knows, and what it does in
+    // particular situations. Operator-only -- see the route.
+    operatorOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <rect x="4" y="6" width="16" height="12" rx="3" />
+        <path d="M9 11v1M15 11v1M9.5 15h5" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/knowledge",
     label: "Knowledge",
     icon: (

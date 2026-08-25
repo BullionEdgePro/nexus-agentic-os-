@@ -61,11 +61,37 @@ export function dueDateFor(column: ColumnKey): string | null {
     return d.toISOString();
   }
   if (column === "today") {
+    // FOUND AT 23:48 ON 2026-08-25, by the test below, which asserts the
+    // property rather than the implementation.
+    //
+    // This aimed at 17:00, fell back to 23:30 once that had passed, and stopped
+    // there. Between 23:30 and midnight BOTH are in the past, so dropping a
+    // card into Today gave it a due date that had already gone and it landed
+    // reading Overdue — the exact thing the fallback existed to prevent, in a
+    // thirty-minute window each day that nobody had been working in.
+    const endOfDay = new Date(d);
+    endOfDay.setHours(23, 59, 59, 999);
+
     d.setHours(17, 0, 0, 0);
-    // Late afternoon, unless that has passed — in which case the end of the
-    // day, because a card dropped in Today must not immediately read Overdue.
-    if (d.getTime() < Date.now()) d.setHours(23, 30, 0, 0);
-    return d.toISOString();
+    if (d.getTime() > Date.now()) return d.toISOString();
+
+    const lateAfternoonGone = new Date(d);
+    lateAfternoonGone.setHours(23, 30, 0, 0);
+
+    // Never a moment already past, and never so close to now that a slow render
+    // arrives after it.
+    const soon = Date.now() + 5 * 60 * 1000;
+    const chosen = Math.max(lateAfternoonGone.getTime(), soon);
+
+    if (chosen <= endOfDay.getTime()) return new Date(chosen).toISOString();
+
+    // The last minutes of the day, where no instant is both still today and
+    // still ahead. Tomorrow morning is the only honest answer, and the card
+    // moves to Later — which is what it now means.
+    const tomorrow = new Date(d);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    return tomorrow.toISOString();
   }
   if (column === "later") {
     d.setDate(d.getDate() + 1);

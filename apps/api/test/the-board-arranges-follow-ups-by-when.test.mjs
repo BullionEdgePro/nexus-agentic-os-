@@ -88,13 +88,34 @@ test("done and cancelled share one column", () => {
 
 test("a card dropped in Today does not immediately read Overdue", () => {
   // The bug this avoids is visible and silly: drag something out of Overdue,
-  // watch it land, watch it jump straight back. dueDateFor("today") aims at
-  // late afternoon and falls back to the end of the day once that has passed.
+  // watch it land, watch it jump straight back.
+  //
+  // IT CAUGHT ONE, at 23:48 on 2026-08-25. dueDateFor aimed at 17:00, fell back
+  // to 23:30 once that had passed, and stopped — so between 23:30 and midnight
+  // both were in the past and a dropped card landed already overdue. A
+  // thirty-minute window each day that nobody had happened to work in.
+  //
+  // Written against the property rather than the implementation, which is the
+  // only reason it fired at all: an assertion that 23:30 appears in the source
+  // would have passed happily throughout.
   const due = new Date(dueDateFor("today")).getTime();
   assert.ok(due > Date.now(), "a card dropped in Today must be due later than now");
-  const midnight = new Date();
-  midnight.setHours(23, 59, 59, 999);
-  assert.ok(due <= midnight.getTime(), "and must still be due today");
+
+  // AND STILL TODAY -- except in the last minutes of a day, where no instant is
+  // both. The two requirements are jointly unsatisfiable then, and the honest
+  // answer is tomorrow morning rather than a date already gone. Saying so here
+  // beats a test that flakes for five minutes a day and gets deleted for it.
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+  const roomLeft = endOfDay.getTime() - Date.now() > 5 * 60 * 1000;
+  if (roomLeft) {
+    assert.ok(due <= endOfDay.getTime(), "and must still be due today");
+  } else {
+    assert.ok(
+      due <= endOfDay.getTime() + 12 * 60 * 60 * 1000,
+      "in the last minutes of the day it may spill to tomorrow morning, and no further"
+    );
+  }
 });
 
 test("dropping into Overdue means it, and does not sit on the boundary", () => {

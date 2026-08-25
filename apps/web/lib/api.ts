@@ -1205,6 +1205,46 @@ export interface ContactMemoryView {
   updatedAt: string;
 }
 
+export interface AgentConfigView {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  model: string;
+  tools: string[];
+  isActive: boolean;
+  /** Null means it is still exactly as onboarding left it. */
+  promptUpdatedBy: string | null;
+  promptUpdatedAt: string | null;
+}
+
+export interface PromptVersion {
+  id: string;
+  systemPrompt: string;
+  replacedBy: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export function getAgentConfig(orgSlug: BusinessSlug): Promise<{
+  config: AgentConfigView;
+  history: PromptVersion[];
+  /** From the server, so the counter and the rule that refuses agree. */
+  limits: { min: number; max: number };
+}> {
+  return request(`/api/organizations/${orgSlug}/agent`);
+}
+
+export function setSystemPrompt(
+  orgSlug: BusinessSlug,
+  systemPrompt: string,
+  note?: string
+): Promise<{ config: AgentConfigView; history: PromptVersion[] }> {
+  return request(`/api/organizations/${orgSlug}/agent/prompt`, {
+    method: "PUT",
+    body: JSON.stringify({ systemPrompt, note }),
+  });
+}
+
 export function getContacts(
   orgSlug: BusinessSlug,
   search?: string

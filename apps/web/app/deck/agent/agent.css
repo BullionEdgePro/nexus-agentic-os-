@@ -1,0 +1,188 @@
+/* How the agent behaves.
+ *
+ * The prompt box is given more room than anything else on this deck, and that
+ * is the design: it is the only text on the platform that a business writes and
+ * every customer then hears. A four-line input would invite four-line thinking.
+ */
+
+.ag-note {
+  margin: 0;
+  color: var(--mist);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+/* Amber, not red. Nothing is wrong — this is how the screen works, and it is
+   said before the typing rather than after the save. */
+.ag-warn {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--warn);
+  background: var(--pebble);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 72ch;
+}
+
+.ag-err {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--crit);
+  background: var(--pebble);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 72ch;
+}
+
+.ag-err-load {
+  padding: 20px;
+}
+
+.ag-saved {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--good);
+  background: var(--pebble);
+  color: var(--ink);
+  font-size: 13px;
+  max-width: 72ch;
+}
+
+.ag-prompt {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.65;
+  padding: 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  color: var(--ink);
+  resize: vertical;
+}
+
+.ag-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ag-count {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--mist);
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-count.over {
+  color: var(--crit);
+}
+
+.ag-note-input {
+  flex: 1 1 240px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.ag-save,
+.ag-revert,
+.ag-restore,
+.ag-history-toggle {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  border-radius: 100px;
+  cursor: pointer;
+}
+
+.ag-save {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--marble);
+}
+
+.ag-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ag-revert,
+.ag-restore {
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--mist);
+}
+
+.ag-meta {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--mist);
+}
+
+.ag-history {
+  border-top: 1px solid var(--hairline);
+  padding-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.ag-history-toggle {
+  justify-self: start;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--slate);
+}
+
+.ag-versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.ag-versions li {
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  display: grid;
+  gap: 8px;
+}
+
+.ag-version-meta {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--mist);
+}
+
+/* The old text at full length, wrapped rather than truncated: an ellipsis in
+   the middle of the sentence you are trying to recover is worse than useless. */
+.ag-version-text {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--slate);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow-y: auto;
+}

@@ -76,6 +76,10 @@ export const TENANT_SCOPED_TABLES = [
   // Added 2026-08-25 with lead labels. Carries an organization_id and is
   // read per business, so it belongs on this list like everything else.
   "lead_labels",
+  // Added 2026-08-25 with the editable system prompt. Carries an
+  // organization_id and holds the previous text of what the agent was told
+  // to be, which is that business's alone.
+  "agent_config_versions",
   // Added 2026-08-19. Each carries an organization_id, so each is tenant data
   // by construction, and none was on this list, on migration 018's array, or on
   // rls-verify's copy — the three places the set is typed out. A table is

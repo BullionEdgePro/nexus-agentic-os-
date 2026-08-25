@@ -63,6 +63,11 @@ const TAB_API = {
   // they are talking to, and the route pins them to their own business.
   "/deck/customers": "/api/organizations/",
   "/deck/team": "/api/organizations/",
+  // What the agent is told to be. Operator-only, and this one is not a
+  // judgement call: an edit takes effect on the next message with no review
+  // step anywhere, and it changes what the COMPANY says. That belongs with
+  // whoever answers for the company rather than everyone who can sign in.
+  "/deck/agent": "/api/organizations/",
   "/deck/knowledge": "/api/organizations/",
   // Addressed per organization, exactly like Knowledge, and reachable by an
   // employee for the same reason: it is that business's own material rather
@@ -124,7 +129,40 @@ function navEntries() {
 const OPERATOR_ONLY = apiOperatorOnlyPrefixes();
 const ENTRIES = navEntries();
 
-const isOperatorOnly = (path) => OPERATOR_ONLY.some((prefix) => path.startsWith(prefix));
+/**
+ * Tabs whose route enforces operator-only IN THE HANDLER, not by middleware.
+ *
+ * The middleware form guards a whole prefix, which is why the derivation
+ * above can read it off index.ts. It cannot be used for a route mounted under
+ * /api/organizations, because that prefix also carries Knowledge, Procedures,
+ * Team and Customers -- all deliberately reachable by an employee. Guarding
+ * the prefix to protect one route would lock the person doing the job out of
+ * four screens that are theirs.
+ *
+ * So the claim is made here and VERIFIED against the route's source below,
+ * rather than trusted. A file listed here that does not actually refuse an
+ * employee fails, which is the property the middleware form gets for free.
+ */
+const HANDLER_OPERATOR_ONLY = {
+  "/deck/agent": "agent.ts",
+};
+
+const isOperatorOnly = (path, href) =>
+  OPERATOR_ONLY.some((prefix) => path.startsWith(prefix)) ||
+  Boolean(href && HANDLER_OPERATOR_ONLY[href]);
+
+test("a route claiming to refuse employees in its handler really does", () => {
+  // Without this the table above is a note. With it, the note is a test.
+  for (const [href, file] of Object.entries(HANDLER_OPERATOR_ONLY)) {
+    const source = read("apps", "api", "src", "routes", file);
+    assert.match(
+      source,
+      /scope.role !== "operator"/,
+      `${href} is listed as operator-only in its handler, but ${file} never checks the role`
+    );
+    assert.match(source, /403/, `${file} checks the role and does not refuse`);
+  }
+});
 
 // ============================================================
 // The tables must describe the real product
@@ -156,7 +194,7 @@ test("every declared endpoint is one the web client really calls", () => {
 
 test("no employee is offered a tab the API will refuse", () => {
   const offered = ENTRIES.filter((entry) => !entry.operatorOnly && !ROLE_BRANCHED.has(entry.href))
-    .filter((entry) => isOperatorOnly(TAB_API[entry.href]));
+    .filter((entry) => isOperatorOnly(TAB_API[entry.href], entry.href));
 
   assert.deepEqual(
     offered.map((entry) => entry.label),
@@ -171,7 +209,7 @@ test("no tab is hidden from employees that they could actually use", () => {
   // the person doing the work, deliberately reachable by employees and narrowed
   // to their business inside the route.
   const hidden = ENTRIES.filter((entry) => entry.operatorOnly)
-    .filter((entry) => !isOperatorOnly(TAB_API[entry.href]));
+    .filter((entry) => !isOperatorOnly(TAB_API[entry.href], entry.href));
 
   assert.deepEqual(
     hidden.map((entry) => entry.label),
@@ -183,7 +221,7 @@ test("no tab is hidden from employees that they could actually use", () => {
 test("the counts match, so neither list can drift alone", () => {
   const railHides = ENTRIES.filter((entry) => entry.operatorOnly).length;
   const apiRefuses = ENTRIES.filter(
-    (entry) => isOperatorOnly(TAB_API[entry.href]) && !ROLE_BRANCHED.has(entry.href)
+    (entry) => isOperatorOnly(TAB_API[entry.href], entry.href) && !ROLE_BRANCHED.has(entry.href)
   ).length;
   assert.equal(railHides, apiRefuses, `rail hides ${railHides}, API refuses ${apiRefuses}`);
 });
