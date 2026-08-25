@@ -524,3 +524,51 @@ export async function assignTask(
   );
   return rows[0] ? toTask(rows[0]) : null;
 }
+
+/**
+ * Move a follow-up's due date, or take it off the calendar entirely.
+ *
+ * ============================================================
+ * WHY THIS EXISTS
+ * ============================================================
+ *
+ * The board (F7) arranges follow-ups by WHEN rather than by state — overdue,
+ * today, later — because that is what a follow-up is. "Call them back at 4" has
+ * a state of `open` whether it is due in an hour or was due last Tuesday, and a
+ * board whose columns were open/done/cancelled would put every live commitment
+ * in one pile and call it a workflow.
+ *
+ * So moving a card between those columns is a real change to a real field, and
+ * this is the writer for it. Until now `tasks.due_at` could only be set when the
+ * task was created: the PATCH route could close, cancel and reassign, and the
+ * most ordinary edit anybody makes to a follow-up — moving it — had no door.
+ *
+ * `null` clears the date rather than rejecting it. A commitment with no date is
+ * a real state the schema already allows and the list already shows; refusing to
+ * return to it would make the board a one-way ratchet.
+ *
+ * `withinOrganization` for the same reason as assignTask and setTaskStatus, and
+ * the reason is written out there: this is reached by a route that takes an id
+ * and no slug, so without it an employee holding any task id could move another
+ * business's commitment and the only trace would be a call that never happened.
+ */
+export async function rescheduleTask(
+  taskId: string,
+  dueAt: string | null,
+  withinOrganization?: string | null
+): Promise<TaskRecord | null> {
+  const { rows } = await getPool().query<TaskRow>(
+    `with updated as (
+       update tasks set due_at = $2::timestamptz, updated_at = now()
+        where id = $1 and ($3::uuid is null or organization_id = $3)
+          -- A closed follow-up has no due date worth arguing about, and moving
+          -- one back onto the calendar without reopening it would put a card in
+          -- a column for work nobody is going to do.
+          and status = 'open'
+        returning *
+     )
+     ${returning("updated")}`,
+    [taskId, dueAt, withinOrganization ?? null]
+  );
+  return rows[0] ? toTask(rows[0]) : null;
+}

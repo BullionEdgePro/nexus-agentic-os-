@@ -66,6 +66,19 @@ export const NAV: NavItem[] = [
     ),
   },
   {
+    // Beside Follow-ups, not instead of it. The list answers "what is owed to
+    // this contact" and the board answers "what is owed today"; they are the
+    // same rows and different questions, and replacing one with the other would
+    // lose the search, the notes and the create form.
+    href: "/deck/board",
+    label: "Workspace",
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M3.5 4.5h5v15h-5zM9.5 4.5h5v9h-5zM15.5 4.5h5v12h-5z" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/tasks",
     label: "Follow-ups",
     icon: (

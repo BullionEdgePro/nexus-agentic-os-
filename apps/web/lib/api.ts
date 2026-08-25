@@ -1086,7 +1086,11 @@ export function createTask(input: {
 
 export function updateTask(
   taskId: string,
-  change: { status?: TaskStatus; employeeId?: string | null }
+  /**
+   * `dueAt` moves a follow-up; `null` clears the date. The board sends this
+   * when a card is dragged between its when-columns.
+   */
+  change: { status?: TaskStatus; employeeId?: string | null; dueAt?: string | null }
 ): Promise<{ task: TaskRecord }> {
   return request(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(change) });
 }

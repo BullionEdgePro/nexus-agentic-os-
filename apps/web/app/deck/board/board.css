@@ -1,0 +1,209 @@
+/* The Workspace board.
+ *
+ * Every colour here is a token from deck.css. Nothing is hardcoded, because a
+ * hardcoded hex is how the palette retarget on 2026-08-21 left 61 rgba literals
+ * behind in fifteen files — and `a-token-that-does-not-exist-renders-as-nothing`
+ * would catch a var() naming a token nobody defined, which is the other half of
+ * the same mistake.
+ */
+
+.bd {
+  display: grid;
+  gap: 18px;
+}
+
+.bd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.bd-head h1 {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.bd-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--slate);
+  max-width: 62ch;
+  line-height: 1.45;
+}
+
+.bd-view {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bd-view label {
+  display: grid;
+  gap: 4px;
+}
+
+.bd-view span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+.bd-view select {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.bd-err {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--crit);
+  background: var(--pebble);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+/* A failed LOAD says so where the columns would be, rather than above four
+   empty ones. Empty columns over a failed fetch read as "no follow-ups". */
+.bd-err-load {
+  padding: 20px;
+}
+
+.bd-note {
+  margin: 0;
+  color: var(--mist);
+  font-size: 13px;
+}
+
+.bd-cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.bd-col {
+  background: var(--marble);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  padding: 12px;
+  min-height: 160px;
+  /* The drop target is the whole column, so the border is what changes rather
+     than a background flash — a column that lights up under the cursor tells
+     you where the card will land before you let go. */
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.bd-col.over {
+  border-color: var(--signal);
+  background: var(--paper);
+}
+
+.bd-col-head h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.bd-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mist);
+  font-weight: 400;
+}
+
+.bd-col-head p {
+  margin: 2px 0 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--mist);
+}
+
+.bd-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.bd-card {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  cursor: grab;
+  box-shadow: var(--lift);
+}
+
+.bd-card:active {
+  cursor: grabbing;
+}
+
+/* Closed work is present and visibly not draggable: the cursor says so before
+   somebody tries, rather than a drag that silently does nothing. */
+.bd-card.closed {
+  cursor: default;
+  box-shadow: none;
+  background: var(--pebble);
+  color: var(--slate);
+}
+
+.bd-title {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.bd-card.closed .bd-title {
+  color: var(--slate);
+}
+
+.bd-meta {
+  margin: 6px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--mist);
+}
+
+.bd-empty {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 6px 2px;
+}
+
+@media (max-width: 900px) {
+  .bd-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .bd-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

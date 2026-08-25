@@ -45,6 +45,13 @@ const TAB_API = {
   "/inbox": "/api/organizations/",
   "/deck/operators": "/api/operators",
   "/deck/tasks": "/api/tasks",
+  // The Workspace board. Same endpoint as the list beside it, because it is
+  // the same rows asked a different question -- what is owed TODAY rather
+  // than what is owed to this contact. Reachable by an employee for the same
+  // reason /deck/tasks is: their own commitments are not management
+  // information about them, and /api/tasks already restricts a non-operator
+  // to their own business.
+  "/deck/board": "/api/tasks",
   "/deck/bookings": "/api/bookings",
   "/deck/team": "/api/organizations/",
   "/deck/knowledge": "/api/organizations/",

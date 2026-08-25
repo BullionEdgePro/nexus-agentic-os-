@@ -7,6 +7,7 @@ import {
   completeTask,
   setTaskStatus,
   assignTask,
+  rescheduleTask,
   findOrganizationBySlug,
   type TaskStatus,
 } from "@nexus/db";
@@ -190,6 +191,24 @@ tasksRoute.patch("/:taskId", async (c) => {
         typeof body.employeeId === "string" && body.employeeId ? body.employeeId : null,
         within
       );
+    }
+
+    // Moving a follow-up, which the board does when a card is dragged between
+    // its when-columns. `null` clears the date rather than being refused: a
+    // commitment with no date is a state the schema allows and the list already
+    // shows, and refusing to return to it would make the board a one-way ratchet.
+    if ("dueAt" in body) {
+      let dueAt: string | null = null;
+      if (typeof body.dueAt === "string" && body.dueAt) {
+        const parsed = new Date(body.dueAt);
+        if (Number.isNaN(parsed.getTime())) {
+          return c.json({ error: "That is not a date the calendar recognises." }, 400);
+        }
+        dueAt = parsed.toISOString();
+      } else if (body.dueAt !== null) {
+        return c.json({ error: "A due date must be a date, or null to clear it." }, 400);
+      }
+      task = await rescheduleTask(taskId, dueAt, within);
     }
 
     // Null from every branch means the row was not visible or was already in
