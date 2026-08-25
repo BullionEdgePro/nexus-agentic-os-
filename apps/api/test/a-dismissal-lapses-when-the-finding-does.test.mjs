@@ -23,6 +23,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import {
+  DISMISSAL_HORIZONS as HORIZONS,
+  DEFAULT_DISMISSAL_HORIZON,
+  dismissalHorizon,
+} from "@nexus/db";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..", "..");
@@ -46,34 +51,162 @@ function upsertSet() {
   return DB.slice(from, to);
 }
 
+/**
+ * The condition guarding one field of the upsert's `do update set`.
+ *
+ * Plain string work, no regex. The version this replaced matched a pattern that
+ * required `then` to follow the predicate on the same line, and it broke the
+ * moment the predicate gained a second clause -- correctly, which is how that
+ * change got read rather than landing quietly.
+ */
+function guardOf(field) {
+  const body = upsertSet();
+  const NL = String.fromCharCode(10);
+  const at = body.indexOf(field + " = case");
+  assert.ok(at > -1, `${field} is not written as a case in the upsert`);
+  const start = at + (field + " = case").length;
+  const end = body.indexOf("end", start);
+  assert.ok(end > start, `${field}'s case is never closed`);
+  const flat = body
+    .slice(start, end)
+    .split(NL)
+    .map((line) => line.trim())
+    // Comments are where the reasoning lives, not the rule. A test that read
+    // them would pass on a sentence describing a predicate that is not there --
+    // the single most repeated defect on this repository's own register.
+    .filter((line) => line && !line.startsWith("--"))
+    .join(" ")
+    .split("  ")
+    .join(" ");
+
+  // The WHEN only. The else branch names the field being preserved, so it
+  // differs by definition and comparing it would make every field look like it
+  // had drifted.
+  const then = flat.indexOf(" then ");
+  assert.ok(then > -1, `${field}'s case has no then`);
+  return { when: flat.slice(0, then).trim(), then: flat.slice(then + 6).split(" else ")[0].trim() };
+}
+
 test("a dismissal lapses under the same predicate that resets the age", () => {
   // THIS IS THE TEST THIS FILE EXISTS FOR.
   //
   // reconcileFindings already resets first_seen_at when a finding returns from
   // resolved, because a problem that came back yesterday must not be reported
-  // as three weeks old. A dismissal has exactly that lifetime. Tying them to
-  // the same predicate is what makes them impossible to drift apart -- and if
-  // somebody edits one branch and not the other, the result is a permanent
-  // mute that no other test would notice.
+  // as three weeks old. A dismissal has exactly that lifetime.
   const body = upsertSet();
-
-  const branches = [...body.matchAll(/(\w+)\s*=\s*case\s*\n\s*--[\s\S]*?when operator_findings\.resolved_at is not null then (\S+)/g)]
-    .map((m) => [m[1], m[2]]);
-  const simple = [...body.matchAll(/(\w+)\s*=\s*case\s*\n\s*when operator_findings\.resolved_at is not null then (\S+)/g)]
-    .map((m) => [m[1], m[2]]);
-  const all = new Map([...branches, ...simple]);
-
-  assert.equal(
-    all.get("first_seen_at"),
-    "now()",
+  assert.ok(
+    body.includes("first_seen_at = case"),
     "the age no longer resets when a finding returns -- this test's premise is gone"
   );
-  assert.equal(
-    all.get("dismissed_at"),
-    "null",
-    "a dismissal must lapse when the finding returns, or accepting it once mutes it forever"
+  const age = guardOf("first_seen_at");
+  assert.ok(age.when.includes("resolved_at is not null"), "the age no longer resets on return");
+  assert.equal(age.then, "now()", "the age no longer resets when a finding returns");
+
+  // And the four fields of an acceptance share ONE predicate, whatever it is.
+  // Split them and a row survives that is dismissed by nobody, or accepted with
+  // no end -- worse than either state alone, because nothing reports it.
+  const fields = ["dismissed_at", "dismissed_by", "dismissed_reason", "dismissed_until"];
+  const first = guardOf(fields[0]).when;
+  for (const field of fields) {
+    const guard = guardOf(field);
+    assert.equal(
+      guard.when,
+      first,
+      `${field} lapses under a different condition than ${fields[0]} -- they must not drift apart`
+    );
+    assert.equal(guard.then, "null", `${field} does not clear when the acceptance ends`);
+  }
+});
+
+test("an acceptance ends on a horizon as well as on resolution", () => {
+  // THE GAP THIS FILE'S OWN HEADER PREDICTED AND DID NOT CLOSE. Resolution is
+  // the right lapse for every condition that ENDS. For one that stays
+  // continuously true there is no resolution, that branch never fires, and the
+  // acceptance is exactly the "permanent silent mute that looks like a working
+  // feature" written at the top of this file.
+  //
+  // Production held four of them on 2026-08-25. The urgent one had been
+  // accepted at roughly 118 hours of a customer waiting for a reply; it read
+  // 142.3 hours a day later, still climbing, and could never come back.
+  const { when } = guardOf("dismissed_at");
+  assert.ok(
+    when.includes("resolved_at is not null"),
+    "an acceptance must still lapse when the finding resolves and returns"
   );
-  assert.equal(all.get("dismissed_by"), "null", "the acceptor must be cleared with the acceptance");
+  assert.ok(
+    when.includes("dismissed_until <= now()"),
+    "an acceptance that outlives its horizon is a permanent mute -- the whole point of 065"
+  );
+});
+
+test("forever is not on the menu", () => {
+  // Every length offered has an end. The failure this closes was not somebody
+  // choosing badly, it was there being no choice at all -- so the fix is not a
+  // longer default, it is that no option silences anything permanently.
+  assert.ok(HORIZONS.length >= 2, "a menu with one entry is not a choice");
+  for (const h of HORIZONS) {
+    assert.ok(
+      Number.isFinite(h.hours) && h.hours > 0,
+      `"${h.key}" does not describe a finite length of time`
+    );
+    assert.ok(h.label && h.describes, `"${h.key}" says nothing about what it means`);
+  }
+  const forever = HORIZONS.find((h) => /forever|never|permanent|always/i.test(h.key + h.label));
+  assert.equal(forever, undefined, "a length that never ends is back on the menu");
+});
+
+test("a length the server does not know is refused, not defaulted", () => {
+  // Quietly turning an unknown key into the default would silence a finding for
+  // a length nobody chose, and would hide a browser and a server that disagree
+  // about the menu.
+  assert.ok("reason" in dismissalHorizon("fortnight"));
+  assert.ok("reason" in dismissalHorizon(""));
+  assert.ok("reason" in dismissalHorizon(undefined));
+  assert.ok("reason" in dismissalHorizon(999));
+  assert.ok(
+    "horizon" in dismissalHorizon(DEFAULT_DISMISSAL_HORIZON),
+    "the default is not itself on the menu"
+  );
+});
+
+test("the writer builds its interval from a number, never from the request", () => {
+  // make_interval(hours => $4::int), so the key never reaches SQL -- only the
+  // hours the rules resolved it to.
+  const at = DB.indexOf("export async function setFindingDismissal");
+  assert.ok(at > -1, "the dismissal writer is gone");
+  const fn = DB.slice(at, DB.indexOf("return (rowCount", at));
+  assert.ok(fn.includes("make_interval(hours =>"), "the horizon is not applied by the writer");
+  assert.ok(
+    !fn.includes("interval '" + "\" +"),
+    "an interval must not be assembled from a caller's string"
+  );
+});
+
+test("the screen's fallback menu matches the server's", () => {
+  // The page seeds its buttons so Accept works before the fetch returns. A
+  // stale copy would offer a key the server refuses, which is an Accept button
+  // that fails rather than one that is merely wrong.
+  for (const h of HORIZONS) {
+    assert.ok(PAGE.includes('key: "' + h.key + '"'), `the deck's fallback menu is missing "${h.key}"`);
+  }
+  const fallback = PAGE.slice(PAGE.indexOf("FALLBACK_HORIZONS"), PAGE.indexOf("const DEFAULT_HORIZON"));
+  assert.ok(fallback.length > 100, "the deck's fallback menu could not be found to check");
+  for (const part of fallback.split('key: "').slice(1)) {
+    const key = part.slice(0, part.indexOf('"'));
+    assert.ok(
+      HORIZONS.some((h) => h.key === key),
+      `the deck offers "${key}", which the server would refuse`
+    );
+  }
+});
+
+test("withdrawing an acceptance clears its end date too", () => {
+  // Restore passes null everywhere. A row left with a dismissed_until and no
+  // dismissed_at is one the sweep would try to lapse forever.
+  assert.ok(
+    ROUTE.includes("handleDismissal(c, null, null, null)"),
+    "restore no longer clears the horizon"
+  );
 });
 
 test("the sweep can clear a dismissal and can never create one", () => {

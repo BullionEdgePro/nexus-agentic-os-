@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getFindings,
+  getDismissalHorizons,
   dismissFinding,
   restoreFinding,
+  type DismissalHorizonOption,
   type OperatorFinding,
   type OperatorInfo, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
@@ -72,6 +74,21 @@ function describeSweep(lastSweptAt: string | null): string {
   return `Last checked ${hours} hour${hours === 1 ? "" : "s"} ago.`;
 }
 
+/**
+ * What the buttons say before the server has answered.
+ *
+ * Kept in step with DISMISSAL_HORIZONS by a test rather than by care -- the
+ * server refuses a key it does not know, so a stale copy here would be an
+ * Accept button that fails.
+ */
+const FALLBACK_HORIZONS: DismissalHorizonOption[] = [
+  { key: "day", label: "for a day", hours: 24, describes: "It comes back tomorrow if it is still true." },
+  { key: "week", label: "for a week", hours: 168, describes: "Long enough to get to it, short enough not to forget it." },
+  { key: "month", label: "for a month", hours: 720, describes: "For something already decided. It is still reviewed, just not soon." },
+];
+
+const DEFAULT_HORIZON = "week";
+
 export default function OperatorsPage() {
   const [findings, setFindings] = useState<OperatorFinding[]>([]);
   const [operators, setOperators] = useState<OperatorInfo[]>([]);
@@ -80,6 +97,17 @@ export default function OperatorsPage() {
   const [busy, setBusy] = useState<Set<string>>(new Set());
   /** Whether the accepted list is expanded. Collapsed by default, never hidden. */
   const [showDismissed, setShowDismissed] = useState(false);
+  /** The finding whose "how long for" choice is open, if any. */
+  const [choosing, setChoosing] = useState<string | null>(null);
+  /**
+   * The lengths on offer, from the server.
+   *
+   * Seeded with the same three the server has so the button works on the first
+   * paint and if the fetch fails -- an Accept button that does nothing because
+   * a menu did not arrive is worse than one offering a length the server might
+   * refuse, and it will not refuse these.
+   */
+  const [horizons, setHorizons] = useState<DismissalHorizonOption[]>(FALLBACK_HORIZONS);
   const [sweep, setSweep] = useState<{
     lastSweptAt: string | null;
     stalled: boolean;
@@ -157,15 +185,24 @@ export default function OperatorsPage() {
    * A failure sets `error`, not `loadError`: the screen is still correct, and
    * blanking it would lose the finding the message is about.
    */
+  useEffect(() => {
+    getDismissalHorizons()
+      .then((data) => {
+        if (data.horizons.length > 0) setHorizons(data.horizons);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const act = useCallback(
-    async (finding: OperatorFinding) => {
+    async (finding: OperatorFinding, forHow = DEFAULT_HORIZON) => {
       const id = finding.id;
       if (busy.has(id)) return;
       setBusy((prev) => new Set(prev).add(id));
       setError("");
       try {
         if (finding.dismissedAt) await restoreFinding(id);
-        else await dismissFinding(id);
+        else await dismissFinding(id, forHow);
+        setChoosing(null);
         await load(business);
       } catch (err) {
         setError(readableError(err));
@@ -338,15 +375,46 @@ export default function OperatorsPage() {
                       true, stays reconciled, stays counted, and comes back
                       un-accepted if it lapses and returns. Accept is the only
                       one of the three that describes that. */}
-                  <button
-                    type="button"
-                    className="op-accept"
-                    onClick={() => void act(finding)}
-                    disabled={busy.has(finding.id)}
-                    title="Still true, but you have seen it and it does not need action"
-                  >
-                    {busy.has(finding.id) ? "…" : "Accept"}
-                  </button>
+                  {/* ACCEPTING ASKS HOW LONG FOR, and the second click is
+                      the feature rather than friction. Until 2026-08-25 this
+                      was one button and the acceptance was forever: production
+                      held an urgent finding accepted at 118 hours of a customer
+                      waiting, which read 142 a day later and could never come
+                      back, because the only thing that cleared an acceptance
+                      was the finding resolving and it never did. */}
+                  {choosing === finding.id ? (
+                    <div className="op-forhow">
+                      {horizons.map((h) => (
+                        <button
+                          key={h.key}
+                          type="button"
+                          className="op-forhow-opt"
+                          onClick={() => void act(finding, h.key)}
+                          disabled={busy.has(finding.id)}
+                          title={h.describes}
+                        >
+                          {h.label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="op-forhow-cancel"
+                        onClick={() => setChoosing(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="op-accept"
+                      onClick={() => setChoosing(finding.id)}
+                      disabled={busy.has(finding.id)}
+                      title="Still true, but you have seen it and it does not need action yet"
+                    >
+                      {busy.has(finding.id) ? "…" : "Accept"}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -389,6 +457,10 @@ export default function OperatorsPage() {
                         {finding.dismissedBy ? (
                           <span className="op-by">accepted by {finding.dismissedBy}</span>
                         ) : null}
+                        {/* An acceptance with a visible end. Without this the
+                            section says four things are accepted and gives no
+                            way to tell which of them is about to return. */}
+                        <span className="op-until">{comesBack(finding.dismissedUntil)}</span>
                       </p>
                     </div>
                     <div className="op-side">
@@ -446,6 +518,26 @@ export default function OperatorsPage() {
 }
 
 /** Rough age. Precision past "days" is not something anyone acts on differently. */
+/**
+ * When an acceptance runs out, said forwards.
+ *
+ * "comes back in 6d" rather than a date, matching `since` above: the reader is
+ * deciding whether to act now, and a date makes them do the arithmetic. Null is
+ * a row from before horizons existed that migration 065 has not reached; it says
+ * so rather than implying an end it cannot name.
+ */
+function comesBack(iso: string | null): string {
+  if (!iso) return "no end recorded";
+  const until = new Date(iso).getTime();
+  if (Number.isNaN(until)) return "no end recorded";
+  const minutes = Math.round((until - Date.now()) / 60000);
+  if (minutes <= 0) return "comes back on the next check";
+  if (minutes < 60) return `comes back in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `comes back in ${hours}h`;
+  return `comes back in ${Math.round(hours / 24)}d`;
+}
+
 function since(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "an unknown time";

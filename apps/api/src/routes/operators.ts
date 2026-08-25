@@ -9,6 +9,9 @@ import {
   findingScope,
   setFindingDismissal,
   withServingTenant,
+  DISMISSAL_HORIZONS,
+  DEFAULT_DISMISSAL_HORIZON,
+  dismissalHorizon,
 } from "@nexus/db";
 import { isJobStalled } from "@nexus/shared";
 import { OPERATORS } from "../services/operators.js";
@@ -148,7 +151,12 @@ operatorsRoute.get("/", async (c) => {
  * the reconciler reads as a transition — and the alert dispatcher would tell
  * somebody about a finding they dismissed ten minutes earlier.
  */
-async function handleDismissal(c: Context, by: string | null, reason: string | null) {
+async function handleDismissal(
+  c: Context,
+  by: string | null,
+  reason: string | null,
+  horizonHours: number | null
+) {
   const scope = scopeOf(c);
   // Typed as possibly-undefined because Context is not parameterised on the
   // path here. It cannot actually be absent -- both routes declare :id -- but
@@ -166,7 +174,7 @@ async function handleDismissal(c: Context, by: string | null, reason: string | n
   if (!entitled) return c.json({ error: "Finding not found" }, 404);
 
   const changed = await withServingTenant(finding.organizationId, () =>
-    setFindingDismissal(findingId, by, reason)
+    setFindingDismissal(findingId, by, reason, horizonHours)
   );
 
   // False means the finding was resolved between the read above and the write
@@ -183,20 +191,36 @@ async function handleDismissal(c: Context, by: string | null, reason: string | n
   return c.json({ ok: true });
 }
 
+/** The lengths on offer, from the rules themselves rather than typed twice. */
+operatorsRoute.get("/dismissal-horizons", (c) => c.json({ horizons: DISMISSAL_HORIZONS }));
+
 operatorsRoute.post("/findings/:id/dismiss", async (c) => {
   const scope = scopeOf(c);
   // Optional and usually absent. Read defensively: this is a browser body.
   let reason: string | null = null;
+  let forHow: unknown = DEFAULT_DISMISSAL_HORIZON;
   try {
-    const body = (await c.req.json()) as { reason?: unknown };
+    const body = (await c.req.json()) as { reason?: unknown; for?: unknown };
     if (typeof body?.reason === "string" && body.reason.trim()) {
       reason = body.reason.trim().slice(0, 500);
     }
+    // Absent means the default, which is the middle one. A body that NAMES a
+    // length this does not know is a different thing entirely -- the browser
+    // and the server disagreeing about the menu -- and is refused rather than
+    // quietly turned into the default, which would silence the finding for a
+    // length of time nobody chose.
+    if (body && "for" in body) forHow = body.for;
   } catch {
     // No body is the normal case.
   }
-  return handleDismissal(c, scope.sub, reason);
+
+  const chosen = dismissalHorizon(forHow);
+  if ("reason" in chosen) return c.json({ error: chosen.reason }, 400);
+
+  return handleDismissal(c, scope.sub, reason, chosen.horizon.hours);
 });
 
-operatorsRoute.post("/findings/:id/restore", async (c) => handleDismissal(c, null, null));
+// Withdrawing an acceptance has no length: it clears the end date along with
+// everything else, which the writer does under the same null test.
+operatorsRoute.post("/findings/:id/restore", async (c) => handleDismissal(c, null, null, null));
 

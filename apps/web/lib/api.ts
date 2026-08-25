@@ -968,6 +968,8 @@ export interface OperatorFinding {
   dismissedAt: string | null;
   dismissedBy: string | null;
   dismissedReason: string | null;
+  /** When the acceptance runs out and the finding comes back if still true. */
+  dismissedUntil: string | null;
 }
 
 export interface OperatorInfo {
@@ -1014,12 +1016,37 @@ export function getFindings(business?: BusinessSlug | ""): Promise<{
  * being true is still retracted normally, and one that comes back arrives
  * un-accepted because it is a new occurrence.
  */
-export function dismissFinding(id: string, reason?: string): Promise<{ ok: true }> {
+export function dismissFinding(
+  id: string,
+  forHow: string,
+  reason?: string
+): Promise<{ ok: true }> {
   return request(`/api/operators/findings/${encodeURIComponent(id)}/dismiss`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(reason ? { reason } : {}),
+    // The length is always sent. The server has a default, and relying on it
+    // from here would mean the screen does not know how long it just silenced
+    // something for -- which is the thing this whole change is about.
+    body: JSON.stringify(reason ? { for: forHow, reason } : { for: forHow }),
   });
+}
+
+export interface DismissalHorizonOption {
+  key: string;
+  label: string;
+  hours: number;
+  describes: string;
+}
+
+/**
+ * The lengths on offer.
+ *
+ * Fetched rather than written here, for the same reason the automation menu is:
+ * the server refuses a length it does not know, so a screen offering one from
+ * memory is a screen that can be told no.
+ */
+export function getDismissalHorizons(): Promise<{ horizons: DismissalHorizonOption[] }> {
+  return request("/api/operators/dismissal-horizons");
 }
 
 export function restoreFinding(id: string): Promise<{ ok: true }> {

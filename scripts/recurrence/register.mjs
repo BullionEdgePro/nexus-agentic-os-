@@ -408,8 +408,20 @@ export const CLASSES = [
       "Writing a file through a quoted heredoc removes one backslash level. Regexes arrive " +
       "with `\\s` collapsed to `s` and `\\1` collapsed to a literal control character. The " +
       "file is written successfully and the program is silently wrong.",
-    instances: 8,
+    instances: 9,
     evidence: [
+      {
+        sha: null,
+        note:
+          "the ninth, 2026-08-25, writing the horizon tests for migration 065. A JS file " +
+          "authored through a quoted heredoc, itself building the test file from a template " +
+          "literal, so TWO levels were eaten: a split on backslash-n arrived as a split on a " +
+          "literal newline and the file would not parse. Loud rather than silent this time, " +
+          "which is luck -- the same loss in the regexes beside it would have compiled fine " +
+          "and matched nothing. Fixed by abandoning the shell path entirely and writing the " +
+          "file with the editing tool, and by using String.fromCharCode(10) where a newline " +
+          "was genuinely needed",
+      },
       {
         sha: null,
         note:

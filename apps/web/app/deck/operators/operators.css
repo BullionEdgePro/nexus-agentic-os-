@@ -256,3 +256,53 @@
   font-size: 12px;
   color: var(--slate);
 }
+
+/* The "how long for" choice. Sits where the Accept button was, so the row does
+   not jump when it opens -- a list that reflows under the cursor is one where
+   the wrong finding gets accepted. */
+.op-forhow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.op-forhow-opt,
+.op-forhow-cancel {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: var(--r);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.op-forhow-opt {
+  border: 1px solid var(--hairline-strong);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.op-forhow-opt:hover:not(:disabled) {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.op-forhow-opt:disabled { opacity: 0.45; cursor: default; }
+
+.op-forhow-cancel {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mist);
+}
+
+/* When it comes back. Same weight as "accepted by", because the two together
+   are the whole statement: somebody accepted this, and it ends. */
+.op-until {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--mist);
+}

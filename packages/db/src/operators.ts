@@ -54,6 +54,8 @@ export interface OperatorFinding {
   dismissedBy: string | null;
   /** Why, if they said. Optional, and usually empty. */
   dismissedReason: string | null;
+  /** When the acceptance runs out. Shown, so an acceptance has a visible end. */
+  dismissedUntil: string | null;
 }
 
 interface FindingRow {
@@ -73,6 +75,7 @@ interface FindingRow {
   dismissed_at: string | null;
   dismissed_by: string | null;
   dismissed_reason: string | null;
+  dismissed_until: string | null;
 }
 
 const toFinding = (row: FindingRow): OperatorFinding => ({
@@ -92,6 +95,7 @@ const toFinding = (row: FindingRow): OperatorFinding => ({
   dismissedAt: row.dismissed_at,
   dismissedBy: row.dismissed_by,
   dismissedReason: row.dismissed_reason,
+  dismissedUntil: row.dismissed_until,
 });
 
 export interface ReconcileResult {
@@ -222,17 +226,37 @@ export async function reconcileFindings(
          -- Note this is the ONLY write to dismissed_at in the sweep path, and
          -- it only ever writes NULL. An operator can retract a finding; it can
          -- never accept one. That is a person's act by definition.
+         -- THE SECOND WAY AN ACCEPTANCE ENDS, added 2026-08-25 because the
+         -- first way is not enough on its own. Resolution clears it for
+         -- everything that ENDS. For a condition that stays continuously true
+         -- there is no resolution, so that branch never fires and the
+         -- acceptance is permanent -- the exact "silent mute that looks like a
+         -- working feature" this file's test warned about. Production had four
+         -- of them, one an urgent finding accepted at 118 hours of a customer
+         -- waiting and unable to come back at 142.
+         --
+         -- All four branches share the predicate, for the same reason the
+         -- original two did: split them and one field outlives the others,
+         -- which is a row that is dismissed by nobody or accepted with no end.
          dismissed_at = case
-                          when operator_findings.resolved_at is not null then null
+                          when operator_findings.resolved_at is not null
+                            or operator_findings.dismissed_until <= now() then null
                           else operator_findings.dismissed_at
                         end,
          dismissed_by = case
-                          when operator_findings.resolved_at is not null then null
+                          when operator_findings.resolved_at is not null
+                            or operator_findings.dismissed_until <= now() then null
                           else operator_findings.dismissed_by
                         end,
          dismissed_reason = case
-                          when operator_findings.resolved_at is not null then null
+                          when operator_findings.resolved_at is not null
+                            or operator_findings.dismissed_until <= now() then null
                           else operator_findings.dismissed_reason
+                        end,
+         dismissed_until = case
+                          when operator_findings.resolved_at is not null
+                            or operator_findings.dismissed_until <= now() then null
+                          else operator_findings.dismissed_until
                         end,
          resolved_at  = null,
          updated_at   = now()
@@ -313,7 +337,7 @@ const FINDING_SELECT = `
          f.operator, f.severity, f.title, f.detail,
          f.subject_kind, f.subject_id,
          f.first_seen_at, f.last_seen_at, f.resolved_at,
-         f.dismissed_at, f.dismissed_by, f.dismissed_reason
+         f.dismissed_at, f.dismissed_by, f.dismissed_reason, f.dismissed_until
     from operator_findings f
     join organizations o on o.id = ${FINDING_BUSINESS}
 `;
@@ -423,17 +447,26 @@ export async function countOpenFindings(
 export async function setFindingDismissal(
   findingId: string,
   by: string | null,
-  reason: string | null
+  reason: string | null,
+  horizonHours: number | null
 ): Promise<boolean> {
+  // The interval is built from a NUMBER of hours, never from a string handed in
+  // by a caller. `dismissalHorizon` is what turns a key into that number and it
+  // refuses anything not on the menu, so there is no path from a request body
+  // to this expression.
   const { rowCount } = await getPool().query(
     `update operator_findings
         set dismissed_at     = case when $2::text is null then null else now() end,
             dismissed_by     = $2,
             dismissed_reason = case when $2::text is null then null else $3 end,
+            dismissed_until  = case
+                                 when $2::text is null then null
+                                 else now() + make_interval(hours => $4::int)
+                               end,
             updated_at       = now()
       where id = $1
         and resolved_at is null`,
-    [findingId, by, reason]
+    [findingId, by, reason, horizonHours]
   );
   return (rowCount ?? 0) > 0;
 }
