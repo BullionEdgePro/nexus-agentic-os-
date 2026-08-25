@@ -29,6 +29,7 @@ import {
   listCalendarsForSync,
   recordCalendarError,
   replaceBusy,
+  withAllTenants,
   withTenant,
 } from "@nexus/db";
 import { assertPublicUrl, UnsafeUrlError } from "@nexus/knowledge";
@@ -88,7 +89,18 @@ async function fetchIcs(rawUrl: string): Promise<string> {
 
 /** Every connected calendar. One person's failure must not stop the rest. */
 export async function syncAllCalendars(): Promise<CalendarSyncResult> {
-  const calendars = await listCalendarsForSync();
+  // withAllTenants, and the reason is the whole point of this sweep: it reads
+  // every business's calendars in one pass, which is exactly the deliberate
+  // cross-tenant read that wrapper exists to make declarable.
+  //
+  // Left unwrapped for one deploy on 2026-08-25 and DB_TENANT_ASSERT=strict
+  // threw on the first cycle, which is the assert doing its job -- without it
+  // this would have returned zero rows under RLS and reported a clean sync of
+  // nothing, forever, with every diary silently empty.
+  const calendars = await withAllTenants(
+    "calendar sync reads every business's connected feeds in one pass",
+    () => listCalendarsForSync()
+  );
   const result: CalendarSyncResult = { synced: 0, failed: 0, busyBlocks: 0, unsupported: 0 };
 
   const from = new Date();

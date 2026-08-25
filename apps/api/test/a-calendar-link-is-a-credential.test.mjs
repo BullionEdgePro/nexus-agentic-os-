@@ -250,6 +250,37 @@ test("the sync is a scheduled job with a tolerance, so its silence is noticed", 
   );
 });
 
+test("every database read in the sync declares which tenants it is for", () => {
+  // FOUND IN PRODUCTION ON THE FIRST CYCLE, 2026-08-25. listCalendarsForSync
+  // reads every business's feeds by design and was wrapped in nothing, so
+  // DB_TENANT_ASSERT=strict threw — which is the assert doing its job. Without
+  // it the query would have returned zero rows under RLS and this would have
+  // reported a clean sync of nothing, forever, with every diary silently empty.
+  //
+  // The class, not the instance: EVERY db call in this file must sit inside a
+  // wrapper, so the next one added is caught by the same assertion.
+  const calls = ["listCalendarsForSync(", "replaceBusy(", "recordCalendarError("];
+  for (const call of calls) {
+    const at = SYNC.indexOf(call);
+    assert.ok(at > -1, `${call} is gone from the sync`);
+    // Look backwards for the nearest wrapper. Both are legitimate here and they
+    // mean different things: withTenant for one business's rows, withAllTenants
+    // for the sweep that reads them all.
+    const before = SYNC.slice(Math.max(0, at - 300), at);
+    assert.ok(
+      before.includes("withAllTenants(") || before.includes("withTenant("),
+      `${call} runs with no tenant context — under RLS it returns zero rows rather than an error`
+    );
+  }
+
+  // And the cross-tenant one says WHY in words, which is the whole reason that
+  // wrapper takes a reason.
+  assert.ok(
+    SYNC.includes('withAllTenants(' ) && SYNC.includes("calendar sync reads every business"),
+    "the deliberate cross-tenant read must state its reason"
+  );
+});
+
 test("hostOf never throws on something already in the database", () => {
   assert.equal(hostOf("https://calendar.google.com/calendar/ical/x/basic.ics"), "calendar.google.com");
   assert.equal(hostOf("nonsense"), "an unreadable address");
