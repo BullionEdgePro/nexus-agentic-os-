@@ -16,6 +16,8 @@ export interface RecordInboundMessageResult {
   conversationId: string;
   contactId: string;
   messageId: string | null; // null when this wa_message_id was already recorded (webhook retry)
+  /** On a retry, the message already stored and when it arrived. Null on a first delivery. */
+  replayOf: { messageId: string; recordedAt: string } | null;
   isHumanHandoff: boolean;
   aiPausedUntil: string | null;
 }
@@ -89,10 +91,32 @@ export async function recordInboundMessage(
       ]
     );
 
+    // WHICH MESSAGE THE REPLAY IS OF, and when it first arrived.
+    //
+    // `do nothing` returns no row, so on a conflict the caller used to learn
+    // only that this had been seen before. That was enough while "seen before"
+    // and "already answered" were the same thing, and they are not: if the
+    // worker died between this insert and the reply going out, the retry finds
+    // the row, concludes replay, and the customer is never answered at all.
+    //
+    // Read only on the replay path, which is rare, so the happy path pays
+    // nothing for it.
+    let replayOf: { messageId: string; recordedAt: string } | null = null;
+    if (!messageResult.rows[0]) {
+      const existing = await db.query<{ id: string; created_at: string }>(
+        `select id, created_at from messages where wa_message_id = $1 limit 1`,
+        [input.waMessageId]
+      );
+      if (existing.rows[0]) {
+        replayOf = { messageId: existing.rows[0].id, recordedAt: existing.rows[0].created_at };
+      }
+    }
+
     return {
       conversationId,
       contactId,
       messageId: messageResult.rows[0]?.id ?? null,
+      replayOf,
       isHumanHandoff,
       aiPausedUntil,
     };

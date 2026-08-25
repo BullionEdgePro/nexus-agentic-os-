@@ -109,3 +109,31 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
     })),
   };
 }
+
+/**
+ * Has anything been recorded for this conversation since a given moment?
+ *
+ * "Accounted for" rather than "replied to", deliberately. Since migration 049
+ * every path through the processor writes a metric row — including the
+ * deliberate silences, where a person holds the conversation and the agent
+ * correctly says nothing. Asking whether a REPLY went out would re-answer those.
+ *
+ * Used on the webhook-replay path to tell two situations apart that used to be
+ * one: Meta redelivering a message already handled, and a retry of a job that
+ * died before it handled anything. The first must return; the second must not.
+ *
+ * The metric rows carry the NUMBER OWNER's organization_id — every
+ * recordConversationMetric call in the processor passes `organization.id` — and
+ * this is called from inside that same owner's transaction, so it needs no
+ * widening. Said out loud because a plain read on this path is how eleven other
+ * defects started.
+ */
+export async function wasAccountedFor(conversationId: string, since: string): Promise<boolean> {
+  const { rows } = await getPool().query<{ ok: boolean }>(
+    `select true as ok from conversation_metrics
+      where conversation_id = $1 and recorded_at >= $2::timestamptz
+      limit 1`,
+    [conversationId, since]
+  );
+  return rows.length > 0;
+}

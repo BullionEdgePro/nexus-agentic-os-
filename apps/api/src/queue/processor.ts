@@ -30,6 +30,7 @@ import {
   withTenant,
   withServingTenant,
   getActivePhrase,
+  wasAccountedFor,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import type { PhraseMoment } from "@nexus/shared";
@@ -455,27 +456,68 @@ async function answerOneMessage(
     rawPayload: message,
   });
   // `isHumanHandoff` is reassigned below when the flag turns out to be stale.
-  const { conversationId, contactId, messageId, aiPausedUntil } = inboundResult;
+  const { conversationId, contactId, messageId, replayOf, aiPausedUntil } = inboundResult;
   let { isHumanHandoff } = inboundResult;
 
+  // SEEN BEFORE IS NOT THE SAME AS ANSWERED, and treating them as one thing
+  // dropped customer messages.
+  //
+  // `recordInboundMessage` returns a null messageId on exactly one condition:
+  // `on conflict (wa_message_id) do nothing` matched, so this row was already
+  // stored. That happens for two very different reasons.
+  //
+  //   Meta redelivered something already handled. Return: there is no customer
+  //   waiting, and logging every retry would be volume without information.
+  //
+  //   A previous attempt stored the row and then DIED before answering — an
+  //   OOM, a crash, or a deploy landing mid-reply. The row exists and nothing
+  //   was ever sent. Returning here is how the customer gets silence for ever
+  //   while the job reports success, and only customer-waiting notices, hours
+  //   later.
+  //
+  // The second used to be indistinguishable from the first. It is now asked:
+  // has ANYTHING been recorded for this conversation since that message
+  // arrived? Every path through this processor writes a metric row, including
+  // the deliberate silences, so "accounted for" is the honest question and
+  // "did a reply go out" would re-answer a conversation a person has taken.
+  //
+  // FAILING TOWARDS SILENCE, not towards noise: if the check itself throws, it
+  // is treated as answered and the job returns. Re-sending on a failed lookup
+  // would mean a customer hearing the same thing twice because a query timed
+  // out, and this platform can already see an unanswered customer — that is
+  // what customer-waiting is for. It cannot see one who was answered twice.
+  const effectiveMessageId = messageId ?? replayOf?.messageId ?? null;
   if (!messageId) {
-    // SILENT-RETURN-OK: a webhook retry is not a message.
+    const answered = replayOf
+      ? await wasAccountedFor(conversationId, replayOf.recordedAt).catch(() => true)
+      : true;
+
+    if (answered) {
+      // SILENT-RETURN-OK: a webhook retry of a message already accounted for.
+      //
+      // The marker is load-bearing: `every-silent-return-leaves-a-trace` fails
+      // on any return in this path that neither replies nor records, unless it
+      // carries this marker and a reason. Adding one is meant to be a decision
+      // somebody writes down, not an omission.
+      return;
+    }
+
+    logger.warn(
+      { conversationId, waMessageId: message.id, recordedAt: replayOf?.recordedAt },
+      "Replay of a message nothing ever answered — a previous attempt died before replying, so answering it now"
+    );
+  }
+
+  if (!effectiveMessageId) {
+    // SILENT-RETURN-OK: the row conflicted and could not then be found.
     //
-    // `recordInboundMessage` returns a null messageId on exactly one condition
-    // — `on conflict (wa_message_id) do nothing` matched — so this is Meta
-    // redelivering something already recorded, and a reply already went out for
-    // it. There is no customer waiting and nothing to report; logging every
-    // retry would be volume without information.
-    //
-    // The marker above is load-bearing: `every-silent-return-leaves-a-trace`
-    // fails on any return in this path that neither replies nor records, unless
-    // it carries this marker and a reason. Adding one is meant to be a decision
-    // somebody writes down, not an omission.
+    // Only reachable if the message was deleted between the insert and the
+    // lookup a millisecond later. Nothing to answer and nothing to record.
     return;
   }
 
   const inboundDto: MessageDto = {
-    id: messageId,
+    id: effectiveMessageId,
     conversationId,
     direction: "inbound",
     senderType: "contact",
@@ -500,7 +542,9 @@ async function answerOneMessage(
     organizationId: organization.id,
     contactId,
     conversationId,
-    messageId,
+    // The effective id, so a replay being answered late is scored against the
+    // message that actually exists rather than against nothing.
+    messageId: effectiveMessageId,
     text: text.body,
   });
 

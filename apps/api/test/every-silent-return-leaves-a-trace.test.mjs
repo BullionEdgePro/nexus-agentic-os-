@@ -151,16 +151,31 @@ test("the checker can actually fail", () => {
   assert.ok(offenders > 0, "the scan passes even on a file with the fixes removed");
 });
 
-test("the one declared exception states its reason", () => {
-  // The marker is not a way to switch the check off. It has to carry an
+test("every declared exception states its reason", () => {
+  // The marker is not a way to switch the check off. Each has to carry an
   // argument somebody can disagree with.
+  //
+  // This asserted there was EXACTLY ONE, which was true when written and is a
+  // count rather than a property -- the shape this suite has spent the week
+  // unpicking. A second silent return was added deliberately on 2026-08-24 and
+  // this went red for a change that was neither wrong nor careless. What the
+  // tripwire is for is that a marker cannot be added without a reason, so that
+  // is what it checks now, of each one, with a floor so a split finding nothing
+  // still fails.
   const markers = PROCESSOR.split(SILENT_RETURN_OK);
-  assert.equal(markers.length - 1, 1, "exactly one silent return is declared today");
-  const reason = markers[1].split("\n")[0].trim();
-  assert.ok(reason.length > 12, `the marker must state a reason, got: "${reason}"`);
-  assert.match(PROCESSOR, /a webhook retry is not a message/);
-  // And the reason must be true: a null messageId has exactly one cause.
-  assert.match(PROCESSOR, /on conflict \(wa_message_id\) do nothing/);
+  const declared = markers.length - 1;
+  assert.ok(declared >= 1, "no silent return is declared — has the marker been renamed?");
+
+  for (let i = 1; i <= declared; i++) {
+    const reason = markers[i].split(String.fromCharCode(10))[0].trim();
+    assert.ok(reason.length > 12, `a marker states no reason, got: "${reason}"`);
+  }
+
+  // The two that exist, by what they claim rather than by how many there are.
+  assert.ok(PROCESSOR.includes("a webhook retry of a message already accounted for"));
+  assert.ok(PROCESSOR.includes("the row conflicted and could not then be found"));
+  // And the first reason must be true: a null messageId has exactly one cause.
+  assert.ok(PROCESSOR.includes("on conflict (wa_message_id) do nothing"));
 });
 
 test("both branches that were found still record what they did", () => {

@@ -88,6 +88,17 @@ test("the early return it interacts with is still the replay guard", () => {
   // If this stops being "a webhook replay" and becomes something else, the
   // reasoning above needs revisiting rather than inheriting.
   const PROCESSOR = readFileSync(join(here, "..", "src", "queue", "processor.ts"), "utf8");
-  const at = PROCESSOR.indexOf("SILENT-RETURN-OK: a webhook retry is not a message");
-  assert.notEqual(at, -1, "the replay guard is no longer recognisable — recheck the grace period");
+  // The guard now distinguishes a replay that was ANSWERED from one that was
+  // merely recorded, which is the deeper half of this same defect: a crash
+  // between the insert and the reply used to be indistinguishable from Meta
+  // redelivering. The grace period stops the common cause; this stops the
+  // consequence.
+  assert.ok(
+    PROCESSOR.includes("SILENT-RETURN-OK: a webhook retry of a message already accounted for"),
+    "the replay guard is no longer recognisable — recheck the grace period"
+  );
+  assert.ok(
+    PROCESSOR.includes("wasAccountedFor("),
+    "the replay path must ask whether anything answered the message, not only whether it was stored"
+  );
 });

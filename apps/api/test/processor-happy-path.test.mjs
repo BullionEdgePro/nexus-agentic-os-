@@ -94,6 +94,10 @@ mock.module("@nexus/db", {
       id: "org-1", slug: "zipicka", name: "Zipicka",
       whatsappPhoneNumberId: "000000000000001", whatsappBusinessAccountId: "1", timezone: "Asia/Dubai", createdAt: "now",
     }),
+    // A first delivery: replayOf is null and wasAccountedFor is never reached.
+    // Both are listed because the processor imports them, and this mock is the
+    // declaration of everything it may use.
+    wasAccountedFor: async () => true,
     recordInboundMessage: async () => ({
       conversationId: "conv-1", contactId: "contact-1", messageId: "msg-1",
       isHumanHandoff: false, aiPausedUntil: null,

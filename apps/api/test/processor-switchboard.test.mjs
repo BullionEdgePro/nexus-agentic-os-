@@ -152,6 +152,10 @@ mock.module("@nexus/db", {
     recordTriagePrompt: async () => {
       calls.triagePrompts += 1;
     },
+    // A first delivery: replayOf is null and wasAccountedFor is never reached.
+    // Both are listed because the processor imports them, and this mock is the
+    // declaration of everything it may use.
+    wasAccountedFor: async () => true,
     recordInboundMessage: async () => ({
       conversationId: "conv-1",
       contactId: "contact-1",
