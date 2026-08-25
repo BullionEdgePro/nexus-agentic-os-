@@ -1,6 +1,11 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
+import { toCsv, csvFilename } from "@nexus/shared";
 import {
   contactBelongsToBusiness,
+  exportContacts,
+  exportContactRecord,
+  exportMessages,
   findOrganizationBySlug,
   forgetContact,
   getContact,
@@ -29,6 +34,24 @@ import { logger } from "../lib/logger.js";
  * sharing a phone number in a check somebody has to remember to write.
  */
 export const contactsRoute = new Hono();
+
+/**
+ * A CSV the browser saves rather than renders.
+ *
+ * text/csv with an explicit charset, because the file carries a UTF-8 BOM
+ * and Arabic names, and a browser that guesses the encoding gets both wrong.
+ */
+function csvResponse(c: Context, csv: string, filename: string): Response {
+  return new Response(csv, {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}"`,
+      // An export is a snapshot of a moving record. Cached, it is a snapshot
+      // of an older one wearing today's filename.
+      "cache-control": "no-store",
+    },
+  });
+}
 
 contactsRoute.get("/:slug/contacts", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
@@ -112,4 +135,99 @@ contactsRoute.delete("/:slug/contacts/:contactId/memory", async (c) => {
   // read as one: "we hold nothing about them" is the state the caller asked
   // for, however it was reached.
   return c.json({ ok: true, hadMemory: forgotten });
+});
+
+/**
+ * Getting the business's own data out.
+ *
+ * ============================================================
+ * WHY THIS EXISTS AT ALL
+ * ============================================================
+ *
+ * There was no export anywhere in this product. The only download it offered
+ * was a QR code. A business could ask this platform to FORGET a customer --
+ * as of today -- and could not obtain a single row of its own records.
+ *
+ * That is table stakes for a CRM, and it is also the sibling of the erase
+ * button: "delete what you hold about me" and "give me what you hold about
+ * me" are one request asked two ways, and this platform could answer the
+ * first from a screen and the second not at all.
+ *
+ * ============================================================
+ * WHAT AN EXPORT MUST NOT CONTAIN
+ * ============================================================
+ *
+ * Another firm's customers. Two competing law firms answer on this number, so
+ * every query here is scoped through the same predicate the screens use --
+ * the egress policy is the architecture, not a setting.
+ */
+contactsRoute.get("/:slug/export/customers.csv", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const rows = await exportContacts(organization.id);
+  const headers = rows[0] ? Object.keys(rows[0]) : ["phone", "name"];
+  const csv = toCsv(headers, rows.map((row) => headers.map((h) => row[h])));
+
+  logger.info(
+    { organizationId: organization.id, rows: rows.length },
+    "A business exported its customer list"
+  );
+  return csvResponse(c, csv, csvFilename(organization.slug, "customers", new Date()));
+});
+
+contactsRoute.get("/:slug/export/messages.csv", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const { rows, truncated } = await exportMessages(organization.id);
+  const headers = ["conversation_id", "phone", "name", "sent_at", "direction", "sender_type", "body"];
+  const csv = toCsv(headers, rows.map((row) => headers.map((h) => row[h])));
+
+  // SAID IN A HEADER, not swallowed. A truncated record that looks complete
+  // is worse than no record: somebody would reconcile against it and find a
+  // gap they could not explain.
+  const response = csvResponse(c, csv, csvFilename(organization.slug, "messages", new Date()));
+  if (truncated) response.headers.set("x-export-truncated", "true");
+  return response;
+});
+
+/**
+ * Everything held about ONE person, as JSON.
+ *
+ * The answer to a subject access request, and the reason it is JSON rather
+ * than CSV: it is a nested record -- a person, their assessments, their
+ * conversations and every message in them -- and flattening that into a grid
+ * would lose the shape somebody asked to see.
+ *
+ * Unlike the bulk export this DOES carry the remembered summary, because the
+ * subject of that summary is the one person entitled to read it.
+ */
+contactsRoute.get("/:slug/contacts/:contactId/export.json", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const contactId = c.req.param("contactId");
+  const record = await exportContactRecord(organization.id, contactId);
+  if (!record) return c.json({ error: "Customer not found" }, 404);
+
+  const memory = await getContactMemory(organization.id, contactId);
+  const body = {
+    ...record,
+    remembered: memory ? { summary: memory.summary, updatedAt: memory.updatedAt } : null,
+    exportedAt: new Date().toISOString(),
+    exportedBy: organization.slug,
+  };
+
+  logger.info(
+    { organizationId: organization.id, contactId },
+    "A customer's full record was exported"
+  );
+
+  c.header("content-type", "application/json; charset=utf-8");
+  c.header(
+    "content-disposition",
+    `attachment; filename="${organization.slug}-customer-${contactId.slice(0, 8)}.json"`
+  );
+  return c.body(JSON.stringify(body, null, 2));
 });

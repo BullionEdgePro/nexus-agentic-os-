@@ -1227,6 +1227,56 @@ export function getContact(
  * record of what was said. `hadMemory: false` means there was nothing to
  * erase, which is the state the caller asked for and not a failure.
  */
+/**
+ * Download an export.
+ *
+ * Fetched rather than linked, and the reason is the session: the API
+ * authenticates browser traffic with a cookie that a cross-origin <a href>
+ * does not send, so a plain link would download a 401 page named
+ * customers.csv. It is fetched with credentials and handed to the browser as
+ * a blob.
+ *
+ * The blob URL is revoked on a timer rather than immediately: revoking
+ * synchronously can invalidate it before the browser has begun fetching, and
+ * in Firefox and Safari the download silently does nothing. The links page
+ * learned that the same way.
+ */
+export async function downloadExport(path: string, fallbackName: string): Promise<void> {
+  const response = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status} on ${path}: ${await response.text().catch(() => "")}`);
+  }
+
+  // The server names the file -- it knows the business and the date. This
+  // reads that rather than rebuilding it, so the two cannot disagree.
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const named = /filename="([^"]+)"/.exec(disposition);
+
+  // SAID OUT LOUD. A file missing its last thousand rows that looks complete
+  // is worse than no file.
+  const truncated = response.headers.get("x-export-truncated") === "true";
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchorEl = document.createElement("a");
+  anchorEl.href = url;
+  anchorEl.download = named?.[1] ?? fallbackName;
+  document.body.appendChild(anchorEl);
+  anchorEl.click();
+  anchorEl.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+
+  if (truncated) {
+    throw new TruncatedExport(
+      "That export hit its size limit, so the file is incomplete. It downloaded anyway — " +
+        "treat it as a partial record."
+    );
+  }
+}
+
+/** Thrown AFTER the file has been handed over, so the caller can say so. */
+export class TruncatedExport extends Error {}
+
 export function forgetContactMemory(
   orgSlug: BusinessSlug,
   contactId: string

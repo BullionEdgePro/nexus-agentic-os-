@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
+  downloadExport,
   forgetContactMemory,
   getContact,
   getContacts,
   readableError,
+  TruncatedExport,
   type ContactDetail,
   type ContactMemoryView,
   type ContactSummary,
@@ -58,6 +60,8 @@ export default function CustomersPage() {
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Something worth saying that is not a failure. See `download`. */
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async (slug: BusinessSlug, query: string) => {
     setLoading(true);
@@ -79,6 +83,27 @@ export default function CustomersPage() {
     setMemory(null);
     void load(business, search);
   }, [business, search, load]);
+
+  /**
+   * Download one of the exports.
+   *
+   * A truncated file is reported as a NOTICE, not an error: it downloaded, it
+   * is usable, and it is incomplete. Showing it in red beside "that could not
+   * be exported" would teach somebody to read the two the same way.
+   */
+  async function download(path: string, fallback: string) {
+    setError("");
+    setNotice("");
+    setBusy(true);
+    try {
+      await downloadExport(path, fallback);
+    } catch (err) {
+      if (err instanceof TruncatedExport) setNotice(err.message);
+      else setError(readableError(err, "That could not be exported."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function open(contact: ContactSummary) {
     setError("");
@@ -147,6 +172,31 @@ export default function CustomersPage() {
           />
         </label>
 
+        {/* THE BUSINESS'S OWN DATA, OUT.
+
+            There was no export anywhere in this product until today; the only
+            download it offered was a QR code. A platform that can be asked to
+            forget a customer and cannot produce a single row of the business's
+            own records has the two halves of that the wrong way round. */}
+        <div className="cu-export">
+          <span>Take your data</span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void download(`/api/organizations/${business}/export/customers.csv`, "customers.csv")}
+          >
+            Customers (CSV)
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void download(`/api/organizations/${business}/export/messages.csv`, "messages.csv")}
+          >
+            Every message (CSV)
+          </button>
+        </div>
+
+        {notice ? <p className="cu-notice">{notice}</p> : null}
         {error ? <p className="cu-err">{error}</p> : null}
 
         {loadError ? (
@@ -222,14 +272,33 @@ export default function CustomersPage() {
                   {memory.sourceMessages === 1 ? "message" : "messages"} · updated{" "}
                   {when(memory.updatedAt)}
                 </p>
-                <button
-                  type="button"
-                  className="cu-forget"
-                  onClick={() => void forget(selected)}
-                  disabled={busy}
-                >
-                  {busy ? "Erasing…" : "Erase this"}
-                </button>
+                <div className="cu-mem-acts">
+                  <button
+                    type="button"
+                    className="cu-forget"
+                    onClick={() => void forget(selected)}
+                    disabled={busy}
+                  >
+                    {busy ? "Erasing…" : "Erase this"}
+                  </button>
+                  {/* The other half of the same request. Somebody who asks
+                      what is held about them is usually the same person who
+                      may then ask for it to be deleted, and the two answers
+                      belong next to each other. */}
+                  <button
+                    type="button"
+                    className="cu-forget"
+                    disabled={busy}
+                    onClick={() =>
+                      void download(
+                        `/api/organizations/${business}/contacts/${selected.id}/export.json`,
+                        "customer.json"
+                      )
+                    }
+                  >
+                    Download everything held
+                  </button>
+                </div>
               </div>
             ) : (
               <p className="cu-note">

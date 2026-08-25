@@ -272,3 +272,65 @@
   margin-left: auto;
   color: var(--ink);
 }
+
+/* Taking your data out. Deliberately plain and always visible rather than
+   tucked behind a menu: a business that cannot find the export is, in practice,
+   a business that does not have one. */
+.cu-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cu-export span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mist);
+  margin-right: 2px;
+}
+
+.cu-export button {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 100px;
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.cu-export button:hover:not(:disabled) {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.cu-export button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A partial export is amber, not red. It downloaded, it is usable, and it is
+   incomplete — three facts that "could not be exported" does not describe. */
+.cu-notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--warn);
+  background: var(--pebble);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 70ch;
+}
+
+.cu-mem-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

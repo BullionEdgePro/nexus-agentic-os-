@@ -276,3 +276,128 @@ export async function contactBelongsToBusiness(
   );
   return rows.length > 0;
 }
+
+/**
+ * Everything this business holds, flattened for export.
+ *
+ * ============================================================
+ * WHY THE EXPORT IS ITS OWN QUERY AND NOT THE LIST WITH A BIGGER LIMIT
+ * ============================================================
+ *
+ * The list is built to be read on a screen: it counts, it truncates, it orders
+ * by what a person is looking for. An export is the business's own record
+ * leaving the building, and the two want different things -- every row, every
+ * column, and no cleverness about which matter.
+ *
+ * Scoped through `contactServedBy` like everything else here, because the
+ * egress policy is the whole architecture: on a shared number, one firm's
+ * export must not contain another firm's customers. That is not a nicety when
+ * two of the businesses are competing law firms.
+ */
+export async function exportContacts(
+  organizationId: string
+): Promise<Array<Record<string, unknown>>> {
+  const { rows } = await getPool().query(
+    `select ct.wa_id as phone,
+            ct.display_name as name,
+            ct.locale,
+            ct.lead_score,
+            ct.lead_priority,
+            ct.lead_category,
+            ct.last_message_at,
+            ct.created_at as first_seen_at,
+            ct.reengagement_opted_out as opted_out,
+            (
+              select count(*) from conversations c
+               where c.contact_id = ct.id
+                 and coalesce(c.routed_organization_id, c.organization_id) = $1
+            ) as conversations,
+            -- Whether a summary is held, never the summary itself. A bulk
+            -- export of what this platform INFERRED about people is a
+            -- different and much larger disclosure than a list of who they
+            -- are; the per-customer export carries it, where one person is
+            -- asking about themselves.
+            exists (
+              select 1 from contact_memory cm
+               where cm.contact_id = ct.id and cm.organization_id = $1
+            ) as summary_held
+       from contacts ct
+      where ${contactServedBy("$1")}
+      order by ct.last_message_at desc nulls last`,
+    [organizationId]
+  );
+  return rows;
+}
+
+/**
+ * One business's messages, oldest first.
+ *
+ * Ordered oldest-first because this is a transcript: a conversation read
+ * newest-first is a conversation nobody can follow. Capped, because an export
+ * that never returns is an export nobody gets -- and the cap is reported to the
+ * caller rather than silently applied, since a truncated record that looks
+ * complete is worse than no record.
+ */
+export async function exportMessages(
+  organizationId: string,
+  limit = 20000
+): Promise<{ rows: Array<Record<string, unknown>>; truncated: boolean }> {
+  const { rows } = await getPool().query(
+    `select c.id as conversation_id,
+            ct.wa_id as phone,
+            ct.display_name as name,
+            m.created_at as sent_at,
+            m.direction,
+            m.sender_type,
+            m.body
+       from messages m
+       join conversations c on c.id = m.conversation_id
+       join contacts ct on ct.id = c.contact_id
+      where coalesce(c.routed_organization_id, c.organization_id) = $1
+      order by m.created_at asc
+      limit $2`,
+    [organizationId, limit + 1]
+  );
+  return { rows: rows.slice(0, limit), truncated: rows.length > limit };
+}
+
+/**
+ * Everything held about ONE person, for that person.
+ *
+ * The other half of `forgetContact`. "Delete what you hold about me" and "give
+ * me what you hold about me" are the same request asked two ways, and this
+ * platform could answer the first from a screen and the second not at all.
+ *
+ * Unlike the bulk export this DOES include the remembered summary, because the
+ * subject of that summary is the one person entitled to read it.
+ */
+export async function exportContactRecord(
+  organizationId: string,
+  contactId: string
+): Promise<Record<string, unknown> | null> {
+  const detail = await getContact(organizationId, contactId);
+  if (!detail) return null;
+
+  const { rows: messages } = await getPool().query(
+    `select m.created_at as sent_at, m.direction, m.sender_type, m.body
+       from messages m
+       join conversations c on c.id = m.conversation_id
+      where c.contact_id = $2
+        and coalesce(c.routed_organization_id, c.organization_id) = $1
+      order by m.created_at asc`,
+    [organizationId, contactId]
+  );
+
+  return {
+    customer: {
+      phone: detail.waId,
+      name: detail.displayName,
+      firstSeen: null,
+      lastMessageAt: detail.lastMessageAt,
+      optedOut: detail.optedOut,
+    },
+    leadAssessments: detail.leadHistory,
+    conversations: detail.conversationList,
+    messages,
+  };
+}
