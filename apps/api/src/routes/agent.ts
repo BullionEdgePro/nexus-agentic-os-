@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import {
   findOrganizationBySlug,
+  getOrganizationSettings,
+  keywordCollisions,
+  updateOrganizationSettings,
   getAgentConfig,
   listPromptVersions,
   setSystemPrompt,
@@ -45,6 +48,12 @@ agentRoute.get("/:slug/agent", async (c) => {
 
   return c.json({
     config,
+    settings: await getOrganizationSettings(organization.id),
+    // Reported, never prevented: two businesses genuinely can both do
+    // attestation, and refusing the overlap would be this platform
+    // overruling a fact about the world. Showing it lets whoever owns both
+    // lists decide which should keep the word.
+    collisions: await keywordCollisions(organization.id),
     history: await listPromptVersions(organization.id),
     // Sent rather than duplicated in the browser, so the counter on the screen
     // and the rule that refuses cannot disagree about what is too long.
@@ -91,4 +100,65 @@ agentRoute.put("/:slug/agent/prompt", async (c) => {
   );
 
   return c.json({ config: result.config, history: await listPromptVersions(organization.id) });
+});
+
+/**
+ * What the business IS: its name, where it is, and how customers reach it.
+ *
+ * Operator-only for the same reason the prompt is, and one stronger. The
+ * routing keywords decide WHICH BUSINESS a customer reaches on a shared
+ * number, and two of the firms answering this one are competing law
+ * practices. A word moved from one list to the other moves clients.
+ */
+agentRoute.put("/:slug/settings", async (c) => {
+  const scope = scopeOf(c);
+  if (scope.role !== "operator") return c.json({ error: "Not available to this account." }, 403);
+
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const body = (await c.req.json().catch(() => null)) as {
+    name?: unknown;
+    timezone?: unknown;
+    websiteUrl?: unknown;
+    whatsappDisplayNumber?: unknown;
+    routingKeywords?: unknown;
+  } | null;
+  if (!body) return c.json({ error: "Nothing to save." }, 400);
+
+  const before = await getOrganizationSettings(organization.id);
+
+  const result = await updateOrganizationSettings({
+    organizationId: organization.id,
+    name: typeof body.name === "string" ? body.name : undefined,
+    timezone: typeof body.timezone === "string" ? body.timezone : undefined,
+    websiteUrl: typeof body.websiteUrl === "string" ? body.websiteUrl : undefined,
+    whatsappDisplayNumber:
+      typeof body.whatsappDisplayNumber === "string" ? body.whatsappDisplayNumber : undefined,
+    routingKeywords: Array.isArray(body.routingKeywords)
+      ? body.routingKeywords.map((k) => String(k))
+      : undefined,
+  });
+
+  if ("reason" in result) return c.json({ error: result.reason }, 400);
+
+  // The COUNTS, not the words. A keyword list is this business's commercial
+  // positioning and belongs in its row rather than repeated into a log --
+  // but a change in how many words route to a firm sharing a number with a
+  // competitor is worth being able to date afterwards.
+  logger.info(
+    {
+      organizationId: organization.id,
+      sub: scope.sub,
+      keywordsBefore: before?.routingKeywords.length ?? 0,
+      keywordsAfter: result.settings.routingKeywords.length,
+      timezone: result.settings.timezone,
+    },
+    "A business's settings were changed"
+  );
+
+  return c.json({
+    settings: result.settings,
+    collisions: await keywordCollisions(organization.id),
+  });
 });

@@ -5,8 +5,11 @@ import type { BusinessSlug } from "@nexus/shared";
 import {
   getAgentConfig,
   readableError,
+  updateOrganizationSettings,
   setSystemPrompt,
   type AgentConfigView,
+  type KeywordCollision,
+  type OrganizationSettings,
   type PromptVersion,
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
@@ -56,6 +59,11 @@ export default function AgentPage() {
   const [saved, setSaved] = useState("");
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [settings, setSettings] = useState<OrganizationSettings | null>(null);
+  const [collisions, setCollisions] = useState<KeywordCollision[]>([]);
+  /** The keyword list as text, one per line, which is how a person edits a list. */
+  const [keywords, setKeywords] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
@@ -69,6 +77,9 @@ export default function AgentPage() {
       setLimits(data.limits);
       setDraft(data.config.systemPrompt);
       setNote("");
+      setSettings(data.settings);
+      setCollisions(data.collisions);
+      setKeywords((data.settings?.routingKeywords ?? []).join("\n"));
     } catch (err) {
       setConfig(null);
       setLoadError(readableError(err, "The agent's settings could not be loaded."));
@@ -82,6 +93,29 @@ export default function AgentPage() {
   }, [business, load]);
 
   const changed = config !== null && draft.trim() !== config.systemPrompt.trim();
+
+  async function saveRouting() {
+    if (!settings) return;
+    const next = keywords
+      .split(/[\n,]/)
+      .map((word) => word.trim())
+      .filter(Boolean);
+
+    setSavingSettings(true);
+    setError("");
+    setSaved("");
+    try {
+      const data = await updateOrganizationSettings(business, { routingKeywords: next });
+      setSettings(data.settings);
+      setCollisions(data.collisions);
+      setKeywords(data.settings.routingKeywords.join("\n"));
+      setSaved("Saved. The routing menu offers this business on those words from the next message.");
+    } catch (err) {
+      setError(readableError(err, "Those keywords could not be saved."));
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   async function save() {
     if (!config) return;
@@ -141,6 +175,70 @@ export default function AgentPage() {
           <p className="ag-note">Loading…</p>
         ) : config ? (
           <>
+            {settings ? (
+              <section className="ag-routing">
+                <h2>How customers reach this business</h2>
+                <p className="ag-note">
+                  Five businesses answer on one WhatsApp number. When somebody messages it, these
+                  words are how the platform works out which of them they want — and a business
+                  with none is left off the menu entirely.
+                </p>
+
+                {/* THE COLLISIONS, which nothing anywhere could show before.
+                    A word claimed by two firms is a tie the classifier breaks
+                    on a rule neither of them chose, and two of the businesses
+                    on this number are competing law practices. */}
+                {collisions.length > 0 ? (
+                  <div className="ag-collisions">
+                    <strong>
+                      {collisions.length === 1
+                        ? "1 of these words is also claimed by another business here"
+                        : `${collisions.length} of these words are also claimed by other businesses here`}
+                    </strong>
+                    <ul>
+                      {collisions.map((clash) => (
+                        <li key={`${clash.keyword}-${clash.withSlug}`}>
+                          <code>{clash.keyword}</code> — also {clash.withName}
+                        </li>
+                      ))}
+                    </ul>
+                    <span>
+                      Not an error: two businesses really can both do the same thing. But whoever
+                      owns both lists should decide which keeps the word, rather than the
+                      classifier deciding it on their behalf.
+                    </span>
+                  </div>
+                ) : null}
+
+                <textarea
+                  className="ag-keywords"
+                  value={keywords}
+                  onChange={(event) => setKeywords(event.target.value)}
+                  rows={6}
+                  spellCheck={false}
+                  placeholder={"attestation\nnotary\ncertificate"}
+                />
+                <div className="ag-bar">
+                  <span className="ag-count">
+                    {keywords.split(/[\n,]/).filter((w) => w.trim()).length} words
+                  </span>
+                  <button
+                    type="button"
+                    className="ag-save"
+                    disabled={savingSettings}
+                    onClick={() => void saveRouting()}
+                  >
+                    {savingSettings ? "Saving…" : "Save keywords"}
+                  </button>
+                  <span className="ag-meta">
+                    {settings.timezone}
+                    {settings.whatsappDisplayNumber ? ` · ${settings.whatsappDisplayNumber}` : ""}
+                  </span>
+                </div>
+              </section>
+            ) : null}
+
+            <h2 className="ag-section">What the agent is told to be</h2>
             {/* STATED BEFORE THE BOX, not after the save. Every other screen
                 that changes what a customer is told has a review step; this one
                 does not, and somebody should know that while they are typing. */}

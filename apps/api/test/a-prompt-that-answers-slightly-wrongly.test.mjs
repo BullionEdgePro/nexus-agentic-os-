@@ -145,8 +145,21 @@ test("only an operator may read or change it", () => {
   // that a business's own operational information is not management
   // information about its staff. This is different in kind: it changes what the
   // COMPANY says, on the next message, with no review step anywhere.
-  const gets = ROUTE.split('scope.role !== "operator"').length - 1;
-  assert.equal(gets, 2, "both the read and the write must refuse an employee");
+  // Counted against the handlers rather than against a number written here.
+  // The first version asserted "exactly 2" and went red the moment a third
+  // handler was added — correctly, but for the wrong reason: it was policing
+  // the count, not the property. EVERY handler on this router must refuse.
+  // Non-capturing. With a capture group, String.split returns the captures too
+  // and the count doubles — which this test reported as "6 handlers and 3 role
+  // checks" before anybody had written a sixth handler.
+  const handlers = ROUTE.split(/agentRoute\.(?:get|put|post|delete|patch)\(/).length - 1;
+  const refusals = ROUTE.split('scope.role !== "operator"').length - 1;
+  assert.ok(handlers >= 2, `only ${handlers} handlers found — the scan is probably broken`);
+  assert.equal(
+    refusals,
+    handlers,
+    `${handlers} handlers on this router and ${refusals} role checks — one of them serves employees`
+  );
   assert.ok(ROUTE.includes("403"));
 });
 

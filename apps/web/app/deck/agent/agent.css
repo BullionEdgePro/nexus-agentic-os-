@@ -186,3 +186,82 @@
   max-height: 260px;
   overflow-y: auto;
 }
+
+/* --- how customers reach this business --- */
+
+.ag-routing {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ag-routing h2,
+.ag-section {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ag-section {
+  margin-top: 6px;
+}
+
+.ag-keywords {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  padding: 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  color: var(--ink);
+  resize: vertical;
+}
+
+/* A collision is not an error and is not styled as one. Two businesses really
+   can both do attestation; what is wrong is that nobody could see it. */
+.ag-collisions {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-left: 3px solid var(--warn);
+  background: var(--pebble);
+  border-radius: var(--r-sm);
+}
+
+.ag-collisions strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ag-collisions ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.ag-collisions li {
+  font-size: 12.5px;
+  color: var(--slate);
+}
+
+.ag-collisions code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.ag-collisions span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mist);
+  max-width: 70ch;
+}

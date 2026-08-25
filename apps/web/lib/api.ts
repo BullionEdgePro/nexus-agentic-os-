@@ -1225,8 +1225,47 @@ export interface PromptVersion {
   createdAt: string;
 }
 
+export interface OrganizationSettings {
+  id: string;
+  slug: string;
+  name: string;
+  timezone: string;
+  websiteUrl: string | null;
+  whatsappDisplayNumber: string | null;
+  /** How customers reach this business on a shared number. */
+  routingKeywords: string[];
+  isActive: boolean;
+  acceptsSharedNumber: boolean;
+  isNumberOwner: boolean;
+}
+
+/** A word two businesses on one number both claim. Reported, never prevented. */
+export interface KeywordCollision {
+  keyword: string;
+  withSlug: string;
+  withName: string;
+}
+
+export function updateOrganizationSettings(
+  orgSlug: BusinessSlug,
+  input: Partial<{
+    name: string;
+    timezone: string;
+    websiteUrl: string;
+    whatsappDisplayNumber: string;
+    routingKeywords: string[];
+  }>
+): Promise<{ settings: OrganizationSettings; collisions: KeywordCollision[] }> {
+  return request(`/api/organizations/${orgSlug}/settings`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
 export function getAgentConfig(orgSlug: BusinessSlug): Promise<{
   config: AgentConfigView;
+  settings: OrganizationSettings | null;
+  collisions: KeywordCollision[];
   history: PromptVersion[];
   /** From the server, so the counter and the rule that refuses agree. */
   limits: { min: number; max: number };
