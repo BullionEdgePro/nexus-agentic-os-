@@ -1,7 +1,7 @@
 /**
  * What is supposed to run, and how often — the contract in one place.
  *
- * These intervals already exist, once each, inside the six `*-queue.ts` modules
+ * These intervals already exist, once each, inside the seven `*-queue.ts` modules
  * that register the repeat. This is not a second copy of the schedule: it is the
  * EXPECTATION used to judge a heartbeat, and it is passed to Postgres as a
  * parameter rather than written into any SQL, so the operator and the status
@@ -21,6 +21,7 @@ export const SCHEDULED_JOBS = [
   "knowledge-reindex",
   "procedure-inference",
   "forecast-cycle",
+  "calendar-sync",
 ] as const;
 
 export type ScheduledJob = (typeof SCHEDULED_JOBS)[number];
@@ -43,6 +44,11 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
   "knowledge-reindex": 18 * HOUR,
   "procedure-inference": 30 * HOUR,
   "forecast-cycle": 30 * HOUR,
+  // Tight, and second only to the operators, because a silent calendar sync
+  // does not look like an outage from any screen: everybody simply stays as
+  // free as they were the last time it ran, and the agent goes on promising
+  // them to customers. Three intervals plus room for a deploy.
+  "calendar-sync": 60 * MINUTE,
 };
 
 /**

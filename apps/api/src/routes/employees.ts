@@ -14,6 +14,9 @@ import {
   getConversationRouting,
   setEmployeeAccessCodeHash,
   updateEmployeeSchedule,
+  listCalendars,
+  connectCalendar,
+  disconnectCalendar,
 } from "@nexus/db";
 import {
   buildDirectContact,
@@ -24,10 +27,24 @@ import {
   parseWeeklySchedule,
   weeklyHours,
 } from "@nexus/employees";
-import { captureEmployeeLead, listEmployeeLeads } from "@nexus/leads";
+import {
+  captureEmployeeLead,
+  listEmployeeLeads,
+  labelsForAssessments,
+  leadScorerAccuracy,
+  recordLeadLabel,
+  isLeadOutcome,
+} from "@nexus/leads";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { buildHandoverBrief } from "@nexus/agents";
+import { assertPublicUrl } from "@nexus/knowledge";
+import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
+
+/** Who is asking. An unattributed calendar connection is one nobody owns. */
+function scopeOf(c: { get: (k: string) => unknown }): SessionScope {
+  return (c.get("scope") as SessionScope | undefined) ?? { sub: "unknown", role: "employee" };
+}
 
 /**
  * Employee profiles, assignment, and the bridge to an employee's own WhatsApp.
@@ -229,6 +246,84 @@ employeesRoute.patch("/:slug/employees/:employeeId/schedule", async (c) => {
  * could mint one for a colleague in another business, and the scope check would
  * dutifully honour it.
  */
+/**
+ * Calendar presence.
+ *
+ * ============================================================
+ * THE URL IS A CREDENTIAL AND NEVER COMES BACK OUT
+ * ============================================================
+ *
+ * A published ICS link is bearer access to somebody's diary: whoever holds it
+ * reads every event title, attendee and location, with no sign-in and no way
+ * for the owner to see who is reading. It goes in and is never serialised
+ * again -- `CalendarRecord` carries the HOST and not the URL, which is enough
+ * for a person to recognise which link they pasted.
+ *
+ * That is the same rule the operator alert webhook holds, and it is written
+ * out here rather than assumed, because the natural shape of a settings screen
+ * is to render the value back into the field it was typed in.
+ */
+employeesRoute.get("/:slug/calendars", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  return c.json({ calendars: await listCalendars(organization.id) });
+});
+
+employeesRoute.put("/:slug/employees/:employeeId/calendar", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const employee = await findEmployeeById(c.req.param("employeeId"));
+  if (!employee || employee.organizationId !== organization.id) {
+    return c.json({ error: "Employee not found" }, 404);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as { icsUrl?: unknown } | null;
+  const raw = typeof body?.icsUrl === "string" ? body.icsUrl.trim() : "";
+  if (!raw) return c.json({ error: "Paste the secret iCal address of the calendar." }, 400);
+
+  // webcal: is what Apple and Outlook put on the clipboard, and it is https
+  // with a different scheme. Rewriting it here means somebody who pastes what
+  // their calendar gave them is not told their link is wrong when it is not.
+  const normalised = raw.replace(/^webcal:/i, "https:");
+
+  // Checked before it is STORED, not at the first sync. A link that will never
+  // work should be refused while the person who pasted it is still looking at
+  // the screen, rather than becoming an error they discover a quarter of an
+  // hour later on a page they have closed.
+  try {
+    await assertPublicUrl(normalised);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "That address cannot be used.";
+    return c.json({ error: reason }, 400);
+  }
+
+  const scope = scopeOf(c);
+  const calendar = await connectCalendar({
+    organizationId: organization.id,
+    employeeId: employee.id,
+    icsUrl: normalised,
+    createdBy: scope.sub,
+  });
+  if (!calendar) return c.json({ error: "The calendar could not be connected." }, 500);
+
+  // The host, never the URL. See the comment above this route.
+  logger.info(
+    { organizationId: organization.id, employeeId: employee.id, host: calendar.host, sub: scope.sub },
+    "A calendar was connected"
+  );
+  return c.json({ calendar });
+});
+
+employeesRoute.delete("/:slug/employees/:employeeId/calendar", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const removed = await disconnectCalendar(organization.id, c.req.param("employeeId"));
+  if (!removed) return c.json({ error: "No calendar is connected for that person." }, 404);
+  return c.json({ ok: true });
+});
+
 employeesRoute.post("/:slug/employees/:employeeId/access-code", async (c) => {
   const scope = c.get("scope");
   if (scope?.role !== "operator") {
@@ -342,7 +437,72 @@ employeesRoute.get("/:slug/leads", async (c) => {
 
   const employeeId = c.req.query("employeeId") || null;
   const leads = await listEmployeeLeads(organization.id, employeeId);
-  return c.json({ leads });
+
+  // The labels already given, folded in here rather than fetched separately by
+  // the screen: a list that renders unlabelled and then fills in a moment
+  // later invites somebody to label the same lead twice.
+  const labels = await labelsForAssessments(
+    organization.id,
+    leads.map((lead) => lead.assessmentId)
+  );
+
+  return c.json({
+    leads: leads.map((lead) => ({ ...lead, label: labels.get(lead.assessmentId) ?? null })),
+    accuracy: await leadScorerAccuracy(organization.id),
+  });
+});
+
+/**
+ * What a lead turned out to be.
+ *
+ * F3 has said "model second once labels exist" since this platform started,
+ * and nothing in it ever produced a label -- so the condition was one nobody
+ * could reach. This is the half that was missing.
+ *
+ * The question is binary on purpose. "What should the priority have been"
+ * asks a person to do the scorer's job from memory, and the answers would be
+ * noise. "Was this worth your time" is answerable in one click, months later,
+ * by whoever handled it -- and is exactly what a model would train on.
+ */
+employeesRoute.put("/:slug/leads/:assessmentId/label", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const body = (await c.req.json().catch(() => null)) as {
+    worthAttention?: unknown;
+    outcome?: unknown;
+    note?: unknown;
+  } | null;
+  if (typeof body?.worthAttention !== "boolean") {
+    return c.json({ error: "Say whether this lead was worth someone's time." }, 400);
+  }
+
+  // An outcome this does not know is refused rather than stored as free text:
+  // a column of near-synonyms is a column nothing can count.
+  let outcome: string | null = null;
+  if (body.outcome != null && body.outcome !== "") {
+    if (!isLeadOutcome(body.outcome)) {
+      return c.json({ error: `"${String(body.outcome)}" is not one of the outcomes on offer.` }, 400);
+    }
+    outcome = body.outcome;
+  }
+
+  const scope = scopeOf(c);
+  const recorded = await recordLeadLabel({
+    organizationId: organization.id,
+    assessmentId: c.req.param("assessmentId"),
+    worthAttention: body.worthAttention,
+    outcome,
+    note: typeof body.note === "string" && body.note.trim() ? body.note.trim().slice(0, 500) : null,
+    // Always a person. This is training data for something that will later
+    // decide which customers get attention.
+    labelledBy: scope.sub,
+  });
+
+  // Same 404 for "no such assessment" and "not yours", so ids cannot be
+  // enumerated across businesses.
+  if (!recorded) return c.json({ error: "That lead is not available to mark." }, 404);
+  return c.json({ accuracy: await leadScorerAccuracy(organization.id) });
 });
 
 /** Everything this employee is responsible for, with a ready-to-tap link each. */

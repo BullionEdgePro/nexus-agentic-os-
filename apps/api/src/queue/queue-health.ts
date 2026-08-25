@@ -7,6 +7,7 @@ import { PROCEDURE_INFERENCE_QUEUE } from "./procedures-queue.js";
 import { QUALITY_ROLLUP_QUEUE } from "./quality-queue.js";
 import { KNOWLEDGE_REINDEX_QUEUE } from "./reindex-queue.js";
 import { TEMPLATE_SYNC_QUEUE } from "./template-sync-queue.js";
+import { CALENDAR_SYNC_QUEUE } from "./calendar-sync-queue.js";
 
 /**
  * What is stuck or lost in the queues — the half of the background system that
@@ -54,6 +55,7 @@ const QUEUES = [
   KNOWLEDGE_REINDEX_QUEUE,
   PROCEDURE_INFERENCE_QUEUE,
   FORECAST_QUEUE,
+  CALENDAR_SYNC_QUEUE,
 ] as const;
 
 /**

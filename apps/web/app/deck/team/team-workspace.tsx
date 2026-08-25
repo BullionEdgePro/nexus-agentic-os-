@@ -12,14 +12,19 @@ import {
   issueAccessCode,
   captureLead,
   getEmployeeLeads,
+  labelLead,
+  type ScorerAccuracy,
   type EmployeeLead,
   type TeamMember,
   readableError,
   type AssignedConversation,
   type HandoverBrief,
+  getCalendars,
+  type CalendarRecord,
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { RotaEditor } from "./rota-editor";
+import { CalendarLink } from "./calendar-link";
 import "../deck.css";
 import "./team.css";
 
@@ -44,6 +49,25 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
   const [business, setBusiness] = useState<BusinessSlug>(lockedTo?.slug ?? "zipicka");
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [selected, setSelected] = useState<TeamMember | null>(null);
+  /**
+   * Connected calendars, by employee.
+   *
+   * Fetched once for the business rather than per person: the list is at most
+   * as long as the team, and one request keeps the rota editor from opening
+   * with an empty calendar panel that fills in a moment later.
+   */
+  const [calendars, setCalendars] = useState<Record<string, CalendarRecord>>({});
+
+  const loadCalendars = useCallback(async (slug: BusinessSlug) => {
+    try {
+      const data = await getCalendars(slug);
+      setCalendars(Object.fromEntries(data.calendars.map((c) => [c.employeeId, c])));
+    } catch {
+      // A calendar list that will not load must not blank the team screen.
+      // The rota is the more important half and it is already on the page.
+      setCalendars({});
+    }
+  }, []);
   const [assigned, setAssigned] = useState<AssignedConversation[]>([]);
   const [form, setForm] = useState(BLANK);
   const [busy, setBusy] = useState(false);
@@ -52,6 +76,8 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
   const [brief, setBrief] = useState<{ who: string; brief: HandoverBrief } | null>(null);
   const [credential, setCredential] = useState<{ name: string; signInAs: string; code: string } | null>(null);
   const [leads, setLeads] = useState<EmployeeLead[]>([]);
+  /** How the scorer has been doing, or the sentence saying why that cannot be said. */
+  const [accuracy, setAccuracy] = useState<ScorerAccuracy | null>(null);
   const [leadForm, setLeadForm] = useState({ whatsappNumber: "", contactName: "", note: "" });
 
   const loadTeam = useCallback(
@@ -81,7 +107,8 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
     // a switch to another team's panel.
     setCredential(null);
     loadTeam(business);
-  }, [business, loadTeam]);
+    void loadCalendars(business);
+  }, [business, loadTeam, loadCalendars]);
 
   useEffect(() => {
     if (!selected) return;
@@ -89,7 +116,10 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
       .then((r) => setAssigned(r.conversations))
       .catch((err) => setError(readable(err)));
     getEmployeeLeads(business, selected.id)
-      .then((r) => setLeads(r.leads))
+      .then((r) => {
+        setLeads(r.leads);
+        setAccuracy(r.accuracy);
+      })
       .catch((err) => setError(readable(err)));
   }, [selected, business]);
 
@@ -122,6 +152,29 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
       setError(readable(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Mark what a lead turned out to be.
+   *
+   * The list is updated in place rather than refetched, for the reason the
+   * rota editor gives: a reload would drop the selection and close the panel
+   * the moment somebody answered, which reads as the answer having failed.
+   */
+  async function markLead(assessmentId: string, worthAttention: boolean) {
+    try {
+      const { accuracy: updated } = await labelLead(business, assessmentId, { worthAttention });
+      setLeads((current) =>
+        current.map((lead) =>
+          lead.assessmentId === assessmentId
+            ? { ...lead, label: { worthAttention, outcome: null, labelledBy: "you" } }
+            : lead
+        )
+      );
+      setAccuracy(updated);
+    } catch (err) {
+      setError(readable(err));
     }
   }
 
@@ -406,6 +459,7 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                     Remove
                   </button>
                   {selected?.id === member.id ? (
+                    <>
                     <RotaEditor
                       business={business}
                       member={member}
@@ -422,6 +476,13 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                         );
                       }}
                     />
+                    <CalendarLink
+                      business={business}
+                      employeeId={member.id}
+                      calendar={calendars[member.id] ?? null}
+                      onChanged={() => void loadCalendars(business)}
+                    />
+                    </>
                   ) : null}
                 </li>
               ))}
@@ -583,9 +644,54 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                       </span>
                     </div>
                     <p className="lead-note">{lead.note}</p>
+                    {/* WAS IT WORTH IT. The scorer has never once been told
+                        whether it was right, which is why F3's "model second
+                        once labels exist" was a condition nobody could reach.
+                        Binary on purpose: asking for a priority months later
+                        asks somebody to do the scorer's job from memory. */}
+                    <div className="lead-mark">
+                      {lead.label ? (
+                        <span className="lead-marked">
+                          {lead.label.worthAttention ? "was worth it" : "was not worth it"}
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={lead.label?.worthAttention === true ? "on" : ""}
+                        onClick={() => void markLead(lead.assessmentId, true)}
+                      >
+                        Worth it
+                      </button>
+                      <button
+                        type="button"
+                        className={lead.label?.worthAttention === false ? "on" : ""}
+                        onClick={() => void markLead(lead.assessmentId, false)}
+                      >
+                        Not worth it
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
+              {/* WHAT THE MARKS ADD UP TO, or why they do not yet. A figure
+                  computed from four labels has the shape of an accuracy and
+                  none of the content, so below the floor this says what is
+                  missing rather than showing a number. */}
+              {accuracy ? (
+                <p className="lead-acc">
+                  {accuracy.blockedBecause ? (
+                    accuracy.blockedBecause
+                  ) : (
+                    <>
+                      Of the leads it called high or urgent,{" "}
+                      {Math.round((accuracy.falseAlarmRate ?? 0) * 100)}% were not worth anyone's
+                      time. Of the ordinary ones,{" "}
+                      {Math.round((accuracy.missRate ?? 0) * 100)}% were — those are the ones
+                      nobody was told to look at.
+                    </>
+                  )}
+                </p>
+              ) : null}
             </div>
           )}
 

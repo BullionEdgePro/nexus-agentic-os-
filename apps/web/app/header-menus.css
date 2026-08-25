@@ -457,3 +457,36 @@
   .deck-root .hs-field kbd { display: none; }
   .deck-root .hs-panel { left: auto; right: 0; width: min(92vw, 340px); }
 }
+
+/* "Yours" — work assigned to the person reading, above what the checks found.
+   Separated by a rule rather than a heading weight, because the two halves
+   answer different questions: what is wrong with the business, and what is
+   waiting on you. */
+.hm-mine {
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+.hm-mine-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px 2px;
+}
+
+.hm-mine-head strong {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hm-mine-head span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist);
+}

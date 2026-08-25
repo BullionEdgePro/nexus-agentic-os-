@@ -5,6 +5,7 @@ import type { BusinessSlug } from "@nexus/shared";
 import {
   getKnowledge,
   addKnowledge,
+  uploadKnowledgeFile,
   removeKnowledge,
   type KnowledgeSource,
   readableError,
@@ -51,7 +52,8 @@ export default function KnowledgePage() {
    */
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
-  const [mode, setMode] = useState<"url" | "text">("url");
+  const [mode, setMode] = useState<"url" | "text" | "file">("url");
+  const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -83,11 +85,18 @@ export default function KnowledgePage() {
     setError("");
     setNotice("");
     try {
-      const input =
-        mode === "url"
-          ? { url: url.trim(), title: title.trim() || undefined }
-          : { title: title.trim(), content: content.trim() };
-      const result = await addKnowledge(business, input);
+      let result: { chunks: number; unchanged: boolean };
+      if (mode === "file") {
+        if (!file) throw new Error("Choose a document to index.");
+        result = await uploadKnowledgeFile(business, file, title.trim() || undefined);
+      } else {
+        result = await addKnowledge(
+          business,
+          mode === "url"
+            ? { url: url.trim(), title: title.trim() || undefined }
+            : { title: title.trim(), content: content.trim() }
+        );
+      }
       setNotice(
         result.unchanged
           ? "Already up to date — the content had not changed, so nothing was re-indexed."
@@ -96,6 +105,7 @@ export default function KnowledgePage() {
       setUrl("");
       setTitle("");
       setContent("");
+      setFile(null);
       await load(business);
     } catch (err) {
       setError(readable(err));
@@ -185,10 +195,38 @@ export default function KnowledgePage() {
             <button aria-pressed={mode === "text"} onClick={() => setMode("text")}>
               Write it out
             </button>
+            <button aria-pressed={mode === "file"} onClick={() => setMode("file")}>
+              Upload a document
+            </button>
           </div>
 
           <form onSubmit={handleAdd}>
-            {mode === "url" ? (
+            {mode === "file" ? (
+              <>
+                <label>
+                  <span>Document</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.txt,.md,.markdown,.html,.htm,.csv,.log"
+                    onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Title (optional — the file name is used if blank)</span>
+                  <input value={title} onChange={(event) => setTitle(event.target.value)} />
+                </label>
+                {/* Said before the upload rather than after the refusal. A scan
+                    is the commonest thing to try, and it is not obvious that a
+                    document you can read perfectly well on screen might contain
+                    no text at all. */}
+                <p className="kn-hint">
+                  PDF, Word, text, Markdown or HTML, up to 10MB. A PDF that is a scan of a page
+                  holds pictures rather than words — there is nothing to index in one, and it will
+                  be refused rather than added empty.
+                </p>
+              </>
+            ) : mode === "url" ? (
               <>
                 <label>
                   <span>Page address</span>

@@ -11,7 +11,9 @@
   "dependencies": {
     "@google/genai": "^2.15.0",
     "@nexus/db": "*",
-    "@nexus/shared": "*"
+    "@nexus/shared": "*",
+    "mammoth": "^1.12.1",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

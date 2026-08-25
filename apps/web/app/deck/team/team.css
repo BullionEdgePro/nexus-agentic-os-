@@ -448,3 +448,192 @@
   outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
+
+/* --- calendar presence --- */
+
+.cal {
+  border-top: 1px solid var(--hairline);
+  margin-top: 14px;
+  padding-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.cal-head h4 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.cal-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--slate);
+  max-width: 64ch;
+}
+
+.cal-add,
+.cal-on {
+  display: grid;
+  gap: 8px;
+}
+
+.cal-add label {
+  display: grid;
+  gap: 4px;
+}
+
+.cal-add span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+.cal-add input {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  width: 100%;
+}
+
+.cal-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--mist);
+  max-width: 64ch;
+}
+
+.cal-state {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mist);
+}
+
+.cal-host {
+  color: var(--ink);
+}
+
+/* A warning, not an error: the platform is still working, it is working on
+   information it has told you is incomplete. */
+.cal-warn {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--warn);
+  background: var(--pebble);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+  max-width: 64ch;
+}
+
+.cal-err {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--crit);
+  background: var(--pebble);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.cal-save,
+.cal-off {
+  justify-self: start;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border-radius: 100px;
+  cursor: pointer;
+}
+
+.cal-save {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--marble);
+}
+
+.cal-save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cal-off {
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--mist);
+}
+
+/* --- was this lead worth it --- */
+
+.lead-mark {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.lead-mark button {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 100px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--mist);
+  cursor: pointer;
+}
+
+.lead-mark button:hover {
+  border-color: var(--hairline-strong);
+  color: var(--ink);
+}
+
+/* The answer already given, marked on the button rather than only in prose, so
+   a list of twenty leads shows at a glance which are still unanswered. */
+.lead-mark button.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--marble);
+}
+
+.lead-marked {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist);
+  margin-right: 2px;
+}
+
+/* The refusal reads as a sentence, not as an error: nothing is wrong, there is
+   simply not enough yet to say anything true. */
+.lead-acc {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--slate);
+  max-width: 66ch;
+}

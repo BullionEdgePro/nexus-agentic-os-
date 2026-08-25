@@ -8,6 +8,8 @@ import { KNOWLEDGE_REINDEX_QUEUE, scheduleKnowledgeReindex } from "./queue/reind
 import { processKnowledgeReindexJob } from "./queue/reindex-processor.js";
 import { TEMPLATE_SYNC_QUEUE, scheduleTemplateSync } from "./queue/template-sync-queue.js";
 import { processTemplateSyncJob } from "./queue/template-sync-processor.js";
+import { CALENDAR_SYNC_QUEUE, scheduleCalendarSync } from "./queue/calendar-sync-queue.js";
+import { processCalendarSyncJob } from "./queue/calendar-sync-processor.js";
 import { QUALITY_ROLLUP_QUEUE, scheduleQualityRollup } from "./queue/quality-queue.js";
 import { processQualityRollupJob } from "./queue/quality-processor.js";
 import { OPERATORS_QUEUE, scheduleOperators } from "./queue/operators-queue.js";
@@ -49,6 +51,14 @@ const templateSyncWorker = new Worker(TEMPLATE_SYNC_QUEUE, processTemplateSyncJo
 });
 templateSyncWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Template sync job failed")
+);
+
+const calendarSyncWorker = new Worker(CALENDAR_SYNC_QUEUE, processCalendarSyncJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+calendarSyncWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Calendar sync job failed")
 );
 
 const qualityWorker = new Worker(QUALITY_ROLLUP_QUEUE, processQualityRollupJob, {
@@ -124,6 +134,13 @@ scheduleKnowledgeReindex()
 scheduleTemplateSync()
   .then(() => logger.info("Template sync scheduled (every 30m)"))
   .catch((err) => logger.warn({ err }, "Could not schedule template sync"));
+
+// A rota says when somebody is MEANT to be available; a calendar says whether
+// they are. Fifteen minutes bounds how stale that answer can be, which matters
+// because it decides whether a customer is promised a person at all.
+scheduleCalendarSync()
+  .then(() => logger.info("Calendar sync scheduled (every 15m)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule calendar sync"));
 
 // Hourly rather than nightly: the day an owner most wants to look at is the one
 // happening now, and each run recomputes rather than accumulates, so running it

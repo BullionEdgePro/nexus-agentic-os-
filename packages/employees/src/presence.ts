@@ -129,6 +129,19 @@ function manualOverrideActive(employee: Employee, now: Date): boolean {
  *   1. Inactive employee            → offline, twin silent (falls back to the org agent)
  *   2. Active manual override       → whatever the human set
  *   3. Working-hours schedule       → online inside a window, offline outside
+ *   4. Calendar, inside those hours → busy while they are in something
+ *
+ * The calendar sits BELOW the manual override and BELOW the schedule, and both
+ * placements are deliberate. A person who has said "I am available" outranks
+ * their diary, because they are looking at both and this is not. And a calendar
+ * cannot make somebody available outside their working hours: a meeting at
+ * eight in the evening is evidence they are busy, never evidence they are at
+ * work. It behaves exactly like a scheduled break, which is the same fact from
+ * a different source.
+ *
+ * Still pure. The busy blocks are READ by the caller and passed in, because
+ * this runs on every inbound message and the whole point of it being
+ * synchronous is that it never touches the database.
  *
  * `shouldTwinRespond` is deliberately biased toward answering. The one case
  * where the twin stays silent for an available human is `humanFirst`, which
@@ -136,7 +149,12 @@ function manualOverrideActive(employee: Employee, now: Date): boolean {
  * customer-facing silence, which is the failure mode this codebase already
  * works hardest to avoid (see the fallback path in the queue processor).
  */
-export function resolvePresence(employee: Employee, now: Date = new Date()): ResolvedPresence {
+export function resolvePresence(
+  employee: Employee,
+  now: Date = new Date(),
+  /** True when this person's calendar says they are in something right now. */
+  inSomething = false
+): ResolvedPresence {
   if (!employee.isActive) {
     return {
       status: "offline",
@@ -159,21 +177,29 @@ export function resolvePresence(employee: Employee, now: Date = new Date()): Res
   const clock = localClock(now, employee.timezone);
   const onShift = scheduleContains(employee.workingHours, clock);
   const onBreak = onShift && scheduleContains(employee.breakSchedule, clock);
+  // Only inside working hours, for the reason above: a meeting in the evening
+  // is not evidence somebody is at work.
+  const inMeeting = onShift && inSomething;
 
-  const status: PresenceStatus = !onShift ? "offline" : onBreak ? "busy" : "online";
+  const status: PresenceStatus = !onShift ? "offline" : onBreak || inMeeting ? "busy" : "online";
   const tzNote = clock.fellBackToUtc
     ? ` (unrecognized timezone "${employee.timezone}", evaluated in UTC)`
     : "";
 
   return {
     status,
-    source: "schedule",
+    source: inMeeting && !onBreak ? "calendar" : "schedule",
     shouldTwinRespond: twinShouldRespond(employee, status),
     reason: !onShift
       ? `Outside working hours${tzNote}.`
       : onBreak
         ? `On a scheduled break${tzNote}.`
-        : `Within working hours${tzNote}.`,
+        : inMeeting
+          ? // Named distinctly from a break, because the two need different
+            // things from whoever reads it: a break ends by itself, and a diary
+            // full of meetings is a rota problem somebody has to solve.
+            `In something on their calendar${tzNote}.`
+          : `Within working hours${tzNote}.`,
   };
 }
 

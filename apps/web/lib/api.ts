@@ -14,7 +14,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // The API authenticates browser traffic with the operator session cookie,
     // which a cross-origin fetch omits unless credentials are requested.
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    // FormData sets its own Content-Type, and it has to: the header carries a
+    // generated multipart boundary the body is split on. Forcing
+    // application/json over it produces a request the server parses as an
+    // empty form and reports as "attach a file", with the file attached.
+    headers:
+      init?.body instanceof FormData
+        ? { ...init?.headers }
+        : { "Content-Type": "application/json", ...init?.headers },
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
@@ -260,6 +267,37 @@ export interface EmployeeLead {
   category: string;
   createdAt: string;
   employeeName: string | null;
+  /** What a person said it turned out to be. Null until somebody says. */
+  label: { worthAttention: boolean; outcome: string | null; labelledBy: string } | null;
+}
+
+/**
+ * How the lead scorer has actually been doing.
+ *
+ * Two numbers rather than one, because the scorer fails in two directions
+ * that are not equally bad: a false alarm costs somebody a minute, a miss
+ * costs the business the lead. Either is null until enough leads have been
+ * marked for it to mean anything, and `blockedBecause` says which and how many
+ * short.
+ */
+export interface ScorerAccuracy {
+  labelled: number;
+  falseAlarmRate: number | null;
+  missRate: number | null;
+  loudCount: number;
+  quietCount: number;
+  blockedBecause: string | null;
+}
+
+export function labelLead(
+  orgSlug: BusinessSlug,
+  assessmentId: string,
+  input: { worthAttention: boolean; outcome?: string | null; note?: string }
+): Promise<{ accuracy: ScorerAccuracy }> {
+  return request(`/api/organizations/${orgSlug}/leads/${assessmentId}/label`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }
 
 /**
@@ -281,7 +319,7 @@ export function captureLead(
 export function getEmployeeLeads(
   orgSlug: BusinessSlug,
   employeeId?: string
-): Promise<{ leads: EmployeeLead[] }> {
+): Promise<{ leads: EmployeeLead[]; accuracy: ScorerAccuracy }> {
   const q = employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : "";
   return request(`/api/organizations/${orgSlug}/leads${q}`);
 }
@@ -530,6 +568,75 @@ export function addKnowledge(
   return request(`/api/organizations/${orgSlug}/knowledge`, {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Index an uploaded document.
+ *
+ * Separate from `addKnowledge` because the body is bytes rather than JSON, and
+ * the server parses the two differently before anything else can happen.
+ * `chunks` comes back the same way, so the screen reports both the same.
+ */
+export function uploadKnowledgeFile(
+  orgSlug: BusinessSlug,
+  file: File,
+  title?: string
+): Promise<{
+  sourceId: string;
+  chunks: number;
+  unchanged: boolean;
+  format: string;
+  characters: number;
+}> {
+  const form = new FormData();
+  form.append("file", file);
+  if (title) form.append("title", title);
+  return request(`/api/organizations/${orgSlug}/knowledge/file`, { method: "POST", body: form });
+}
+
+/**
+ * A connected calendar, as the screen is allowed to see it.
+ *
+ * NO ics URL, and that is the point rather than an omission: a published iCal
+ * link is bearer access to somebody's diary, so the server returns the host and
+ * keeps the address. The same rule the alert webhook holds.
+ */
+export interface CalendarRecord {
+  employeeId: string;
+  employeeName: string;
+  /** "calendar.google.com" — enough to recognise which link was pasted. */
+  host: string;
+  isActive: boolean;
+  lastSyncedAt: string | null;
+  lastError: string | null;
+  /** Events whose repeat rule is not expanded. Those times are NOT blocked. */
+  unsupportedCount: number;
+  busyBlocks: number;
+  createdBy: string;
+}
+
+export function getCalendars(orgSlug: BusinessSlug): Promise<{ calendars: CalendarRecord[] }> {
+  return request(`/api/organizations/${orgSlug}/calendars`);
+}
+
+export function connectCalendar(
+  orgSlug: BusinessSlug,
+  employeeId: string,
+  icsUrl: string
+): Promise<{ calendar: CalendarRecord }> {
+  return request(`/api/organizations/${orgSlug}/employees/${employeeId}/calendar`, {
+    method: "PUT",
+    body: JSON.stringify({ icsUrl }),
+  });
+}
+
+export function disconnectCalendar(
+  orgSlug: BusinessSlug,
+  employeeId: string
+): Promise<{ ok: true }> {
+  return request(`/api/organizations/${orgSlug}/employees/${employeeId}/calendar`, {
+    method: "DELETE",
   });
 }
 
@@ -1092,10 +1199,19 @@ export interface TaskCounts {
 export function getTasks(options: {
   business?: BusinessSlug | "";
   status?: TaskStatus | "all";
+  /**
+   * Only what is assigned to the caller.
+   *
+   * Ignored for an operator, who has no employee row -- the server drops it
+   * rather than filtering to nothing, so this is safe to send from a header
+   * that does not know which kind of session it is on.
+   */
+  mine?: boolean;
 } = {}): Promise<{ tasks: TaskRecord[]; counts: TaskCounts }> {
   const query = new URLSearchParams();
   if (options.business) query.set("business", options.business);
   if (options.status) query.set("status", options.status);
+  if (options.mine) query.set("mine", "1");
   const suffix = query.toString();
   return request(`/api/tasks${suffix ? `?${suffix}` : ""}`);
 }

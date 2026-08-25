@@ -293,6 +293,20 @@ const SEEN_KEY = "nexus.activity.seenAt";
 export function NotificationsMenu() {
   const [open, setOpen] = useState(false);
   const [findings, setFindings] = useState<OperatorFinding[]>([]);
+  /**
+   * Work assigned to whoever is signed in.
+   *
+   * WHY THIS IS HERE AT ALL. Until 2026-08-25 nothing in this platform ever
+   * told a person they had been given something. The board could be filtered to
+   * an owner and the API had taken ?mine=1 for months, but both need somebody
+   * to go and look -- and since automations landed, a rule can assign a
+   * follow-up at three in the morning with nobody in the loop at all.
+   *
+   * Empty for an operator, who has no employee row. The server drops the filter
+   * for them rather than matching nothing, so this is safe to ask for without
+   * knowing which kind of session it is.
+   */
+  const [mine, setMine] = useState<TaskRecord[]>([]);
   const [seenAt, setSeenAt] = useState<number>(0);
   const wrap = useDismissable(open, () => setOpen(false));
 
@@ -309,6 +323,12 @@ export function NotificationsMenu() {
     getFindings()
       .then((d) => setFindings(d.findings))
       .catch(() => undefined);
+    // Separately, and failing separately: a person's own work must still show
+    // when the checks are unreachable, and the checks must still show when this
+    // is. One catch for both would have lost whichever came second.
+    getTasks({ mine: true, status: "open" })
+      .then((d) => setMine(d.tasks))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -321,6 +341,15 @@ export function NotificationsMenu() {
     () => findings.filter((f) => new Date(f.firstSeenAt).getTime() > seenAt),
     [findings, seenAt]
   );
+
+  /**
+   * Yours and already late.
+   *
+   * `isOverdue` is the SERVER's verdict and is not recomputed here, for the
+   * reason written on the board's columns: a browser clock that is behind would
+   * quietly declare late work fine.
+   */
+  const mineOverdue = useMemo(() => mine.filter((t) => t.isOverdue), [mine]);
 
   /**
    * Urgent, open, and nobody has said they are dealing with it.
@@ -365,24 +394,33 @@ export function NotificationsMenu() {
         onClick={openAndMarkSeen}
         aria-expanded={open}
         title={
-          nagging.length
-            ? `${nagging.length} urgent, not yet accepted` +
-              (fresh.length ? ` · ${fresh.length} new since you last looked` : "")
-            : fresh.length
-              ? `${fresh.length} new since you last looked`
-              : "Activity"
+          [
+            // Yours comes first. Everything else on this badge is about the
+            // business; this part is about the person reading it.
+            mine.length
+              ? `${mine.length} assigned to you` +
+                (mineOverdue.length ? ` (${mineOverdue.length} late)` : "")
+              : "",
+            nagging.length ? `${nagging.length} urgent, not yet accepted` : "",
+            fresh.length ? `${fresh.length} new since you last looked` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Activity"
         }
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
           <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7Z" />
           <path d="M10 20a2 2 0 0 0 4 0" />
         </svg>
-        {nagging.length || fresh.length ? (
+        {nagging.length || fresh.length || mine.length ? (
           // Urgent gets its own colour. A dot that means "something new" and a
           // dot that means "somebody has been waiting five days" should not be
-          // the same dot.
+          // the same dot -- and work of yours that is already late belongs in
+          // the second group, not the first.
           <span
-            className={nagging.length ? "badge dot-only urgent" : "badge dot-only"}
+            className={
+              nagging.length || mineOverdue.length ? "badge dot-only urgent" : "badge dot-only"
+            }
             aria-hidden="true"
           />
         ) : null}
@@ -400,6 +438,42 @@ export function NotificationsMenu() {
                   : "nothing new"}
             </span>
           </div>
+
+          {/* YOURS, AND IT DOES NOT CLEAR WHEN YOU LOOK AT IT.
+              `fresh` below is deliberately a "since you last opened this panel"
+              marker, and this section is deliberately not: a glance is not the
+              same as doing the work, and this platform has already shipped that
+              exact confusion once -- a single opening of this panel permanently
+              silenced a customer who had been waiting five days. This list
+              empties when the follow-ups are closed and at no other time. */}
+          {mine.length > 0 ? (
+            <div className="hm-mine">
+              <div className="hm-mine-head">
+                <strong>Yours</strong>
+                <span>
+                  {mineOverdue.length
+                    ? `${mineOverdue.length} late of ${mine.length}`
+                    : `${mine.length} open`}
+                </span>
+              </div>
+              <ul className="hm-list">
+                {mine.slice(0, 5).map((t) => (
+                  <li key={t.id}>
+                    <a href="/deck/board">
+                      <span className={`hm-tag ${t.isOverdue ? "urgent" : "warn"}`}>
+                        {t.isOverdue ? "late" : "yours"}
+                      </span>
+                      <span className="hm-t">{t.title}</span>
+                      <span className="hm-m">
+                        {t.businessName}
+                        {t.dueAt ? ` · due ${new Date(t.dueAt).toLocaleDateString()}` : " · no date"}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {findings.length === 0 ? (
             <p className="hm-empty">

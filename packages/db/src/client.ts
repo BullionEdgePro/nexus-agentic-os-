@@ -68,6 +68,14 @@ export const TENANT_SCOPED_TABLES = [
   // no row-level security, precisely so a new one cannot be forgotten here.
   "automations",
   "automation_runs",
+  // Added 2026-08-25 with calendar presence. Both carry an organization_id
+  // and both are read on the reply path, so an unscoped query here would be
+  // the shared-number trap by a new door.
+  "employee_calendars",
+  "calendar_busy",
+  // Added 2026-08-25 with lead labels. Carries an organization_id and is
+  // read per business, so it belongs on this list like everything else.
+  "lead_labels",
   // Added 2026-08-19. Each carries an organization_id, so each is tenant data
   // by construction, and none was on this list, on migration 018's array, or on
   // rls-verify's copy — the three places the set is typed out. A table is

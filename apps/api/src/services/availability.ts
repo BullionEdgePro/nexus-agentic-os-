@@ -1,4 +1,4 @@
-import { listEmployees, withServingTenant } from "@nexus/db";
+import { busyEmployeeIds, listEmployees, withServingTenant } from "@nexus/db";
 import { resolvePresence } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
 
@@ -47,12 +47,28 @@ import { logger } from "../lib/logger.js";
  * their desk. Every container green, every reply plausible.
  */
 export async function hasStaffOnShift(organizationId: string): Promise<boolean> {
-  const employees = await withServingTenant(organizationId, () => listEmployees(organizationId));
-  const active = employees.filter((employee) => employee.isActive);
+  // ONE withServingTenant AROUND BOTH READS, not one each. Both are asked about
+  // the SERVING business from inside the number owner's transaction, and the
+  // comment above this function is the record of what happens when that is got
+  // wrong: RLS matches nothing, the query returns an empty array, and the empty
+  // array reads as a fact.
+  const { active, busy } = await withServingTenant(organizationId, async () => {
+    const employees = await listEmployees(organizationId);
+    const live = employees.filter((employee) => employee.isActive);
+    if (live.length === 0) return { active: live, busy: new Set<string>() };
+    // A calendar that has never synced contributes an empty set, which means
+    // nobody is blocked by it. That is the right default: this must never make
+    // somebody unavailable on the strength of data it does not have.
+    const inSomething = await busyEmployeeIds(live.map((employee) => employee.id)).catch(
+      () => new Set<string>()
+    );
+    return { active: live, busy: inSomething };
+  });
+
   if (active.length === 0) return false;
 
   const onShift = active.filter(
-    (employee) => resolvePresence(employee).status === "online"
+    (employee) => resolvePresence(employee, new Date(), busy.has(employee.id)).status === "online"
   );
   if (onShift.length > 0) return true;
 
@@ -67,10 +83,15 @@ export async function hasStaffOnShift(organizationId: string): Promise<boolean> 
       organizationId,
       activeStaff: active.length,
       withoutSchedule: unscheduled.map((employee) => employee.employeeCode),
+      inSomething: busy.size,
     },
     unscheduled.length === active.length
       ? "Staff exist but none has working hours configured — escalation will not promise them"
-      : "Staff exist but none is on shift right now — escalation falls back to answering directly"
+      : busy.size > 0 && busy.size === active.length
+        ? // A third way of having nobody, and it needs a different action again:
+          // everybody is at their desk and every one of them is in something.
+          "Staff are on shift but every one of them is in a meeting — escalation falls back to answering directly"
+        : "Staff exist but none is on shift right now — escalation falls back to answering directly"
   );
   return false;
 }

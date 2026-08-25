@@ -7,6 +7,7 @@ export * from "./evaluations.js";
 export * from "./metrics.js";
 export * from "./broadcasts.js";
 export * from "./employees.js";
+export * from "./calendars.js";
 export * from "./routing.js";
 export * from "./admins.js";
 export * from "./activity.js";

@@ -50,7 +50,13 @@ export function isBlockedAddress(address: string): boolean {
   return true; // not an IP literal at all — caller resolves first
 }
 
-async function assertPublicUrl(rawUrl: string): Promise<URL> {
+/**
+ * Exported since 2026-08-25 so the calendar sync can reuse THIS guard rather
+ * than write a second one. It fetches text/calendar, which fetchDocument
+ * refuses by content type, and duplicating the SSRF check to get around that
+ * would mean two places to keep right about link-local addresses.
+ */
+export async function assertPublicUrl(rawUrl: string): Promise<URL> {
   let url: URL;
   try {
     url = new URL(rawUrl);

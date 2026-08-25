@@ -76,9 +76,47 @@ test("the dot appears for an unaccepted urgent finding even with nothing new", (
   // reason the weakness was visible at all.
   const flat = code.replace(/\s+/g, " ");
   assert.ok(
-    flat.includes("{nagging.length || fresh.length ? ("),
-    "the dot must be gated on unaccepted urgency OR novelty — gated on novelty alone, a " +
-      "five-day-old urgent finding shows nothing once somebody has glanced at the panel"
+    flat.includes("{nagging.length || fresh.length || mine.length ? ("),
+    "the dot must be gated on unaccepted urgency OR novelty OR work assigned to the reader — " +
+      "gated on novelty alone, a five-day-old urgent finding shows nothing once somebody has " +
+      "glanced at the panel"
+  );
+});
+
+test("work assigned to you does not clear when you glance at it", () => {
+  // THE SAME DEFECT, IN THE SECTION ADDED NEXT TO IT. `fresh` is a
+  // "since you last opened this panel" marker and is honest about being one.
+  // A person's own outstanding work is not that: it stops mattering when the
+  // work is done, and at no other moment.
+  const at = code.indexOf("const mine, setMine");
+  const decl = code.slice(code.indexOf("const [mine, setMine]"), code.indexOf("const [seenAt"));
+  assert.ok(decl.length > 20, "the yours list is gone");
+  assert.ok(
+    !decl.includes("seenAt"),
+    "seenAt must not enter this: glancing at a list is not doing the work on it"
+  );
+  assert.equal(at, -1, "unexpected declaration shape -- re-read this test");
+
+  // And the list itself is filtered on status, not on having been seen.
+  assert.ok(
+    code.includes('getTasks({ mine: true, status: "open" })'),
+    "the yours list must be the open work assigned to the caller"
+  );
+});
+
+test("late work of your own turns the dot red", () => {
+  // A dot that means "you have things" and a dot that means "you have things
+  // that are already late" should not be the same dot, for the same reason the
+  // two findings dots were separated.
+  const flat = code.replace(/\s+/g, " ");
+  assert.ok(
+    flat.includes('nagging.length || mineOverdue.length ? "badge dot-only urgent"'),
+    "your own overdue work must reach the urgent colour"
+  );
+  // The server's verdict, never the browser's clock.
+  assert.ok(
+    code.includes("mine.filter((t) => t.isOverdue)"),
+    "overdue must come from the server -- a slow browser clock would call late work fine"
   );
 });
 

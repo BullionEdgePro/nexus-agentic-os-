@@ -204,3 +204,13 @@
   .kn-item { grid-template-columns: 1fr; }
   .kn-meta { align-items: flex-start; }
 }
+
+/* Said before the upload, not after the refusal: a scan is the commonest thing
+   to try and the least obvious thing to be wrong with. */
+.kn-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mist);
+  max-width: 62ch;
+}

@@ -5,6 +5,10 @@ import {
   deleteKnowledgeSource,
   ingestUrlSource,
   ingestTextSource,
+  extractFile,
+  formatOf,
+  MAX_FILE_BYTES,
+  READABLE_FORMATS,
   UnsafeUrlError,
 } from "@nexus/knowledge";
 import { logger } from "../lib/logger.js";
@@ -95,6 +99,95 @@ knowledgeRoute.post("/:slug/knowledge", async (c) => {
       { error: err instanceof Error ? err.message : "Ingestion failed" },
       502
     );
+  }
+});
+
+/**
+ * Index a document somebody uploads.
+ *
+ * ============================================================
+ * WHY THIS IS A SEPARATE ROUTE FROM THE ONE ABOVE
+ * ============================================================
+ *
+ * The JSON route takes a url or a body of text; this one takes bytes, and the
+ * two cannot share a handler because the request is parsed differently before
+ * anything else can happen. Folding them together would mean reading the body
+ * twice or guessing at the content type, and guessing is how a truncated
+ * upload becomes a knowledge source containing half a document.
+ *
+ * ============================================================
+ * WHAT IT REFUSES, AND WHY REFUSING IS THE POINT
+ * ============================================================
+ *
+ * A scanned PDF is a picture of words. A parser handed one returns an empty
+ * string rather than an error, so without a floor this would answer "ok, 0
+ * chunks", list the source beside the working ones, and leave the agent saying
+ * "I'll check with a colleague" to every question that document answers. So an
+ * unreadable file is a 400 with a sentence naming the likely cause -- see
+ * `extractFile`, which holds that rule for every caller rather than here.
+ */
+knowledgeRoute.post("/:slug/knowledge/file", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  let form: Record<string, unknown>;
+  try {
+    form = await c.req.parseBody();
+  } catch {
+    return c.json({ error: "That upload could not be read." }, 400);
+  }
+
+  const file = form.file;
+  if (!(file instanceof File)) {
+    return c.json({ error: "Attach a file to index." }, 400);
+  }
+
+  // Checked before the bytes are pulled into memory as well as inside
+  // extractFile: the second is the rule, this one keeps a 500MB upload from
+  // being buffered just to be told no.
+  if (file.size > MAX_FILE_BYTES) {
+    const mb = Math.round(MAX_FILE_BYTES / (1024 * 1024));
+    return c.json({ error: `That file is larger than ${mb}MB.` }, 400);
+  }
+  if (!formatOf(file.name)) {
+    return c.json({ error: `"${file.name}" is not a format this can read. Upload ${READABLE_FORMATS}.` }, 400);
+  }
+
+  const extracted = await extractFile(file.name, new Uint8Array(await file.arrayBuffer()));
+  if ("reason" in extracted) return c.json({ error: extracted.reason }, 400);
+
+  const titleField = form.title;
+  const title = typeof titleField === "string" && titleField.trim() ? titleField.trim() : file.name;
+  const employeeField = form.employeeId;
+
+  try {
+    const result = await ingestTextSource({
+      organizationId: organization.id,
+      employeeId: typeof employeeField === "string" && employeeField ? employeeField : null,
+      title,
+      content: extracted.text,
+      // 'file' has been allowed by the schema since migration 003 and has never
+      // had a writer. The deck can now tell an uploaded document apart from
+      // something typed in, which matters when a source needs re-checking and
+      // nobody remembers where it came from.
+      kind: "file",
+    });
+
+    logger.info(
+      { organizationId: organization.id, format: extracted.format, chunks: result.chunks, characters: extracted.text.length },
+      "A document was indexed"
+    );
+
+    return c.json({
+      sourceId: result.sourceId,
+      chunks: result.chunks,
+      unchanged: result.skipped,
+      format: extracted.format,
+      characters: extracted.text.length,
+    });
+  } catch (err) {
+    logger.error({ err, filename: file.name }, "Document ingestion failed");
+    return c.json({ error: err instanceof Error ? err.message : "Ingestion failed" }, 502);
   }
 });
 
