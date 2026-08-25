@@ -26,6 +26,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   createAutomation,
+  deleteAutomation,
   getAutomationOptions,
   getAutomations,
   readableError,
@@ -105,6 +106,20 @@ export function Automations({
       await load();
     } catch (err) {
       setActionError(readableError(err, "That rule could not be changed."));
+    }
+  }
+
+  async function remove(rule: AutomationRecord) {
+    // Asked first, because this takes the record of what it already did with
+    // it. Switching off is the reversible one and it is the button beside this.
+    const acted = rule.timesRun === 0 ? "" : ` It has acted ${rule.timesRun} time${rule.timesRun === 1 ? "" : "s"}, and that record goes with it.`;
+    if (!window.confirm(`Remove this rule?${acted} The follow-ups it raised stay.`)) return;
+    setActionError("");
+    try {
+      await deleteAutomation(rule.id);
+      await load();
+    } catch (err) {
+      setActionError(readableError(err, "That rule could not be removed."));
     }
   }
 
@@ -210,13 +225,23 @@ export function Automations({
                   {rule.timesRun === 0 ? "has never acted" : `acted ${rule.timesRun}×`}
                 </p>
               </div>
-              <button
-                type="button"
-                className={rule.isActive ? "bd-auto-on" : "bd-auto-off"}
-                onClick={() => void toggle(rule)}
-              >
-                {rule.isActive ? "On" : "Off"}
-              </button>
+              <div className="bd-auto-controls">
+                <button
+                  type="button"
+                  className={rule.isActive ? "bd-auto-on" : "bd-auto-off"}
+                  onClick={() => void toggle(rule)}
+                >
+                  {rule.isActive ? "On" : "Off"}
+                </button>
+                {/* Not decoration. One rule per business, operator and action is
+                    a unique index an inactive rule still holds, so a rule made
+                    with the wrong person on it can only be fixed by removing
+                    it — and until this existed, creating the corrected one was
+                    refused and there was no way out of the dead end. */}
+                <button type="button" className="bd-auto-remove" onClick={() => void remove(rule)}>
+                  Remove
+                </button>
+              </div>
             </li>
           ))}
         </ul>

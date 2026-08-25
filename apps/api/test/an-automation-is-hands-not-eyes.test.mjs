@@ -29,6 +29,7 @@ import {
   automationRefusal,
 } from "@nexus/db";
 import { withoutComments } from "../../../scripts/recurrence/source.mjs";
+import { businessForById } from "../src/routes/automations.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..", "..");
@@ -242,5 +243,68 @@ test("both new tables are tenant-scoped, and the write is no wider than the read
   assert.ok(
     !MIGRATION.includes("routed_organization_id"),
     "neither table has a serving-business dimension, so neither write should widen"
+  );
+});
+
+// ============================================================
+// Who may change a rule once it exists
+// ============================================================
+
+test("an operator can switch a rule off without naming a business", async () => {
+  // THE BUG THIS PINS, and it made the switch not work at all for the only
+  // people who use the screen. PATCH and DELETE carry no business anywhere —
+  // not in the path, not in a body, not in a query — and the first version
+  // reused the resolver written for CREATE, which reaches for `?business=`.
+  // For an operator it found nothing and returned "Choose which business this
+  // rule belongs to" on every toggle. Every test in this file was pure, so all
+  // of them passed over it.
+  const ctx = { req: { path: "/api/automations/x" } };
+  const where = await businessForById(ctx, { sub: "op", role: "operator" });
+  assert.deepEqual(where, { organizationId: null }, "an operator must not be asked to name a business here");
+});
+
+test("an employee is pinned to their own business whatever the request says", async () => {
+  const ctx = { req: { path: "/api/automations/x" } };
+  assert.deepEqual(
+    await businessForById(ctx, { sub: "e", role: "employee", organizationId: "org-1" }),
+    { organizationId: "org-1" }
+  );
+
+  // And an employee attached to nothing gets a refusal rather than null, which
+  // would have read as "every business" — the whole failure mode of this file.
+  const orphan = await businessForById(ctx, { sub: "e", role: "employee" });
+  assert.ok("error" in orphan, "an employee with no business must be refused, not widened");
+  assert.equal(orphan.status, 403);
+});
+
+test("a rule that is off still holds its slot, so it must be removable", () => {
+  // `automations_one_per_trigger` is unconditional. Switching a rule off does
+  // NOT free the business/operator/action slot, so a rule created with the
+  // wrong person on it cannot be corrected by switching it off and making
+  // another — the unique index refuses the second one. Until Remove existed
+  // that was a dead end with an error message telling somebody to do the thing
+  // they had already done.
+  assert.ok(
+    !MIGRATION.includes("automations_one_per_trigger\n  on automations (organization_id, trigger_operator, action) where"),
+    "if this index becomes partial, re-read the panel: Remove may no longer be the only way out"
+  );
+  const PANEL = withoutComments(
+    readFileSync(join(root, "apps", "web", "app", "deck", "board", "automations.tsx"), "utf8")
+  );
+  assert.ok(PANEL.includes("deleteAutomation("), "the panel offers no way out of the dead end");
+  assert.ok(PANEL.includes("window.confirm("), "removing takes the run record with it and must be asked first");
+});
+
+test("switching a rule to the state it is already in is not an authorisation failure", () => {
+  // The writer matched `is_active <> $3`, so a second Off returned no row and
+  // the route turned that into "that rule is not available to change" — the
+  // same sentence it uses for somebody else's rule. Two people pressing Off at
+  // once is not a permissions problem and must not read like one.
+  const WRITER = withoutComments(
+    readFileSync(join(root, "packages", "db", "src", "automations.ts"), "utf8")
+  );
+  assert.ok(
+    !WRITER.includes("is_active <> $3"),
+    "setAutomationActive must be idempotent, or a no-op reads as a refusal"
   );
 });

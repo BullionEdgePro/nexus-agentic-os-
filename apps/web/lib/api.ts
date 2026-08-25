@@ -1371,3 +1371,15 @@ export function setAutomationActive(
 ): Promise<{ automation: AutomationRecord }> {
   return request(`/api/automations/${id}`, { method: "PATCH", body: JSON.stringify({ isActive }) });
 }
+
+/**
+ * Remove a rule.
+ *
+ * Needed rather than nice: one rule per business, operator and action is a
+ * unique index that an INACTIVE rule still occupies, so switching one off does
+ * not free the slot. Without this, a rule pointed at the wrong person could
+ * never be corrected.
+ */
+export function deleteAutomation(id: string): Promise<{ ok: true }> {
+  return request(`/api/automations/${id}`, { method: "DELETE" });
+}

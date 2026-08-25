@@ -114,7 +114,18 @@ function withDelegates(body, fileSource) {
   let out = body;
   const NL = String.fromCharCode(10);
   const decls = [];
-  for (const keyword of [NL + "function ", NL + "async function "]) {
+  // Exported forms too. automations.ts exports its resolver so a test can CALL
+  // it rather than grep for its name, and this scan then could not see through
+  // the handoff -- it reported PATCH and DELETE /api/automations/:id as
+  // unguarded when the restriction was one line down, inside the export. A
+  // checker that treats "exported" as "invisible" pushes people toward helpers
+  // nothing can test, which is the opposite of what it is here to encourage.
+  for (const keyword of [
+    NL + "function ",
+    NL + "async function ",
+    NL + "export function ",
+    NL + "export async function ",
+  ]) {
     let at = fileSource.indexOf(keyword);
     while (at !== -1) {
       const nameStart = at + keyword.length;

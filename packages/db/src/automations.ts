@@ -122,14 +122,29 @@ export async function createAutomation(input: {
   return found;
 }
 
+/**
+ * Switch a rule on or off.
+ *
+ * `organizationId` may be null, meaning "whichever business this rule belongs
+ * to". That is not a hole: an operator already reads every business's rules on
+ * one screen, and the id alone identifies the row. An EMPLOYEE is never given
+ * null — the route pins them to their own business before it gets here, the
+ * same way /api/tasks does.
+ *
+ * Idempotent on purpose. The first version only matched `is_active <> $3`, so
+ * setting a rule to the state it was already in returned no row, and the route
+ * turned that into "that rule is not available to change" — the same sentence
+ * it uses for a rule belonging to somebody else. Two people pressing Off at
+ * once is not an authorisation failure and must not read like one.
+ */
 export async function setAutomationActive(
-  organizationId: string,
+  organizationId: string | null,
   id: string,
   isActive: boolean
 ): Promise<AutomationRecord | null> {
   const { rows } = await getPool().query<{ id: string }>(
     `update automations set is_active = $3, updated_at = now()
-      where id = $2 and organization_id = $1 and is_active <> $3
+      where id = $2 and ($1::uuid is null or organization_id = $1)
       returning id`,
     [organizationId, id, isActive]
   );
@@ -137,9 +152,23 @@ export async function setAutomationActive(
   return (await listAutomations(organizationId)).find((a) => a.id === id) ?? null;
 }
 
-export async function deleteAutomation(organizationId: string, id: string): Promise<boolean> {
+/**
+ * Remove a rule entirely.
+ *
+ * This exists because switching one off is not enough: `automations_one_per_trigger`
+ * is unconditional, so an inactive rule still holds the slot for its business,
+ * operator and action. Without a way to remove it, a rule created with the wrong
+ * person on it could only be switched off, and the corrected one would be
+ * refused by the unique index — with an error telling somebody to switch off the
+ * rule they had already switched off.
+ *
+ * The runs go with it, by cascade. That is a real loss and it is the right
+ * trade: the audit a business actually reads is the follow-ups themselves, each
+ * a row on the board with a note saying what raised it, and those stay.
+ */
+export async function deleteAutomation(organizationId: string | null, id: string): Promise<boolean> {
   const { rowCount } = await getPool().query(
-    `delete from automations where id = $2 and organization_id = $1`,
+    `delete from automations where id = $2 and ($1::uuid is null or organization_id = $1)`,
     [organizationId, id]
   );
   return (rowCount ?? 0) > 0;

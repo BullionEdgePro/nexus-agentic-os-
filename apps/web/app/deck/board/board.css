@@ -367,3 +367,28 @@
   background: transparent;
   color: var(--mist);
 }
+
+.bd-auto-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.bd-auto-remove {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 100px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mist);
+  cursor: pointer;
+}
+
+.bd-auto-remove:hover {
+  border-color: var(--crit);
+  color: var(--crit);
+}
