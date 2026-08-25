@@ -62,6 +62,12 @@ export const TENANT_SCOPED_TABLES = [
   "operator_findings",
   "bookings",
   "forecasts",
+  // Migration 064. Both carry organization_id and both are read on a path a
+  // business reaches, so rls-verify's derived catalogue would have failed on
+  // them the moment they existed -- it lists every table with that column and
+  // no row-level security, precisely so a new one cannot be forgotten here.
+  "automations",
+  "automation_runs",
   // Added 2026-08-19. Each carries an organization_id, so each is tenant data
   // by construction, and none was on this list, on migration 018's array, or on
   // rls-verify's copy — the three places the set is typed out. A table is

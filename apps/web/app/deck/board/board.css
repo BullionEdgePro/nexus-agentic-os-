@@ -207,3 +207,163 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* --- rules (automations) --- */
+
+.bd-auto {
+  border-top: 1px solid var(--hairline);
+  padding-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.bd-auto-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bd-auto-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.bd-auto-head p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--slate);
+  max-width: 68ch;
+}
+
+.bd-auto-add,
+.bd-auto-save {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--marble);
+  cursor: pointer;
+}
+
+.bd-auto-add {
+  background: transparent;
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+
+.bd-auto-save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bd-auto-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px;
+  background: var(--marble);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+}
+
+.bd-auto-form label {
+  display: grid;
+  gap: 4px;
+}
+
+.bd-auto-form span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+.bd-auto-form select {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 190px;
+}
+
+.bd-auto-none {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--mist);
+  max-width: 68ch;
+}
+
+.bd-auto-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.bd-auto-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+}
+
+.bd-auto-what {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.bd-auto-meta {
+  margin: 3px 0 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--mist);
+}
+
+/* On is stated plainly rather than in green: a rule that acts unattended is not
+   a success indicator, it is a live grant, and the colour that suits it is the
+   one that says "this is doing something" rather than "this is fine". */
+.bd-auto-on,
+.bd-auto-off {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 100px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.bd-auto-on {
+  border: 1px solid var(--signal);
+  background: var(--signal);
+  color: var(--paper);
+}
+
+.bd-auto-off {
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--mist);
+}

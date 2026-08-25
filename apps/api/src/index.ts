@@ -14,6 +14,7 @@ import { adminAuthRoute } from "./routes/admin-auth.js";
 import { activityRoute } from "./routes/activity.js";
 import { qualityRoute } from "./routes/quality.js";
 import { linksRoute, publicLinksRoute } from "./routes/links.js";
+import { automationsRoute } from "./routes/automations.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
@@ -303,6 +304,10 @@ app.route("/api/catalog", catalogRoute);
 // which is where the check has to live because /api/tasks carries no :slug for
 // requireTenantScope to read.
 app.route("/api/tasks", tasksRoute);
+// Scoped inside the handlers exactly like /api/tasks, and NOT operatorOnly for
+// the same reason: the person doing the work is the one who needs the rule.
+// Both mounts, because a bare mount covers only itself.
+app.route("/api/automations", automationsRoute);
 // Tasks raised from inside a conversation. Composed onto the conversations
 // router so requireConversationScope has already settled access.
 app.route("/api/conversations", conversationTasksRoute);

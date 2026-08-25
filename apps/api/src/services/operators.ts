@@ -22,6 +22,7 @@ import {
   type ScheduledJob,
 } from "@nexus/shared";
 import { logger } from "../lib/logger.js";
+import { runAutomations } from "./automation-runner.js";
 import { dispatchRaisedFindings } from "./alert-dispatch.js";
 
 /**
@@ -2017,6 +2018,22 @@ export async function runOperators(): Promise<OperatorRunSummary[]> {
   // costs a log line and nothing else -- it must never be the reason an operator
   // run is recorded as failed.
   await dispatchRaisedFindings(raisedThisSweep, (id) => slugById.get(id) ?? id);
+
+  // THE HANDS, after the eyes have finished. Every finding is written by this
+  // point, so the automations read what is true rather than what is arriving,
+  // and a business with no automations does one cheap query and stops.
+  //
+  // Deliberately not given `raisedThisSweep`: that list carries no subject, on
+  // purpose, because it is built for dispatch OUTSIDE the platform and a
+  // finding's title names a customer. The runner reads the findings itself,
+  // scoped to each business.
+  //
+  // Outside the sweep's error handling for the same reason the dispatch is: an
+  // automation that throws must never be the reason an operator run is recorded
+  // as failed, because the findings themselves are correct and already visible.
+  await runAutomations(organizations.map((organization) => organization.id)).catch((err) => {
+    logger.error({ err }, "Automations failed — every finding still stands and is on the deck");
+  });
 
   return summaries;
 }

@@ -43,10 +43,12 @@ import type { BusinessSlug } from "@nexus/shared";
 import {
   getOrganizations,
   getTasks,
+  getTeam,
   readableError,
   updateTask,
   type TaskRecord,
 } from "../../../lib/api";
+import { Automations } from "./automations";
 import { COLUMNS, columnFor, dueDateFor, type ColumnKey } from "./columns";
 
 /** The view this browser last chose. Per machine, which is what localStorage means. */
@@ -74,6 +76,7 @@ export default function BoardPage() {
   const [actionError, setActionError] = useState("");
   const [loading, setLoading] = useState(true);
   const [dragging, setDragging] = useState<string | null>(null);
+  const [team, setTeam] = useState<Array<{ id: string; fullName: string }>>([]);
   const [over, setOver] = useState<ColumnKey | null>(null);
 
   useEffect(() => {
@@ -120,6 +123,20 @@ export default function BoardPage() {
   useEffect(() => {
     void load(business);
   }, [business, load]);
+
+  useEffect(() => {
+    // Only with a business chosen. `getTeam` is addressed per organization, and
+    // "everybody at all five companies" is not a list anybody should be
+    // assigning work from — a rule can only give work to somebody at the
+    // business it belongs to, and createAutomation refuses otherwise.
+    if (!business) {
+      setTeam([]);
+      return;
+    }
+    getTeam(business)
+      .then((data) => setTeam(data.employees.map((e) => ({ id: e.id, fullName: e.fullName }))))
+      .catch(() => setTeam([]));
+  }, [business]);
 
   useEffect(() => {
     getOrganizations()
@@ -281,6 +298,11 @@ export default function BoardPage() {
           ))}
         </div>
       )}
+
+      {/* Under the board rather than above it: the columns are what somebody
+          came here for, and the rules are what they set up once and then leave
+          alone. */}
+      <Automations business={business} team={team} />
     </div>
   );
 }

@@ -25,3 +25,5 @@ export * from "./forecasts.js";
 export * from "./search.js";
 export * from "./policy-shape.js";
 export * from "./self-improvement.js";
+export * from "./automation-rules.js";
+export * from "./automations.js";

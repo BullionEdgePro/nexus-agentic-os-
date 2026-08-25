@@ -65,6 +65,11 @@ test("no operator calls a model", () => {
     "@nexus/shared",
     "../lib/logger.js",
     "./alert-dispatch.js",
+    // Added 2026-08-25 after checking, which is what this list is for. The
+    // automation runner imports @nexus/db and a logger and nothing else; it
+    // acts on findings the sweep has already made and calls no model. The
+    // check that would catch it if that changed is this line failing again.
+    "./automation-runner.js",
   ]);
 
   const imports = sweepImports(OPERATORS);

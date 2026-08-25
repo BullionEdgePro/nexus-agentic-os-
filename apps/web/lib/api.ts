@@ -1313,3 +1313,61 @@ export function updateMe(input: {
 }): Promise<{ ok: true }> {
   return request("/api/me", { method: "PATCH", body: JSON.stringify(input) });
 }
+
+/* ---------------------------------------------------------------- automations */
+
+export interface AutomationRecord {
+  id: string;
+  organizationId: string;
+  businessName: string;
+  triggerOperator: string;
+  action: string;
+  assigneeId: string | null;
+  assigneeName: string | null;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  /** How many times it has acted. The only number that says whether it earns its keep. */
+  timesRun: number;
+  lastRanAt: string | null;
+}
+
+export interface AutomationOption {
+  action: string;
+  describes: string;
+  operators: string[];
+  needsAssignee: boolean;
+}
+
+/**
+ * What may be automated, from the rules themselves.
+ *
+ * Fetched rather than hardcoded in the form: the server derives this from the
+ * same allow-list that refuses a bad pair, so a menu cannot offer something the
+ * create call would then reject. A form that lets you choose an option and then
+ * says no is a form that was written from memory.
+ */
+export function getAutomationOptions(): Promise<{ actions: AutomationOption[] }> {
+  return request("/api/automations/options");
+}
+
+export function getAutomations(business?: BusinessSlug | ""): Promise<{ automations: AutomationRecord[] }> {
+  const query = business ? `?business=${encodeURIComponent(business)}` : "";
+  return request(`/api/automations${query}`);
+}
+
+export function createAutomation(input: {
+  business?: BusinessSlug | "";
+  triggerOperator: string;
+  action: string;
+  assigneeId?: string | null;
+}): Promise<{ automation: AutomationRecord }> {
+  return request("/api/automations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function setAutomationActive(
+  id: string,
+  isActive: boolean
+): Promise<{ automation: AutomationRecord }> {
+  return request(`/api/automations/${id}`, { method: "PATCH", body: JSON.stringify({ isActive }) });
+}
