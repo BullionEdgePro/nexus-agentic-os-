@@ -7,6 +7,7 @@ import {
   withTenant,
   type FindingInput,
   type RaisedFinding,
+  AUTO_REVIEWER,
 } from "@nexus/db";
 // Pure and rules-based — no model call, so using it here keeps operators within
 // the property that makes them cheap enough to run every ten minutes.
@@ -876,6 +877,74 @@ const bookingWithoutAnyone: Operator = {
             ? `Your agent is set up to book appointments, and ${staff === 1 ? "your one member of staff has" : `all ${staff} of your staff have`} no working hours set — so the diary can never offer a time. Rather than let the agent offer appointments nobody can take, the platform withholds booking from it entirely: it will not offer or take an appointment for you at all. Set working hours on the Team screen and booking switches itself back on.`
             : "Your agent is set up to book appointments and this business has no active staff — so the diary can never offer a time. Rather than let the agent offer appointments nobody can take, the platform withholds booking from it entirely: it will not offer or take an appointment for you at all. Add someone on the Team screen and give them working hours, and booking switches itself back on.",
         subjectKind: "agent_config",
+        subjectId: row.id,
+      } satisfies FindingInput;
+    });
+  },
+};
+
+/**
+ * RULE 5 OF THE AUTOMATIC ACTIVATION: it is never silent.
+ *
+ * F14's refusal was that "the judgement of whether a rate is wrong belongs to
+ * someone who knows the business". The owner asked for the feature finished, so
+ * that judgement now lives in `autoActivationDecision`. This is what stops that
+ * being a quiet transfer: every procedure the platform switched on and nobody
+ * has reviewed shows up in the same list the business already reads.
+ *
+ * Computed from STATE, not from the activation event, which is what makes it
+ * retract properly. The moment a person opens it and switches it off — or looks
+ * at it and leaves it on — `reviewed_by` stops being the automation's marker and
+ * this finding disappears on the next sweep. It says "nobody has looked at this
+ * yet", and it stops saying it the moment somebody has.
+ *
+ * `info`, not `warn`. Nothing is wrong: this is the feature working as asked
+ * for. But an agent following a method nobody approved is worth a sentence.
+ */
+const procedureSwitchedOn: Operator = {
+  slug: "procedure-switched-on",
+  title: "The agent is following a method nobody has approved",
+  description:
+    "This platform inferred a way of handling a kind of enquiry from conversations that went well, found enough evidence to trust it, and switched it on by itself. It is live now. Nobody at this business has looked at it yet.",
+  run: async (organizationId) => {
+    const { rows } = await getPool().query<{
+      id: string;
+      intent_category: string;
+      language: string;
+      derived_from_count: string;
+      days: string;
+    }>(
+      `select p.id,
+              p.intent_category,
+              p.language,
+              p.derived_from_count::text,
+              extract(day from now() - p.reviewed_at)::text as days
+         from procedures p
+        where p.organization_id = $1
+          and p.is_active
+          -- The automation's own marker. A procedure a PERSON switched on is
+          -- not this operator's business, and neither is one a person has since
+          -- reviewed: reviewed_by changes and this finding retracts itself.
+          and p.reviewed_by = $2
+        order by p.reviewed_at asc`,
+      [organizationId, AUTO_REVIEWER]
+    );
+
+    return rows.map((row) => {
+      const days = Number(row.days ?? 0);
+      return {
+        // One per procedure, so switching one off retracts only that one.
+        fingerprint: `procedure-switched-on:${row.id}`,
+        severity: "info" as const,
+        title: "The agent is following a method nobody has approved",
+        detail:
+          `Your agent is now handling "${row.intent_category.replace(/_/g, " ")}" enquiries ` +
+          `by a method this platform worked out for itself, from ${row.derived_from_count} ` +
+          `conversations that went well. It switched on ` +
+          (days >= 1 ? `${days} day${days === 1 ? "" : "s"} ago` : "today") +
+          ` and nobody here has looked at it. Read it on the How we answer screen — if it is ` +
+          `wrong, switching it off is one click and this platform will not switch it back on.`,
+        subjectKind: "procedure",
         subjectId: row.id,
       } satisfies FindingInput;
     });
@@ -1873,6 +1942,7 @@ export const OPERATORS: Operator[] = [
   judgeOffline,
   procedureAwaitingReview,
   wordingAwaitingReview,
+  procedureSwitchedOn,
   bookingWithoutAnyone,
   bookingUnassigned,
   templateRejected,

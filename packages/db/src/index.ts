@@ -24,3 +24,4 @@ export * from "./phrases.js";
 export * from "./forecasts.js";
 export * from "./search.js";
 export * from "./policy-shape.js";
+export * from "./self-improvement.js";

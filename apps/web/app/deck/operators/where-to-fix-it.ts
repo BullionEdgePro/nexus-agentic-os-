@@ -56,6 +56,10 @@ const WHERE: Record<string, Destination> = {
   // How the agent answers.
   "procedure-awaiting-review": { screen: "procedures" },
   "wording-awaiting-review": { screen: "procedures" },
+  // The one finding on this list the platform raised about ITSELF. It goes
+  // to the same screen as the wording above, because the thing to read and
+  // the switch to turn it off are both there.
+  "procedure-switched-on": { screen: "procedures" },
 
   // Who is available to take work.
   "booking-unassigned": { screen: "team" },

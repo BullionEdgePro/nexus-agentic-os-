@@ -28,14 +28,42 @@ const OPERATORS = readFileSync(
   "utf8"
 );
 
-/** The deck's routes, read from the directory that defines them. */
+/**
+ * The deck's screens: the URL segment AND the heading a person actually reads.
+ *
+ * Directory names alone were not enough, and the gap had teeth in the wrong
+ * direction. `/deck/procedures` puts "How we answer" in its own h1 — that is
+ * the only name for it a user has ever seen. A finding saying "the Procedures
+ * screen" would have passed this test while sending somebody to look for a
+ * heading that appears nowhere in the product, and a finding saying "How we
+ * answer" failed while being exactly right.
+ *
+ * So the headings are read from the pages too. Derived from what the screens
+ * call themselves rather than from an allowlist somebody maintains, which is
+ * the same correction this suite has made a dozen times this week.
+ */
 function deckScreens() {
   const dir = join(root, "apps", "web", "app", "deck");
-  return new Set(
-    readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, "page.tsx")))
-      .map((e) => e.name.toLowerCase())
-  );
+  const names = new Set();
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const page = join(dir, entry.name, "page.tsx");
+    if (!existsSync(page)) continue;
+
+    names.add(entry.name.toLowerCase());
+
+    // The first h1's text, up to the first tag or brace inside it. Pages open
+    // with `<h1>How we answer` and often continue with a `{count}` expression.
+    const src = readFileSync(page, "utf8");
+    const at = src.indexOf("<h1");
+    if (at === -1) continue;
+    const open = src.indexOf(">", at);
+    if (open === -1) continue;
+    const text = src.slice(open + 1, open + 90).split(/[<{]/)[0].trim();
+    if (text.length > 2) names.add(text.toLowerCase());
+  }
+  return names;
 }
 
 /**

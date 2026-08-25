@@ -16,6 +16,7 @@ import {
   type ProcedureStep,
 } from "@nexus/shared";
 import { logger } from "../lib/logger.js";
+import { activateWellEvidencedProcedures } from "./self-improvement.js";
 
 /**
  * The inference writer (F10).
@@ -607,6 +608,32 @@ export async function inferProceduresForAllBusinesses(): Promise<BusinessInferen
         { business: organization.slug, ...summarise(run) },
         "Procedure inference complete"
       );
+
+      // F14's automatic action, immediately after the evidence that feeds it.
+      //
+      // Same job rather than a second timer: acting on evidence the moment it
+      // is written is the point, and two schedules would only create a window
+      // where the writer and the switch disagree about what the drafts say.
+      //
+      // Its own try, because switching a procedure on is a different kind of
+      // failure from inferring one. A collision on the one-active-per-situation
+      // index must not be reported as "procedure inference failed" — the
+      // inference succeeded, and the sentence a person reads should say which
+      // half went wrong.
+      try {
+        const activated = await activateWellEvidencedProcedures(organization.id);
+        if (activated.length > 0) {
+          logger.info(
+            { business: organization.slug, count: activated.length },
+            "Procedures switched on automatically — procedure-switched-on will tell the business"
+          );
+        }
+      } catch (err) {
+        logger.error(
+          { business: organization.slug, err },
+          "Automatic procedure activation failed — the drafts stay off, which is the safe direction"
+        );
+      }
     } catch (err) {
       logger.error({ business: organization.slug, err }, "Procedure inference failed");
     }
