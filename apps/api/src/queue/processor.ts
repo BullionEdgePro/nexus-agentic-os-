@@ -1321,7 +1321,25 @@ async function resolveServingOrganization(ctx: {
     return { kind: "asked" };
   }
 
-  await askWhichBusiness(ctx, businesses);
+  // ASK ABOUT THE ONES THAT MATCHED, not about all five.
+  //
+  // The classifier already works out WHICH businesses a message could be
+  // for -- `ambiguous` carries them -- and this line threw that away and
+  // rebuilt the full menu every time. Somebody who writes "legal" on a number
+  // shared by three law firms and two other trades was asked to pick from
+  // five, two of which could not possibly have been what they meant.
+  //
+  // Only when the candidates are a genuine narrowing. One candidate is not a
+  // menu, and a list as long as the full one is the full one -- in both cases
+  // the whole roster is the honest thing to show, because the classifier has
+  // not actually told us anything.
+  const candidates = outcome.kind === "ambiguous" ? outcome.candidates : [];
+  const narrowed = candidates.length >= 2 && candidates.length < businesses.length;
+  const asked = narrowed
+    ? businesses.filter((business) => candidates.some((c) => c.id === business.id))
+    : businesses;
+
+  await askWhichBusiness(ctx, asked);
   return { kind: "asked" };
 }
 
