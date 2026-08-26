@@ -602,3 +602,16 @@
   .deck-root .lift-hover { transition: none; }
   .deck-root .lift-hover:hover { transform: none; }
 }
+
+/* The caption under an empty chart.
+ *
+ * An empty chart with no caption is indistinguishable from one that failed to
+ * load, which is the confusion this whole console has been corrected for three
+ * times. It says which of the two silences it is. */
+.deck-root .chart-empty {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mist);
+  max-width: 44ch;
+}

@@ -277,9 +277,22 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
   }, []);
 
 
-  // area chart path (static sample)
+  /**
+   * The conversations chart.
+   *
+   * It was drawn from [46, 58, 52, 74, 68, 88, 102] — a rising seven-day
+   * trend, hardcoded, rendered unconditionally, on a platform that has had
+   * seventeen conversations in its entire existence. Not a fallback: there
+   * was no path on which it drew anything else.
+   *
+   * There is no series to replace it with. `/api/metrics/overview` returns
+   * aggregates and no history, so the honest chart is an empty one — the same
+   * answer the stat cards above already give with their empty sparklines.
+   * When a real series exists, pass it here and this draws it.
+   */
   const area = useMemo(() => {
-    const vals = [46, 58, 52, 74, 68, 88, 102];
+    const vals: number[] = [];
+    if (vals.length < 2) return null;
     const w = 320;
     const h = 150;
     const mn = Math.min(...vals);
@@ -439,10 +452,54 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                   Last 24h
                 </span>
               </div>
-              <GovRow label="PII scan" sub="Deterministic redaction pass" val="3 held" pct={12} color="var(--good)" tone="var(--good)" />
-              <GovRow label="Hallucination judge" sub="Claude Haiku · grounding check" val="low · 94%" pct={94} color="linear-gradient(90deg,var(--good),var(--signal))" tone="var(--warn)" />
-              <GovRow label="Escalated to human" sub="Juris Prime Legal · strict tier" val="6" valColor="var(--crit)" pct={22} color="var(--crit)" tone="var(--crit)" />
-              <GovRow label="Reply never dropped" sub="Silence-guarantee coverage" val="100%" valColor="var(--good)" pct={100} color="var(--good)" tone="var(--signal)" />
+              {/* THE THIRD ROUND OF THIS IN ONE FILE.
+
+                  The header above records that invented conversations were
+                  removed and invented statistics were left; the statistics
+                  were then fixed and THESE were left. Four hardcoded
+                  governance figures on the owner's own dashboard: "3 held",
+                  "low · 94%", "6 escalated" attributed by name to Juris Prime
+                  Legal, and "100%" coverage — with meters drawn to match.
+
+                  Production has had ZERO escalations. The 94% was never
+                  measured by anything.
+
+                  Only one of the four has a real number behind it today, so
+                  only one of them shows one. The rest keep their labels,
+                  because an empty dashboard should still say what it would
+                  show, and carry an em dash because that is what is true. */}
+              <GovRow
+                label="Held by governance"
+                sub="PII scan and grounding judge, replies withheld"
+                val={live && overview ? String(overview.governanceHolds) : null}
+                pct={0}
+                color="var(--good)"
+                tone="var(--good)"
+              />
+              <GovRow
+                label="Hallucination judge"
+                sub="Runs on every reply; no breakdown is published yet"
+                val={null}
+                pct={0}
+                color="var(--good)"
+                tone="var(--warn)"
+              />
+              <GovRow
+                label="Escalated to human"
+                sub="Not counted here yet — see Agent quality"
+                val={null}
+                pct={0}
+                color="var(--crit)"
+                tone="var(--crit)"
+              />
+              <GovRow
+                label="Reply never dropped"
+                sub="Silence guarantee — measured by the operators, not here"
+                val={null}
+                pct={0}
+                color="var(--good)"
+                tone="var(--signal)"
+              />
             </div>
           </div>
 
@@ -457,8 +514,11 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                   </span>
                   Conversations
                 </h3>
-                <span className="pill mono" style={{ color: "var(--good)" }}>
-                  +18%
+                {/* The pill said "+18%" in green, permanently, against a
+                    platform whose entire history is seventeen conversations.
+                    A growth figure nothing computed. */}
+                <span className="pill mono" style={{ color: "var(--mist)" }}>
+                  {live && overview ? `${overview.activeConversations} open` : "—"}
                 </span>
               </div>
               <svg className="area" viewBox="0 0 320 150" preserveAspectRatio="none">
@@ -470,10 +530,31 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                 </defs>
                 <path d="M0 75 H320" stroke="rgba(22,22,15,.1)" />
                 <path d="M0 120 H320" stroke="rgba(22,22,15,.07)" />
-                <path d={area.fill} fill="url(#ag)" />
-                <path d={area.line} fill="none" stroke="var(--signal)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx={area.last[0]} cy={area.last[1]} r="3.5" fill="var(--signal)" />
+                {area ? (
+                  <>
+                    <path d={area.fill} fill="url(#ag)" />
+                    <path
+                      d={area.line}
+                      fill="none"
+                      stroke="var(--signal)"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx={area.last[0]} cy={area.last[1]} r="3.5" fill="var(--signal)" />
+                  </>
+                ) : null}
               </svg>
+              {/* Which of the two silences this is, in the same words the
+                  cards above use — an empty chart with no caption is just a
+                  chart that failed to load. */}
+              {area ? null : (
+                <p className="chart-empty">
+                  {live
+                    ? "No history is published yet — the overview counts today, not the week."
+                    : "Nothing to draw: the platform could not be reached."}
+                </p>
+              )}
               <div className="foot" style={{ marginTop: 12 }}>
                 <span>Mon</span>
                 <span>Tue</span>
@@ -572,8 +653,10 @@ function GovRow({
 }: {
   label: string;
   sub: string;
-  val: string;
+  /** Null when the platform did not send one. Never a plausible stand-in. */
+  val: string | null;
   valColor?: string;
+  /** Ignored when val is null — a full meter under an em dash is still a claim. */
   pct: number;
   color: string;
   tone: string;
@@ -592,11 +675,13 @@ function GovRow({
         </div>
       </div>
       <div style={{ textAlign: "right" }}>
-        <b className="mono" style={valColor ? { color: valColor } : undefined}>
-          {val}
+        <b className="mono" style={val !== null && valColor ? { color: valColor } : undefined}>
+          {val ?? "—"}
         </b>
+        {/* THE METER IS A CLAIM TOO. A bar drawn to 94% beside an em dash
+            reads as "94%" to anybody glancing, which is most people. */}
         <div className="meter">
-          <i style={{ width: `${pct}%`, background: color }} />
+          {val === null ? null : <i style={{ width: `${pct}%`, background: color }} />}
         </div>
       </div>
     </div>
