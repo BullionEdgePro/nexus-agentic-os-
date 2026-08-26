@@ -258,7 +258,7 @@ phone number and narrows immediately.
 
 **Re-read against the running system on 2026-08-22, and again on 2026-08-24.** Every count below was
 measured, not carried forward: 20 operators (this table said sixteen), 10
-copilot questions (it said six), 67 migrations, eleven gates, 1234 tests. The eleventh, added 2026-08-24, is `backup-check`, and it is the only one that says nothing about whether the deploy works — it asks whether the thing that gets you back if it does not is still standing. `backup-db.sh` had been restoring every nightly dump into a scratch database since it was written, and writing the answer to a log no script, gate, operator or endpoint had ever opened.
+copilot questions (it said six), 68 migrations, eleven gates, 1280 tests. The eleventh, added 2026-08-24, is `backup-check`, and it is the only one that says nothing about whether the deploy works — it asks whether the thing that gets you back if it does not is still standing. `backup-db.sh` had been restoring every nightly dump into a scratch database since it was written, and writing the answer to a log no script, gate, operator or endpoint had ever opened.
 
 ### The vocabulary, which is the point of this revision
 

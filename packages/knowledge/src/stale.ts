@@ -48,6 +48,62 @@ export interface StaleSource {
  */
 const RETRY_FAILED_AFTER_HOURS = 24;
 
+/**
+ * How long to wait when the provider ASKED US to come back later.
+ *
+ * ============================================================
+ * THIS IS NOT THE TAXONOMY THE COMMENT ABOVE REFUSES
+ * ============================================================
+ *
+ * That refusal is right and stands: classifying provider errors in general
+ * means owning a vocabulary somebody else changes, and it rots.
+ *
+ * This is one bit, and it is not the provider's vocabulary. 429 and 503 are
+ * HTTP, they have meant "retry later" since 1999, and every provider that
+ * rate-limits speaks them. The question is not "what kind of error is this"
+ * but "did the other end say to come back".
+ *
+ * AND IT FAILS SAFE, which is what makes it worth having at all: if the
+ * wording ever stops matching, the delay falls back to the 24 hours above.
+ * The narrowing can stop working; it cannot make anything worse.
+ *
+ * Measured on 2026-08-26. The embedding provider's free tier hit its quota
+ * and returned 429 for five of ABR's pages -- litigation, maritime law,
+ * property law, our expertise, overview, which is most of what a law firm
+ * does. The quota had cleared within the hour and those pages were still
+ * going to serve stale content for another twenty-three, on a key that will
+ * hit the same limit again tomorrow.
+ */
+const RETRY_RATE_LIMITED_AFTER_HOURS = 1;
+
+/**
+ * Did the other end tell us to come back later?
+ *
+ * Deliberately narrow. Anything not recognised is treated as an ordinary
+ * failure and waits the full cooldown, which is the behaviour this had before
+ * the distinction existed.
+ */
+export function looksRateLimited(error: string | null | undefined): boolean {
+  if (!error) return false;
+  const text = error.toLowerCase();
+  return (
+    text.includes("429") ||
+    text.includes("503") ||
+    text.includes("quota") ||
+    text.includes("rate limit") ||
+    text.includes("too many requests") ||
+    text.includes("service unavailable")
+  );
+}
+
+/** When a source that just failed should next be tried. */
+export function retryAfterFor(error: string | null | undefined, now = new Date()): Date {
+  const hours = looksRateLimited(error)
+    ? RETRY_RATE_LIMITED_AFTER_HOURS
+    : RETRY_FAILED_AFTER_HOURS;
+  return new Date(now.getTime() + hours * 60 * 60 * 1000);
+}
+
 export async function findStaleSources(input: {
   olderThanHours?: number;
   limit?: number;
@@ -72,11 +128,24 @@ export async function findStaleSources(input: {
               (status <> 'failed'
                and (last_checked_at is null
                     or last_checked_at < now() - ($1 || ' hours')::interval))
-              -- And a failed one, once its cooldown has passed. Without this a
-              -- 429 removes a page from the knowledge base permanently.
+              -- And a failed one, once it is due. Without this a 429 removes a
+              -- page from the knowledge base permanently.
+              --
+              -- retry_after is written when the failure HAPPENS, so a rate
+              -- limit comes back in an hour and everything else still waits
+              -- the full cooldown. Null is a row that failed before the column
+              -- existed and keeps the old rule -- which is also the fallback if
+              -- the narrowing ever stops recognising anything.
+              --
+              -- (No backticks in this comment: it lives inside a template
+              -- literal and one would end the string. Written here after doing
+              -- exactly that, despite the same warning already standing in
+              -- operators.ts.)
               or (status = 'failed'
                   and (last_checked_at is null
-                       or last_checked_at < now() - ($3 || ' hours')::interval))
+                       or (retry_after is not null and retry_after <= now())
+                       or (retry_after is null
+                           and last_checked_at < now() - ($3 || ' hours')::interval)))
             )
       -- HEALTHY SOURCES FIRST. Ordering by staleness alone would put the failed
       -- ones at the front — they are by definition the least recently
@@ -106,8 +175,11 @@ export async function findStaleSources(input: {
 export async function markSourceFailed(sourceId: string, error: string): Promise<void> {
   await getPool().query(
     `update knowledge_sources
-     set status = 'failed', error = $2, last_checked_at = now()
+     set status = 'failed', error = $2, last_checked_at = now(), retry_after = $3
      where id = $1`,
-    [sourceId, error.slice(0, 500)]
+    // Decided HERE, once, rather than re-derived from the stored text by
+    // whoever reads it. The error string is the provider's and may be
+    // reworded; the moment it arrived is when we knew what it meant.
+    [sourceId, error.slice(0, 500), retryAfterFor(error)]
   );
 }
