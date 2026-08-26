@@ -1534,6 +1534,31 @@ export function updateBooking(
   return request(`/api/bookings/${bookingId}`, { method: "PATCH", body: JSON.stringify(change) });
 }
 
+/**
+ * Put an appointment in the diary from the console.
+ *
+ * `startsAt` and `endsAt` are absolute instants — full ISO strings with an
+ * offset, never a wall clock. The caller converts from the BUSINESS's timezone,
+ * because that is the zone the customer will physically arrive in, and a form
+ * that posted the operator's own clock would produce a real appointment at the
+ * wrong hour with nothing anywhere reporting a fault.
+ *
+ * Refusals worth handling at the call site: 409 when the slot went while the
+ * form was open, and 400 carrying the reason from the database — no contact, a
+ * staff member who works somewhere else, an end before its start.
+ */
+export function createBooking(input: {
+  business: BusinessSlug;
+  contactId: string;
+  startsAt: string;
+  endsAt: string;
+  employeeId?: string | null;
+  subject?: string | null;
+  notes?: string | null;
+}): Promise<{ booking: BookingRecord }> {
+  return request(`/api/bookings`, { method: "POST", body: JSON.stringify(input) });
+}
+
 /** Appointments that came out of one conversation, cancellations included. */
 export function getConversationBookings(
   conversationId: string

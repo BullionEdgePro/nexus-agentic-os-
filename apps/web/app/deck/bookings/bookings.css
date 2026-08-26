@@ -104,3 +104,127 @@
   .bk-when span { font-size: 16px; }
   .bk-actions { justify-content: flex-start; }
 }
+
+/* ============================================================
+   Adding an appointment by hand
+   ============================================================ */
+
+.deck-root .bk-add-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 18px;
+  font-size: 13px;
+  color: var(--slate);
+}
+
+.deck-root .bk-add-open {
+  border: 1px solid var(--hairline);
+  background: var(--marble);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 7px 13px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.deck-root .bk-add-open:hover { border-color: var(--signal-text); color: var(--signal-text); }
+
+.deck-root .bk-add {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--marble);
+  padding: 18px;
+  margin: 4px 0 20px;
+}
+
+.deck-root .bk-add-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.deck-root .bk-add-close {
+  border: 0;
+  background: none;
+  color: var(--slate);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.deck-root .bk-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+.deck-root .bk-field > span {
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.deck-root .bk-field input,
+.deck-root .bk-field select,
+.deck-root .bk-field textarea {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.deck-root .bk-field textarea { resize: vertical; }
+
+.deck-root .bk-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.deck-root .bk-row .bk-field { flex: 1 1 130px; }
+
+/* The zone line is the one piece of prose on this form that stops a plausible
+   wrong answer, so it is not styled as a hint. */
+.deck-root .bk-zone {
+  margin: 0;
+  font-size: 13px;
+  color: var(--slate);
+}
+.deck-root .bk-zone b { color: var(--ink); }
+
+.deck-root .bk-unreadable {
+  font-size: 12.5px;
+  font-style: normal;
+  color: var(--slate);
+  border-left: 2px solid var(--hairline);
+  padding-left: 9px;
+}
+
+.deck-root .bk-add-error {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--crit);
+}
+
+.deck-root .bk-add-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.deck-root .bk-add-foot button {
+  border: 0;
+  background: var(--signal-text);
+  color: var(--paper);
+  border-radius: 6px;
+  padding: 9px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.deck-root .bk-add-foot button:disabled { opacity: .55; cursor: default; }
+.deck-root .bk-add-foot span { font-size: 12.5px; color: var(--slate); }

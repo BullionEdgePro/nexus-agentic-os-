@@ -9,7 +9,8 @@ import {
   type BookingRecord,
   type BookingCounts,
   type BookingStatus,
-  type TeamMember, readableError } from "@/lib/api";
+  type TeamMember, readableError, getOrganizations } from "@/lib/api";
+import { AddAppointment } from "./add-appointment";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -25,12 +26,25 @@ import "./bookings.css";
  * records, the same customer. This page is the first place either has ever been
  * visible.
  *
- * THERE IS NO "ADD" FORM, and the omission is deliberate rather than unfinished.
- * A booking made here would be a booking nobody told the customer about — the
- * conversation is where an appointment is agreed, and this is where it is
- * managed afterwards. Cancelling from this page is a status change the customer
- * still has to be told about, which is why the caveat at the bottom says so
- * rather than leaving it implied.
+ * THERE IS NOW AN ADD FORM, having deliberately not been one. What this said
+ * before, and why it changed:
+ *
+ *   "A booking made here would be a booking nobody told the customer about —
+ *    the conversation is where an appointment is agreed."
+ *
+ * True of the case it was written about, and silent about the case it was not.
+ * A law firm takes phone calls; somebody walks in; a client emails. A person is
+ * talking to the customer in every one of those — just not over WhatsApp — and
+ * a diary only the agent can write to is a diary that describes a fraction of
+ * the business. The owner asked for it on 2026-08-26 with the original
+ * reasoning put to them.
+ *
+ * The guarantee that note was protecting never depended on the form's absence:
+ * an appointment added here goes through the same `createBooking`, so the same
+ * exclusion constraint refuses a double-booking and the same check refuses a
+ * staff member from another company. Cancelling — and now creating — is still
+ * something the customer has to be told about by a person, which is why the
+ * caveat at the bottom says so rather than leaving it implied.
  *
  * TIMES ARE SHOWN IN THE BUSINESS'S ZONE, unlike the follow-ups page. A due date
  * is a deadline for whoever is reading it, so their own clock is right. An
@@ -57,6 +71,15 @@ export default function BookingsPage() {
    */
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
+  /**
+   * Each business's own zone, for the ADD form.
+   *
+   * The rows already carry `businessTimezone`, but an empty diary carries no
+   * rows — and an empty diary is exactly when somebody reaches for this form.
+   * Falling back to the reader's clock there would make the first appointment a
+   * business ever books the one most likely to be at the wrong hour.
+   */
+  const [timezones, setTimezones] = useState<Record<string, string>>({});
 
   const load = useCallback(async (slug: BusinessSlug | "", which: BookingStatus | "all") => {
     setLoading(true);
@@ -76,6 +99,18 @@ export default function BookingsPage() {
   useEffect(() => {
     void load(business, status);
   }, [business, status, load]);
+
+  useEffect(() => {
+    getOrganizations()
+      .then((data) =>
+        setTimezones(Object.fromEntries(data.organizations.map((o) => [o.slug, o.timezone])))
+      )
+      // Failing soft is right here and only because of what the fallback is:
+      // `zoneFor` prefers a zone off a real booking row and the form prints
+      // whichever zone it ends up using, so a reader is never shown a time
+      // without being told whose clock it is on.
+      .catch(() => undefined);
+  }, []);
 
   // Assignees come from the business being viewed. With "all businesses"
   // selected there is no single staff list, so reassignment is offered only
@@ -135,10 +170,14 @@ export default function BookingsPage() {
         <header className="act-head">
           <h1>Appointments</h1>
         </header>
+        {/* This used to open "What the agent agreed on the business's behalf",
+            which stopped being true the moment staff could add one. The second
+            sentence is untouched, because it never depended on who started the
+            booking — both routes run the same checks. */}
         <p className="act-lede">
-          What the agent agreed on the business&apos;s behalf. Every one of these was offered from a
-          real rota and taken against a live diary — the database refuses two people the same slot,
-          so an appointment appearing here is one somebody can actually keep.
+          What this business has agreed to — by agent, or by whoever took the call. Every one was
+          taken against a live diary and the database refuses two people the same slot, so an
+          appointment appearing here is one somebody can actually keep.
         </p>
 
         <div className="tk-counts">
@@ -176,6 +215,22 @@ export default function BookingsPage() {
             </button>
           ))}
         </div>
+
+        {/*
+         * OFFERED ONLY INSIDE ONE BUSINESS, for the reason the assignee dropdown
+         * above already gives: with "all businesses" selected there is no single
+         * staff list and no single timezone, and a form mixing five companies'
+         * customers is one where picking wrong is a mistake nobody can see.
+         */}
+        {business ? (
+          <AddAppointment
+            business={business}
+            businessName={TENANTS.find((t) => t.slug === business)?.ref ?? business}
+            timezone={zoneFor(business, timezones, bookings)}
+            team={team}
+            onCreated={() => void load(business, status)}
+          />
+        ) : null}
 
         {loadError ? (
           /*
@@ -308,6 +363,29 @@ export default function BookingsPage() {
  * page is built to avoid, and one that produces a plausible time rather than a
  * visible fault.
  */
+/**
+ * The zone to type an appointment in, from whichever source actually knows.
+ *
+ * A booking already in the diary is the strongest evidence — it is the zone the
+ * server itself stamped on that business. The organizations list is the fallback
+ * and the one that carries an empty diary. Only if neither answered does this
+ * reach the browser's own zone, and the form prints whatever comes back, so the
+ * weakest case is still stated out loud rather than assumed.
+ */
+function zoneFor(
+  slug: string,
+  timezones: Record<string, string>,
+  bookings: BookingRecord[]
+): string {
+  const fromRow = bookings.find((b) => b.businessSlug === slug)?.businessTimezone;
+  return (
+    fromRow ||
+    timezones[slug] ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    "UTC"
+  );
+}
+
 function formatDay(iso: string, timeZone: string): string {
   return safeFormat(iso, timeZone, { weekday: "short", day: "numeric", month: "short" });
 }
