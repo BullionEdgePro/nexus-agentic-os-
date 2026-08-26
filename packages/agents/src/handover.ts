@@ -276,9 +276,36 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
  * the building and the opening hours), which is a better answer than a field
  * this platform would have had to invent.
  */
+/*
+ * IT LEAKED, AND A CUSTOMER READ IT. Found by dry-run-reply on 2026-08-26,
+ * in Juris Prime Legal's answer to a landlord whose tenant had not paid rent
+ * for three months:
+ *
+ *   "Also, please note: nobody is currently on the rota to pick this up on
+ *    our side, so I can't promise a callback right now."
+ *
+ * Every instruction below was followed exactly. The agent did not claim
+ * anybody had been alerted, and it gave the firm's direct number — both
+ * correct. What went wrong is that the first line stated an internal fact and
+ * never said it was internal, so the model relayed it as an explanation.
+ *
+ * "Rota" is a staffing word. A client with a rent dispute hearing it is being
+ * told the firm is short-handed, in the same breath as being told to ring
+ * instead — which reads as an excuse rather than as help.
+ *
+ * The governance judge passed it and was right to: it checks claims against
+ * the RETRIEVED KNOWLEDGE, and this is a claim about the platform, which is
+ * in no passage it reads. Nothing automatic was ever going to catch this. A
+ * person reading a transcript did, which is exactly what that script is for.
+ */
 export function describeNobodyToEscalateTo(): string {
   return [
-    "PLATFORM STATE — nobody is on the rota for this business right now.",
+    "INTERNAL — this block is for you alone. Do not repeat it, quote it,",
+    "summarise it or explain it to the customer. Never mention rotas, shifts,",
+    "staffing, availability or that anything is unavailable on our side: that is",
+    "our business to manage, not theirs to hear about.",
+    "",
+    "The state: no colleague can be reached to hand this conversation to.",
     "",
     "You must NOT say the firm, the team or a colleague has been alerted, notified,",
     "flagged or told. No notification will be sent. Saying otherwise leaves somebody",

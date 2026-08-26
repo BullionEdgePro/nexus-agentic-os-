@@ -46,6 +46,48 @@ function note() {
   return HANDOVER.slice(from, HANDOVER.indexOf("\n}", from));
 }
 
+test("the note is marked internal, because a customer read it", () => {
+  // FOUND IN A DRY RUN ON 2026-08-26, in Juris Prime Legal's reply to a
+  // landlord whose tenant had not paid rent for three months:
+  //
+  //   "Also, please note: nobody is currently on the rota to pick this up on
+  //    our side, so I can't promise a callback right now."
+  //
+  // Every instruction below was obeyed. The agent claimed nobody had been
+  // alerted and it gave the firm's direct number. What leaked was the note's
+  // own first line, which stated an internal fact and never said it was one.
+  //
+  // Nothing automatic could have caught it: the governance judge checks claims
+  // against retrieved knowledge, and this is a claim about the platform, which
+  // appears in no passage it reads.
+  const body = note();
+  assert.match(body, /INTERNAL/, "the block does not say it is internal");
+  // Plain fragments rather than one pattern spanning them. The note is an array
+  // of string literals, so the sentence is split across lines with quotes and
+  // commas between — a regex written to span that breaks on reformatting rather
+  // than on meaning, which is the opposite of what a test should be sensitive
+  // to. (The first attempt here also arrived with its escapes eaten, which is
+  // the registered heredoc class and an argument for plain strings on its own.)
+  for (const forbidden of ["Do not repeat it", "summarise it", "explain it to the customer"]) {
+    assert.ok(body.includes(forbidden), `the block does not forbid relaying it: "${forbidden}"`);
+  }
+});
+
+test("the customer never hears staffing words", () => {
+  // "Rota" is a staffing term. A client with a rent dispute hearing it is
+  // being told the firm is short-handed, in the same breath as being told to
+  // ring instead -- which reads as an excuse rather than as help.
+  const body = note();
+  for (const word of ["rotas", "shifts", "staffing", "availability"]) {
+    assert.ok(body.includes(word), `the note does not forbid mentioning "${word}"`);
+  }
+  // And it no longer opens by stating the staffing fact in the clear.
+  assert.ok(
+    !body.includes("nobody is on the rota for this business right now"),
+    "the note still leads with the internal fact that leaked"
+  );
+});
+
 test("the note forbids the specific claim, by the words the agent would use", () => {
   // Not "do not over-promise" — a general caution is one a model can satisfy
   // while still writing the sentence. The banned verbs are named.
