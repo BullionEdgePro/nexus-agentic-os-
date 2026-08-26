@@ -73,22 +73,53 @@ fi
 # that is precisely one of the outages the inside-only gates cannot see.
 CURL="curl --silent --show-error --max-time 20"
 
+# How long the API is allowed to take to accept traffic. Long enough to cover a
+# container that has just been rebuilt, short enough that a genuinely dead
+# platform is reported within a minute rather than tomorrow.
+HEALTH_WAIT_SECONDS="${HEALTH_WAIT_SECONDS:-60}"
+
 echo "Asking the public hostnames, from outside the containers."
 echo
 
 # ------------------------------------------------------------
 # 1. Does the API answer at all?
 # ------------------------------------------------------------
+#
+# IT WAITS, AND IT SAYS HOW LONG IT WAITED.
+#
+# The first time this gate ran after a real deploy it failed on a 502, and it
+# was right to see one: deploy.sh had just replaced the api container and
+# verify-all.sh ran immediately, so Caddy had no upstream listening yet. Seconds
+# later the same URL answered perfectly.
+#
+# A single request at a service that has just been restarted measures the race,
+# not the platform. But a retry loop that silently swallows the wait is worse
+# than the race -- it turns "the API takes forty seconds to accept traffic after
+# every deploy" into a green tick, and that is a real fact about a real outage
+# window that nobody would ever see again. So it retries, and prints the wait
+# whenever there was one.
 printf '%-24s ' "api /health"
-health=$($CURL --write-out '\n%{http_code}' "https://${api_domain}/health" 2>&1)
-health_code=$(printf '%s' "$health" | tail -1)
-health_body=$(printf '%s' "$health" | sed '$d')
+waited=0
+while :; do
+  health=$($CURL --write-out '\n%{http_code}' "https://${api_domain}/health" 2>&1)
+  health_code=$(printf '%s' "$health" | tail -1)
+  health_body=$(printf '%s' "$health" | sed '$d')
+  if [ "$health_code" = "200" ] && printf '%s' "$health_body" | grep -q '"status":"ok"'; then break; fi
+  [ "$waited" -ge "$HEALTH_WAIT_SECONDS" ] && break
+  sleep 2
+  waited=$((waited + 2))
+done
 
 if [ "$health_code" = "200" ] && printf '%s' "$health_body" | grep -q '"status":"ok"'; then
-  echo "PASS"
+  if [ "$waited" -gt 4 ]; then
+    echo "PASS"
+    note "answered only after ${waited}s — that is how long this deploy served 502s"
+  else
+    echo "PASS"
+  fi
 else
   echo "FAIL"
-  note "https://${api_domain}/health returned ${health_code:-no response}"
+  note "https://${api_domain}/health returned ${health_code:-no response} after waiting ${waited}s"
   # Truncated. When the hostname resolves to something that is not this API,
   # the body is a whole HTML page, and a gate that fails at 3am should not
   # print one -- the first line is enough to tell you what answered instead.
