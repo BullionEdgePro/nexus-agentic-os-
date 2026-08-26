@@ -62,6 +62,38 @@ test("no theme demo page reaches the real estate agent", () => {
   }
 });
 
+test("the home page is excluded, because its Featured widget IS the demo data", () => {
+  // FOUND IN A DRY RUN ON 2026-08-26, and it was the page actually reaching
+  // customers. The listing PAGES were excluded from the start; the home page
+  // carries the same demo listings in a widget and was indexed with nine
+  // passages, more than any other SFS source.
+  //
+  // Asked what a two-bedroom Dubai rental costs, the agent answered with
+  // "Central apartment with doorman at AED 190,000/Yearly" -- a Houzez demo
+  // listing -- alongside a demo agent and the demo telephone number
+  // 321 456 9874. A customer would have rung it.
+  const kept = selectPages([...SFS_SITEMAP, "https://sfsintrealestate.com/"], sfs.exclude);
+  assert.ok(
+    !kept.includes("https://sfsintrealestate.com/"),
+    "the home page would be indexed, and its featured listings are theme demo stock"
+  );
+
+  // And ONLY the home page. An exclusion anchored loosely would take the
+  // whole site with it and leave the agent with nothing at all, which is a
+  // worse failure than the one being fixed.
+  for (const real of [
+    "https://sfsintrealestate.com/about/",
+    "https://sfsintrealestate.com/contact/",
+    "https://sfsintrealestate.com/frequently-asked-questions/",
+    "https://sfsintrealestate.com/terms-and-conditions/",
+  ]) {
+    assert.ok(
+      selectPages([real], sfs.exclude).includes(real),
+      `${real} is genuine agency content and must survive`
+    );
+  }
+});
+
 test("property listings are excluded entirely — genuine ones too", () => {
   const kept = selectPages(SFS_SITEMAP, sfs.exclude);
   assert.ok(!kept.some((u) => u.includes("/property/")), "no listing may be indexed");
@@ -78,8 +110,12 @@ test("the informational pages that remain are the ones worth answering from", ()
   const kept = selectPages(SFS_SITEMAP, sfs.exclude);
   const paths = kept.map((u) => u.replace("https://sfsintrealestate.com", ""));
 
+  // "/" left this list on 2026-08-26. It was the largest SFS source at nine
+  // passages and the one quoting Houzez demo listings — a fake apartment, a
+  // fake agent and a fake telephone number — to a customer asking about Dubai
+  // rentals. What it contributed otherwise was navigation and a search box; the
+  // mission and the service description are at /about/, which stays.
   assert.deepEqual(paths, [
-    "/",
     "/about/",
     "/contact/",
     "/frequently-asked-questions/",

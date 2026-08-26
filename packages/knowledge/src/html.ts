@@ -125,8 +125,42 @@ export function extractTitle(html: string): string | null {
   return title || null;
 }
 
+/**
+ * Remove tags, leaving a space where each one stood.
+ *
+ * ============================================================
+ * WHY THE PATTERN IS NOT `<[^>]*>`
+ * ============================================================
+ *
+ * It was, and a `>` inside a quoted attribute value ended the tag early — so
+ * the REST of the tag became prose. Found on 2026-08-26 in SFS International's
+ * indexed pages, where a Bootstrap-select widget put this into the knowledge
+ * base as text a customer could be answered with:
+ *
+ *   1" data-actions-box="true" multiple data-select-all-text="Select All"
+ *   data-none-results-text="No results matched {0}" data-container="body">
+ *
+ * Two chunks across the whole platform, which is why nothing noticed: it needs
+ * a page whose markup happens to contain that character inside an attribute.
+ * The pattern now consumes quoted runs whole, so a `>` inside one cannot
+ * terminate the tag.
+ *
+ * ============================================================
+ * WHY A SPACE RATHER THAN NOTHING
+ * ============================================================
+ *
+ * The same page produced `ShowerRefrigeratorSaunaSwimming Pool` — an amenities
+ * filter whose every option was a separate element with no whitespace between.
+ * Deleting the tags welds the words together, and the result is a token no
+ * embedding has ever seen and no reader can parse.
+ *
+ * Block elements are already turned into paragraph breaks before this runs, so
+ * what is left is inline. The trade is real and small: `hel<b>lo</b>` becomes
+ * "hel lo". Fusing a list of amenities into one word is the commoner accident
+ * and the worse one, and the whitespace collapse downstream absorbs the rest.
+ */
 function stripTags(input: string): string {
-  return input.replace(/<[^>]*>/g, "");
+  return input.replace(/<(?:[^>"']|"[^"]*"|'[^']*')*>/g, " ");
 }
 
 /**

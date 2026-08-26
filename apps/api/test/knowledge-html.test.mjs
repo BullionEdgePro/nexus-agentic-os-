@@ -174,3 +174,59 @@ test("a non-IP string is treated as blocked so callers must resolve first", () =
   assert.equal(isBlockedAddress("not an ip"), true);
   console.log("PASS: HTML extraction drops chrome, SSRF guard blocks internal targets");
 });
+
+test("a > inside an attribute does not spill the rest of the tag into the text", () => {
+  // FOUND IN PRODUCTION ON 2026-08-26. The pattern was <[^>]*>, so the first
+  // > ended the tag wherever it appeared -- including inside a quoted
+  // attribute value -- and everything after it became prose. SFS
+  // International's knowledge base held this as text an agent could answer a
+  // customer with:
+  //
+  //   1" data-actions-box="true" multiple data-select-all-text="Select All"
+  //   data-none-results-text="No results matched {0}" data-container="body">
+  //
+  // Two chunks across the entire platform, which is why nothing noticed: it
+  // needs a page whose markup happens to carry that character in an
+  // attribute.
+  const html =
+    '<select data-title="Choose >" data-actions-box="true" data-container="body">' +
+    "<option>For Rent</option><option>For Sale</option></select>";
+  const text = htmlToText(html);
+
+  for (const leaked of ["data-actions-box", "data-container", 'true"']) {
+    assert.ok(!text.includes(leaked), `markup reached the text: ${leaked}`);
+  }
+  assert.ok(text.includes("For Rent"), "the real option text was lost with it");
+});
+
+test("single-quoted attributes are handled too", () => {
+  // The same hole, quoted the other way. A fix that only understood double
+  // quotes would look right on the page that prompted it.
+  const text = htmlToText("<a href='x>y' title='z'>Link text</a>");
+  assert.equal(text.trim(), "Link text");
+});
+
+test("adjacent inline elements do not weld their words together", () => {
+  // The same page produced "ShowerRefrigeratorSaunaSwimming Pool" -- an
+  // amenities filter whose options were separate elements with no whitespace
+  // between them. The result is a token no embedding has seen and no reader
+  // can parse.
+  const text = htmlToText("<span>Shower</span><span>Refrigerator</span><span>Sauna</span>");
+  assert.ok(!text.includes("ShowerRefrigerator"), "inline elements are being fused");
+  for (const word of ["Shower", "Refrigerator", "Sauna"]) {
+    assert.ok(text.includes(word), `${word} was lost`);
+  }
+});
+
+test("an ordinary page is unchanged by all of that", () => {
+  // The guard on the fix. Replacing tags with a space rather than nothing is
+  // a real trade, and this is what it must not cost.
+  const text = htmlToText(
+    "<html><body><nav>Home Shop</nav><main><h1>Delivery</h1>" +
+      "<p>Orders inside Dubai arrive next day.</p></main><footer>copyright</footer></body></html>"
+  );
+  assert.ok(text.includes("Delivery"));
+  assert.ok(text.includes("Orders inside Dubai arrive next day."));
+  assert.ok(!text.includes("Home Shop"), "the nav is still dropped");
+  assert.ok(!text.includes("copyright"), "the footer is still dropped");
+});

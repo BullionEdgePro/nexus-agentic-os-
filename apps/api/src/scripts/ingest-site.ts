@@ -108,8 +108,30 @@ export const TENANT_SOURCES: Record<string, TenantSource> = {
     // The URL list is not the durable fix — `dropPlaceholderChunks` in
     // packages/knowledge is, because it looks at the words rather than the
     // address. This entry stops SFS re-indexing a page that has nothing to say.
+    //   THE HOME PAGE — added 2026-08-26, and it is the one that was actually
+    //                  reaching customers. The list above excludes individual
+    //                  listing PAGES; the home page carries the same demo
+    //                  listings in its "Featured" widget and was indexed with
+    //                  nine passages, more than any other SFS source.
+    //
+    //                  A dry run asked what a two-bedroom Dubai rental costs.
+    //                  The agent answered with "Central apartment with doorman
+    //                  at AED 190,000/Yearly" — the exact Houzez demo listing
+    //                  named at the top of this comment — alongside a demo
+    //                  agent, "Aisha Gupta", and the demo telephone number
+    //                  321 456 9874. A real customer would have rung it.
+    //
+    //                  `dropPlaceholderChunks` cannot help and should not try:
+    //                  this is plausible English, not Latin, and that filter is
+    //                  deliberately narrow because one that guesses at English
+    //                  deletes real copy. The words are indistinguishable from
+    //                  genuine content; only the ADDRESS knows it is a theme
+    //                  widget.
+    //
+    //                  What is lost is navigation and a search box. The mission
+    //                  and the service description live at /about/, which stays.
     exclude:
-      /\/(property|grid-[a-z0-9-]*|with-[a-z0-9-]*|list-layout[a-z0-9-]*|listings[a-z0-9-]*|home-[a-z0-9-]*|my-[a-z0-9-]*|compare-properties|saved-search|search-results|select-your-package|complete-order|create-listing|favorite-properties|invoices|membership-info|packages|stripe|thank-you|testing|inquiry-form|agents-2|agencies|board|blog|insights|privacy)\/|new-york|los-angeles|miami|brooklyn/,
+      /\/(property|grid-[a-z0-9-]*|with-[a-z0-9-]*|list-layout[a-z0-9-]*|listings[a-z0-9-]*|home-[a-z0-9-]*|my-[a-z0-9-]*|compare-properties|saved-search|search-results|select-your-package|complete-order|create-listing|favorite-properties|invoices|membership-info|packages|stripe|thank-you|testing|inquiry-form|agents-2|agencies|board|blog|insights|privacy)\/|new-york|los-angeles|miami|brooklyn|^https?:\/\/sfsintrealestate\.com\/?$/,
     note: "agency information, FAQ and terms — deliberately no property listings",
   },
 
