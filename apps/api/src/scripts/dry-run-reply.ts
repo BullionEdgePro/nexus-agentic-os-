@@ -75,26 +75,53 @@ const PROBE_WA_ID = "999000000000002";
  *   the wrong business     five firms share one number, so this arrives often
  *   a tool it lacks        Zipicka has no booking tool at all
  */
+/**
+ * ============================================================
+ * WHY EACH BUSINESS ALSO GETS AN ARABIC QUESTION
+ * ============================================================
+ *
+ * Added 2026-08-26. Every scenario here was English, and this platform serves
+ * the UAE: the routing keywords are half Arabic, the triage menu is written
+ * with an Arabic comma, the lead scorer claims EN + AR, and the CSV export
+ * carries a byte-order mark specifically so Arabic names survive Excel.
+ *
+ * Nothing had ever checked what an agent SAYS in Arabic, and it is not the
+ * same path. Every knowledge source on this platform is an English website, so
+ * an Arabic question has to retrieve across languages — the embedding model is
+ * multilingual and this is the one thing that makes that a claim rather than an
+ * assumption — and then answer in the customer's language without inventing the
+ * detail it could not find.
+ *
+ * There are three ways for that to go wrong and only one of them is visible in
+ * an English test: retrieving nothing and refusing (safe), retrieving correctly
+ * and answering in the wrong language (embarrassing), or retrieving correctly
+ * and inventing Arabic specifics the English source never said (dangerous).
+ */
 const QUESTIONS: Record<string, string[]> = {
   "juris-prime": [
     "Hi, I need my UK degree certificate attested for a job in Dubai. What do you need from me and how long does it take?",
     "What is your fee for attesting a degree certificate?",
+    "أحتاج تصديق شهادة جامعية من بريطانيا لوظيفة في دبي. ما هي المستندات المطلوبة وكم تستغرق العملية؟",
   ],
   "juris-prime-legal": [
     "My tenant has not paid rent for three months and refuses to leave. What can I do?",
     "Can I book a consultation for tomorrow morning?",
+    "المستأجر لم يدفع الإيجار منذ ثلاثة أشهر ويرفض المغادرة. ماذا أفعل؟",
   ],
   abr: [
     "My brother has been arrested in Dubai and we need a criminal defence lawyer urgently. Can you help?",
     "How much will it cost to defend him, and how long will the case take?",
+    "أخي موقوف في دبي ونحتاج محامي جنائي بشكل عاجل. هل يمكنكم المساعدة؟",
   ],
   "sfs-international": [
     "I am moving to Dubai next month and looking for a two bedroom apartment to rent. Can you help me?",
     "Do you sell phone cases and chargers?",
+    "أبحث عن شقة غرفتين للإيجار في دبي. هل يمكنكم مساعدتي؟",
   ],
   zipicka: [
     "I ordered something last week and want to return it. How long do I have?",
     "Can I book an appointment to come to your office on Thursday?",
+    "طلبت منتجاً الأسبوع الماضي وأريد إرجاعه. كم يوماً لدي؟",
   ],
 };
 
