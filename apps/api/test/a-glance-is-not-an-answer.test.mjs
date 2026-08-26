@@ -76,10 +76,18 @@ test("the dot appears for an unaccepted urgent finding even with nothing new", (
   // reason the weakness was visible at all.
   const flat = code.replace(/\s+/g, " ");
   assert.ok(
-    flat.includes("{nagging.length || fresh.length || mine.length ? ("),
+    flat.includes("nagging.length || fresh.length || mine.length ? ("),
     "the dot must be gated on unaccepted urgency OR novelty OR work assigned to the reader — " +
       "gated on novelty alone, a five-day-old urgent finding shows nothing once somebody has " +
       "glanced at the panel"
+  );
+  // The opening brace moved when the unreachable state was put in front of this
+  // condition, which is the THIRD time this assertion has gone red on the
+  // condition growing. Each time the growth was the point, so it now matches
+  // the condition rather than the punctuation around it.
+  assert.ok(
+    flat.includes("reachable === false ? ("),
+    "an unreachable check must be distinguishable from a quiet one"
   );
 });
 
@@ -134,4 +142,43 @@ test("the panel's own summary leads with urgency", () => {
     code.includes("`${nagging.length} urgent`"),
     "the panel header should say how many are urgent when any are"
   );
+});
+
+test("a dark bell does not mean all clear when nothing could be asked", () => {
+  // THE SAME DEFECT AS THE ONE ABOVE, THROUGH THE DOOR NOBODY WATCHED.
+  //
+  // getFindings().catch(() => undefined) left `findings` empty, so a failed
+  // fetch produced no dot — and no dot is how this control says "nothing needs
+  // attention". An outage, an expired session or a 500 rendered as all clear,
+  // on the one control whose entire job is to nag about a customer who has
+  // been waiting five days.
+  //
+  // Three states, not two: the same shape /deck/operators already uses for its
+  // alert destination, and for the same reason.
+  assert.ok(
+    code.includes("const [reachable, setReachable] = useState<boolean | null>(null)"),
+    "the bell cannot tell 'nothing to report' from 'could not ask'"
+  );
+  assert.ok(
+    code.includes("catch(() => setReachable(false))"),
+    "a failed findings fetch is still swallowed"
+  );
+  // Plain fragments. Written first as a flattened-whitespace comparison whose
+  // escapes were eaten on the way in — the thirteenth instance of that today,
+  // and the argument for not reaching for a pattern when a string will do.
+  assert.ok(code.includes("reachable === false ? ("), "the unreachable state is not rendered");
+  assert.ok(
+    code.includes('className="badge dot-only unknown"'),
+    "an unreachable check does not show its own state"
+  );
+});
+
+test("uncertainty is not coloured like an alarm", () => {
+  // Nothing is KNOWN to be wrong. Painting that red would teach somebody to
+  // discount red, which costs more than the case it was meant to cover.
+  const at = CSS.indexOf(".badge.dot-only.unknown");
+  assert.ok(at > -1, "the unreachable dot has no style of its own");
+  const rule = CSS.slice(at, CSS.indexOf("}", at));
+  assert.ok(rule.includes("var(--mist)"), "uncertainty is not muted");
+  assert.ok(!rule.includes("var(--crit)"), "uncertainty is coloured as an alarm");
 });

@@ -490,3 +490,15 @@
   text-transform: uppercase;
   color: var(--mist);
 }
+
+/* "Could not ask", which is neither "nothing to report" nor an alarm.
+   Muted deliberately: nothing is known to be wrong, and colouring uncertainty
+   red would teach people to ignore red. */
+.badge.dot-only.unknown {
+  background: var(--mist);
+}
+
+.hm-unreachable {
+  border-left: 2px solid var(--mist);
+  padding-left: 10px;
+}

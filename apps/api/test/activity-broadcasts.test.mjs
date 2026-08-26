@@ -569,10 +569,20 @@ test("no header badge shows a number the server did not send", () => {
   // what this test should welcome. What it is actually about is that a badge
   // renders only when there is something to report, which is still true.
   const flat = MENUS.replace(/\s+/g, " ");
+  // Matched WITHOUT the leading brace. This assertion has now gone red three
+  // times, every time because the condition grew — first for unaccepted
+  // urgency, then for work assigned to the reader, and now because an
+  // unreachable check is rendered ahead of it. Each growth was the point, and
+  // pinning the punctuation in front of the condition made a widening look
+  // like a regression.
   assert.ok(
-    flat.includes("{nagging.length || fresh.length || mine.length ? ("),
+    flat.includes("nagging.length || fresh.length || mine.length ? ("),
     "the activity dot must render for unaccepted urgency, for novelty, or for work assigned " +
-      "to the reader, and for nothing else"
+      "to the reader"
+  );
+  assert.ok(
+    flat.includes("reachable === false ? ("),
+    "a bell that could not reach the checks must say so rather than going dark"
   );
   assert.ok(
     !flat.includes("<span className=\"badge dot-only\" />"),

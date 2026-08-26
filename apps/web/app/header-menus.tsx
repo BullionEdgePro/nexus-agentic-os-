@@ -307,6 +307,21 @@ export function NotificationsMenu() {
    * knowing which kind of session it is.
    */
   const [mine, setMine] = useState<TaskRecord[]>([]);
+  /**
+   * Whether the checks could be REACHED, which is not the same as whether
+   * they found anything.
+   *
+   * THREE STATES, NOT TWO — the same shape /deck/operators uses for its alert
+   * destination, and for the same reason. This bell swallowed a failed fetch
+   * into an empty list, so an outage, an expired session or a 500 rendered as
+   * a dark bell: "nothing needs attention".
+   *
+   * That is the failure this control exists to prevent, arriving through the
+   * one door nobody was watching. It polls every two minutes, so a blip heals
+   * itself; a session that has expired does not, and the bell stays dark for
+   * as long as somebody leaves the tab open.
+   */
+  const [reachable, setReachable] = useState<boolean | null>(null);
   const [seenAt, setSeenAt] = useState<number>(0);
   const wrap = useDismissable(open, () => setOpen(false));
 
@@ -321,8 +336,14 @@ export function NotificationsMenu() {
 
   const load = useCallback(() => {
     getFindings()
-      .then((d) => setFindings(d.findings))
-      .catch(() => undefined);
+      .then((d) => {
+        setFindings(d.findings);
+        setReachable(true);
+      })
+      // The findings are what the dot is ABOUT, so this is the fetch whose
+      // failure the bell has to admit to. `mine` below failing is a smaller
+      // loss and does not darken anything that was lit.
+      .catch(() => setReachable(false));
     // Separately, and failing separately: a person's own work must still show
     // when the checks are unreachable, and the checks must still show when this
     // is. One catch for both would have lost whichever came second.
@@ -405,14 +426,21 @@ export function NotificationsMenu() {
             fresh.length ? `${fresh.length} new since you last looked` : "",
           ]
             .filter(Boolean)
-            .join(" · ") || "Activity"
+            .join(" · ") ||
+          (reachable === false ? "The checks could not be reached" : "Activity")
         }
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
           <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7Z" />
           <path d="M10 20a2 2 0 0 0 4 0" />
         </svg>
-        {nagging.length || fresh.length || mine.length ? (
+        {/* A THIRD DOT, because there are three things to say and a dark bell
+            was saying the wrong one. Muted, not red: nothing is known to be
+            wrong, and treating "cannot tell" as an alarm would be the
+            opposite mistake. */}
+        {reachable === false ? (
+          <span className="badge dot-only unknown" aria-hidden="true" />
+        ) : nagging.length || fresh.length || mine.length ? (
           // Urgent gets its own colour. A dot that means "something new" and a
           // dot that means "somebody has been waiting five days" should not be
           // the same dot -- and work of yours that is already late belongs in
@@ -446,6 +474,13 @@ export function NotificationsMenu() {
               exact confusion once -- a single opening of this panel permanently
               silenced a customer who had been waiting five days. This list
               empties when the follow-ups are closed and at no other time. */}
+          {reachable === false ? (
+            <p className="hm-empty hm-unreachable">
+              The checks could not be reached, so this is not a report that nothing is wrong —
+              it is no report at all. It retries every two minutes.
+            </p>
+          ) : null}
+
           {mine.length > 0 ? (
             <div className="hm-mine">
               <div className="hm-mine-head">
