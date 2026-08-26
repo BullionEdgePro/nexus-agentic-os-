@@ -29,6 +29,31 @@ export interface HallucinationCheckInput {
    * withheld, and replaced by a promise of a human.
    */
   businessName?: string;
+  /**
+   * What the business has stated about ITSELF — its own system prompt.
+   *
+   * THE SAME DEFECT AS businessName, ONE STEP FURTHER OUT. That field exists
+   * because the judge marked an agent naming its own company as a
+   * hallucination. It still marked an agent stating its own ADDRESS, phone
+   * number or opening hours as one, and those come from the same place: things
+   * the business said about itself, which live in the prompt and in no
+   * retrieved passage.
+   *
+   * Found on 2026-08-26 in the first Arabic dry run. ABR's reply to "my brother
+   * has been arrested, we need a criminal lawyer urgently" scored HIGH —
+   * verbatim: "asserts a specific office address (building name, location,
+   * district in Dubai, and hours) that does not appear anywhere in the
+   * retrieved knowledge base". The identical English scenario scored LOW,
+   * because retrieval happened to return a page carrying the address that time.
+   * The verdict turned on which chunks came back rather than on whether the
+   * reply was true.
+   *
+   * And the platform had TOLD it to say that. `describeNobodyToEscalateTo`
+   * instructs the agent to give its direct contact details when nobody is on
+   * the rota — so the path where this matters most, an urgent matter with
+   * nobody to escalate to, is the path that got flagged for obeying.
+   */
+  businessFacts?: string;
 }
 
 /**
@@ -92,6 +117,17 @@ export async function evaluateHallucinationRisk(
                 `inviting a consultation is NOT a hallucination — it is the speaker. Judge the ` +
                 `verifiable claims instead: prices, timeframes, legal or factual assertions, ` +
                 `and promises about what will happen next.\n\n`
+              : "") +
+            // The speaker's own account of itself, offered as a SOURCE rather
+            // than as instructions. A reply repeating the firm's own address is
+            // quoting its employer, not inventing a fact — and without this the
+            // judge can only see whatever retrieval happened to return, so the
+            // same true sentence scores differently from one message to the
+            // next.
+            (input.businessFacts
+              ? `What this business states about itself, in its own standing instructions. ` +
+                `Treat these as verified for its identity, contact details, address, opening ` +
+                `hours and the services it offers:\n${input.businessFacts}\n\n`
               : "") +
             `Conversation history:\n${input.conversationHistory || "(none)"}\n\n` +
             `Retrieved context:\n${input.ragContext || "(none provided)"}\n\n` +

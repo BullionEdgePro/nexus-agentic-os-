@@ -934,6 +934,13 @@ async function answerOneMessage(
       // Who is speaking. Without it, an agent naming its own company scores as
       // a hallucination — see HallucinationCheckInput.businessName.
       businessName: serving.name,
+      // What the business says about ITSELF. Without it the judge marks the
+      // firm's own address and phone number as unverified -- the same defect
+      // businessName fixed for the company's NAME, one step further out, and
+      // it fired on the path that matters most: an urgent matter with nobody
+      // on the rota, where the agent is instructed to give exactly those
+      // details.
+      businessFacts: agent.config.systemPrompt,
     });
 
     // Deterministic backstop for the twin's identity rules: the prompt forbids

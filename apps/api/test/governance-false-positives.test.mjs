@@ -105,3 +105,69 @@ test("what each verdict still does, so a fix here cannot quietly widen it", () =
   );
   console.log("PASS: the checks were right; the inputs were missing a fact");
 });
+
+// ============================================================
+// 3. A business quoting its own ADDRESS
+// ============================================================
+//
+// The third of the same kind, found 2026-08-26 in the first Arabic dry run.
+// ABR's reply to "my brother has been arrested, we need a criminal lawyer
+// urgently" scored HIGH -- verbatim: "asserts a specific office address
+// (building name, location, district in Dubai, and hours) that does not
+// appear anywhere in the retrieved knowledge base".
+//
+// The identical ENGLISH scenario scored LOW an hour earlier, because
+// retrieval happened to return a page carrying the address that time. The
+// verdict turned on which chunks came back, not on whether the reply was
+// true -- so the same sentence was a hallucination on Tuesday and a fact on
+// Monday.
+
+test("the judge is given what the business says about itself", () => {
+  const HALLUCINATION = read("packages", "governance", "src", "hallucination.ts");
+
+  // A plain string, not a pattern. The regex written here first arrived with
+  // its escape eaten, so `businessFacts?:` became "businessFact" plus an
+  // optional "s" — a pattern that could never match the literal question mark
+  // in the source. Twelfth instance of that on this repository's register, and
+  // the argument for plain strings wherever one will do.
+  assert.ok(
+    HALLUCINATION.includes("businessFacts?: string;"),
+    "the judge cannot see the business's own standing instructions"
+  );
+  // And it is put in the prompt as a SOURCE, not merely accepted as a field.
+  assert.ok(
+    HALLUCINATION.includes("input.businessFacts"),
+    "businessFacts is accepted and never shown to the judge"
+  );
+  assert.ok(
+    HALLUCINATION.includes("Treat these as verified for its identity, contact"),
+    "the judge is not told these are the speaker's own verified statements"
+  );
+});
+
+test("the reply pipeline and the dry run give the judge the same sources", () => {
+  // A dry run that grades more harshly than production is a dry run that
+  // sends somebody hunting a defect which does not exist -- and one that
+  // grades more leniently hides the ones that do.
+  const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
+  const DRY_RUN = read("apps", "api", "src", "scripts", "dry-run-reply.ts");
+  for (const [name, source] of [["the reply pipeline", PROCESSOR], ["the dry run", DRY_RUN]]) {
+    assert.ok(
+      source.includes("businessFacts: agent.config.systemPrompt"),
+      `${name} does not give the judge the business's own instructions`
+    );
+    assert.ok(source.includes("businessName:"), `${name} does not say who is speaking`);
+  }
+});
+
+// Worth recording and NOT worth asserting: the PII half of governance learned
+// in August that a business's own published contact details are not a leak,
+// and the hallucination half never learned it — so one governance check
+// treated the firm's phone number as legitimate while the other treated it as
+// invented, in the same reply.
+//
+// This was written as a test first, checking that the sentence recording that
+// lesson still appears in index.ts. `a-claim-satisfied-by-prose` caught it
+// within the minute: a phrase that exists only in a comment is an assertion
+// green on prose. The behaviour it gestures at is already proved by the first
+// test in this file.

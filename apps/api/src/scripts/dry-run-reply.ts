@@ -257,6 +257,9 @@ async function main() {
           draftReply: reply.text,
           conversationHistory: `customer: ${question}`,
           ragContext: agentContext || undefined,
+          // The same source the reply pipeline gives it, or this script
+          // would grade a reply more harshly than production does.
+          businessFacts: agent.config.systemPrompt,
           businessName: organization.name,
         });
         console.log(
