@@ -228,3 +228,24 @@
 
 .deck-root .bk-add-foot button:disabled { opacity: .55; cursor: default; }
 .deck-root .bk-add-foot span { font-size: 12.5px; color: var(--slate); }
+
+.deck-root .bk-newcontact {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 8px;
+  padding: 13px;
+}
+
+.deck-root .bk-newlink {
+  align-self: flex-start;
+  font-size: 12.5px;
+  padding: 0;
+}
+
+.deck-root .bk-addnote {
+  font-style: normal;
+  font-size: 12.5px;
+  color: var(--slate);
+}

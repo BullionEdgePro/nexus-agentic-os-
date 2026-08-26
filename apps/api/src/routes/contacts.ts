@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { toCsv, csvFilename } from "@nexus/shared";
 import {
   contactBelongsToBusiness,
+  ensureContactForServingBusiness,
   exportContacts,
   exportContactRecord,
   exportMessages,
@@ -61,6 +62,46 @@ contactsRoute.get("/:slug/contacts", async (c) => {
   return c.json({
     contacts: await listContacts(organization.id, { search }),
   });
+});
+
+/**
+ * Adding a customer nobody has messaged yet.
+ *
+ * Built for the diary: an appointment needs somebody to meet, and a person who
+ * phoned or walked in has no WhatsApp conversation to be found from. Before
+ * this the console could read customers and never create one, so the booking
+ * form could only serve people who had already sent a message.
+ *
+ * The row does NOT land under this business — see `ensureContactForServingBusiness`.
+ * It lands under the owner of the shared number, exactly where the webhook
+ * would put it, and this business sees them through a routed conversation.
+ */
+contactsRoute.post("/:slug/contacts", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const body = await c.req.json<{ waId?: string; displayName?: string }>().catch(() => null);
+  if (!body?.waId) {
+    return c.json({ error: "A WhatsApp number is required." }, 400);
+  }
+
+  try {
+    const result = await ensureContactForServingBusiness({
+      servingOrganizationId: organization.id,
+      waId: body.waId,
+      displayName: body.displayName ?? null,
+    });
+    // 200 rather than 201 when they were already known, and `created` says
+    // which. Somebody typing in a customer who turns out to be on file already
+    // has not made a mistake, and should not be told they have -- but the
+    // screen still needs to be able to say "this person was already here".
+    return c.json(result, result.created ? 201 : 200);
+  } catch (err) {
+    // The sentences thrown from there are written for a form.
+    const message = err instanceof Error ? err.message : "Could not add that customer.";
+    logger.warn({ slug: organization.slug, err }, "Manual contact creation refused");
+    return c.json({ error: message }, 400);
+  }
 });
 
 contactsRoute.get("/:slug/contacts/:contactId", async (c) => {

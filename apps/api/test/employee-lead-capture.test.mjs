@@ -24,30 +24,77 @@ const CAPTURE = readFileSync(
   join(here, "..", "..", "..", "packages", "leads", "src", "capture.ts"),
   "utf8"
 );
+const IDENTITY = readFileSync(
+  join(here, "..", "..", "..", "packages", "db", "src", "contact-identity.ts"),
+  "utf8"
+);
 const MIGRATION = readFileSync(
   join(here, "..", "..", "..", "packages", "db", "migrations", "013-employee-sourced-leads.sql"),
   "utf8"
 );
 
 test("a captured lead lands on the same contact an inbound message would", () => {
-  // The whole point of reusing `contacts` keyed on (organization_id, wa_id):
-  // if this person later messages the shared number, the webhook finds THIS
-  // row rather than making a second one, and the employee's groundwork and the
-  // inbound conversation end up on one contact with no merge step for anyone
-  // to forget.
-  assert.match(CAPTURE, /insert into contacts/);
-  assert.match(CAPTURE, /on conflict \(organization_id, wa_id\) do update/);
+  // THIS TEST PASSED FOR MONTHS ON A PROPERTY IT NEVER CHECKED.
+  //
+  // Its claim was right and its assertions could not see it. Landing on the
+  // same row as an inbound message needs the upsert to be keyed on
+  // (organization_id, wa_id) AND that organization_id to be the one the webhook
+  // uses. It matched the first and never the second — and the second was wrong:
+  // capture passed the EMPLOYEE'S business, the webhook writes under the shared
+  // number's OWNER, so on this deployment the two would have produced two
+  // contacts for one person. The SQL the assertion matched was present and
+  // correct the whole time. The argument to it was not.
+  //
+  // Never fired, because zero contacts on production had been captured by an
+  // employee when it was found on 2026-08-26.
+  //
+  // Now checked where it can actually be seen: capture resolves identity
+  // through the one function that knows about shared numbers, and that function
+  // keys the upsert on the owner.
+  assert.match(CAPTURE, /ensureContactForServingBusiness\(/);
+  assert.ok(
+    !/insert into contacts/.test(CAPTURE),
+    "capture has its own contact insert again — two answers to where a person goes"
+  );
+  assert.match(IDENTITY, /on conflict \(organization_id, wa_id\) do update/);
+  assert.match(
+    IDENTITY,
+    /findOrganizationByPhoneNumberId/,
+    "identity must resolve the number's owner, not take the business it was given"
+  );
+  assert.match(
+    IDENTITY,
+    /\[owner\.id, waId,/,
+    "the upsert must be keyed on the owner — this is the half the old test could not see"
+  );
+});
+
+test("the serving business can still find a customer it never messaged", () => {
+  // The other half of writing under the owner: without a conversation routed to
+  // them, a law firm's own hand-entered customer would be invisible to it.
+  // served_organization_ids is trigger-maintained out of conversations and
+  // cannot be set directly, so the conversation IS the mechanism.
+  assert.match(IDENTITY, /insert into conversations \(organization_id, contact_id, routed_organization_id\)/);
+  assert.match(
+    IDENTITY,
+    /serving\.id === owner\.id \? null : serving\.id/,
+    "routing a conversation at the owner would read as having been through triage"
+  );
 });
 
 test("finding someone first keeps the credit", () => {
   // Re-capturing a known contact must not re-attribute them to whoever logged
   // the most recent note, or attribution becomes last-touch by accident.
+  // Reads IDENTITY, not CAPTURE: the upsert moved when hand-entered contacts
+  // stopped being written under the wrong business. The rule is unchanged and
+  // now applies to the console's add-a-customer form as well, which is the
+  // point of there being one place.
   assert.match(
-    CAPTURE,
+    IDENTITY,
     /captured_by_employee_id = coalesce\(contacts\.captured_by_employee_id, excluded\.captured_by_employee_id\)/
   );
   // And a blank name must never overwrite a real one.
-  assert.match(CAPTURE, /display_name = coalesce\(contacts\.display_name, excluded\.display_name\)/);
+  assert.match(IDENTITY, /display_name = coalesce\(contacts\.display_name, excluded\.display_name\)/);
 });
 
 test("a captured lead is marked as employee-sourced, not inbound", () => {

@@ -1,4 +1,4 @@
-import { getPool } from "@nexus/db";
+import { getPool, ensureContactForServingBusiness } from "@nexus/db";
 import { scoreLead, type LeadAssessment } from "./score.js";
 
 /**
@@ -35,29 +35,33 @@ export interface CapturedLead extends LeadAssessment {
 export async function captureEmployeeLead(input: CaptureLeadInput): Promise<CapturedLead> {
   const pool = getPool();
 
-  // Reuse `contacts` rather than a separate table, keyed on the same
-  // (organization_id, wa_id). If this person later messages the shared number
-  // the webhook finds THIS row instead of creating a second one, so the
-  // employee's groundwork and the inbound conversation end up on one contact
-  // automatically. A parallel table would have needed a merge step that nobody
-  // would remember to run.
-  const { rows } = await pool.query<{ id: string; inserted: boolean }>(
-    `insert into contacts (organization_id, wa_id, display_name, captured_by_employee_id, captured_at)
-     values ($1, $2, $3, $4, now())
-     on conflict (organization_id, wa_id) do update set
-       -- Never overwrite a name we already have with a blank one, and never
-       -- re-attribute a contact who was already known: the first employee to
-       -- find someone keeps the credit.
-       display_name = coalesce(contacts.display_name, excluded.display_name),
-       captured_by_employee_id = coalesce(contacts.captured_by_employee_id, excluded.captured_by_employee_id),
-       captured_at = coalesce(contacts.captured_at, excluded.captured_at),
-       updated_at = now()
-     returning id, (xmax = 0) as inserted`,
-    [input.organizationId, input.contactWaId, input.contactName?.trim() || null, input.employeeId]
-  );
+  // Reuse `contacts` rather than a separate table, so an employee's groundwork
+  // and the later inbound conversation end up on one record automatically. A
+  // parallel table would have needed a merge step nobody would remember to run.
+  //
+  // WHICH ORGANIZATION THE ROW LANDS UNDER IS NOT THIS ONE. The comment here
+  // used to promise that "if this person later messages the shared number the
+  // webhook finds THIS row instead of creating a second one", and keyed the
+  // upsert on `input.organizationId` -- the employee's own business. That was
+  // true when one business had one number. On a shared number the webhook
+  // writes under the number's OWNER, so a lead captured by an SFS employee and
+  // the same person's first message would have become two contacts.
+  //
+  // It never fired: zero contacts on production carried captured_by_employee_id
+  // when this was found on 2026-08-26. It would have, the first time an
+  // employee of a law firm typed in a name.
+  //
+  // `ensureContactForServingBusiness` is now the single answer to "where does a
+  // hand-entered person go", shared with the console's own add-a-customer form.
+  const ensured = await ensureContactForServingBusiness({
+    servingOrganizationId: input.organizationId,
+    waId: input.contactWaId,
+    displayName: input.contactName,
+    capturedByEmployeeId: input.employeeId,
+  });
 
-  const contactId = rows[0].id;
-  const isNewContact = rows[0].inserted;
+  const contactId = ensured.contactId;
+  const isNewContact = ensured.created;
 
   // A contact an employee went out and found is, by definition, further along
   // than a cold inbound "hi" — someone met them. `priorInboundCount` is the

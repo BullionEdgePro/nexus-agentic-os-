@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
+  addContact,
   createBooking,
   getContacts,
   readableError,
@@ -73,6 +74,14 @@ export function AddAppointment({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Adding somebody who has never messaged. A person who phoned or walked in
+  // has no WhatsApp conversation to be found from, and before this the form
+  // could only book customers who had already sent a message -- which excludes
+  // exactly the people it was built for.
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newNumber, setNewNumber] = useState("");
+  const [addNote, setAddNote] = useState("");
 
   // Customers are searched on the server, which already supports `q` — filtering
   // a first page in the browser would quietly hide anyone who did not happen to
@@ -116,6 +125,33 @@ export function AddAppointment({
     const endsAt = new Date(new Date(startsAt).getTime() + minutes * 60_000).toISOString();
     return `${describeInstant(startsAt, timezone)} — ${describeInstant(endsAt, timezone, true)}`;
   }, [date, time, minutes, timezone]);
+
+  const addCustomer = useCallback(async () => {
+    setError("");
+    setAddNote("");
+    try {
+      const result = await addContact(business, {
+        waId: newNumber,
+        displayName: newName.trim() || null,
+      });
+      // Selected immediately, because the only reason to add somebody here is
+      // to book them, and making the operator find their own new row in a list
+      // is a step that exists for no one.
+      setContactId(result.contactId);
+      setSearch(newName.trim() || newNumber);
+      setAdding(false);
+      setNewName("");
+      setNewNumber("");
+      // "Already on file" is not an error and is not silence either. Somebody
+      // who types in a customer the platform already knows has not made a
+      // mistake, and should be told which happened.
+      setAddNote(
+        result.created ? "Added, and selected below." : "They were already on file — selected below."
+      );
+    } catch (err) {
+      setError(readableError(err));
+    }
+  }, [business, newName, newNumber]);
 
   const submit = useCallback(
     async (event: React.FormEvent) => {
@@ -190,7 +226,43 @@ export function AddAppointment({
           placeholder="Search by name or number"
           onChange={(event) => setSearch(event.target.value)}
         />
-        {contactsReadable === false ? (
+        {adding ? (
+          <div className="bk-newcontact">
+            <div className="bk-row">
+              <label className="bk-field">
+                <span>Their name</span>
+                <input
+                  type="text"
+                  value={newName}
+                  placeholder="As you would greet them"
+                  onChange={(event) => setNewName(event.target.value)}
+                />
+              </label>
+              <label className="bk-field">
+                <span>WhatsApp number</span>
+                <input
+                  type="tel"
+                  value={newNumber}
+                  placeholder="971501234567"
+                  onChange={(event) => setNewNumber(event.target.value)}
+                />
+              </label>
+            </div>
+            {/* Full international form, because a number without a country code
+                produces a customer nobody can ever message. */}
+            <p className="bk-zone">
+              Country code first, digits only. This is the number the business would reply on.
+            </p>
+            <div className="bk-add-foot">
+              <button type="button" onClick={() => void addCustomer()}>
+                Add customer
+              </button>
+              <button type="button" className="bk-add-close" onClick={() => setAdding(false)}>
+                Back to the list
+              </button>
+            </div>
+          </div>
+        ) : contactsReadable === false ? (
           <em className="bk-unreadable">
             The customer list could not be read just now. This is not a report that there are none.
           </em>
@@ -206,6 +278,12 @@ export function AddAppointment({
             ))}
           </select>
         )}
+        {!adding ? (
+          <button type="button" className="bk-add-close bk-newlink" onClick={() => setAdding(true)}>
+            Someone who has never messaged? Add them
+          </button>
+        ) : null}
+        {addNote ? <em className="bk-addnote">{addNote}</em> : null}
       </label>
 
       <label className="bk-field">

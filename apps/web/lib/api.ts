@@ -1304,6 +1304,28 @@ export function getContacts(
   return request(`/api/organizations/${orgSlug}/contacts${q}`);
 }
 
+/**
+ * Add somebody who has never messaged.
+ *
+ * The row does not land under `orgSlug` — it lands under the owner of the
+ * shared WhatsApp number, which is where an inbound message would have put it,
+ * and this business sees them through a conversation routed to it. Getting that
+ * backwards makes a second identity for one person.
+ *
+ * `created` is false when they were already on file. That is not an error and
+ * must not be shown as one: somebody typing in a customer who turns out to be
+ * known has not made a mistake.
+ */
+export function addContact(
+  orgSlug: BusinessSlug,
+  input: { waId: string; displayName?: string | null }
+): Promise<{ contactId: string; conversationId: string; created: boolean }> {
+  return request(`/api/organizations/${orgSlug}/contacts`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function getContact(
   orgSlug: BusinessSlug,
   contactId: string
