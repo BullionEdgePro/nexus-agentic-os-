@@ -561,14 +561,27 @@ test("no header badge shows a number the server did not send", () => {
   assert.ok(!/<span className="badge">\d/.test(MENUS), "no literal number in a badge");
   // To-do shows a count; Activity shows a dot. Both render only when there is
   // something to report — a badge showing 0 is decoration.
-  assert.match(MENUS, /\{due \? <span className="badge">/);
+  //
+  // Flattened and brace-free, which is the lesson recorded twice below and not
+  // applied here: this went red when the count badge grew an else-branch for
+  // the could-not-check state, and it went red on the line break rather than
+  // on anything true. The property is that a NUMBER renders only when due is.
+  const flat = MENUS.replace(/\s+/g, " ");
+  assert.ok(
+    flat.includes('due ? ( <span className="badge">'),
+    "the to-do count must render only when something actually needs doing"
+  );
+  // A dot in its place is not a number and does not claim to be one.
+  assert.ok(
+    flat.includes('unanswered ? ( <span className="badge dot-only unknown" />'),
+    "a to-do menu that could not be read must say so rather than showing nothing"
+  );
   // The DOT'S CONDITION, not its exact JSX. This has now gone red twice for
   // the same good reason: first when the dot learned to appear for an urgent
   // finding nobody has accepted, and again when it learned to appear for work
   // assigned to the person reading it. Both times the condition GREW, which is
   // what this test should welcome. What it is actually about is that a badge
   // renders only when there is something to report, which is still true.
-  const flat = MENUS.replace(/\s+/g, " ");
   // Matched WITHOUT the leading brace. This assertion has now gone red three
   // times, every time because the condition grew — first for unaccepted
   // urgency, then for work assigned to the reader, and now because an

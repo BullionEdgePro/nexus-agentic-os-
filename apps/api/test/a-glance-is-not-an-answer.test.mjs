@@ -182,3 +182,51 @@ test("uncertainty is not coloured like an alarm", () => {
   assert.ok(rule.includes("var(--mist)"), "uncertainty is not muted");
   assert.ok(!rule.includes("var(--crit)"), "uncertainty is coloured as an alarm");
 });
+
+test("the to-do menu does not assert three facts it never checked", () => {
+  // THE MOST CONFIDENT FALSE SENTENCE IN THE PRODUCT. `due` is a sum over two
+  // fetches, both of which swallowed failure, and at due === 0 the panel said:
+  //
+  //   "No customer is waiting, nothing promised is overdue, and every
+  //    follow-up has an owner."
+  //
+  // Three named claims, each about data nobody had. The bell next to it at
+  // least only implied its all-clear; this one wrote it out.
+  assert.ok(
+    code.includes("const [unanswered, setUnanswered] = useState(false)"),
+    "the to-do menu cannot tell 'nothing to do' from 'could not ask'"
+  );
+  assert.ok(
+    code.includes("due === 0 && !unanswered ? ("),
+    "the three-claim sentence must not render when either fetch failed"
+  );
+});
+
+test("both of its fetches count, because the number sums both", () => {
+  // due = counts.overdue + counts.unassigned + waiting.length. One of the two
+  // failing understates it silently, so one catch is not enough.
+  const at = code.indexOf("export function WorkMenu");
+  const body = code.slice(at, code.indexOf("export function", at + 30));
+  assert.equal(
+    body.split("catch(admit)").length - 1,
+    2,
+    "both fetches must admit failure -- the badge is a sum across both"
+  );
+  assert.ok(
+    body.includes("if (!broke) setUnanswered(false)"),
+    "a success must not clear a failure recorded by the other fetch in the same pass"
+  );
+});
+
+test("the bell's own work fetch admits failure too", () => {
+  // The fix one commit earlier covered getFindings and left getTasks, under a
+  // comment claiming this fetch "does not darken anything that was lit". It
+  // does: mine.length is one of the three terms gating the dot.
+  const at = code.indexOf("getTasks({ mine: true");
+  assert.ok(at > -1, "the caller's own work is no longer fetched");
+  const after = code.slice(at, at + 200);
+  assert.ok(
+    after.includes("catch(() => setReachable(false))"),
+    "a failed 'assigned to me' fetch still renders as 'nothing assigned to you'"
+  );
+});

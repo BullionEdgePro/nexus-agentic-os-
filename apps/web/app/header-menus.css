@@ -502,3 +502,14 @@
   border-left: 2px solid var(--mist);
   padding-left: 10px;
 }
+
+/* An empty list that could not be read. Same muting as the unknown dot and for
+   the same reason: nothing is known to be wrong, and the sentence this replaces
+   -- "No customer is waiting, nothing promised is overdue, and every follow-up
+   has an owner" -- asserted three things about data nobody had. */
+.deck-root .hm-empty.unknown {
+  color: var(--slate);
+  border-left: 2px solid var(--mist);
+  margin: 8px 14px 0;
+  padding: 6px 0 6px 10px;
+}

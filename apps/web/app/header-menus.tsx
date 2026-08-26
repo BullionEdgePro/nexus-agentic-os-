@@ -183,18 +183,34 @@ export function WorkMenu() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [waiting, setWaiting] = useState<OperatorFinding[]>([]);
   const [counts, setCounts] = useState({ overdue: 0, unassigned: 0, open: 0 });
+  const [unanswered, setUnanswered] = useState(false);
   const wrap = useDismissable(open, () => setOpen(false));
 
   const load = useCallback(() => {
+    // Both, because `due` is a sum across both and the empty state below makes
+    // a claim about each of them by name. Either failing makes that sentence a
+    // statement about something nobody asked.
+    let broke = false;
+    const admit = () => {
+      broke = true;
+      setUnanswered(true);
+    };
+    const settle = () => {
+      if (!broke) setUnanswered(false);
+    };
     getTasks({ status: "open" })
       .then((d) => {
         setTasks(d.tasks);
         setCounts(d.counts);
+        settle();
       })
-      .catch(() => undefined);
+      .catch(admit);
     getFindings()
-      .then((d) => setWaiting(d.findings.filter((f) => f.operator === "customer-waiting")))
-      .catch(() => undefined);
+      .then((d) => {
+        setWaiting(d.findings.filter((f) => f.operator === "customer-waiting"));
+        settle();
+      })
+      .catch(admit);
   }, []);
 
   useEffect(() => {
@@ -218,28 +234,49 @@ export function WorkMenu() {
         className="icon-btn"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        title={due ? `${due} things need doing` : "Nothing needs doing"}
+        title={
+          unanswered
+            ? "Could not check what needs doing"
+            : due
+              ? `${due} things need doing`
+              : "Nothing needs doing"
+        }
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
           <path d="M9 5h11M9 12h11M9 19h11" />
           <path d="M3.5 5.2l1.3 1.3L7.4 3.9M3.5 12.2l1.3 1.3 2.6-2.6M3.5 19.2l1.3 1.3 2.6-2.6" />
         </svg>
-        {due ? <span className="badge">{due > 99 ? "99+" : due}</span> : null}
+        {due ? (
+          <span className="badge">{due > 99 ? "99+" : due}</span>
+        ) : unanswered ? (
+          <span className="badge dot-only unknown" />
+        ) : null}
       </button>
 
       {open ? (
         <div className="hm-panel">
           <div className="hm-head">
             <strong>To do</strong>
-            <span>{due ? `${due} needing action` : "nothing right now"}</span>
+            <span>
+              {unanswered ? "could not check" : due ? `${due} needing action` : "nothing right now"}
+            </span>
           </div>
 
-          {due === 0 ? (
+          {unanswered ? (
+            <p className="hm-empty unknown">
+              Some of this could not be read just now. If the list below is short or empty, that
+              is not the same as nothing needing doing.
+            </p>
+          ) : null}
+
+          {due === 0 && !unanswered ? (
             <p className="hm-empty">
               No customer is waiting, nothing promised is overdue, and every follow-up has an
               owner.
             </p>
-          ) : (
+          ) : null}
+
+          {due > 0 ? (
             <ul className="hm-list">
               {waiting.slice(0, 4).map((f) => (
                 <li key={f.id}>
@@ -272,7 +309,7 @@ export function WorkMenu() {
                 </li>
               ))}
             </ul>
-          )}
+          ) : null}
 
           <div className="hm-foot">
             <a href="/deck/tasks">All follow-ups</a>
@@ -340,16 +377,20 @@ export function NotificationsMenu() {
         setFindings(d.findings);
         setReachable(true);
       })
-      // The findings are what the dot is ABOUT, so this is the fetch whose
-      // failure the bell has to admit to. `mine` below failing is a smaller
-      // loss and does not darken anything that was lit.
       .catch(() => setReachable(false));
-    // Separately, and failing separately: a person's own work must still show
-    // when the checks are unreachable, and the checks must still show when this
-    // is. One catch for both would have lost whichever came second.
+    // The LISTS fail separately -- a person's own work must still show when the
+    // checks are unreachable, and the checks must still show when this is. One
+    // catch for both would have lost whichever came second.
+    //
+    // The BADGE does not. Its dark state is a claim about everything the bell
+    // covers, and `mine.length` is one of the three terms that lights it, so a
+    // failure here darkens a dot that had work behind it. The comment that used
+    // to sit above said this fetch "does not darken anything that was lit",
+    // which was written in the same hour as the fix for exactly that defect on
+    // the fetch above it, and was simply wrong.
     getTasks({ mine: true, status: "open" })
       .then((d) => setMine(d.tasks))
-      .catch(() => undefined);
+      .catch(() => setReachable(false));
   }, []);
 
   useEffect(() => {
