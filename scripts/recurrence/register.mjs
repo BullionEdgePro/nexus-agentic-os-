@@ -408,8 +408,29 @@ export const CLASSES = [
       "Writing a file through a quoted heredoc removes one backslash level. Regexes arrive " +
       "with `\\s` collapsed to `s` and `\\1` collapsed to a literal control character. The " +
       "file is written successfully and the program is silently wrong.",
-    instances: 9,
+    instances: 12,
     evidence: [
+      {
+        sha: null,
+        note:
+          "the tenth, eleventh and twelfth all landed on 2026-08-26, in one session, and " +
+          "each was caught before it could be committed -- which is the finding. The tenth " +
+          "turned a join on backslash-n into a join on a literal newline and would not " +
+          "parse. The eleventh stripped the escapes from a pattern in a test, which then " +
+          "matched nothing and went red. The twelfth turned businessFacts-backslash-? into " +
+          "an optional s, and the assertion failed on the literal question mark it could no " +
+          "longer see." +
+          " AND THE QUIET HALF WAS MEASURED RATHER THAN ASSUMED. This entry has said the " +
+          "collapse of backslash-s to s is uncoverable because a scanner cannot know it was " +
+          "unintended, which remains true. So the repository was scanned for the SHAPE it " +
+          "leaves -- a bare s, d, w or b followed by a quantifier inside a regex literal, " +
+          "walked by hand rather than by a pattern -- across every tracked .ts, .tsx and " +
+          ".mjs file. Zero. Not one quiet collapse has survived into the tree, in twelve " +
+          "instances. The mitigation that catches them is not a detector: it is that a " +
+          "mangled pattern either fails to parse, fails to typecheck, or matches nothing " +
+          "and takes its assertion red with it. Writing tests that assert a PROPERTY rather " +
+          "than the presence of a string is what makes that third case loud."
+      },
       {
         sha: null,
         note:
