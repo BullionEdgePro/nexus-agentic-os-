@@ -112,6 +112,19 @@ export default function OperatorsPage() {
   const [notReported, setNotReported] = useState<NotReportedConversation[]>([]);
   const [showNotReported, setShowNotReported] = useState(false);
   /**
+   * Whether the suppressed list could be READ, which is not whether it is empty.
+   *
+   * The register's recipe for this class, applied: when a fallback value would
+   * be indistinguishable from a real answer, carry a second field saying which
+   * it was and surface it where the reader is.
+   *
+   * Three states. `true` — asked and answered. `false` — asked and could not be
+   * told, which must not render as "nothing was suppressed". `null` — never
+   * asked, either because the load has not returned or because this is an
+   * employee, for whom the whole section is correctly absent.
+   */
+  const [suppressionReadable, setSuppressionReadable] = useState<boolean | null>(null);
+  /**
    * The lengths on offer, from the server.
    *
    * Seeded with the same three the server has so the button works on the first
@@ -201,8 +214,22 @@ export default function OperatorsPage() {
     // Operator-only on the server; an employee simply gets nothing, which is
     // the right shape here -- this list carries other firms' customers.
     getNotReported()
-      .then((data) => setNotReported(data.conversations))
-      .catch(() => undefined);
+      .then((data) => {
+        setNotReported(data.conversations);
+        setSuppressionReadable(true);
+      })
+      .catch((err) => {
+        // AN ERROR MUST NOT BECOME A VALUE THAT READS AS A FACT, and this
+        // section is the one place on the deck where that would be sharpest: an
+        // empty list here says "nothing was suppressed", which is the exact
+        // sentence it exists to stop being said falsely.
+        //
+        // A 403 is not a failure. It is an employee being told this is not
+        // theirs to read, and it should render as nothing at all rather than as
+        // an alarm about a list they were never going to see.
+        const forbidden = err instanceof Error && err.message.includes("403");
+        setSuppressionReadable(forbidden ? null : false);
+      });
   }, []);
 
   useEffect(() => {
@@ -516,6 +543,17 @@ export default function OperatorsPage() {
             customer sent. It is usually right and it is not checked by
             anything at the moment it is made -- so the excerpt is shown, and
             it is the whole point of the row. */}
+        {/* SAID BEFORE THE LIST, because its absence is the misleading state.
+            Rendering nothing here would mean an unreachable endpoint and a
+            genuinely quiet platform look identical — on the one section whose
+            purpose is that they never should. */}
+        {suppressionReadable === false ? (
+          <p className="op-note op-unreadable">
+            The suppressed conversations could not be read, so this is not a report that none
+            were suppressed — it is no report at all.
+          </p>
+        ) : null}
+
         {notReported.length > 0 ? (
           <section className="op-dismissed op-quiet">
             <button

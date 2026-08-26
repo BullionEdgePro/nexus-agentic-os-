@@ -201,3 +201,36 @@ test("the list is operator-only", () => {
   assert.ok(body.includes('scope.role !== "operator"'), "an employee can read other firms' customers");
   assert.ok(body.includes("403"));
 });
+
+test("a list that could not be read does not render as an empty one", () => {
+  // THE SAME DEFECT AS THE SECTION ITSELF, IN THE SECTION ITSELF. This was
+  // written to stop an empty findings list meaning two different things, and
+  // its own fetch swallowed failure into an empty array -- so an unreachable
+  // endpoint rendered as "nothing was suppressed".
+  //
+  // The register's recipe for the class, applied: a second field saying
+  // whether the answer arrived, surfaced where the reader is.
+  assert.ok(
+    PAGE.includes("const [suppressionReadable, setSuppressionReadable]"),
+    "the screen cannot tell 'none were suppressed' from 'could not ask'"
+  );
+  assert.ok(
+    PAGE.includes("suppressionReadable === false ? ("),
+    "an unreadable list is not distinguished on screen"
+  );
+  assert.ok(
+    PAGE.includes("it is no report at all"),
+    "the message does not say what the silence means"
+  );
+});
+
+test("an employee is not shown an alarm about a list that is not theirs", () => {
+  // A 403 here is the route working. Rendering it as a failure would put a
+  // warning on every employee's screen about customers they were never going
+  // to be shown.
+  assert.ok(PAGE.includes('err.message.includes("403")'), "a 403 is treated as a failure");
+  assert.ok(
+    PAGE.includes("forbidden ? null : false"),
+    "a forbidden read must land in the never-asked state, not the failed one"
+  );
+});

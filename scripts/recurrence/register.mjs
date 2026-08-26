@@ -113,8 +113,26 @@ export const CLASSES = [
       "reply states it with the same confidence either way. This is the same confusion as " +
       "the eleven-instance RLS class one layer up — there, zero rows meant 'this business " +
       "has nothing configured'; here, a caught error means it.",
-    instances: 3,
+    instances: 5,
     evidence: [
+      {
+        sha: null,
+        note:
+          "the fourth and fifth, both 2026-08-26 and both on CONSOLE controls rather than " +
+          "server paths, which is where the 2026-08-24 sweep did not look. The notifications " +
+          "bell: getFindings().catch(() => undefined) left the list empty, and an empty list " +
+          "is exactly how that control says 'nothing needs attention' -- so an outage, an " +
+          "expired session or a 500 rendered as all clear on the one thing whose job is to " +
+          "nag about a customer waiting five days. And the suppressed-conversations section " +
+          "on /deck/operators, written the same day to make a silent judgement visible, whose " +
+          "own failure rendered as 'nothing was suppressed'. " +
+          "BOTH FIXED BY THE RECIPE BELOW rather than by arguing a direction: a second field " +
+          "(`reachable`, `suppressionReadable`) carrying whether the answer was received, " +
+          "surfaced in the words the reader needs -- 'this is not a report that nothing is " +
+          "wrong, it is no report at all'. The recipe was written for server responses and " +
+          "works unchanged on a component's state, which is worth knowing because that is " +
+          "where the next one will be.",
+      },
       {
         sha: null,
         note:

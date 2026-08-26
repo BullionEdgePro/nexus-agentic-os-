@@ -323,3 +323,12 @@
   max-width: 70ch;
   font-style: italic;
 }
+
+/* "Could not be read", which is not "none". Muted rather than critical: nothing
+   is known to be wrong, and an alarm here would compete with the findings this
+   screen exists to show. */
+.op-unreadable {
+  border-left: 2px solid var(--mist);
+  padding-left: 10px;
+  max-width: 70ch;
+}
