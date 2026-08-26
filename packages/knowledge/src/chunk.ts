@@ -157,6 +157,8 @@ function tailContext(previous: string, overlapChars: number): string {
  * would silently delete real content, which is far worse than keeping filler.
  */
 const PLACEHOLDER_MARKERS = [
+  // The opening. Everything here was drawn from the first two sentences of the
+  // standard passage, which is where a short sample stops.
   "lorem ipsum",
   "dolor sit amet",
   "consectetur adipiscing",
@@ -165,6 +167,31 @@ const PLACEHOLDER_MARKERS = [
   "quis nostrud exercitation",
   "duis aute irure",
   "excepteur sint occaecat",
+
+  // THE BODY, added 2026-08-26 because the opening is not where filler ends.
+  //
+  // A chunk of SFS International's terms and conditions survived this filter
+  // and sat in the knowledge base, quotable:
+  //
+  //   "pretium luctus vitae sit amet est. Etiam in maximus urna. Cum sociis
+  //    natoque penatibus et magnis dis parturient montes, nascetur ridiculus
+  //    mus. Curabitur tristique nec ex eget posuere."
+  //
+  // It matched NOT ONE marker. "vitae sit amet" is not "dolor sit amet", and
+  // nothing else above appears past the first two sentences. Long filler is
+  // split across chunks and only the FIRST piece carries the famous words --
+  // so the longer the filler, the more of it this let through.
+  //
+  // Same test as before: these are Latin fragments that essentially never occur
+  // in genuine business copy, and two independent hits are still required.
+  "cum sociis natoque",
+  "parturient montes",
+  "nascetur ridiculus mus",
+  "pellentesque habitant morbi",
+  "vestibulum ante ipsum",
+  "aenean commodo ligula",
+  "donec quam felis",
+  "vivamus elementum semper",
 ];
 
 /** True when this text is placeholder filler rather than content. */

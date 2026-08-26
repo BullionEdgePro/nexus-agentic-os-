@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { chunkText, estimateTokens, normalize } from "@nexus/knowledge";
+import { chunkText, estimateTokens, normalize, isPlaceholderText } from "@nexus/knowledge";
 
 test("short text produces exactly one chunk", () => {
   const chunks = chunkText("We ship within two business days.");
@@ -115,4 +115,43 @@ test("token estimate is proportional and never zero for real text", () => {
   assert.ok(estimateTokens("hello world") > 0);
   assert.ok(estimateTokens("a".repeat(400)) > estimateTokens("a".repeat(100)));
   console.log("PASS: chunker respects boundaries, loses no content, and normalizes vectors");
+});
+
+test("filler is caught past the opening sentence, not only at it", () => {
+  // FOUND IN PRODUCTION ON 2026-08-26, in SFS International's terms and
+  // conditions, sitting in the knowledge base and quotable to a customer.
+  //
+  // It matched NOT ONE marker. Every fragment in the original list came from
+  // the first two sentences of the standard passage; this is the middle of
+  // it. "vitae sit amet" is not "dolor sit amet". Long filler is split across
+  // chunks and only the FIRST piece carries the famous words -- so the longer
+  // the filler, the more of it got through.
+  const production =
+    "pretium luctus vitae sit amet est. Etiam in maximus urna. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Curabitur tristique nec ex eget posuere. Sed elit lacus,";
+  assert.equal(isPlaceholderText(production), true, "the passage that got through still would");
+});
+
+test("the widened list still does not eat real copy", () => {
+  // The guard. A filter that guesses deletes genuine content, which is worse
+  // than keeping filler -- and the sentence below is the one that broke the
+  // FIRST version of this rule: a design agency saying it never ships lorem
+  // ipsum, flagged because it named the thing once.
+  const genuine = [
+    "We never ship lorem ipsum to a client. Every word on your site is written by a person who understands your business, reviewed with you before launch.",
+    "Our mission is to be one of the leading providers of high-end real estate across Dubai, Abu Dhabi, Sharjah and Ajman.",
+    "You have 30 days from the date you received your item to request a return. Items must be unused and in original packaging.",
+    "The arbitration clause follows FIDIC standard form, and montes may be relevant to the site survey.",
+  ];
+  for (const text of genuine) {
+    assert.equal(isPlaceholderText(text), false, `real copy was deleted: ${text.slice(0, 50)}`);
+  }
+});
+
+test("two independent markers is still the rule", () => {
+  // The widened list must not become a one-word trigger. A single Latin-looking
+  // fragment inside a long real paragraph is not evidence of anything.
+  const oneMarkerInRealProse =
+    "Our surveyor noted that the parturient montes reference in the older deed is a transcription error, " +
+    "and the boundary should be read against the 1987 plan rather than the description carried forward from it.";
+  assert.equal(isPlaceholderText(oneMarkerInRealProse), false);
 });
