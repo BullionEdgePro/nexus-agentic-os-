@@ -47,6 +47,7 @@ export async function createBroadcast(input: CreateBroadcastInput): Promise<Broa
 }
 
 export interface BroadcastTemplateInfo {
+  organizationId: string;
   metaTemplateName: string;
   language: string;
   isApproved: boolean;
@@ -55,18 +56,24 @@ export interface BroadcastTemplateInfo {
 
 export async function getBroadcastTemplate(templateId: string): Promise<BroadcastTemplateInfo | null> {
   const { rows } = await getPool().query<{
+    organization_id: string;
     meta_template_name: string;
     language: string;
     is_approved: boolean;
     body_param_count: number;
   }>(
-    `select meta_template_name, language, is_approved, body_param_count
+    // organization_id is selected because the caller has to compare it. Without
+    // it the create route could not check that a template row belongs to the
+    // business the broadcast is for, and it did not -- a broadcast for one
+    // company could be paired with another company's template row by id alone.
+    `select organization_id, meta_template_name, language, is_approved, body_param_count
        from message_templates where id = $1`,
     [templateId]
   );
   const row = rows[0];
   if (!row) return null;
   return {
+    organizationId: row.organization_id,
     metaTemplateName: row.meta_template_name,
     language: row.language,
     isApproved: row.is_approved,

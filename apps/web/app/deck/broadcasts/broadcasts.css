@@ -131,3 +131,19 @@
 }
 .bc-sync:hover:not(:disabled) { border-color: var(--signal); color: var(--signal-text); }
 .bc-sync:disabled { opacity: .45; cursor: default; }
+
+/* A template that is on the account but not this business's to send. */
+.deck-root .bc-foreign {
+  margin-left: 8px;
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.deck-root .bc-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--slate);
+  border-left: 2px solid var(--hairline);
+  padding-left: 10px;
+}

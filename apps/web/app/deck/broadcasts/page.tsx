@@ -62,7 +62,11 @@ export default function BroadcastsPage() {
       setBroadcasts(data.broadcasts);
       setReachable(data.reachable);
       setCanSend(data.canSend);
-      setTemplateId(data.templates.find((t) => t.isApproved)?.id ?? "");
+      // From the SENDABLE set. Picking the first approved row defaulted four of
+      // the five businesses to somebody else's template, pre-selected.
+      setTemplateId(
+        data.templates.find((t) => t.isApproved && t.attribution !== "other-business")?.id ?? ""
+      );
     } catch (err) {
       setLoadError(readableError(err));
     } finally {
@@ -108,8 +112,16 @@ export default function BroadcastsPage() {
     }
   }
 
-  const approved = templates.filter((t) => t.isApproved);
+  // SENDABLE, not merely approved. Five businesses share one WhatsApp account,
+  // so every template on it syncs into every business — this deployment holds
+  // 35 rows for 7 real templates, all APPROVED. Offering them all means offering
+  // a law firm the chance to message its clients as a retail order update.
+  //
+  // The server decides attribution and refuses the same set at create and at
+  // send; this filter exists so nobody is shown a choice that would 422.
+  const approved = templates.filter((t) => t.isApproved && t.attribution !== "other-business");
   const pending = templates.filter((t) => !t.isApproved && t.status !== "DELETED");
+  const otherBusinesses = templates.filter((t) => t.attribution === "other-business");
 
   return (
     <div className={`deck-root ${fontVariables}`}>
@@ -260,7 +272,15 @@ export default function BroadcastsPage() {
                   <tbody>
                     {templates.map((template) => (
                       <tr key={template.id}>
-                        <td>{template.metaTemplateName}</td>
+                        <td>
+                          {template.metaTemplateName}
+                          {template.attribution === "other-business" ? (
+                            <span className="act-flag warn bc-foreign">another business</span>
+                          ) : null}
+                          {template.attribution === "unattributed" ? (
+                            <span className="act-flag bc-foreign">not created here</span>
+                          ) : null}
+                        </td>
                         <td>{template.language}</td>
                         <td className={template.category ? "" : "act-zero"}>
                           {template.category ?? "—"}
@@ -276,6 +296,17 @@ export default function BroadcastsPage() {
                 </table>
               </div>
             )}
+
+            {otherBusinesses.length > 0 ? (
+              /* Said out loud rather than silently filtered. A picker that is
+                 shorter than the table above it invites the reader to think the
+                 list is broken; naming the reason ends that in one sentence. */
+              <p className="bc-note">
+                {otherBusinesses.length} of these belong to other businesses on the shared
+                WhatsApp account and cannot be sent from here. Meta approving a template says
+                what it may send, never who it is for.
+              </p>
+            ) : null}
 
             <h2 className="act-sub-head">Past sends</h2>
             {broadcasts.length === 0 ? (

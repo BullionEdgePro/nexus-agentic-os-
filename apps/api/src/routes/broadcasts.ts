@@ -13,6 +13,7 @@ import {
   getBroadcast,
 } from "@nexus/db";
 import type { AudienceFilter } from "@nexus/shared";
+import { attributeTemplate, describeWrongTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { syncTemplatesForOrganization } from "../services/template-sync.js";
 import { logger } from "../lib/logger.js";
@@ -34,13 +35,28 @@ broadcastsRoute.get("/:slug", async (c) => {
     countReachableContacts(organization.id),
   ]);
 
+  // Every template on the shared WhatsApp account arrives under every business,
+  // so the list is annotated rather than trusted. "own" and "unattributed" are
+  // offerable; "other-business" is what the send path refuses, and saying so
+  // here means the picker can grey it out instead of letting somebody choose it
+  // and meet a 422 they did not expect.
+  const annotated = templates.map((template) => ({
+    ...template,
+    attribution: attributeTemplate(template.metaTemplateName, organization.slug),
+  }));
+
   return c.json({
-    templates,
+    templates: annotated,
     broadcasts,
     reachable,
-    // The send path refuses an unapproved template, so say plainly whether a
-    // send is possible at all rather than letting the user find out at 422.
-    canSend: templates.some((template) => template.isApproved) && reachable > 0,
+    // Approved is not enough on its own. This used to read `some(isApproved)`,
+    // which was true for every business on this deployment the moment any
+    // template anywhere on the account was approved — including four belonging
+    // to other companies and two left by an unrelated integration.
+    canSend:
+      annotated.some(
+        (template) => template.isApproved && template.attribution !== "other-business"
+      ) && reachable > 0,
   });
 });
 
@@ -83,6 +99,28 @@ broadcastsRoute.post("/", async (c) => {
     return c.json({ error: "Template is not yet Meta-approved" }, 422);
   }
 
+  // THE TEMPLATE ROW MUST BE THIS BUSINESS'S. It was fetched by id and nothing
+  // compared it to the organization — the same defect the send path already
+  // carries a test for, one route earlier: pairing broadcast A with B's row
+  // resolved fine, returned 200, and put another company's message in front of
+  // these customers.
+  if (template.organizationId !== organization.id) {
+    return c.json({ error: "That template belongs to a different business." }, 403);
+  }
+
+  // AND ITS NAME MUST NOT SPEAK FOR SOMEBODY ELSE. Passing the check above is
+  // not enough on a shared WhatsApp account: a sync writes every template on
+  // the account under every business, so ABR holds its own APPROVED copy of
+  // `zipicka_order_update`. Meta approving a template says what it may send,
+  // never who it is for.
+  const attribution = attributeTemplate(template.metaTemplateName, organization.slug);
+  if (attribution === "other-business") {
+    return c.json(
+      { error: describeWrongTemplate(template.metaTemplateName, organization.slug) },
+      422
+    );
+  }
+
   const broadcast = await createBroadcast({
     organizationId: organization.id,
     templateId: body.templateId,
@@ -115,6 +153,20 @@ broadcastsRoute.post("/:id/send", async (c) => {
   // drafting and sending, and this is the last point before messages go out.
   if (!template.isApproved) {
     return c.json({ error: "Template is not yet Meta-approved" }, 422);
+  }
+  // Both attribution checks are repeated here for a different reason than
+  // approval is. Approval can change at Meta; ownership cannot. What can exist
+  // is a broadcast DRAFTED before these checks shipped, sitting in the table
+  // with another business's template already chosen — and the send route is the
+  // only thing standing between that row and a customer's phone.
+  if (template.organizationId !== organization.id) {
+    return c.json({ error: "That template belongs to a different business." }, 403);
+  }
+  if (attributeTemplate(template.metaTemplateName, organization.slug) === "other-business") {
+    return c.json(
+      { error: describeWrongTemplate(template.metaTemplateName, organization.slug) },
+      422
+    );
   }
 
   const contacts = await getContactsForAudience(broadcast.organizationId, body?.audienceFilter ?? broadcast.audienceFilter ?? {});

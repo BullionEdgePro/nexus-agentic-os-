@@ -145,7 +145,20 @@ test("the Send button is disabled until a send could actually succeed", () => {
   // WhatsApp blocks business-initiated messages without an approved template,
   // a verified business and billing. A button that always 422s teaches people
   // the product is broken; a disabled button beside the reason does not.
-  assert.match(BROADCAST_ROUTE, /canSend: templates\.some\(\(template\) => template\.isApproved\) && reachable > 0/);
+  // WIDENED, and the widening is the point. This pinned the exact expression
+  // `templates.some((template) => template.isApproved) && reachable > 0`, which
+  // was the whole condition until the shared-account problem was measured: all
+  // five businesses hold an APPROVED copy of all seven templates on the one
+  // WhatsApp account, so "some template is approved" was true everywhere the
+  // moment anything anywhere was approved.
+  //
+  // What this test is about is that the button is dark until a send could
+  // succeed. Attribution made that STRICTER, and pinning the old expression
+  // turned a tightening into a failure. Matched on the two things that have to
+  // be true instead.
+  assert.match(BROADCAST_ROUTE, /canSend:/);
+  assert.match(BROADCAST_ROUTE, /template\.isApproved && template\.attribution !== "other-business"/);
+  assert.match(BROADCAST_ROUTE, /reachable > 0/);
   assert.match(BROADCAST_PAGE, /disabled=\{!canSend \|\| !templateId \|\| busy\}/);
   assert.match(BROADCAST_PAGE, /Sending is not open yet/);
   console.log("PASS: nav has no dead ends, activity counts are unjoined, sends cannot cross businesses");

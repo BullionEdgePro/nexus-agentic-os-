@@ -426,8 +426,20 @@ export function getActivity(
   return request(`/api/activity${orgSlug ? `?business=${orgSlug}` : ""}`);
 }
 
+/**
+ * `attribution` is decided by the server, never by reading the name here.
+ *
+ * Templates live on the WhatsApp Business Account and five businesses share
+ * one, so every business's sync pulls back all of them. "own" and
+ * "unattributed" may be sent; "other-business" is refused by both the create
+ * and the send route, and is carried so the picker can say why rather than
+ * offering a choice that 422s.
+ */
+export type TemplateAttribution = "own" | "other-business" | "unattributed";
+
 export interface BroadcastTemplate {
   id: string;
+  attribution: TemplateAttribution;
   metaTemplateName: string;
   language: string;
   category: string | null;
