@@ -89,7 +89,10 @@ if [ "$health_code" = "200" ] && printf '%s' "$health_body" | grep -q '"status":
 else
   echo "FAIL"
   note "https://${api_domain}/health returned ${health_code:-no response}"
-  note "${health_body:-no body}"
+  # Truncated. When the hostname resolves to something that is not this API,
+  # the body is a whole HTML page, and a gate that fails at 3am should not
+  # print one -- the first line is enough to tell you what answered instead.
+  note "$(printf '%s' "${health_body:-no body}" | tr '\n' ' ' | cut -c1-180)"
   note "Nothing below this line means much if the API is not answering."
   fail=1
 fi
@@ -140,7 +143,13 @@ fi
 # supposed to be sent to /login — what is being checked is that Next.js is
 # serving and Caddy is pointed at it, not what it decided to serve.
 printf '%-24s ' "web console"
-web_code=$($CURL --output /dev/null --write-out '%{http_code}' "https://${web_domain}/" 2>&1)
+# Split the same way as the checks above. Reading the merged stream as one value
+# printed "returned curl: (6) Could not resolve host: nope.invalid\n000" -- the
+# reason and the status code run together, in a line whose job is to be read at
+# speed by somebody working out what broke.
+web_out=$($CURL --output /dev/null --write-out '\n%{http_code}' "https://${web_domain}/" 2>&1)
+web_code=$(printf '%s' "$web_out" | tail -1)
+web_msg=$(printf '%s' "$web_out" | sed '$d')
 
 case "$web_code" in
   200|301|302|303|307|308)
@@ -149,6 +158,7 @@ case "$web_code" in
   *)
     echo "FAIL"
     note "https://${web_domain}/ returned ${web_code:-no response}"
+    [ -n "$web_msg" ] && note "$web_msg"
     note "The gates all run inside the worker; none of them would have noticed this."
     fail=1
     ;;
