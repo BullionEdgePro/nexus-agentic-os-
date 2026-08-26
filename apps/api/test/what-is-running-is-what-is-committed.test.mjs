@@ -115,7 +115,14 @@ test("a build that forgets the argument is reported, not tolerated", () => {
 
 test("build-check runs first", () => {
   const gates = VERIFY.slice(VERIFY.indexOf("GATES=("), VERIFY.indexOf(")", VERIFY.indexOf("GATES=(")));
-  const listed = gates.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("GATES"));
+  // Comments stripped, because a comment inside a bash array is valid bash and
+  // this parser treated one as a gate name -- reporting that verify-all listed
+  // a gate whose script did not exist, when what it had actually found was a
+  // sentence. The first comment ever written inside this array broke it.
+  const listed = gates
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("GATES") && !l.startsWith("#"));
   assert.equal(listed[0], "build-check",
     "a gate that passes against a stale build has verified the stale build");
   assert.ok(listed.includes("schema-drift-check"));

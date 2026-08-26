@@ -13,11 +13,28 @@
 # THE ORDER IS NOT ALPHABETICAL AND IS NOT A PREFERENCE.
 #
 #   build-check first of all, because it decides what the rest of this run is
-#   about. Every other gate talks to the API, so none of them can see that the
-#   deck is running an older image — and a suite that passes while the screen
-#   shows yesterday's code is worse than one that fails. It is also the only
-#   check whose answer changes the meaning of every answer after it: gates that
-#   pass against a stale build have verified the stale build.
+#   about. Every other gate exercises the application's own code in process, so
+#   none of them can see that the deck is running an older image — and a suite
+#   that passes while the screen shows yesterday's code is worse than one that
+#   fails. It is also the only check whose answer changes the meaning of every
+#   answer after it: gates that pass against a stale build have verified the
+#   stale build.
+#
+#   That sentence used to read "every other gate talks to the API", and that is
+#   how the hole below went unnoticed for as long as it did: it was written down
+#   as covered. They do not talk to the API. Eight of them run as
+#   `compose exec -T worker npx tsx`, in a container, against Postgres on the
+#   internal network; the other three read images, schema and backups on the
+#   host. Nothing here made an HTTP request to anything this platform serves.
+#
+#   serving-check second, and it is the only gate that comes from OUTSIDE.
+#   Everything above and below it would pass unchanged on a platform nobody
+#   could reach — a wedged api container, Caddy pointed at the wrong upstream,
+#   an expired certificate, DNS moved. "All gates pass" is the line a deploy is
+#   signed off with, and until this gate existed it was a claim about the
+#   platform's logic being read as a claim about the platform. It also calls
+#   /health/jobs, which was built to notice a dead operator sweep and which,
+#   until now, nothing in this repository ever called.
 #
 #   schema-check next, and first among the ones that touch the database. It is the only one that plans SQL that has never
 #   executed, so it is the one that fails on a migration that was written and
@@ -67,6 +84,8 @@ mkdir -p "$OUT_DIR"
 # The last one is optional because of its cost, not because it matters less.
 GATES=(
   build-check
+  # The only one that asks from outside. Reasoning in the header above.
+  serving-check
   schema-check
   schema-drift-check
   shared-number-check
@@ -108,7 +127,8 @@ for gate in "${GATES[@]}"; do
   # separately is a gate that gets run on the days somebody has time, which is
   # the reason this file exists at all -- so it runs here, with a special case,
   # rather than in a paragraph of prose.
-  if [ "$gate" = "schema-drift-check" ] || [ "$gate" = "build-check" ] || [ "$gate" = "backup-check" ]; then
+  if [ "$gate" = "schema-drift-check" ] || [ "$gate" = "build-check" ] ||
+    [ "$gate" = "backup-check" ] || [ "$gate" = "serving-check" ]; then
     "./scripts/${gate}.sh" > "$OUT_DIR/${gate}.out" 2>&1
   else
     $COMPOSE exec -T worker npx tsx "apps/api/src/scripts/${gate}.ts" > "$OUT_DIR/${gate}.out" 2>&1

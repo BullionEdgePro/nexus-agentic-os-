@@ -124,7 +124,7 @@ by getting it wrong, and because the script has to keep being right about them.
   re-assert bits on files it already has, which is the same blind spot one step along. It now also
   REFUSES the push if anything was demoted, because this failure is silent until something will not
   run — on 19 August, following the manual steps literally demoted `verify-all.sh`, which is how
-  the eleven gates are run on the VPS.
+  the twelve gates are run on the VPS.
 * **Deletions propagate.** Unpacking an archive over a populated clone adds and overwrites but
   never removes, so a deleted migration would live on in production forever.
 * **`gh` is logged in as a different account on this machine** and hijacks github.com auth, so the

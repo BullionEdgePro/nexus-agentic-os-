@@ -161,7 +161,7 @@ legible to whoever acts on it.
 
 ## Why this is a test and not an eleventh gate
 
-The eleven gates in `verify-all.sh` run against production and answer questions
+The twelve gates in `verify-all.sh` run against production and answer questions
 only production can answer. This one reads source, so its answer is the same
 everywhere and should be given at the commit, not after the deploy. `npm test`
 is what the pre-commit hook runs.
