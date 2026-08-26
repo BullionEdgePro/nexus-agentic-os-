@@ -10,8 +10,8 @@
  * errors: the taxonomy belongs to somebody else and it rots. That reasoning is
  * right and stands.
  *
- * What it did not separate is the one case where the other end TOLD US to come
- * back. A 429 and a 404 waited the same day.
+ * What it did not separate is whether the server ANSWERED. A 429 and a 404
+ * waited the same day — and so did a connection that was simply reset.
  *
  * Measured on 2026-08-26: the embedding provider's free tier hit its quota and
  * returned 429 for five of ABR's pages — litigation, maritime law, property
@@ -34,7 +34,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { looksRateLimited, retryAfterFor } from "@nexus/knowledge";
+import { shouldRetrySoon, retryAfterFor } from "@nexus/knowledge";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..", "..");
@@ -61,7 +61,7 @@ const hoursFrom = (error) =>
 
 test("the error that actually happened is recognised", () => {
   // Not a synthetic string. This is the text that was sitting in five rows.
-  assert.equal(looksRateLimited(PRODUCTION_429), true);
+  assert.equal(shouldRetrySoon(PRODUCTION_429), true);
   assert.equal(hoursFrom(PRODUCTION_429), 1);
 });
 
@@ -74,7 +74,7 @@ test("the shapes other providers use for the same thing", () => {
     "Rate limit exceeded, retry after 30s",
     "RESOURCE_EXHAUSTED: quota exceeded for embeddings",
   ]) {
-    assert.equal(looksRateLimited(wording), true, `not recognised: ${wording}`);
+    assert.equal(shouldRetrySoon(wording), true, `not recognised: ${wording}`);
   }
 });
 
@@ -82,26 +82,54 @@ test("the shapes other providers use for the same thing", () => {
 // Everything else is untouched
 // ============================================================
 
-test("a genuinely broken page still waits a full day", () => {
-  // A page that fails every time should cost one attempt a day, not one every
-  // cycle — which is what the flat cooldown was for and still is.
+test("a page the server ANSWERED about still waits a full day", () => {
+  // A definitive answer is definitive. The page is gone, or is not a page, and
+  // asking hourly will not change that — one attempt a day, which is what the
+  // flat cooldown was for and still is.
   for (const wording of [
     "HTTP 404 Not Found",
-    "HTTP 500 Internal Server Error",
+    "HTTP 410 Gone",
     "Unparseable URI: not-a-url",
     "Refusing to fetch private address",
     "Unsupported content-type application/pdf",
   ]) {
-    assert.equal(looksRateLimited(wording), false, `wrongly treated as transient: ${wording}`);
+    assert.equal(shouldRetrySoon(wording), false, `wrongly treated as transient: ${wording}`);
     assert.equal(hoursFrom(wording), 24);
   }
+});
+
+test("a failure where the server never answered comes back soon", () => {
+  // FOUND WITHIN AN HOUR OF SHIPPING THE FIRST VERSION. SFS's terms page
+  // failed with a bare "fetch failed" in 313ms and answered 200 twice when
+  // asked again ninety seconds later. Under the rate-limit-only rule that blip
+  // cost the page a day of staleness AND a warn-level finding for the same
+  // day, which is the noise that teaches somebody to stop reading the list.
+  for (const wording of [
+    "fetch failed",
+    "ECONNRESET",
+    "connect ETIMEDOUT 1.2.3.4:443",
+    "getaddrinfo EAI_AGAIN example.com",
+    "socket hang up",
+  ]) {
+    assert.equal(shouldRetrySoon(wording), true, `not recognised as transient: ${wording}`);
+    assert.equal(hoursFrom(wording), 1);
+  }
+});
+
+test("a definitive answer beats a transient-looking word inside it", () => {
+  // The two lists overlap in the wild: a 404 for a URL containing "quota", or
+  // a "not found" whose body mentions the network. Answered wins, because it
+  // is the stronger signal — otherwise a permanently dead page would be
+  // retried hourly for ever.
+  assert.equal(shouldRetrySoon("HTTP 404 Not Found for /quota-policy"), false);
+  assert.equal(shouldRetrySoon("410 Gone — network documentation retired"), false);
 });
 
 test("an unrecognised error falls back to the old behaviour, not to nothing", () => {
   // THE PROPERTY THAT MAKES THIS SAFE. If a provider rewords its errors past
   // recognition, every source waits the flat cooldown — exactly as it did
   // before this distinction existed.
-  assert.equal(looksRateLimited("something nobody has seen before"), false);
+  assert.equal(shouldRetrySoon("something nobody has seen before"), false);
   assert.equal(hoursFrom("something nobody has seen before"), 24);
   assert.equal(hoursFrom(null), 24);
   assert.equal(hoursFrom(undefined), 24);

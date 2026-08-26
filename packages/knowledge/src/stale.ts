@@ -49,7 +49,7 @@ export interface StaleSource {
 const RETRY_FAILED_AFTER_HOURS = 24;
 
 /**
- * How long to wait when the provider ASKED US to come back later.
+ * How long to wait when the failure looks transient.
  *
  * ============================================================
  * THIS IS NOT THE TAXONOMY THE COMMENT ABOVE REFUSES
@@ -58,10 +58,9 @@ const RETRY_FAILED_AFTER_HOURS = 24;
  * That refusal is right and stands: classifying provider errors in general
  * means owning a vocabulary somebody else changes, and it rots.
  *
- * This is one bit, and it is not the provider's vocabulary. 429 and 503 are
- * HTTP, they have meant "retry later" since 1999, and every provider that
- * rate-limits speaks them. The question is not "what kind of error is this"
- * but "did the other end say to come back".
+ * This is one bit, and it is not the provider's vocabulary. The question is
+ * not "what kind of error is this" but "did the server ANSWER" — see
+ * shouldRetrySoon, which is where that line is drawn and why.
  *
  * AND IT FAILS SAFE, which is what makes it worth having at all: if the
  * wording ever stops matching, the delay falls back to the 24 hours above.
@@ -74,32 +73,69 @@ const RETRY_FAILED_AFTER_HOURS = 24;
  * going to serve stale content for another twenty-three, on a key that will
  * hit the same limit again tomorrow.
  */
-const RETRY_RATE_LIMITED_AFTER_HOURS = 1;
+const RETRY_TRANSIENT_AFTER_HOURS = 1;
 
 /**
- * Did the other end tell us to come back later?
+ * Did we get a DEFINITIVE answer, or should we come back soon?
  *
- * Deliberately narrow. Anything not recognised is treated as an ordinary
- * failure and waits the full cooldown, which is the behaviour this had before
- * the distinction existed.
+ * ============================================================
+ * ONE BIT, AND THIS IS THE HONEST PLACE TO CUT IT
+ * ============================================================
+ *
+ * The first version of this asked only "did the other end say 429". That was
+ * right about rate limits and wrong about the commoner case, found within the
+ * hour: SFS's terms page failed with a bare "fetch failed" in 313ms, and
+ * answered 200 twice when asked again ninety seconds later. An intermittent
+ * connection reset had cost that page a day of staleness -- and a warn-level
+ * broken-knowledge finding for the same day, which is the noise that teaches
+ * somebody to stop reading the operator list.
+ *
+ * The line that holds is not a taxonomy of errors. It is whether the server
+ * ANSWERED. A 404 or a 410 is a definitive answer and deserves the full
+ * cooldown: the page is gone and asking hourly will not bring it back. A
+ * reset connection, a DNS failure, a timeout or a 503 is the absence of an
+ * answer, and the absence of an answer is transient until proven otherwise.
+ *
+ * Still deliberately narrow, and still failing safe: anything unrecognised
+ * waits the full cooldown, which is the behaviour this had before any of the
+ * distinction existed.
  */
-export function looksRateLimited(error: string | null | undefined): boolean {
+export function shouldRetrySoon(error: string | null | undefined): boolean {
   if (!error) return false;
   const text = error.toLowerCase();
+
+  // A definitive answer wins, even if the text also mentions something
+  // transient-looking. "404 Not Found" for a page whose URL contains the word
+  // "quota" must not be read as a rate limit.
+  for (const definitive of ["404", "410", "not found", "gone", "unsupported content-type", "unparseable uri", "refusing to fetch"]) {
+    if (text.includes(definitive)) return false;
+  }
+
   return (
+    // The other end asked us to wait.
     text.includes("429") ||
     text.includes("503") ||
     text.includes("quota") ||
     text.includes("rate limit") ||
     text.includes("too many requests") ||
-    text.includes("service unavailable")
+    text.includes("service unavailable") ||
+    // Or never answered at all.
+    text.includes("fetch failed") ||
+    text.includes("econnreset") ||
+    text.includes("econnrefused") ||
+    text.includes("etimedout") ||
+    text.includes("eai_again") ||
+    text.includes("socket hang up") ||
+    text.includes("network") ||
+    text.includes("timeout")
   );
 }
 
+
 /** When a source that just failed should next be tried. */
 export function retryAfterFor(error: string | null | undefined, now = new Date()): Date {
-  const hours = looksRateLimited(error)
-    ? RETRY_RATE_LIMITED_AFTER_HOURS
+  const hours = shouldRetrySoon(error)
+    ? RETRY_TRANSIENT_AFTER_HOURS
     : RETRY_FAILED_AFTER_HOURS;
   return new Date(now.getTime() + hours * 60 * 60 * 1000);
 }
