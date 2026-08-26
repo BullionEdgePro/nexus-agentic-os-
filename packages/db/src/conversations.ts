@@ -212,3 +212,32 @@ export async function pauseAiForContact(contactId: string, hours = 24): Promise<
     [contactId, hours]
   );
 }
+
+/**
+ * Give the agent the contact back.
+ *
+ * ============================================================
+ * THE OTHER HALF OF pauseAiForContact, WHICH HAD NONE
+ * ============================================================
+ *
+ * `ai_paused_until` had exactly one writer and no way back. It expired by
+ * time and by nothing else, which is right for the case it was built for -- a
+ * person taking a conversation for a while -- and wrong for the case the
+ * inbox actually offers.
+ *
+ * Unticking "Human handoff" cleared the conversation flag and left the
+ * contact paused. So: somebody replies, finishes, hands it back, and for up
+ * to twenty-four hours the customer writes to a conversation that is no
+ * longer marked as human-held -- so nobody is watching it -- and that the
+ * agent will not answer. Silence, from a control whose label says the agent
+ * has it back.
+ *
+ * PER CONTACT, NOT PER CONVERSATION, and that asymmetry is inherited rather
+ * than introduced: the pause it undoes is per contact too. On this platform a
+ * contact has one open conversation per business, so the two coincide in
+ * practice; if that stops being true, both halves need the same fix and not
+ * just this one.
+ */
+export async function resumeAiForContact(contactId: string): Promise<void> {
+  await getPool().query(`update contacts set ai_paused_until = null where id = $1`, [contactId]);
+}

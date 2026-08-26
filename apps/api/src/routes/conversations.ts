@@ -4,6 +4,7 @@ import {
   getMessagesForConversation,
   insertOutboundMessage,
   pauseAiForContact,
+  resumeAiForContact,
   setConversationHandoff,
   listCustody,
 } from "@nexus/db";
@@ -137,8 +138,14 @@ conversationsRoute.patch("/:id/handoff", async (c) => {
   // an unattributed toggle is still worth more than no record of the toggle.
   const actor = (c.get("scope") as { sub?: string } | undefined)?.sub ?? null;
   await setConversationHandoff(conversationId, body.isHumanHandoff, "manual_toggle", actor);
+  // SYMMETRICAL, and it was not. Turning the handoff ON paused the agent for
+  // a day; turning it OFF cleared the flag and left the pause standing, so a
+  // customer writing back within that day reached a conversation nobody was
+  // watching and an agent that would not answer.
   if (body.isHumanHandoff) {
     await pauseAiForContact(conversation.contactId, 24);
+  } else {
+    await resumeAiForContact(conversation.contactId);
   }
 
   await publishInboxEvent({
