@@ -167,6 +167,15 @@ export interface TeamMember {
   whatsappReady: boolean;
   presence: { status: string; source: string; shouldTwinRespond: boolean };
   timezone: string;
+  /**
+   * When they last SIGNED IN, and what from. Both null means never.
+   *
+   * Separate from presence, which is about right now. This answers "is this
+   * account being used, and was it them" -- the question an owner asks when a
+   * person has left or an access code may have been shared.
+   */
+  lastLoginAt: string | null;
+  lastLoginDevice: string | null;
   workingHours: WeeklySchedule;
   breakSchedule: WeeklySchedule;
   /**
@@ -1774,6 +1783,15 @@ export interface Me {
   whatsappNumber: string | null;
   avatarUrl: string | null;
   jobTitle: string | null;
+  /**
+   * Your own last sign-in, and what from.
+   *
+   * On your own record because you are the only person who can say whether it
+   * was you. A shared or leaked access code looks like ordinary use from every
+   * other angle, and like an unfamiliar device from this one.
+   */
+  lastLoginAt: string | null;
+  lastLoginDevice: string | null;
   /** False for operators — there is no operator profile to change. */
   editable: boolean;
 }

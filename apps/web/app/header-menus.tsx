@@ -752,6 +752,22 @@ export function AccountMenu({ signedInAs }: { signedInAs: string }) {
                   ? "Operator · every business"
                   : `${me?.jobTitle ? `${me.jobTitle} · ` : ""}${me?.businessName ?? ""}`}
               </span>
+              {/*
+                YOUR OWN LAST SIGN-IN, because you are the only person who can
+                say whether it was you. A shared or leaked code looks like
+                ordinary use from every other angle and like an unfamiliar
+                device from this one.
+
+                Only when it is known: an account whose sign-in predates this
+                being recorded should say nothing rather than "Unknown device",
+                which would read as a warning about a session that was fine.
+              */}
+              {me?.lastLoginAt ? (
+                <span className="acct-signin">
+                  Last signed in {new Date(me.lastLoginAt).toLocaleString()}
+                  {me.lastLoginDevice ? ` · ${me.lastLoginDevice}` : ""}
+                </span>
+              ) : null}
             </div>
           </div>
 

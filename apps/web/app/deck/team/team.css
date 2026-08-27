@@ -637,3 +637,12 @@
   color: var(--slate);
   max-width: 66ch;
 }
+
+/* When this person last signed in, and from what. Quiet by default: it is
+   reference, not an alarm — right up until it names a device nobody knows. */
+.deck-root .team-signin {
+  display: block;
+  font-size: 11.5px;
+  color: var(--slate);
+  letter-spacing: .01em;
+}

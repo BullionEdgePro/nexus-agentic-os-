@@ -29,6 +29,8 @@ interface EmployeeRow {
   manual_presence: PresenceStatus | null;
   manual_presence_until: string | null;
   last_seen_at: string | null;
+  last_login_at: string | null;
+  last_login_device: string | null;
   human_first: boolean;
   is_active: boolean;
 }
@@ -38,7 +40,7 @@ const EMPLOYEE_COLUMNS = `
   permissions, whatsapp_phone_number_id, whatsapp_number, timezone, working_hours, break_schedule,
   languages, skills, expertise, twin_enabled, ai_personality, response_style, knowledge_collection,
   escalation_rules, twin_disclosure, digital_signature, manual_presence, manual_presence_until,
-  last_seen_at, human_first, is_active
+  last_seen_at, last_login_at, last_login_device, human_first, is_active
 `;
 
 function toEmployee(row: EmployeeRow): Employee {
@@ -70,6 +72,8 @@ function toEmployee(row: EmployeeRow): Employee {
     manualPresence: row.manual_presence,
     manualPresenceUntil: row.manual_presence_until,
     lastSeenAt: row.last_seen_at,
+    lastLoginAt: row.last_login_at,
+    lastLoginDevice: row.last_login_device,
     humanFirst: row.human_first,
     isActive: row.is_active,
   };
@@ -455,10 +459,21 @@ export async function findEmployeeForLogin(
  */
 export async function recordEmployeeLogin(
   employeeId: string,
-  organizationId: string
+  organizationId: string,
+  device?: string | null
 ): Promise<void> {
   await withTenant(organizationId, () =>
-    getPool().query(`update employees set last_login_at = now() where id = $1`, [employeeId])
+    getPool().query(
+      // COALESCE ON THE NEW VALUE, not on the old one. A sign-in that arrived
+      // without a usable device header must not erase the last device we did
+      // recognise -- "was that me?" is answered by the newest thing we KNOW,
+      // and blanking it on a stray request would lose the only answer there is.
+      `update employees
+          set last_login_at = now(),
+              last_login_device = coalesce(nullif($2, ''), last_login_device)
+        where id = $1`,
+      [employeeId, device ?? null]
+    )
   );
 }
 

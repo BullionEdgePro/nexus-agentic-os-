@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { findEmployeeForLogin, recordEmployeeLogin } from "@nexus/db";
+import { describeDevice } from "@nexus/shared";
 import { verifyAccessCode } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
 import {
@@ -79,7 +80,11 @@ employeeAuthRoute.post("/employee", async (c) => {
 
   // Best-effort: a failed bookkeeping write must not deny a valid sign-in.
   try {
-    await recordEmployeeLogin(candidate.id, candidate.organizationId);
+    await recordEmployeeLogin(
+      candidate.id,
+      candidate.organizationId,
+      describeDevice(c.req.header("user-agent"))
+    );
   } catch (err) {
     logger.error({ employeeId: candidate.id, err }, "Failed to record employee login");
   }

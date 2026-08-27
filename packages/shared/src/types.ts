@@ -309,6 +309,17 @@ export interface Employee {
   manualPresence?: PresenceStatus | null;
   manualPresenceUntil?: string | null;
   lastSeenAt?: string | null;
+  /**
+   * When this person last SIGNED IN, and what from.
+   *
+   * Distinct from `lastSeenAt`, which is activity. A date alone answers "is
+   * this account still used"; the device answers the question somebody actually
+   * asks looking at their own record -- "was that me?"
+   *
+   * Null on both means nobody has ever signed in with it.
+   */
+  lastLoginAt?: string | null;
+  lastLoginDevice?: string | null;
   humanFirst: boolean;
 
   isActive: boolean;

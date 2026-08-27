@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { findAdminByEmail, recordAdminLogin, hasWorkingAdminAccount } from "@nexus/db";
+import { describeDevice } from "@nexus/shared";
 import { verifySecret } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
 import { clientKey, loginBlocked, recordLoginFailure, clearLoginFailures } from "../lib/login-throttle.js";
@@ -104,7 +105,7 @@ adminAuthRoute.post("/admin", async (c) => {
 
   // Best-effort: a failed bookkeeping write must not deny a valid sign-in.
   try {
-    await recordAdminLogin(admin.id);
+    await recordAdminLogin(admin.id, describeDevice(c.req.header("user-agent")));
   } catch (err) {
     logger.error({ adminId: admin.id, err }, "Failed to record admin login");
   }

@@ -513,3 +513,11 @@
   margin: 8px 14px 0;
   padding: 6px 0 6px 10px;
 }
+
+/* Your own last sign-in. Quiet: it is reference until the day the device is
+   one you do not recognise, and then it is the only place that would say so. */
+.deck-root .acct-signin {
+  font-size: 11.5px;
+  color: var(--slate);
+  margin-top: 2px;
+}

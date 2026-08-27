@@ -31,6 +31,23 @@ import "./team.css";
 const BLANK = { fullName: "", jobTitle: "", email: "", whatsappNumber: "" };
 
 /**
+ * A sign-in date somebody can read at a glance.
+ *
+ * Relative for the recent past, because "3 days ago" is the form the question
+ * is asked in; an absolute date once it stops being recent, because "97 days
+ * ago" is arithmetic nobody wants to do.
+ */
+function formatSignIn(iso: string): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "signed in at an unreadable time";
+  const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
+  if (days <= 0) return "signed in today";
+  if (days === 1) return "signed in yesterday";
+  if (days < 30) return `signed in ${days} days ago`;
+  return `signed in ${then.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`;
+}
+
+/**
  * When an EMPLOYEE is signed in rather than the operator.
  *
  * They get their own customers and the lead form, and none of the roster
@@ -439,6 +456,22 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                     {member.isActive && (member.weeklyHours ?? 0) === 0 ? (
                       <span className="team-norota">no hours set</span>
                     ) : null}
+                    {/*
+                      WHEN, AND FROM WHAT. A date alone says whether an account
+                      is still in use; the device answers the question actually
+                      asked when somebody looks -- "was that me?" A shared
+                      access code shows up here as a sign-in from a machine the
+                      person does not recognise, and nowhere else.
+
+                      "Never signed in" is stated rather than left blank,
+                      because a blank reads as missing data and this is a fact
+                      worth acting on: an account issued and never used.
+                    */}
+                    <span className="team-signin">
+                      {member.lastLoginAt
+                        ? `${formatSignIn(member.lastLoginAt)}${member.lastLoginDevice ? ` · ${member.lastLoginDevice}` : ""}`
+                        : "never signed in"}
+                    </span>
                   </button>
                   <button
                     type="button"

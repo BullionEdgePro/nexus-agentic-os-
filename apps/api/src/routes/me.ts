@@ -58,6 +58,12 @@ meRoute.get("/", async (c) => {
       whatsappNumber: admin?.whatsappNumber ?? null,
       avatarUrl: admin?.avatarUrl ?? null,
       jobTitle: null,
+      // WHEN YOU LAST SIGNED IN, AND FROM WHAT. Shown on your own record
+      // because you are the only person who can say whether it was you -- a
+      // shared or leaked access code looks exactly like ordinary use from every
+      // other angle, and looks like an unfamiliar device from this one.
+      lastLoginAt: admin?.lastLoginAt ?? null,
+      lastLoginDevice: admin?.lastLoginDevice ?? null,
       editable: Boolean(admin),
     });
   }

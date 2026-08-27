@@ -14,6 +14,7 @@ export interface AdminAccount {
   passwordHash: string;
   isActive: boolean;
   lastLoginAt: string | null;
+  lastLoginDevice: string | null;
   avatarUrl: string | null;
   whatsappNumber: string | null;
 }
@@ -25,6 +26,7 @@ interface AdminRow {
   password_hash: string;
   is_active: boolean;
   last_login_at: string | null;
+  last_login_device: string | null;
   avatar_url: string | null;
   whatsapp_number: string | null;
 }
@@ -36,6 +38,7 @@ const toAdmin = (row: AdminRow): AdminAccount => ({
   passwordHash: row.password_hash,
   isActive: row.is_active,
   lastLoginAt: row.last_login_at,
+  lastLoginDevice: row.last_login_device,
   avatarUrl: row.avatar_url,
   whatsappNumber: row.whatsapp_number,
 });
@@ -56,7 +59,7 @@ export async function findAdminByEmail(email: string): Promise<AdminAccount | nu
   if (!needle) return null;
 
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url, whatsapp_number
+    `select id, email, full_name, password_hash, is_active, last_login_at, last_login_device, avatar_url, whatsapp_number
        from admins
       where lower(email) = $1 and is_active = true
       limit 1`,
@@ -86,7 +89,7 @@ export async function upsertAdmin(input: {
        password_hash = excluded.password_hash,
        is_active     = true,
        updated_at    = now()
-     returning id, email, full_name, password_hash, is_active, last_login_at, avatar_url, whatsapp_number`,
+     returning id, email, full_name, password_hash, is_active, last_login_at, last_login_device, avatar_url, whatsapp_number`,
     [input.email.trim(), input.fullName.trim(), input.passwordHash]
   );
   return toAdmin(rows[0]);
@@ -95,7 +98,7 @@ export async function upsertAdmin(input: {
 /** Look up an admin by the id carried in their session. */
 export async function findAdminById(id: string): Promise<AdminAccount | null> {
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, password_hash, is_active, last_login_at, avatar_url, whatsapp_number
+    `select id, email, full_name, password_hash, is_active, last_login_at, last_login_device, avatar_url, whatsapp_number
        from admins
       where id = $1 and is_active = true
       limit 1`,
@@ -134,8 +137,16 @@ export async function updateAdminProfile(
   return (rowCount ?? 0) > 0;
 }
 
-export async function recordAdminLogin(adminId: string): Promise<void> {
-  await getPool().query(`update admins set last_login_at = now() where id = $1`, [adminId]);
+export async function recordAdminLogin(adminId: string, device?: string | null): Promise<void> {
+  // See the note in recordEmployeeLogin: a sign-in with no usable device header
+  // must not erase the last device that was recognised.
+  await getPool().query(
+    `update admins
+        set last_login_at = now(),
+            last_login_device = coalesce(nullif($2, ''), last_login_device)
+      where id = $1`,
+    [adminId, device ?? null]
+  );
 }
 
 /**
@@ -173,7 +184,7 @@ export async function hasWorkingAdminAccount(): Promise<boolean> {
 
 export async function listAdmins(): Promise<Array<Omit<AdminAccount, "passwordHash">>> {
   const { rows } = await getPool().query<AdminRow>(
-    `select id, email, full_name, '' as password_hash, is_active, last_login_at, avatar_url, whatsapp_number
+    `select id, email, full_name, '' as password_hash, is_active, last_login_at, last_login_device, avatar_url, whatsapp_number
        from admins order by created_at asc`
   );
   return rows.map(({ password_hash: _ignored, ...row }) => {
