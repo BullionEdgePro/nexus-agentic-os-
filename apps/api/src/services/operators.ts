@@ -2120,9 +2120,27 @@ const backupUnprotected: Operator = {
       });
     }
 
+    // AN OWNER MAY DECIDE THIS, AND A DECIDED THING IS NOT A FINDING.
+    //
+    // On 2026-08-27 the owner chose to keep backups on the machine only. That is
+    // theirs to choose, and five findings that can never clear would be exactly
+    // the permanent noise this deck argues against everywhere else -- the
+    // fastest way to teach somebody that a warn badge means nothing.
+    //
+    // NOT deleted, and not a dismissal either. The dismissal horizons have no
+    // "forever" on purpose, because a standing business decision is a different
+    // thing from "remind me later" and should be written down where the next
+    // person reads it rather than buried in a mute. So it is an explicit env
+    // flag: greppable, dated in .env, and off by default so a NEW deployment is
+    // still told.
+    //
+    // backup-check still prints "NOT off-box" on every run regardless. The
+    // decision silences the nag, never the fact.
+    const offsiteWaived = process.env.BACKUP_OFFSITE_WAIVED === "1";
+
     // Reported even when the run succeeded, because a verified dump sitting on
     // the machine it protects is the case this whole operator was written for.
-    if (!latest.off_box && !latest.failed_reason) {
+    if (!latest.off_box && !latest.failed_reason && !offsiteWaived) {
       out.push({
         fingerprint: `${organizationId}:backup-not-off-box`,
         // The subject is the BUSINESS, not the run. A finding keyed on a

@@ -149,3 +149,50 @@ test("it says nothing about tenants it cannot speak for", () => {
     assert.ok(!code.includes(forbidden), `backup_runs must not carry ${forbidden}`);
   }
 });
+
+test("an owner may decide against off-box, and only that finding stops", () => {
+  // The owner decided on 2026-08-27 to keep backups on the machine. Five
+  // findings that can never clear would be exactly the permanent noise this
+  // deck argues against everywhere else, and the fastest way to teach somebody
+  // that a warn badge means nothing.
+  //
+  // NOT a deletion and NOT a dismissal. The horizons have no "forever" on
+  // purpose; a standing business decision is a different thing and belongs
+  // written down where the next person reads it.
+  assert.match(BODY, /BACKUP_OFFSITE_WAIVED === "1"/);
+  assert.match(BODY, /!offsiteWaived/);
+
+  // OFF BY DEFAULT. A new deployment must still be told -- a waiver that
+  // defaults to on would silence a platform whose owner never chose anything.
+  assert.match(
+    read("docker-compose.prod.yml"),
+    /BACKUP_OFFSITE_WAIVED: \$\{BACKUP_OFFSITE_WAIVED:-0\}/,
+    "the waiver must default to 0"
+  );
+});
+
+test("the waiver silences the nag and never the fact", () => {
+  // The two branches that matter MORE once backups are local-only: if the
+  // nightly run fails or stops, that is now the entire safety net gone. Neither
+  // may be affected by the waiver.
+  // Asserted on the CONDITIONS rather than on a slice of the file. The first
+  // version cut from "latest.failed_reason" to "backup-not-off-box" and caught
+  // the `const offsiteWaived` declaration that sits between them -- reporting a
+  // leak that was not there. A test about which branch reads a flag should read
+  // the branches, not the lines near them.
+  assert.match(BODY, /if \(latest\.failed_reason\) \{/, "the failed branch must not consult the waiver");
+  assert.match(BODY, /\} else if \(hours > BACKUP_STALE_HOURS\) \{/, "the stale branch must not either");
+
+  // Exactly two mentions: the declaration, and the one condition it guards.
+  const mentions = BODY.split("offsiteWaived").length - 1;
+  assert.equal(mentions, 2, `offsiteWaived appears ${mentions} times — it must guard one branch only`);
+
+  // And backup-check still says it on every run, so the fact stays visible even
+  // though the deck has stopped asking about it.
+  const CHECK = read("scripts", "backup-check.sh");
+  assert.match(CHECK, /NOT OFF-BOX/, "the gate must still state the fact on every run");
+  assert.ok(
+    !CHECK.includes("BACKUP_OFFSITE_WAIVED"),
+    "the gate must keep reporting off-box regardless of the waiver"
+  );
+});

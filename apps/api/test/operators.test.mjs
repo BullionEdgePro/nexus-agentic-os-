@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { operatorBody } from "../../../scripts/recurrence/source.mjs";
+import { operatorBody, withoutComments } from "../../../scripts/recurrence/source.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
@@ -31,14 +31,23 @@ const PAGE = read("apps", "web", "app", "deck", "operators", "page.tsx");
 
 /** Every module the sweep imports from, read from its own import statements. */
 function sweepImports(src) {
+  // COMMENTS STRIPPED FIRST. This scans for `from "` anywhere in the file, and
+  // on 2026-08-27 a comment reading `a different thing from "remind me later"`
+  // was reported as an unapproved import of a module called "remind me later".
+  //
+  // Funny, and the wrong kind of wrong: an allow-list check that prose can
+  // break is one somebody eventually widens to make their sentence compile,
+  // and this is the check standing between the ten-minute sweep and a model
+  // bill. It should fail on imports and on nothing else.
+  const code = withoutComments(src);
   const out = new Set();
   const NEEDLE = 'from "';
-  let at = src.indexOf(NEEDLE);
+  let at = code.indexOf(NEEDLE);
   while (at !== -1) {
     const from = at + NEEDLE.length;
-    const to = src.indexOf('"', from);
-    if (to !== -1) out.add(src.slice(from, to));
-    at = src.indexOf(NEEDLE, at + 1);
+    const to = code.indexOf('"', from);
+    if (to !== -1) out.add(code.slice(from, to));
+    at = code.indexOf(NEEDLE, at + 1);
   }
   return [...out].sort();
 }

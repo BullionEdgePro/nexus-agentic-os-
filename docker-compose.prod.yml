@@ -77,6 +77,9 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
+      # Set to 1 when the owner has decided backups stay on this machine.
+      # Off by default, so a NEW deployment is still told about it.
+      BACKUP_OFFSITE_WAIVED: ${BACKUP_OFFSITE_WAIVED:-0}
       # Least-privilege role (migration 006). Falls back to the owner role when
       # APP_DB_* is unset so an existing deployment keeps working, but a
       # production deploy should set both — the app needs DML only, and running
@@ -139,6 +142,9 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
+      # Set to 1 when the owner has decided backups stay on this machine.
+      # Off by default, so a NEW deployment is still told about it.
+      BACKUP_OFFSITE_WAIVED: ${BACKUP_OFFSITE_WAIVED:-0}
       # Least-privilege role (migration 006). Falls back to the owner role when
       # APP_DB_* is unset so an existing deployment keeps working, but a
       # production deploy should set both — the app needs DML only, and running
@@ -165,6 +171,9 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      # Set to 1 when the owner has decided backups stay on this machine.
+      # Off by default, so a NEW deployment is still told about it.
+      BACKUP_OFFSITE_WAIVED: ${BACKUP_OFFSITE_WAIVED:-0}
       # Command-deck operator login (/login → /deck). Set these in .env for prod;
       # the defaults keep the demo working out of the box.
       NEXUS_OPERATOR_PASSWORD: ${NEXUS_OPERATOR_PASSWORD:-demo1234}
