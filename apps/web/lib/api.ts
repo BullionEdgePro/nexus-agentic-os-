@@ -1339,6 +1339,40 @@ export function addContact(
   });
 }
 
+/** What happened to one row of an imported file. */
+export interface ImportedContact {
+  /** Which line of the file it came from, so a refusal can be pointed at. */
+  line: number | null;
+  waId: string;
+  outcome: "added" | "already-known" | "refused";
+  reason?: string;
+}
+
+/**
+ * Import a customer list.
+ *
+ * Returns a result PER ROW, not a count. "Imported 40" is the failure mode an
+ * importer has: a file with seven unusable rows brings in thirty-three, says
+ * nothing, and the seven surface weeks later as customers nobody contacted.
+ *
+ * Safe to run twice — every row upserts on the same identity, so fixing two
+ * lines and re-importing the whole file duplicates nobody.
+ */
+export function importContacts(
+  orgSlug: BusinessSlug,
+  rows: Array<{ waId: string; displayName?: string | null; line?: number }>
+): Promise<{
+  results: ImportedContact[];
+  added: number;
+  alreadyKnown: number;
+  refused: number;
+}> {
+  return request(`/api/organizations/${orgSlug}/contacts/import`, {
+    method: "POST",
+    body: JSON.stringify({ rows }),
+  });
+}
+
 export function getContact(
   orgSlug: BusinessSlug,
   contactId: string

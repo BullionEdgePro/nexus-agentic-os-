@@ -13,6 +13,7 @@ import {
   type ContactMemoryView,
   type ContactSummary,
 } from "@/lib/api";
+import { ImportCustomers } from "./import-customers";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
@@ -178,6 +179,15 @@ export default function CustomersPage() {
             download it offered was a QR code. A platform that can be asked to
             forget a customer and cannot produce a single row of the business's
             own records has the two halves of that the wrong way round. */}
+        {/* Import sits beside export deliberately. A product that will hand
+            you your data and not take it back is a one-way door, and until this
+            existed the only way in was one customer at a time. */}
+        <ImportCustomers
+          business={business}
+          businessName={TENANTS.find((t) => t.slug === business)?.ref ?? business}
+          onImported={() => void load(business, "")}
+        />
+
         <div className="cu-export">
           <span>Take your data</span>
           <button

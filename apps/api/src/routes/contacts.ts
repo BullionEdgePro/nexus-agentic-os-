@@ -104,6 +104,85 @@ contactsRoute.post("/:slug/contacts", async (c) => {
   }
 });
 
+/**
+ * Import a customer list.
+ *
+ * ============================================================
+ * WHAT AN IMPORT MUST NOT DO
+ * ============================================================
+ *
+ * Report a number. "Imported 40" is the failure mode here: a file with seven
+ * unusable rows imports thirty-three and says nothing, and the seven are found
+ * weeks later by somebody wondering why a customer was never contacted.
+ *
+ * So every row comes back with its own outcome and, when refused, the reason
+ * in the sentence the identity check itself wrote. The caller renders them.
+ *
+ * SAFE TO RUN TWICE. Each row goes through `ensureContactForServingBusiness`,
+ * which upserts on (owner, wa_id) -- so re-importing the same file updates
+ * nothing and duplicates nobody. That matters more than it sounds: the first
+ * thing anyone does with a failed import is fix two rows and run it again.
+ */
+contactsRoute.post("/:slug/contacts/import", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const body = await c.req
+    .json<{ rows?: Array<{ waId?: string; displayName?: string; line?: number }> }>()
+    .catch(() => null);
+  const rows = Array.isArray(body?.rows) ? body.rows : null;
+  if (!rows || rows.length === 0) {
+    return c.json({ error: "There were no rows to import." }, 400);
+  }
+  // Bounded. A file with a hundred thousand rows would hold a connection for
+  // minutes and time out having done an unknown fraction of the work, which is
+  // the worst possible outcome for an import.
+  if (rows.length > 2000) {
+    return c.json({ error: "Import up to 2000 customers at a time." }, 400);
+  }
+
+  const results: Array<{
+    line: number | null;
+    waId: string;
+    outcome: "added" | "already-known" | "refused";
+    reason?: string;
+  }> = [];
+
+  // Sequential on purpose. These share one upsert key and a parallel run of the
+  // same number twice would race on the same row for no gain -- the work is one
+  // insert per customer, not something worth pipelining.
+  for (const row of rows) {
+    const waId = String(row?.waId ?? "").trim();
+    const line = typeof row?.line === "number" ? row.line : null;
+    try {
+      const result = await ensureContactForServingBusiness({
+        servingOrganizationId: organization.id,
+        waId,
+        displayName: row?.displayName ?? null,
+      });
+      results.push({
+        line,
+        waId,
+        outcome: result.created ? "added" : "already-known",
+      });
+    } catch (err) {
+      results.push({
+        line,
+        waId,
+        outcome: "refused",
+        reason: err instanceof Error ? err.message : "Could not add that customer.",
+      });
+    }
+  }
+
+  return c.json({
+    results,
+    added: results.filter((r) => r.outcome === "added").length,
+    alreadyKnown: results.filter((r) => r.outcome === "already-known").length,
+    refused: results.filter((r) => r.outcome === "refused").length,
+  });
+});
+
 contactsRoute.get("/:slug/contacts/:contactId", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
