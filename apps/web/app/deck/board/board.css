@@ -392,3 +392,39 @@
   border-color: var(--crit);
   color: var(--crit);
 }
+
+/* ------------------------------------------------------------
+   What the rules have done
+   ------------------------------------------------------------ */
+.deck-root .bd-runs { margin-top: 16px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+
+.deck-root .bd-runs h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--slate);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Refusals are the reason this panel exists, so the count is coloured. */
+.deck-root .bd-runs-bad { font-style: normal; color: var(--crit); letter-spacing: normal; }
+
+.deck-root .bd-runs-empty { margin: 0; font-size: 12.5px; color: var(--slate); }
+
+.deck-root .bd-runs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+
+.deck-root .bd-runs-list li {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(90px, auto) 1fr;
+  gap: 10px;
+  font-size: 12.5px;
+  align-items: baseline;
+}
+
+.deck-root .bd-run-when { color: var(--slate); font-variant-numeric: tabular-nums; }
+.deck-root .bd-run-what { color: var(--ink); }
+.deck-root .bd-run-why { color: var(--slate); }
+.deck-root .bd-runs-list li.bad .bd-run-why { color: var(--crit); }

@@ -6,6 +6,7 @@ import {
   getQuality,
   refreshQuality,
   askCopilot,
+  getCopilotCapabilities,
   type QualityDay,
   type QualitySummary,
   type CopilotAnswer,
@@ -44,6 +45,14 @@ export default function QualityPage() {
    */
   const [loadError, setLoadError] = useState("");
   const [question, setQuestion] = useState("");
+  // WHAT IT CAN ACTUALLY ANSWER.
+  //
+  // This box refuses anything it cannot answer from real data, which is the
+  // right behaviour and reads as a broken feature if you never knew what to
+  // ask. The list comes from the server, derived from the same questions the
+  // router matches against, so the screen cannot advertise something the
+  // answerer would then decline.
+  const [canAnswer, setCanAnswer] = useState<string[]>([]);
   const [asking, setAsking] = useState(false);
   const [reply, setReply] = useState<CopilotAnswer | null>(null);
   const [hotspots, setHotspots] = useState<EscalationHotspot[]>([]);
@@ -67,6 +76,14 @@ export default function QualityPage() {
   useEffect(() => {
     void load(business);
   }, [business, load]);
+
+  useEffect(() => {
+    getCopilotCapabilities(business)
+      .then((data) => setCanAnswer(data.capabilities))
+      // Failing soft is right here and only because of what is lost: the box
+      // still works, it just stops advertising. There is no claim to get wrong.
+      .catch(() => setCanAnswer([]));
+  }, [business]);
 
   async function handleRefresh() {
     setBusy(true);
@@ -255,6 +272,22 @@ export default function QualityPage() {
 
         <section className="q-ask">
           <h2 className="act-sub-head">Ask about this business</h2>
+          {canAnswer.length > 0 ? (
+            <div className="q-can">
+              <span>It can answer:</span>
+              <ul>
+                {canAnswer.map((what) => (
+                  /* Clickable, because the shortest path from "what can I ask"
+                     to an answer is not retyping the sentence. */
+                  <li key={what}>
+                    <button type="button" onClick={() => setQuestion(what)}>
+                      {what}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <form onSubmit={handleAsk}>
             <input
               value={question}

@@ -22,17 +22,19 @@
  * know they are not adding a second thing that watches.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   createAutomation,
   deleteAutomation,
   getAutomationOptions,
+  getAutomationRuns,
   getAutomations,
   readableError,
   setAutomationActive,
   type AutomationOption,
   type AutomationRecord,
+  type AutomationRun,
 } from "../../../lib/api";
 
 const readable = (slug: string) => slug.replace(/-/g, " ");
@@ -45,6 +47,15 @@ export function Automations({
   team: Array<{ id: string; fullName: string }>;
 }) {
   const [rules, setRules] = useState<AutomationRecord[]>([]);
+  // WHAT THE RULES HAVE ACTUALLY DONE.
+  //
+  // A rule that has been firing and one that has been REFUSED on every finding
+  // look identical in the list below: both show as active, and neither shows a
+  // result. `failedReason` is the case that costs somebody real work -- an
+  // urgent finding that was meant to be assigned to a person and silently was
+  // not.
+  const [runs, setRuns] = useState<AutomationRun[]>([]);
+  const [runsReadable, setRunsReadable] = useState<boolean | null>(null);
   const [options, setOptions] = useState<AutomationOption[]>([]);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -68,6 +79,26 @@ export function Automations({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadRuns = useCallback(() => {
+    getAutomationRuns(business)
+      .then((data) => {
+        setRuns(data.runs);
+        setRunsReadable(true);
+      })
+      .catch(() => {
+        // An empty history and an unreadable one are opposite news on a panel
+        // whose whole subject is whether anything has been happening.
+        setRuns([]);
+        setRunsReadable(false);
+      });
+  }, [business]);
+
+  useEffect(() => {
+    loadRuns();
+  }, [loadRuns]);
+
+  const failures = useMemo(() => runs.filter((run) => run.failedReason), [runs]);
 
   useEffect(() => {
     getAutomationOptions()
@@ -246,6 +277,44 @@ export function Automations({
           ))}
         </ul>
       )}
+
+      {/* ------------------------------------------------------------
+          What the rules have done
+          ------------------------------------------------------------
+          Placed under the rules rather than on its own screen: the question
+          "is this working?" is asked while looking at the rule, and a history
+          a click away is a history nobody opens. */}
+      <div className="bd-runs">
+        <h4>
+          Recent activity
+          {failures.length > 0 ? <em className="bd-runs-bad">{failures.length} refused</em> : null}
+        </h4>
+
+        {runsReadable === false ? (
+          <p className="bd-runs-empty">
+            The history could not be read just now. This is not a report that nothing has run.
+          </p>
+        ) : runs.length === 0 ? (
+          <p className="bd-runs-empty">
+            Nothing yet. A rule acts when its trigger next fires — it does not go back over
+            findings raised before it existed.
+          </p>
+        ) : (
+          <ul className="bd-runs-list">
+            {runs.slice(0, 8).map((run) => (
+              <li key={run.id} className={run.failedReason ? "bad" : ""}>
+                <span className="bd-run-when">{new Date(run.ranAt).toLocaleString()}</span>
+                <span className="bd-run-what">{readable(run.action)}</span>
+                {/* The refusal in the rule's own words. A rule that fires and is
+                    turned away is the case worth a screen; saying only "failed"
+                    would send somebody to read logs for a sentence we already
+                    have. */}
+                <span className="bd-run-why">{run.failedReason ?? "done"}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

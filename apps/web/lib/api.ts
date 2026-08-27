@@ -531,6 +531,19 @@ export interface EscalationHotspot {
   escalationRate: number;
 }
 
+/**
+ * The questions the copilot can actually answer.
+ *
+ * Derived on the server from the same list the router matches against, so the
+ * screen cannot advertise something the answerer would then decline. Shown
+ * because a free-text box with no stated repertoire is a guessing game -- and
+ * this one deliberately refuses anything it cannot answer from real data, which
+ * reads as broken if you never knew what to ask.
+ */
+export function getCopilotCapabilities(orgSlug: BusinessSlug): Promise<{ capabilities: string[] }> {
+  return request(`/api/quality/${orgSlug}/capabilities`);
+}
+
 export function getQuality(
   orgSlug: BusinessSlug,
   days = 30
@@ -1782,6 +1795,34 @@ export function createAutomation(input: {
   assigneeId?: string | null;
 }): Promise<{ automation: AutomationRecord }> {
   return request("/api/automations", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** One thing a rule actually did, or failed to do. */
+export interface AutomationRun {
+  id: string;
+  automationId: string;
+  action: string;
+  subjectKind: string | null;
+  subjectId: string | null;
+  /** Non-null means the rule fired and the action was refused. */
+  failedReason: string | null;
+  ranAt: string;
+}
+
+/**
+ * What the rules have been doing.
+ *
+ * Without this a rule is a promise nobody can check. "Assign every urgent
+ * finding to Sara" either has been assigning them or has been failing on every
+ * one -- and from the rules list those look identical, because both show an
+ * active rule and neither shows a result.
+ *
+ * `failedReason` is the whole reason this is worth a screen: a rule that fires
+ * and is refused is the case that costs somebody real work.
+ */
+export function getAutomationRuns(business?: BusinessSlug | ""): Promise<{ runs: AutomationRun[] }> {
+  const query = business ? `?business=${encodeURIComponent(business)}` : "";
+  return request(`/api/automations/runs${query}`);
 }
 
 export function setAutomationActive(
