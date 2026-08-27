@@ -2141,6 +2141,90 @@ const backupUnprotected: Operator = {
   },
 };
 
+
+/** A probe every fifteen minutes; two missed in a row is a gap worth naming. */
+const PROBE_STALE_MINUTES = 45;
+
+/**
+ * Whether anything outside the containers could reach this platform.
+ *
+ * `serving-check` is the only gate that asks from outside -- it calls the public
+ * hostnames, so Caddy, TLS and DNS are all in the path -- and until now it asked
+ * only when a person ran verify-all.sh. Between deploys that is nobody, for
+ * days. A wedged api container or a certificate that expired overnight would be
+ * found by the next release, while every customer message went unanswered.
+ *
+ * It runs from cron every fifteen minutes now and records what it saw. This
+ * reads the last row.
+ *
+ * WHAT IT CANNOT SAY. The probe runs on the same machine, so "outside" means
+ * outside the containers, not outside the building. Nothing running on a box
+ * can report that the box is gone. That case still needs a monitor somewhere
+ * else and this does not stand in for one -- which is why a stale probe is
+ * reported rather than treated as silence.
+ */
+const unreachableFromOutside: Operator = {
+  slug: "unreachable-from-outside",
+  title: "The platform could not be reached from outside",
+  description:
+    "A probe calls the public hostnames every fifteen minutes, the way a customer's phone and the operator console do. This reports when that stopped working, or stopped running.",
+  run: async (organizationId) => {
+    // Not per business, and raised per business for the same reason
+    // schedule-stalled is: reachability belongs to no tenant, and the
+    // consequence -- every customer of that business going unanswered -- lands
+    // on each of them separately.
+    const { rows } = await getPool().query<{
+      ran_at: string;
+      ok: boolean;
+      waited_ms: number | null;
+      detail: string | null;
+    }>(
+      `select ran_at, ok, waited_ms, detail
+         from outside_probes
+        order by ran_at desc
+        limit 1`
+    );
+
+    const latest = rows[0];
+
+    // Silence until the first probe. The table is empty between this shipping
+    // and the next quarter-hour, and the platform is reachable throughout --
+    // reporting from an absence of rows would be reporting on the recording.
+    if (!latest) return [];
+
+    const minutes = Math.round((Date.now() - new Date(latest.ran_at).getTime()) / 60_000);
+
+    if (!latest.ok) {
+      return [
+        {
+          fingerprint: `${organizationId}:unreachable`,
+          subjectKind: "organization",
+          subjectId: organizationId,
+          severity: "urgent",
+          title: "Customers cannot reach this platform",
+          detail: `The last check ${minutes} minutes ago could not get an answer from the public hostnames (${latest.detail ?? "no detail recorded"}). Messages are not being answered and the console will not load. Check the containers and the certificate before anything else on this page.`,
+        },
+      ];
+    }
+
+    if (minutes > PROBE_STALE_MINUTES) {
+      return [
+        {
+          fingerprint: `${organizationId}:probe-stopped`,
+          subjectKind: "organization",
+          subjectId: organizationId,
+          severity: "warn",
+          title: `Nothing has checked the platform from outside for ${minutes} minutes`,
+          detail:
+            "The probe runs every fifteen minutes from cron. Missing several in a row usually means the cron entry was removed or the host is under load — and while it is not running, an outage would be invisible again. It says nothing about whether the platform is up right now.",
+        },
+      ];
+    }
+
+    return [];
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   agentUnavailable,
@@ -2166,6 +2250,7 @@ export const OPERATORS: Operator[] = [
   wordingAwaitingReview,
   procedureSwitchedOn,
   backupUnprotected,
+  unreachableFromOutside,
   bookingWithoutAnyone,
   bookingUnassigned,
   templateRejected,

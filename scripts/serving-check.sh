@@ -195,11 +195,45 @@ case "$web_code" in
     ;;
 esac
 
+# ------------------------------------------------------------
+# Leave a trace, so a run nobody watched still counts
+# ------------------------------------------------------------
+#
+# This gate answers the question no other gate asks, and it answered it only
+# when a person typed verify-all.sh. Between deploys that is nobody, for days --
+# so a certificate that expired overnight would be found by the next release
+# rather than by anything watching.
+#
+# Recorded here rather than in the caller so it holds however the gate is
+# invoked: by hand, by verify-all, or by the cron entry that now runs it every
+# fifteen minutes. An operator reads the table and puts it on the deck.
+#
+# Best-effort, and the direction matters: a probe that could not file its report
+# must never turn a reachable platform into a failed check. The reverse -- the
+# database being down so nothing records -- is a case this cannot cover and does
+# not pretend to.
+record_probe() {
+  local ok="$1" waited="$2" detail="$3"
+  docker compose -f "$NEXUS_DIR/docker-compose.prod.yml" exec -T postgres \
+    psql -U nexus -d nexus -v ON_ERROR_STOP=1 -q -c \
+    "insert into outside_probes (ok, waited_ms, detail)
+     values ($ok, $((waited * 1000)), nullif('$detail', ''));" >/dev/null 2>&1 || true
+}
+
+NEXUS_DIR="${NEXUS_DIR:-/opt/nexus}"
+
 echo
 if [ "$fail" -eq 0 ]; then
+  record_probe true "$waited" ""
   echo "PASS - the API answers, its background schedule is alive, and the console serves."
   exit 0
 fi
+
+# The failing lines, squeezed to one and stripped of quotes: it is going into a
+# SQL literal, and an apostrophe in a curl error must not become a syntax error
+# that loses the whole report.
+summary="$(printf 'api=%s web=%s waited=%ss' "${health_code:-none}" "${web_code:-none}" "$waited" | tr -d "'")"
+record_probe false "$waited" "$summary"
 
 echo "FAIL - something this platform serves is not reachable from outside."
 exit 1

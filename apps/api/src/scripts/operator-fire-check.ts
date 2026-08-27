@@ -80,6 +80,25 @@ interface Case {
 
 const CASES: Case[] = [
   {
+    // The branch that matters and cannot be waited for: the platform being
+    // unreachable. Seeding a failed probe proves the operator reports it as
+    // urgent rather than as a stale-probe warning -- those are different
+    // findings with different first sentences, and getting them the wrong way
+    // round would tell somebody the monitoring stopped when the platform did.
+    slug: "unreachable-from-outside",
+    seed: async () => {
+      await getPool().query(
+        `insert into outside_probes (ok, waited_ms, detail)
+         values (false, 60000, 'seeded by operator-fire-check')`
+      );
+    },
+    expect: (finding) => {
+      if (finding.severity !== "urgent") return `unreachable should be urgent, got ${finding.severity}`;
+      if (!/cannot reach/i.test(finding.title)) return `expected the unreachable title, got "${finding.title}"`;
+      return null;
+    },
+  },
+  {
     // TWO BRANCHES PRODUCTION CANNOT SHOW ME. `backup-unprotected` fires on the
     // real platform right now -- five standing findings, one per business,
     // because the off-box copy is unconfigured -- so the branch that matters

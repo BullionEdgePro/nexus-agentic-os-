@@ -93,6 +93,12 @@ const WHERE: Record<string, Destination> = {
   // the two variable names, which is the thing somebody actually needs -- so
   // the destination is this list, where the detail is already legible.
   "backup-unprotected": { screen: "operators" },
+
+  // Same answer, and here it is nearly a joke: if this finding is standing, the
+  // deck it links to is one of the things that could not be reached. It is
+  // pointed at this list because the detail carries what to check, and because
+  // by the time somebody is reading it the platform is back.
+  "unreachable-from-outside": { screen: "operators" },
 };
 
 /**
