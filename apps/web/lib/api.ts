@@ -1192,6 +1192,16 @@ export interface NotReportedConversation {
   excerpt: string;
   /** true = a stored classification; false = the scorer re-read it just now. */
   classified: boolean;
+  /**
+   * Which rule silenced it, and they are not the same kind of claim.
+   *
+   * "pitch" is a judgement the scorer made and can be wrong about -- the whole
+   * reason this list is shown rather than merely applied. "colleague" is a fact
+   * about the number: it is on one of the five businesses' own rotas. A reader
+   * chasing a customer who never got an answer needs to know which of those
+   * they are auditing.
+   */
+  reason: "pitch" | "colleague";
 }
 
 export interface ContactSummary {

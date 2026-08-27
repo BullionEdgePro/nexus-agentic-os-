@@ -581,9 +581,11 @@ export default function OperatorsPage() {
                       <p className="op-meta">
                         <span className="op-biz">{row.businessSlug}</span>
                         <span>
-                          {row.classified
-                            ? "classified when it arrived"
-                            : "re-read just now — never scored at the time"}
+                          {row.reason === "colleague"
+                            ? "on our own rota — a colleague, not a customer"
+                            : row.classified
+                              ? "classified when it arrived"
+                              : "re-read just now — never scored at the time"}
                         </span>
                       </p>
                     </div>

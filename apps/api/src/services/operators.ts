@@ -5,6 +5,7 @@ import {
   listJobHeartbeats,
   countKnowledgeSourcesAcrossPlatform,
   withTenant,
+  withAllTenants,
   type FindingInput,
   type RaisedFinding,
   AUTO_REVIEWER,
@@ -357,6 +358,55 @@ export function looksLikeAnInboundPitch(row: {
   return scoreLead({ text: row.last_body }).category === "inbound_pitch";
 }
 
+
+/**
+ * The WhatsApp numbers of everyone who works here, across every business.
+ *
+ * ============================================================
+ * WHY CROSS-TENANT, AND WHY A SET RATHER THAN A JOIN
+ * ============================================================
+ *
+ * On 2026-08-27 an urgent finding had stood for 187 hours saying a customer had
+ * been waiting since the 19th. It was the owner of Juris Prime Legal -- its
+ * lawyer -- messaging the shared number from his own phone. Eight days of red on
+ * the one signal that has to stay trustworthy, for a colleague.
+ *
+ * The obvious fix is an EXISTS against `employees` inside the query, and it does
+ * not work here. `employees` is tenant-scoped, the unanswered query runs inside
+ * the NUMBER OWNER's transaction, and the colleague works for a different
+ * business on the same number -- so RLS would hide him and the subquery would
+ * return false. Correct-looking SQL, zero rows, and the finding stays. That is
+ * this codebase's signature defect and it would have landed squarely in the fix
+ * for it.
+ *
+ * So the roster is read once, cross-tenant, with a reason, and the judgement
+ * happens in memory beside the pitch rule -- which is also why both are shared
+ * by the operator and by the view of what it suppressed.
+ */
+export async function staffWhatsAppNumbers(): Promise<Set<string>> {
+  const { rows } = await withAllTenants(
+    "reading every business's staff numbers to tell a colleague from a customer on the shared number",
+    () =>
+      getPool().query<{ wa: string }>(
+        `select regexp_replace(whatsapp_number, '[^0-9]', '', 'g') as wa
+           from employees
+          where is_active = true and coalesce(whatsapp_number, '') <> ''`
+      )
+  );
+  return new Set(rows.map((row: { wa: string }) => row.wa).filter((wa: string) => wa.length >= 8));
+}
+
+/**
+ * Is this "customer" one of ours?
+ *
+ * Separate from the pitch rule on purpose: they suppress for different reasons
+ * and a reader needs to know which. "We judged this a salesman" is a call that
+ * can be wrong; "this number is on our own rota" is a fact.
+ */
+export function looksLikeAColleague(row: { wa_id: string }, staff: Set<string>): boolean {
+  return staff.has((row.wa_id ?? "").replace(/[^0-9]/g, ""));
+}
+
 /**
  * The unanswered conversations this platform decided NOT to tell anybody about.
  *
@@ -366,8 +416,13 @@ export function looksLikeAnInboundPitch(row: {
  * a filter in memory, every ten minutes, and left no trace.
  */
 export async function unansweredButNotReportedFor(organizationId: string) {
-  const rows = await unansweredConversations(organizationId, true);
-  return rows.filter(looksLikeAnInboundPitch).map((row) => ({
+  const [rows, staff] = await Promise.all([
+    unansweredConversations(organizationId, true),
+    staffWhatsAppNumbers(),
+  ]);
+  return rows
+    .filter((row) => looksLikeAnInboundPitch(row) || looksLikeAColleague(row, staff))
+    .map((row) => ({
     conversationId: row.conversation_id,
     servingOrganizationId: row.serving_organization_id,
     who: row.contact_name ?? `+${row.wa_id}`,
@@ -379,6 +434,10 @@ export async function unansweredButNotReportedFor(organizationId: string) {
     // answers: a stored classification is wrong in the data, a recomputed one
     // is wrong in the rules.
     classified: row.is_pitch,
+    // Which rule silenced it. A colleague is a FACT about the number; a pitch is
+    // a judgement that can be wrong, and the two must not be read alike on a
+    // list whose whole purpose is auditing suppression.
+    reason: looksLikeAColleague(row, staff) ? ("colleague" as const) : ("pitch" as const),
   }));
 }
 /**
@@ -427,7 +486,10 @@ const customerWaiting: Operator = {
   description:
     "Someone messaged and nothing has gone back. Normally the agent answers in seconds, so each finding works out which of four things happened — a handover nobody picked up, a colleague who replied and then stopped, a deliberate silence the agent recorded, or a message the reply path never accounted for at all.",
   run: async (organizationId) => {
-    const rows = await unansweredConversations(organizationId, false);
+    const [rows, staff] = await Promise.all([
+      unansweredConversations(organizationId, false),
+      staffWhatsAppNumbers(),
+    ]);
 
     return rows
       // The pitch rule, named once in `looksLikeAnInboundPitch` and shared
@@ -436,6 +498,17 @@ const customerWaiting: Operator = {
       // made -- so "nothing is waiting" and "two people are waiting and we
       // judged them salesmen" were indistinguishable from every screen.
       .filter((row) => !looksLikeAnInboundPitch(row))
+      // AND NOT ONE OF OUR OWN. Measured 2026-08-27: an urgent finding had
+      // stood for 187 hours naming a waiting customer who turned out to be the
+      // owner and lawyer of one of the five businesses, messaging the shared
+      // number from his own phone. Eight days of red on the one signal that has
+      // to stay trustworthy.
+      //
+      // Suppressed rather than downgraded, and SHOWN in the not-reported list
+      // with its reason, because the rule that hides a real customer must be
+      // auditable -- which is the same argument the pitch rule already lost and
+      // had to answer.
+      .filter((row) => !looksLikeAColleague(row, staff))
       .map((row) => {
       const hours = Number(row.waited_hours);
       const who = row.contact_name ?? `+${row.wa_id}`;

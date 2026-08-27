@@ -57,9 +57,20 @@ test("the operator and the view of what it silenced share one predicate", () => 
     body.includes("looksLikeAnInboundPitch(row)"),
     "the operator no longer uses the shared pitch decision"
   );
+  // MATCHED ON THE PROPERTY, NOT THE EXPRESSION. This pinned
+  // `rows.filter(looksLikeAnInboundPitch)` verbatim and went red when a SECOND
+  // suppression rule was added beside it -- a colleague's own number, after an
+  // urgent finding stood for 187 hours naming a business owner as a waiting
+  // customer. The condition growing is what this test should welcome; what it
+  // is actually about is that neither side can judge on its own.
+  const view = OPERATORS.slice(
+    OPERATORS.indexOf("export async function unansweredButNotReportedFor"),
+    OPERATORS.indexOf("What every business's sweep chose not to report")
+  );
+  assert.ok(view.includes("looksLikeAnInboundPitch(row)"), "the view no longer shares the pitch rule");
   assert.ok(
-    OPERATORS.includes("rows.filter(looksLikeAnInboundPitch)"),
-    "the not-reported view no longer uses the shared pitch decision"
+    view.includes("looksLikeAColleague(row, staff)"),
+    "the view no longer shares the colleague rule"
   );
   // And exactly one place actually asks the scorer.
   const asks = OPERATORS.split("scoreLead({ text:").length - 1;
@@ -232,5 +243,35 @@ test("an employee is not shown an alarm about a list that is not theirs", () => 
   assert.ok(
     PAGE.includes("forbidden ? null : false"),
     "a forbidden read must land in the never-asked state, not the failed one"
+  );
+});
+
+test("a colleague is suppressed by both, and only one of them can be wrong", () => {
+  // The two rules silence for different reasons and the list has to say which.
+  // "We judged this a salesman" is a call that can be wrong; "this number is on
+  // our own rota" is a fact, and a reader chasing a missed customer needs to
+  // know which kind of claim they are auditing.
+  const body = operatorBody(OPERATORS, "customer-waiting");
+  assert.ok(body.includes("looksLikeAColleague(row, staff)"), "the operator does not know about staff");
+  assert.ok(
+    OPERATORS.includes('reason: looksLikeAColleague(row, staff) ? ("colleague" as const)'),
+    "the suppressed row does not say WHICH rule silenced it"
+  );
+});
+
+test("the staff roster is read cross-tenant, or it finds nobody", () => {
+  // THE TRAP THIS FIX WOULD OTHERWISE HAVE LANDED IN. `employees` is
+  // tenant-scoped and the unanswered query runs inside the NUMBER OWNER's
+  // transaction, so an EXISTS against employees would be filtered by RLS to the
+  // owner's own staff -- and the colleague works for a different business on the
+  // same number. Correct-looking SQL, zero rows, finding stays.
+  const at = OPERATORS.indexOf("export async function staffWhatsAppNumbers");
+  assert.ok(at > -1, "the roster read is gone");
+  const fn = OPERATORS.slice(at, OPERATORS.indexOf("export function looksLikeAColleague"));
+  assert.ok(fn.includes("withAllTenants("), "the roster must be read cross-tenant");
+  assert.ok(fn.includes("is_active = true"), "a former colleague is a customer again");
+  assert.ok(
+    !fn.includes("organization_id = $1"),
+    "scoping this to one business is the defect it exists to avoid"
   );
 });
