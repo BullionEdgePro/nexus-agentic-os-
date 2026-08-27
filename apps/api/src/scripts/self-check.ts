@@ -16,6 +16,7 @@
  * removes it before exiting — including on failure.
  */
 import { pathToFileURL } from "node:url";
+import { isUpstreamUnavailable, upstreamNotice, EXIT_UPSTREAM_UNAVAILABLE } from "./upstream.js";
 import { PHRASE_MOMENTS, unfilledPlaceholders } from "@nexus/shared";
 import {
   getPool,
@@ -969,6 +970,17 @@ if (invokedDirectly) {
   main()
     .then((code) => process.exit(code))
     .catch(async (err) => {
+      // A PROVIDER OUTAGE IS NOT A REPLY-PATH DEFECT. This gate drives real
+      // model calls, so a 503 from Google aborts it before it has judged
+      // anything -- and on 2026-08-27 that printed the same "FAIL" as an agent
+      // answering wrongly would have. Different facts, one word.
+      //
+      // Still not a pass: nothing was checked, and the run says so rather than
+      // going quiet, because "All gates pass" is what a deploy is signed off on.
+      if (isUpstreamUnavailable(err)) {
+        console.error(upstreamNotice("self-check", "The reply path", err));
+        process.exit(EXIT_UPSTREAM_UNAVAILABLE);
+      }
       console.error("\nSelf-check aborted:", err);
       process.exit(1);
     });

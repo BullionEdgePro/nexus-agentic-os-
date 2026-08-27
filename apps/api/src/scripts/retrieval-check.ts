@@ -27,6 +27,7 @@
  * that does not exist fails forever and gets deleted rather than investigated.
  */
 import { pathToFileURL } from "node:url";
+import { isUpstreamUnavailable, upstreamNotice, EXIT_UPSTREAM_UNAVAILABLE } from "./upstream.js";
 import { withTenant, withAllTenants, findOrganizationBySlug, findNumberOwner } from "@nexus/db";
 import { searchKnowledge, searchKnowledgeLexical } from "@nexus/knowledge";
 
@@ -264,6 +265,16 @@ async function lexicalSurvey() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
+    // A PROVIDER OUTAGE IS NOT A RETRIEVAL DEFECT. Every probe here embeds a
+    // question, so a 503 from Google fails the gate having measured nothing --
+    // and on the summary line that was indistinguishable from the reply path
+    // being broken. It is still not a pass: retrieval quality genuinely was not
+    // checked, and the run says so instead of going quiet.
+    if (isUpstreamUnavailable(err)) {
+      console.error(upstreamNotice("retrieval-check", "Retrieval quality", err));
+      process.exitCode = EXIT_UPSTREAM_UNAVAILABLE;
+      return;
+    }
     console.error(err);
     process.exitCode = 1;
   });

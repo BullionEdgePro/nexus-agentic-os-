@@ -112,6 +112,8 @@ echo
 declare -a NAMES=()
 declare -a CODES=()
 failed=0
+unverified=0
+UNVERIFIED_NAMES=()
 
 for gate in "${GATES[@]}"; do
   if [ "$SKIP_SLOW" = "1" ] && [ "$gate" = "retrieval-check" ]; then
@@ -139,6 +141,24 @@ for gate in "${GATES[@]}"; do
   if [ "$code" -eq 0 ]; then
     CODES+=("PASS")
     echo "PASS"
+  elif [ "$code" -eq 75 ]; then
+    # THE THIRD OUTCOME, and it exists because two gates call a model provider.
+    #
+    # On 2026-08-27 Google returned 503 twice inside twenty minutes and this
+    # printed FAIL beside self-check and retrieval-check. Nothing was wrong with
+    # the platform, and the only way to know that was to open the output file
+    # and read a stack trace. A gate that goes red for a reason the reader
+    # cannot act on teaches them to re-run rather than read.
+    #
+    # It is NOT counted as a pass. Retrieval quality genuinely was not checked,
+    # and the summary below refuses to say "All gates pass" while any gate stood
+    # down -- the same rule /health/jobs applies to `queuesUnreadable`: "I could
+    # not check" is not "nothing is wrong".
+    CODES+=("UNVERIFIED")
+    unverified=$((unverified + 1))
+    UNVERIFIED_NAMES+=("$gate")
+    echo "UNVERIFIED — the model provider did not answer"
+    tail -4 "$OUT_DIR/${gate}.out" | sed 's/^/    /'
   else
     CODES+=("FAIL($code)")
     failed=$((failed + 1))
@@ -168,6 +188,21 @@ if [ "$failed" -gt 0 ]; then
   echo
   echo "$failed of ${#NAMES[@]} gates failed."
   exit 1
+fi
+
+# A RUN THAT CHECKED LESS THAN IT LOOKS LIKE MUST NOT SAY OTHERWISE.
+#
+# Exits 0, because nothing is known to be broken and a deploy blocked by
+# somebody else's outage helps nobody. Says so loudly, because "All gates pass"
+# is the sentence this whole file is read for, and printing it after a gate
+# stood down would make it mean less every time it appeared.
+if [ "$unverified" -gt 0 ]; then
+  echo
+  echo "PASS, WITH ${unverified} UNVERIFIED: ${UNVERIFIED_NAMES[*]}"
+  echo "Nothing failed. But those gates could not reach the model provider, so"
+  echo "what they check is neither confirmed nor denied by this run. Re-run them"
+  echo "once it is back:  ./scripts/verify-all.sh"
+  exit 0
 fi
 
 echo
