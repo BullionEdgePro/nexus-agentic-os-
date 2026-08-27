@@ -2096,6 +2096,11 @@ const backupUnprotected: Operator = {
         // night for a week is one problem, and a new finding each morning
         // would bury the six other operators under it.
         fingerprint: `${organizationId}:backup-failed`,
+        // The subject is the BUSINESS, not the run. A finding keyed on a
+        // run could never be retracted once that run scrolled out of view,
+        // and the deck links a finding by its subject.
+        subjectKind: "organization",
+        subjectId: organizationId,
         severity: "urgent",
         title: "Last night's backup failed",
         detail: `The backup run ${hours}h ago did not complete: "${latest.failed_reason}". Until it succeeds there is no new copy of the database, and the older ones are only kept for a fortnight.`,
@@ -2103,6 +2108,11 @@ const backupUnprotected: Operator = {
     } else if (hours > BACKUP_STALE_HOURS) {
       out.push({
         fingerprint: `${organizationId}:backup-stale`,
+        // The subject is the BUSINESS, not the run. A finding keyed on a
+        // run could never be retracted once that run scrolled out of view,
+        // and the deck links a finding by its subject.
+        subjectKind: "organization",
+        subjectId: organizationId,
         severity: "urgent",
         title: `No backup has run for ${hours} hours`,
         detail:
@@ -2115,6 +2125,11 @@ const backupUnprotected: Operator = {
     if (!latest.off_box && !latest.failed_reason) {
       out.push({
         fingerprint: `${organizationId}:backup-not-off-box`,
+        // The subject is the BUSINESS, not the run. A finding keyed on a
+        // run could never be retracted once that run scrolled out of view,
+        // and the deck links a finding by its subject.
+        subjectKind: "organization",
+        subjectId: organizationId,
         severity: "warn",
         title: "Backups are not leaving this machine",
         detail:
