@@ -56,6 +56,13 @@ BACKUP_LOG="${BACKUP_LOG:-/var/log/nexus-backup.log}"
 # for a backup that is 23 hours old and perfectly healthy.
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-26}"
 
+# Needed only for the backup_runs read below. Spelled the same way backup-db.sh
+# spells them, because the two now share a table and a pair of names that drift
+# is a pair that eventually points at different databases.
+COMPOSE=(docker compose -f "$NEXUS_DIR/docker-compose.prod.yml")
+DB_USER="${DB_USER:-nexus}"
+DB_NAME="${DB_NAME:-nexus}"
+
 fail() { echo "FAIL — $*"; exit 1; }
 
 # ---- 1. is there anything at all -------------------------------------------
@@ -81,23 +88,64 @@ fi
 stamp="$(basename "$newest" | sed -E 's/^nexus-([0-9]{8}-[0-9]{6})\.sql\.gz$/\1/')"
 [ "$stamp" != "$(basename "$newest")" ] || fail "cannot read a timestamp out of $(basename "$newest")"
 
-if [ ! -r "$BACKUP_LOG" ]; then
+# THE DATABASE ROW BEATS THE LOG, and only became available on 2026-08-27.
+#
+# This gate reads stdout that backup-db.sh wrote to a file the CRONTAB redirects
+# it to. Run the script by hand without that redirect -- which I did twice in
+# one morning while testing -- and the dump is perfect, restore-verified, and
+# reported here as "the log has no record of dumping it. Check whether something
+# other than backup-db.sh wrote it." A true alarm about a file that is fine.
+#
+# The script now records every run in `backup_runs`, which happens however it
+# was invoked. That row is the fact; the log line was always a proxy for it.
+# Matched on time rather than on the filename because the table records a run,
+# not a file, and a run that produced a given dump is the one that happened
+# within a few minutes of its timestamp.
+#
+# The log check below is KEPT as the fallback, for the case this cannot answer:
+# a database that will not respond. It is not deleted just because something
+# better usually works.
+stamp_epoch="$(date -u -d "${stamp:0:4}-${stamp:4:2}-${stamp:6:2} ${stamp:9:2}:${stamp:11:2}:${stamp:13:2}" +%s 2>/dev/null || echo 0)"
+recorded=""
+if [ "$stamp_epoch" -gt 0 ]; then
+  recorded="$("${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+    "select extract(epoch from ran_at)::bigint || ':' || verified
+       from backup_runs order by ran_at desc limit 1" 2>/dev/null | tr -d '[:space:]')"
+fi
+
+if [ -n "$recorded" ]; then
+  row_epoch="${recorded%%:*}"
+  row_verified="${recorded##*:}"
+  drift=$(( stamp_epoch > row_epoch ? stamp_epoch - row_epoch : row_epoch - stamp_epoch ))
+  if [ "$drift" -lt 900 ] && [ "$row_verified" = "t" ]; then
+    echo "Restore verified: backup_runs has a verified run within $((drift))s of $stamp."
+    verified_line="recorded in backup_runs, ${drift}s from the dump's own timestamp"
+    run="(read from backup_runs rather than the log)"
+  fi
+fi
+
+if [ -z "${run:-}" ] && [ ! -r "$BACKUP_LOG" ]; then
   # Not a pass. The dump may be perfect; this cannot tell, and saying so is the
   # whole point of the file it could not read.
   fail "no readable backup log at $BACKUP_LOG, so whether $stamp was ever restored
        is unknown. A dump nobody has restored is a file, not a backup."
 fi
 
-# Everything the log said from this dump's own run onwards.
-run="$(awk -v s="$stamp" 'index($0, "Dumping") && index($0, s) {found=1} found' "$BACKUP_LOG")"
+# Everything the log said from this dump's own run onwards -- consulted only
+# when the table above did not already answer.
+if [ -z "${run:-}" ]; then
+  run="$(awk -v s="$stamp" 'index($0, "Dumping") && index($0, s) {found=1} found' "$BACKUP_LOG")"
+fi
 [ -n "$run" ] || fail "the log has no record of dumping $stamp. The file exists and nothing
        accounts for it — check whether something other than backup-db.sh wrote it."
 
-echo "$run" | grep -q "Verified:" || fail "dump $stamp was written but NEVER RESTORE-VERIFIED.
+echo "$run" | grep -qE "Verified:|backup_runs" || fail "dump $stamp was written but NEVER RESTORE-VERIFIED.
        backup-db.sh restores every dump into a scratch database; this one has no
        Verified line, so either that step failed or the run did not finish."
 
-verified_line="$(echo "$run" | grep -m1 "Verified:" | sed 's/^\[[^]]*\] //')"
+if [ -z "${verified_line:-}" ]; then
+  verified_line="$(echo "$run" | grep -m1 "Verified:" | sed 's/^\[[^]]*\] //')"
+fi
 
 # ---- 4. is it a plausible size ---------------------------------------------
 size="$(wc -c < "$newest")"
