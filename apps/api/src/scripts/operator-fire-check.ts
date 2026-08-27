@@ -62,7 +62,7 @@ import {
   AUTO_ACTIVATION_FLOOR,
 } from "@nexus/db";
 import { JUDGE_UNAVAILABLE } from "@nexus/governance";
-import { OPERATORS } from "../services/operators.js";
+import { OPERATORS, staffWhatsAppNumbers, type SweepContext } from "../services/operators.js";
 import type { FindingInput } from "@nexus/db";
 
 /** Not a dialable number, so this can never collide with a real contact. */
@@ -452,6 +452,10 @@ function malformed(finding: FindingInput | undefined): string | null {
 }
 
 async function main() {
+  // Built here, outside any tenant transaction, exactly as runOperators does.
+  // Reading it inside one returns a single business's staff and looks correct
+  // -- the trap SweepContext documents.
+  const sweep: SweepContext = { staffNumbers: await staffWhatsAppNumbers() };
   console.log("Operator fire check — does each alarm produce a usable finding?\n");
 
   const organizations = await withAllTenants("fire-check: tenant registry", () => listOrganizations());
@@ -489,7 +493,7 @@ async function main() {
         // Taken FIRST, before the probe contact and conversation exist, because
         // those are seeded data too and an operator could legitimately fire on
         // them.
-        const before = await operator.run(org.id);
+        const before = await operator.run(org.id, sweep);
         const known = new Set(before.map((finding) => finding.fingerprint));
 
         const { rows: contact } = await getPool().query<{ id: string }>(
@@ -509,7 +513,7 @@ async function main() {
         // ONLY WHAT THE SEED CAUSED. The question this gate asks is "does this
         // alarm fire", and the only honest evidence is a finding that was not
         // there a moment ago. Anything already standing is somebody else's.
-        const after = await operator.run(org.id);
+        const after = await operator.run(org.id, sweep);
         const fresh = after.filter((finding) => !known.has(finding.fingerprint));
 
         const problem = malformed(fresh[0]) ?? testCase.expect?.(fresh[0]) ?? null;

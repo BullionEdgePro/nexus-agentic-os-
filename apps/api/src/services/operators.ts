@@ -66,13 +66,55 @@ import { dispatchRaisedFindings } from "./alert-dispatch.js";
  * that fact is a different sentence, and it is not this operator's to say.
  */
 
+/**
+ * What the sweep knows before it enters any business's transaction.
+ *
+ * ============================================================
+ * WHY THIS IS A PARAMETER AND NOT A FUNCTION CALL
+ * ============================================================
+ *
+ * The colleague rule needs every business's staff numbers. Reading them inside
+ * an operator does not work, and it fails in the quietest possible way.
+ *
+ * Measured on production 2026-08-27, the same read from two places:
+ *
+ *   at top level:               6 staff numbers
+ *   inside withTenant(zipicka): 1 staff number   <- Atif invisible
+ *
+ * `withClient` reuses an already-open transaction, so `withAllTenants` nested
+ * inside `withTenant` runs on the OUTER connection with `app.current_org` still
+ * set -- and `employees` is tenant-scoped, so RLS returns only that business's
+ * own staff. No error, a plausible-looking Set, and a colleague from another
+ * business silently absent from it.
+ *
+ * This codebase already documented the same shape one level down, in
+ * `withServingTenant`: "`withTenant` nested inside `withTenant` deliberately
+ * reuses the outer context rather than opening a second one -- so
+ * `withTenant(serving.id, ...)` at those call sites was a no-op that READ
+ * EXACTLY LIKE A FIX." I wrote a warning about that trap into the colleague
+ * rule and then walked into it one level up, in the same commit.
+ *
+ * So it is computed once per sweep, before the per-business loop, and handed
+ * down. A parameter cannot be forgotten the way a call can be got wrong.
+ */
+export interface SweepContext {
+  /** Every active employee's WhatsApp number, across all businesses. */
+  staffNumbers: Set<string>;
+}
+
 export interface Operator {
   slug: string;
   /** Shown on the page, so a reader knows what is watching them. */
   title: string;
   description: string;
-  /** Returns everything currently wrong for this business. */
-  run: (organizationId: string) => Promise<FindingInput[]>;
+  /**
+   * Returns everything currently wrong for this business.
+   *
+   * `sweep` carries facts that must be read OUTSIDE any tenant transaction.
+   * Passed in rather than fetched, because fetching them here cannot work: see
+   * `SweepContext`.
+   */
+  run: (organizationId: string, sweep: SweepContext) => Promise<FindingInput[]>;
 }
 
 /** Hours a customer may wait before it is worth someone's attention. */
@@ -485,11 +527,9 @@ const customerWaiting: Operator = {
   title: "Customer waiting",
   description:
     "Someone messaged and nothing has gone back. Normally the agent answers in seconds, so each finding works out which of four things happened — a handover nobody picked up, a colleague who replied and then stopped, a deliberate silence the agent recorded, or a message the reply path never accounted for at all.",
-  run: async (organizationId) => {
-    const [rows, staff] = await Promise.all([
-      unansweredConversations(organizationId, false),
-      staffWhatsAppNumbers(),
-    ]);
+  run: async (organizationId, sweep) => {
+    const rows = await unansweredConversations(organizationId, false);
+    const staff = sweep.staffNumbers;
 
     return rows
       // The pitch rule, named once in `looksLikeAnInboundPitch` and shared
@@ -2372,6 +2412,9 @@ export interface OperatorRunSummary {
  */
 export async function runOperators(): Promise<OperatorRunSummary[]> {
   const organizations = await listOrganizations();
+  // BEFORE THE LOOP, and that is the whole point -- see SweepContext. Once
+  // inside withTenant this read returns one business's staff and looks fine.
+  const sweep: SweepContext = { staffNumbers: await staffWhatsAppNumbers() };
   const summaries: OperatorRunSummary[] = [];
 
   // Collected across the whole sweep and dispatched once at the end, not per
@@ -2384,7 +2427,7 @@ export async function runOperators(): Promise<OperatorRunSummary[]> {
     for (const operator of OPERATORS) {
       try {
         const summary = await withTenant(organization.id, async () => {
-          const found = await operator.run(organization.id);
+          const found = await operator.run(organization.id, sweep);
           const result = await reconcileFindings(organization.id, operator.slug, found);
           return result;
         });

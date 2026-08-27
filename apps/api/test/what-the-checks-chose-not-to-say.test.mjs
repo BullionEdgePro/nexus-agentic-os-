@@ -275,3 +275,48 @@ test("the staff roster is read cross-tenant, or it finds nobody", () => {
     "scoping this to one business is the defect it exists to avoid"
   );
 });
+
+test("the staff roster is read before any business's transaction is open", () => {
+  // THE TRAP THE FIX ITSELF FELL INTO, one level up from the warning I wrote
+  // about it. Measured on production, the same call from two places:
+  //
+  //   at top level:               6 staff numbers
+  //   inside withTenant(zipicka): 1 staff number    <- the colleague invisible
+  //
+  // withClient reuses an already-open transaction, so withAllTenants nested
+  // inside withTenant runs on the OUTER connection with app.current_org still
+  // set -- and employees is tenant-scoped, so RLS returns that business's own
+  // staff. No error, a plausible Set, and the suppression silently does
+  // nothing. Exactly what withServingTenant's own comment says about
+  // withTenant-inside-withTenant: "a no-op that read exactly like a fix".
+  //
+  // So it is a PARAMETER. A parameter cannot be forgotten the way a call can be
+  // got wrong, and TypeScript found all three call sites the moment it changed.
+  assert.match(OPERATORS, /export interface SweepContext/);
+  assert.match(
+    OPERATORS,
+    /const sweep: SweepContext = \{ staffNumbers: await staffWhatsAppNumbers\(\) \};/,
+    "the roster must be built in runOperators"
+  );
+
+  // And built BEFORE the per-business loop, which is the entire point.
+  //
+  // Scoped to runOperators first: a bare indexOf found an earlier
+  // `for (const organization of organizations)` in the cross-business
+  // not-reported view and compared against the wrong loop. A position test that
+  // does not say WHICH positions is a coin toss with a comment.
+  const sweepFn = OPERATORS.slice(OPERATORS.indexOf("export async function runOperators"));
+  const built = sweepFn.indexOf("const sweep: SweepContext");
+  const loop = sweepFn.indexOf("for (const organization of organizations)");
+  assert.ok(built > -1, "runOperators does not build the roster");
+  assert.ok(loop > -1, "runOperators no longer loops over businesses");
+  assert.ok(built < loop, "the roster is built inside the tenant loop, where it sees one business");
+
+  // The operator must take it, never fetch it.
+  const body = operatorBody(OPERATORS, "customer-waiting");
+  assert.ok(body.includes("sweep.staffNumbers"), "the operator does not use the passed roster");
+  assert.ok(
+    !body.includes("staffWhatsAppNumbers()"),
+    "the operator fetches the roster itself, which returns one business's staff"
+  );
+});

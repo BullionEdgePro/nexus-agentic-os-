@@ -85,7 +85,7 @@ import {
   recordForecasts,
 } from "@nexus/db";
 import { addDays } from "@nexus/shared";
-import { OPERATORS } from "../services/operators.js";
+import { OPERATORS, staffWhatsAppNumbers, type SweepContext } from "../services/operators.js";
 import {
   findWellHandledConversations,
   getInferenceReadiness,
@@ -156,8 +156,11 @@ async function main(): Promise<void> {
   // cleanup. Running them here does not replace the sweep; it moves the
   // discovery to the moment somebody is watching.
   console.log("\nOperators (read-only, run against a real tenant)");
+  // Outside the loop below, for the reason SweepContext sets out: read inside a
+  // tenant transaction, this returns a single business's staff and looks fine.
+  const sweep: SweepContext = { staffNumbers: await staffWhatsAppNumbers() };
   for (const operator of OPERATORS) {
-    await withTenant(org.id, () => step(`operator ${operator.slug}`, () => operator.run(org.id)));
+    await withTenant(org.id, () => step(`operator ${operator.slug}`, () => operator.run(org.id, sweep)));
   }
 
   // ---- procedural memory (migrations 033 and 034) ----
