@@ -55,7 +55,23 @@ MIN_TABLES="${MIN_TABLES:-8}"
 COMPOSE=(docker compose -f "$NEXUS_DIR/docker-compose.prod.yml")
 
 log() { echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $*"; }
-fail() { log "FAILED: $*"; exit 1; }
+# A FAILURE THAT RECORDS NOTHING IS THE CASE THIS WAS BUILT FOR.
+#
+# Every abort in this script goes through here. Without the insert, a run that
+# died leaves the previous night's success as the newest row -- and the operator
+# reading "the last run was fine" would be reading a row from before the
+# problem. It has to be able to tell a stale success from a fresh one.
+#
+# `record_run` is defined further down; this only runs at exit time, by which
+# point it exists.
+fail() {
+  log "FAILED: $*"
+  # Squeeze the reason to one line and strip quotes, because it is going into a
+  # SQL literal and a stray apostrophe in an error message must not become a
+  # syntax error that loses the whole report.
+  record_run false false 0 0 "$(printf '%s' "$*" | tr -d "'" | tr -s '[:space:]' ' ' | cut -c1-400)" 2>/dev/null || true
+  exit 1
+}
 
 timestamp="$(date -u +'%Y%m%d-%H%M%S')"
 dump_file="$BACKUP_DIR/nexus-$timestamp.sql.gz"
@@ -216,8 +232,39 @@ fi
 deleted="$(find "$BACKUP_DIR" -name 'nexus-*.sql.gz' -mtime "+$RETENTION_DAYS" -print -delete | wc -l)"
 log "Rotation: removed $deleted backup(s) older than $RETENTION_DAYS days"
 
+
+# ---------------------------------------------------------------
+# 5. Say so where somebody will see it
+# ---------------------------------------------------------------
+#
+# THE LOG IS NOT A REPORT. Everything above lands in
+# /var/log/nexus-backup.log, which is read when somebody thinks to read it --
+# and the state this exists to surface is exactly the one nobody goes looking
+# for. On 2026-08-27 the off-box copy had been skipped every night since the
+# feature was written, saying so each time, into that file.
+#
+# So the outcome goes in the database, where an operator reads it every ten
+# minutes and the deck shows it. One row per run: "the last one worked" and
+# "the last one worked and the four before it did not" must not look alike.
+#
+# Best-effort by design. A backup that succeeded and could not file its
+# paperwork is still a backup, and failing the run here would turn a reporting
+# problem into a data-protection one.
+record_run() {
+  local verified="$1" offbox="$2" size="$3" tables="$4" reason="$5"
+  "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -q -c     "insert into backup_runs (verified, off_box, size_bytes, tables_seen, failed_reason)
+     values ($verified, $offbox, nullif($size, 0), nullif($tables, 0), nullif('$reason', ''));"     >/dev/null 2>&1 || log "Could not record this run in backup_runs (the backup itself is unaffected)"
+}
+
 remaining="$(find "$BACKUP_DIR" -name 'nexus-*.sql.gz' | wc -l)"
 # The summary line carries the off-box state, because it is the line a person
 # actually skims in a log they are not reading closely. "OK" on its own would
 # read as fully protected on the day it is anything but.
 log "OK — $remaining backup(s) retained in $BACKUP_DIR; latest is $offsite"
+
+# `offsite` is the human sentence; this is the same fact as a boolean.
+case "$offsite" in
+  off-box*) off_box_flag=true ;;
+  *)        off_box_flag=false ;;
+esac
+record_run true "$off_box_flag" "$(stat -c%s "$dump_file" 2>/dev/null || echo 0)" "${table_count:-0}" ""

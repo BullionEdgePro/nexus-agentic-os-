@@ -85,6 +85,14 @@ const WHERE: Record<string, Destination> = {
   // row, and there is no screen that shows one. The finding carries the error
   // itself, which is the thing somebody actually needs.
   "job-failing": { screen: "operators" },
+
+  // THE ONLY ONE FIXED SOMEWHERE THIS PRODUCT CANNOT REACH. Backups are
+  // configured in /etc/nexus-backup.env on the server, and inventing a settings
+  // screen for two values a person edits once would be a screen built to be
+  // wrong about whether it had worked. The finding carries the exact file and
+  // the two variable names, which is the thing somebody actually needs -- so
+  // the destination is this list, where the detail is already legible.
+  "backup-unprotected": { screen: "operators" },
 };
 
 /**

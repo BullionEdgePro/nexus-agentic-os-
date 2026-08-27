@@ -2038,6 +2038,94 @@ function describeInterval(job: ScheduledJob): string {
   return hours >= 24 ? "day" : hours >= 1 ? `${Math.round(hours / 3)} hours` : `${Math.round(seconds / 60)} minutes`;
 }
 
+
+/** A nightly dump is late once it has missed a night, not once it is late. */
+const BACKUP_STALE_HOURS = 30;
+
+/**
+ * The paperwork the backup files about itself, read where somebody looks.
+ *
+ * `backup-db.sh` has always said all of this -- into /var/log/nexus-backup.log,
+ * which is opened when somebody thinks to open it. The gate that reads the same
+ * files names the remaining hole in its own header: it closes the hole where
+ * nothing COULD notice, not the hole where nobody is looking.
+ *
+ * Measured 2026-08-27: rclone installed, /etc/nexus-backup.env present, both
+ * values EMPTY, and every night since the feature was written printing
+ * "Off-box copy: SKIPPED" to that file. Half-configured, silent, for weeks.
+ */
+const backupUnprotected: Operator = {
+  slug: "backup-unprotected",
+  title: "The database backup is not protecting what it should",
+  description:
+    "The nightly dump has stopped, failed, or is not leaving this machine. Losing the server would lose the database and every backup of it together, and nothing else on this platform would have mentioned it.",
+  run: async (organizationId) => {
+    // Not per business. `backup_runs` belongs to no tenant -- a backup is of
+    // the whole database -- and it is raised per business for the same reason
+    // schedule-stalled is: the CONSEQUENCE is each business losing its own
+    // customers, so it belongs where the person responsible for them looks.
+    const { rows } = await getPool().query<{
+      ran_at: string;
+      verified: boolean;
+      off_box: boolean;
+      failed_reason: string | null;
+    }>(
+      `select ran_at, verified, off_box, failed_reason
+         from backup_runs
+        order by ran_at desc
+        limit 1`
+    );
+
+    const latest = rows[0];
+
+    // SILENCE UNTIL THERE IS SOMETHING TO SAY.
+    //
+    // The table is empty on the day this ships and stays empty until 03:15,
+    // and backups have been running correctly the whole time. Reporting "no
+    // backup" from an absence of ROWS would be reporting on the recording
+    // rather than on the backup -- the same mistake as calling a job stalled
+    // ninety seconds after the worker booted.
+    if (!latest) return [];
+
+    const hours = Math.round((Date.now() - new Date(latest.ran_at).getTime()) / 3_600_000);
+    const out: FindingInput[] = [];
+
+    if (latest.failed_reason) {
+      out.push({
+        // One fingerprint per condition, not per run: a backup failing every
+        // night for a week is one problem, and a new finding each morning
+        // would bury the six other operators under it.
+        fingerprint: `${organizationId}:backup-failed`,
+        severity: "urgent",
+        title: "Last night's backup failed",
+        detail: `The backup run ${hours}h ago did not complete: "${latest.failed_reason}". Until it succeeds there is no new copy of the database, and the older ones are only kept for a fortnight.`,
+      });
+    } else if (hours > BACKUP_STALE_HOURS) {
+      out.push({
+        fingerprint: `${organizationId}:backup-stale`,
+        severity: "urgent",
+        title: `No backup has run for ${hours} hours`,
+        detail:
+          "The dump is scheduled nightly at 03:15. Missing a night usually means cron was removed, the disk is full, or the database refused the dump — and the platform carries on answering customers either way, which is what makes this quiet.",
+      });
+    }
+
+    // Reported even when the run succeeded, because a verified dump sitting on
+    // the machine it protects is the case this whole operator was written for.
+    if (!latest.off_box && !latest.failed_reason) {
+      out.push({
+        fingerprint: `${organizationId}:backup-not-off-box`,
+        severity: "warn",
+        title: "Backups are not leaving this machine",
+        detail:
+          "The nightly dump restores cleanly and is kept in /opt/nexus/backups — on the same disk as the database it protects. Losing the server loses both. Set BACKUP_REMOTE and BACKUP_PASSPHRASE in /etc/nexus-backup.env; rclone is already installed.",
+      });
+    }
+
+    return out;
+  },
+};
+
 export const OPERATORS: Operator[] = [
   customerWaiting,
   agentUnavailable,
@@ -2062,6 +2150,7 @@ export const OPERATORS: Operator[] = [
   procedureAwaitingReview,
   wordingAwaitingReview,
   procedureSwitchedOn,
+  backupUnprotected,
   bookingWithoutAnyone,
   bookingUnassigned,
   templateRejected,
