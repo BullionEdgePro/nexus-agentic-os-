@@ -80,9 +80,29 @@ test("rate limiting and gateway errors count", () => {
   assert.equal(isUpstreamUnavailable({ status: 504 }), true);
 });
 
-test("a request that never landed counts", () => {
+test("a socket error does not count, because it does not say who refused", () => {
+  // THE DEFECT THIS FILE SHIPPED WITH FOR AN HOUR, found by asking the
+  // recogniser about a database failure rather than about the outage it was
+  // written for:
+  //
+  //   connect ECONNREFUSED 172.18.0.2:5432   ->   "upstream unavailable"
+  //
+  // Both gates catch at top level, so Postgres being down travels the same path
+  // as Google being down. Accepting bare transport codes would have reported
+  // the platform's own database outage as somebody else's, exited 0, and
+  // printed "PASS, WITH 1 UNVERIFIED" while nothing worked at all -- strictly
+  // worse than the FAIL it was replacing.
+  const postgres = Object.assign(new Error("connect ECONNREFUSED 172.18.0.2:5432"), {
+    code: "ECONNREFUSED",
+  });
+  assert.equal(isUpstreamUnavailable(postgres), false, "a database outage is OURS");
+
   for (const code of ["ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND"]) {
-    assert.equal(isUpstreamUnavailable({ code }), true, `${code} should count`);
+    assert.equal(
+      isUpstreamUnavailable({ code }),
+      false,
+      `${code} names a socket, not a vendor — it must go red`
+    );
   }
 });
 

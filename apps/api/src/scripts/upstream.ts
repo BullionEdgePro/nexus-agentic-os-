@@ -65,12 +65,23 @@ export function isUpstreamUnavailable(err: unknown): boolean {
     return status === 429 || status === 502 || status === 503 || status === 504;
   }
 
-  // No status at all: the request did not reach anyone. `fetch` rejects with a
-  // bare TypeError, and Node surfaces DNS and socket failures by code.
-  const code = typeof err === "object" && err !== null ? String((err as { code?: unknown }).code ?? "") : "";
-  if (["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND", "UND_ERR_CONNECT_TIMEOUT"].includes(code)) {
-    return true;
-  }
+  // NO TRANSPORT CODES. This branch used to accept ECONNREFUSED, ECONNRESET,
+  // ETIMEDOUT, ENOTFOUND and friends, and it was wrong within an hour of being
+  // written -- caught by asking it about a Postgres failure:
+  //
+  //   connect ECONNREFUSED 172.18.0.2:5432   ->  "upstream unavailable"
+  //
+  // A bare socket error does not say WHO refused. Both gates catch at top
+  // level, so the database being down travels the same path as the model
+  // provider being down -- and this would have reported the platform's own
+  // database outage as somebody else's problem, exited 0, and printed
+  // "PASS, WITH 1 UNVERIFIED" while nothing worked at all.
+  //
+  // That is a worse failure than the one this file exists to fix. The real
+  // outage on 2026-08-27 arrived as a 503 WITH a status, which the branch above
+  // catches, so nothing is lost by refusing to guess. A genuine DNS failure for
+  // the provider now goes red, and red on our side is the safe direction: a
+  // defect reported as a defect.
 
   // Last resort, on the message. Kept because the Google SDK wraps its own
   // errors and the status is not always where the type says it is -- the
