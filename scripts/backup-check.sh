@@ -116,12 +116,15 @@ if [ "$stamp_epoch" -gt 0 ]; then
   # wrong reason, and looked like the fix had not deployed.
   recorded="$("${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -tAc \
     "select extract(epoch from ran_at)::bigint || ':' || (case when verified then 1 else 0 end)
+            || ':' || (case when off_box then 1 else 0 end)
        from backup_runs order by ran_at desc limit 1" 2>/dev/null | tr -d '[:space:]')"
 fi
 
 if [ -n "$recorded" ]; then
   row_epoch="${recorded%%:*}"
-  row_verified="${recorded##*:}"
+  rest="${recorded#*:}"
+  row_verified="${rest%%:*}"
+  row_off_box="${rest##*:}"
   drift=$(( stamp_epoch > row_epoch ? stamp_epoch - row_epoch : row_epoch - stamp_epoch ))
   if [ "$drift" -lt 900 ] && [ "$row_verified" = "1" ]; then
     echo "Restore verified: backup_runs has a verified run within $((drift))s of $stamp."
@@ -174,7 +177,23 @@ echo "       $verified_line"
 echo "       $retained nightly dump(s) retained."
 
 # Stated on every run, deliberately, and not a failure. See the header.
-if echo "$run" | grep -q "Off-box copy: SKIPPED"; then
+#
+# READ FROM THE STATE, NOT FROM THE LOG LINE. This grepped $run for the script's
+# own "Off-box copy: SKIPPED" sentence -- and when the restore proof started
+# coming from backup_runs, $run became a one-line placeholder, the grep matched
+# nothing, and this whole warning silently stopped printing. The gate went on
+# saying PASS and stopped saying the one thing it says about risk.
+#
+# Caught by running it, minutes after a test asserted the sentence was "still
+# there". It was: in the file, in a branch nothing reached any more. A string
+# present in the source is not a string anybody sees.
+off_box_now=""
+[ -n "${row_off_box:-}" ] && off_box_now="$row_off_box"
+if [ -z "$off_box_now" ] && echo "$run" | grep -q "Off-box copy: SKIPPED"; then
+  off_box_now=0
+fi
+
+if [ "${off_box_now:-1}" = "0" ]; then
   echo "       NOT OFF-BOX: every copy is on the disk it is protecting. Losing that disk"
   echo "       loses the database and all $retained backups together. Set BACKUP_REMOTE."
 fi

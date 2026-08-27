@@ -191,6 +191,26 @@ test("the waiver silences the nag and never the fact", () => {
   // though the deck has stopped asking about it.
   const CHECK = read("scripts", "backup-check.sh");
   assert.match(CHECK, /NOT OFF-BOX/, "the gate must still state the fact on every run");
+
+  // A STRING IN THE SOURCE IS NOT A STRING ANYBODY SEES.
+  //
+  // The line above passed while the warning had stopped printing entirely. The
+  // gate used to grep its own log for "Off-box copy: SKIPPED"; when the restore
+  // proof moved to backup_runs, the variable it grepped became a one-line
+  // placeholder, the match failed, and the only sentence this gate says about
+  // risk vanished -- under a PASS. Found by running it, not by this file.
+  //
+  // So the condition is asserted, not the message: it reads the recorded state.
+  assert.match(
+    CHECK,
+    /case when off_box then 1 else 0 end/,
+    "the off-box state must be read from the row, not scraped from a log line"
+  );
+  assert.match(CHECK, /off_box_now/, "the warning must be gated on that state");
+  assert.ok(
+    !/if echo "\$run" \| grep -q "Off-box copy: SKIPPED"; then/.test(CHECK),
+    "the log-scraping condition is back, and it does not fire on the row path"
+  );
   assert.ok(
     !CHECK.includes("BACKUP_OFFSITE_WAIVED"),
     "the gate must keep reporting off-box regardless of the waiver"
