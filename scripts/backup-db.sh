@@ -186,9 +186,28 @@ log "Verified: $table_count tables, $org_count organizations restored cleanly"
 # same shape as the dump that was never restored: fine until it is not.
 if [ -z "${BACKUP_REMOTE:-}" ]; then
   offsite="NOT off-box — local disk only"
-  log "Off-box copy: SKIPPED. BACKUP_REMOTE is not set, so this dump exists only on"
-  log "              this machine, beside the database it is protecting. Losing the"
-  log "              disk loses both. See the header for the two values needed."
+  # "NOT SET" AND "SET TO NOTHING" READ DIFFERENTLY TO THE PERSON WHO EDITED
+  # THE FILE. On 2026-08-27 /etc/nexus-backup.env had held
+  #
+  #   BACKUP_REMOTE=""
+  #
+  # since 17 August. Somebody looking at that file sees the name they were told
+  # to set, present, and a log insisting it is not set -- and I made exactly
+  # that mistake myself when checking it, with a grep that matched the opening
+  # quote and reported the value as filled in.
+  #
+  # So the two states are named separately. It costs one line and removes the
+  # only reading under which the log and the file appear to contradict.
+  if [ -r "$BACKUP_ENV_FILE" ] && grep -qE '^[[:space:]]*BACKUP_REMOTE=' "$BACKUP_ENV_FILE"; then
+    log "Off-box copy: SKIPPED. BACKUP_REMOTE is present in $BACKUP_ENV_FILE but EMPTY,"
+    log "              so this dump exists only on this machine, beside the database it"
+    log "              is protecting. Losing the disk loses both. Put the remote between"
+    log "              the quotes -- for example BACKUP_REMOTE=\"b2:nexus-backups\"."
+  else
+    log "Off-box copy: SKIPPED. BACKUP_REMOTE is not set, so this dump exists only on"
+    log "              this machine, beside the database it is protecting. Losing the"
+    log "              disk loses both. See the header for the two values needed."
+  fi
 else
   command -v rclone >/dev/null \
     || fail "BACKUP_REMOTE is set but rclone is not installed — install it (curl https://rclone.org/install.sh | sudo bash) and configure the remote, or unset BACKUP_REMOTE"
