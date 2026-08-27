@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BusinessTabs } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getBookings,
@@ -195,26 +196,10 @@ export default function BookingsPage() {
           </div>
         </div>
 
-        <div className="act-tabs">
-          <button aria-pressed={business === ""} onClick={() => setBusiness("")}>
-            All businesses
-          </button>
-          {TENANTS.map((tenant) => (
-            <button
-              key={tenant.slug}
-              aria-pressed={business === tenant.slug}
-              onClick={() => setBusiness(tenant.slug as BusinessSlug)}
-            >
-              {tenant.ref}
-            </button>
-          ))}
-          <span className="tk-tab-gap" />
-          {(["confirmed", "cancelled", "completed", "all"] as const).map((which) => (
-            <button key={which} aria-pressed={status === which} onClick={() => setStatus(which)}>
-              {which}
-            </button>
-          ))}
-        </div>
+        <BusinessTabs
+          value={business}
+          onChange={(slug) => setBusiness(slug)}
+        />
 
         {/*
          * OFFERED ONLY INSIDE ONE BUSINESS, for the reason the assignee dropdown
@@ -225,7 +210,7 @@ export default function BookingsPage() {
         {business ? (
           <AddAppointment
             business={business}
-            businessName={TENANTS.find((t) => t.slug === business)?.ref ?? business}
+            businessName={TENANTS.find((t) => t.slug === business)?.name ?? business}
             timezone={zoneFor(business, timezones, bookings)}
             team={team}
             onCreated={() => void load(business, status)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { BusinessTabs } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getFindings,
@@ -286,20 +287,10 @@ export default function OperatorsPage() {
           Nothing here calls an AI — these are rules over what the platform already knows.
         </p>
 
-        <div className="act-tabs">
-          <button aria-pressed={business === ""} onClick={() => setBusiness("")}>
-            All businesses
-          </button>
-          {TENANTS.map((tenant) => (
-            <button
-              key={tenant.slug}
-              aria-pressed={business === tenant.slug}
-              onClick={() => setBusiness(tenant.slug as BusinessSlug)}
-            >
-              {tenant.ref}
-            </button>
-          ))}
-        </div>
+        <BusinessTabs
+          value={business}
+          onChange={(slug) => setBusiness(slug)}
+        />
 
         {loadError ? (
           /*

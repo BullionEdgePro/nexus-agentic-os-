@@ -407,7 +407,7 @@
 .deck-root .card-h h3 .ic { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; background: var(--marble); border: 1px solid var(--hairline-strong); }
 .deck-root .card-h h3 .ic svg { width: 13px; height: 13px; color: var(--signal-text); }
 
-.deck-root .switchboard { position: relative; height: 320px; border-radius: var(--r-sm); overflow: hidden; background: var(--marble); border: 1px dashed var(--hairline-strong); }
+.deck-root .switchboard { position: relative; height: 360px; border-radius: var(--r-sm); overflow: hidden; background: var(--marble); border: 1px dashed var(--hairline-strong); }
 .deck-root .switchboard > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .deck-root .core { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 108px; height: 108px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: var(--paper); border: 1.4px solid var(--ink); }
 .deck-root .core::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed var(--hairline-strong); }
@@ -615,3 +615,50 @@
   color: var(--mist);
   max-width: 44ch;
 }
+
+/* ------------------------------------------------------------
+   The switchboard, as a nervous system
+   ------------------------------------------------------------
+   Five businesses on one WhatsApp number. The old drawing was a hub with five
+   spokes and an identical dot travelling every one of them — including the
+   four that had never carried a message. Motion is a claim, so now only a link
+   with real traffic fires, and the ring says the five are connected to each
+   other rather than merely to the middle. */
+
+.deck-root .sb-net .sb-web {
+  stroke: var(--hairline-strong);
+  stroke-width: .75;
+  stroke-dasharray: 2 6;
+  opacity: .5;
+}
+
+.deck-root .sb-net .sb-axon { opacity: .5; }
+.deck-root .sb-net .sb-axon.on { opacity: 1; }
+
+/* The nucleus breathes. Slow enough to read as alive rather than as a spinner
+   claiming work is happening. */
+.deck-root .switchboard .core::after {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 1px solid var(--signal);
+  opacity: .28;
+  animation: sb-breathe 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sb-breathe {
+  0%, 100% { transform: scale(1);    opacity: .28; }
+  50%      { transform: scale(1.09); opacity: .07; }
+}
+
+/* Nothing here is load-bearing, so it all stops on request. A signal dot is
+   decoration for anybody who has asked the machine to hold still. */
+@media (prefers-reduced-motion: reduce) {
+  .deck-root .switchboard .core::after { animation: none; }
+  .deck-root .sb-net .sb-pulse { display: none; }
+}
+
+.deck-root .sb-net .sb-syn { fill: var(--hairline-strong); }
+.deck-root .sb-net .sb-syn.on { fill: var(--signal); }

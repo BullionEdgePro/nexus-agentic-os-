@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BusinessTabs, useVisibleBusinesses } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getTasks,
@@ -55,6 +56,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const { businesses: visibleBusinesses } = useVisibleBusinesses();
   const [draftBusiness, setDraftBusiness] = useState<BusinessSlug | "">("");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNotes, setDraftNotes] = useState("");
@@ -194,7 +196,11 @@ export default function TasksPage() {
                 required
               >
                 <option value="">Choose…</option>
-                {TENANTS.map((tenant) => (
+                {/* SCOPED LIKE THE TABS ABOVE. A dropdown is a switcher wearing
+                    a different hat: an employee offered five businesses here
+                    can pick one the create call then refuses, and the follow-up
+                    they were writing is lost to a 403 they cannot read. */}
+                {visibleBusinesses.map((tenant) => (
                   <option key={tenant.slug} value={tenant.slug}>
                     {tenant.name}
                   </option>
@@ -248,26 +254,10 @@ export default function TasksPage() {
           </button>
         </form>
 
-        <div className="act-tabs">
-          <button aria-pressed={business === ""} onClick={() => setBusiness("")}>
-            All businesses
-          </button>
-          {TENANTS.map((tenant) => (
-            <button
-              key={tenant.slug}
-              aria-pressed={business === tenant.slug}
-              onClick={() => setBusiness(tenant.slug as BusinessSlug)}
-            >
-              {tenant.ref}
-            </button>
-          ))}
-          <span className="tk-tab-gap" />
-          {(["open", "done", "all"] as const).map((which) => (
-            <button key={which} aria-pressed={status === which} onClick={() => setStatus(which)}>
-              {which}
-            </button>
-          ))}
-        </div>
+        <BusinessTabs
+          value={business}
+          onChange={(slug) => setBusiness(slug)}
+        />
 
         {loadError ? (
           /*

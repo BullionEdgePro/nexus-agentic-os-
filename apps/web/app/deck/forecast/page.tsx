@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { BusinessTabs } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getForecast,
@@ -123,17 +124,16 @@ export default function ForecastPage() {
           guessing &ldquo;the same weekday last week&rdquo; would have said.
         </p>
 
-        <div className="act-tabs">
-          {TENANTS.map((tenant) => (
-            <button
-              key={tenant.slug}
-              aria-pressed={business === tenant.slug}
-              onClick={() => setBusiness(tenant.slug as BusinessSlug)}
-            >
-              {tenant.ref}
-            </button>
-          ))}
-        </div>
+        <BusinessTabs
+          value={business}
+          onChange={(slug) => {
+            // These screens are meaningless without one business chosen, so they
+            // hold a plain BusinessSlug and never render the All tab. The guard
+            // says that rather than casting the empty case away.
+            if (slug) setBusiness(slug);
+          }}
+          includeAll={false}
+        />
 
         {loadError ? (
           /*

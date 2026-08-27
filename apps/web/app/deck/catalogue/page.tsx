@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BusinessTabs } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getCatalog,
@@ -327,18 +328,16 @@ export default function CataloguePage() {
         </div>
 
         <h2 className="act-sub-head">Installing into</h2>
-        <div className="act-tabs">
-          {TENANTS.map((tenant) => (
-            <button
-              key={tenant.slug}
-              aria-pressed={business === tenant.slug}
-              onClick={() => setBusiness(tenant.slug)}
-              title={tenant.name}
-            >
-              {tenant.ref}
-            </button>
-          ))}
-        </div>
+        <BusinessTabs
+          value={business}
+          onChange={(slug) => {
+            // These screens are meaningless without one business chosen, so they
+            // hold a plain BusinessSlug and never render the All tab. The guard
+            // says that rather than casting the empty case away.
+            if (slug) setBusiness(slug);
+          }}
+          includeAll={false}
+        />
         <p className="mk-target">
           {tenantName(business)} — {installedHere.size} installed
         </p>

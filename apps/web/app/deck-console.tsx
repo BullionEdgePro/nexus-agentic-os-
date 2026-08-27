@@ -49,7 +49,25 @@ const NO_DATA: Stat[] = [
 /** The caption under every card, which is the only place the reason fits. */
 const emptyStats = (reason: string): Stat[] => NO_DATA.map((stat) => ({ ...stat, d: reason }));
 
-type TenantMeta = { slug: string; ref: string; nm: string; rl: string; st: "live" | "warn"; msg: string; ang: number };
+type TenantMeta = {
+  slug: string;
+  ref: string;
+  nm: string;
+  rl: string;
+  st: "live" | "warn";
+  msg: string;
+  /**
+   * The real message count, kept as a NUMBER as well as a sentence.
+   *
+   * The switchboard fires a signal along every dendrite, and it used to fire
+   * along all five at the same rate whether the business had ten messages or
+   * none. Motion is a claim: a link that pulses says traffic is flowing, and on
+   * four of these it was flowing nowhere. `-1` means the API has not answered,
+   * which is different again from zero and must not animate either.
+   */
+  count: number;
+  ang: number;
+};
 // Derived from the one shared list. `msg` is only what shows before the API
 // answers — real counts replace it — and it reads "—" rather than a plausible
 // number so a console that failed to load data cannot be mistaken for a quiet
@@ -61,6 +79,7 @@ const TENANT_META: TenantMeta[] = TENANTS.map((t) => ({
   rl: t.role,
   st: t.status === "live" ? "live" : "warn",
   msg: t.note,
+  count: -1,
   ang: t.angle,
 }));
 
@@ -191,7 +210,11 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
   // Distinguishes "the API said there is nothing" from "the API did not answer".
   const [unreachable, setUnreachable] = useState(false);
   const [nodes, setNodes] = useState<{ meta: TenantMeta; x: number; y: number }[]>([]);
-  const [links, setLinks] = useState<{ x1: number; y1: number; x2: number; y2: number; dur: number }[]>([]);
+  const [links, setLinks] = useState<
+    { d: string; dur: number; width: number; alive: boolean; slug: string }[]
+  >([]);
+  /** Faint arcs between neighbouring businesses — they share one number. */
+  const [web, setWeb] = useState<string[]>([]);
   const [grown, setGrown] = useState(false);
   const [clock, setClock] = useState("");
 
@@ -208,7 +231,12 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
           TENANT_META.map((meta) => {
             const t = metrics.tenants.find((x) => x.slug === meta.slug);
             if (!t) return meta;
-            return { ...meta, nm: t.name || meta.nm, msg: metrics.hasData ? `${t.messageCount} msgs` : meta.msg };
+            return {
+              ...meta,
+              nm: t.name || meta.nm,
+              count: metrics.hasData ? t.messageCount : -1,
+              msg: metrics.hasData ? `${t.messageCount} msgs` : meta.msg,
+            };
           })
         );
       })
@@ -249,13 +277,58 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
       const bh = el.clientHeight;
       const cx = bw / 2;
       const cy = bh / 2;
-      const R = Math.min(bw, bh) * 0.36;
+      // ELLIPTICAL, NOT CIRCULAR. A radius from min(w, h) throws away the
+      // width the board actually has, and stacked the five cards on top of the
+      // nucleus and each other.
+      const rx = bw * 0.34;
+      const ry = bh * 0.36;
       const ns = tenants.map((meta) => {
         const a = (meta.ang * Math.PI) / 180;
-        return { meta, x: cx + Math.cos(a) * R * 1.15, y: cy + Math.sin(a) * R };
+        return { meta, x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry };
       });
       setNodes(ns);
-      setLinks(ns.map((n, i) => ({ x1: cx, y1: cy, x2: n.x, y2: n.y, dur: 2.2 + i * 0.4 })));
+
+      // A DENDRITE, NOT A WIRE. The curve bows away from the straight line by a
+      // fraction of its own length, so five of them fan out of the nucleus
+      // instead of meeting it as spokes on a wheel.
+      const curve = (x2: number, y2: number, bow: number) => {
+        const mx = (cx + x2) / 2;
+        const my = (cy + y2) / 2;
+        // Perpendicular to the run, so the bow is always sideways.
+        const nx = -(y2 - cy);
+        const ny = x2 - cx;
+        const len = Math.hypot(nx, ny) || 1;
+        return `M${cx} ${cy} Q${mx + (nx / len) * bow} ${my + (ny / len) * bow} ${x2} ${y2}`;
+      };
+
+      setLinks(
+        ns.map((n, i) => ({
+          slug: n.meta.slug,
+          // Bow proportional to the run, so the arc reads at any board size.
+          d: curve(n.x, n.y, (i % 2 === 0 ? 1 : -1) * Math.hypot(n.x - cx, n.y - cy) * 0.3),
+          // Busier businesses fire faster. Quiet ones do not fire at all.
+          dur: n.meta.count > 0 ? Math.max(1.6, 4.4 - n.meta.count * 0.18) : 0,
+          width: n.meta.count > 0 ? Math.min(2.4, 1 + n.meta.count * 0.08) : 0.8,
+          alive: n.meta.count > 0,
+        }))
+      );
+
+      // Ring arcs, node to node. Five businesses share one WhatsApp number, so
+      // the picture should say they are connected to each other and not only to
+      // the middle -- which is the thing the routing actually has to get right.
+      setWeb(
+        ns.map((n, i) => {
+          const next = ns[(i + 1) % ns.length];
+          const mx = (n.x + next.x) / 2;
+          const my = (n.y + next.y) / 2;
+          // Bowed AWAY from the nucleus, so the ring encloses the picture
+          // instead of lying under the dendrites it is meant to sit behind.
+          const dx = mx - cx;
+          const dy = my - cy;
+          const len = Math.hypot(dx, dy) || 1;
+          return `M${n.x} ${n.y} Q${mx + (dx / len) * 34} ${my + (dy / len) * 34} ${next.x} ${next.y}`;
+        })
+      );
     };
     layout();
     const ro = new ResizeObserver(layout);
@@ -399,23 +472,75 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                 </span>
               </div>
               <div className="switchboard" ref={boardRef}>
-                <svg>
-                  {links.map((l, i) => (
-                    <g key={i}>
-                      <line
-                        x1={l.x1}
-                        y1={l.y1}
-                        x2={l.x2}
-                        y2={l.y2}
-                        stroke="rgba(22,22,15,.32)"
-                        strokeWidth="1"
-                        strokeDasharray="3 4"
+                <svg className="sb-net">
+                  <defs>
+                    {/* A dendrite is brighter where it leaves the nucleus and
+                        fades towards the business, which is the direction a
+                        routed message actually travels. */}
+                    <linearGradient id="sb-dendrite" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="var(--signal)" stopOpacity=".30" />
+                      <stop offset="100%" stopColor="var(--signal)" stopOpacity=".10" />
+                    </linearGradient>
+                    {/* The carrying one. A business with traffic should be the
+                        thing your eye finds first, and the four without it
+                        should recede rather than compete. */}
+                    <linearGradient id="sb-dendrite-on" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="var(--signal)" stopOpacity="1" />
+                      <stop offset="100%" stopColor="var(--signal)" stopOpacity=".45" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* The ring: every business connected to its neighbours, not
+                      only to the middle. Faint on purpose — it says "one number
+                      serves all of these", which is context rather than news. */}
+                  {web.map((d, i) => (
+                    <path key={`w${i}`} d={d} className="sb-web" fill="none" />
+                  ))}
+
+                  {links.map((l) => (
+                    <g key={l.slug}>
+                      <path
+                        d={l.d}
+                        fill="none"
+                        stroke={l.alive ? "url(#sb-dendrite-on)" : "url(#sb-dendrite)"}
+                        strokeWidth={l.alive ? l.width : 1}
+                        strokeLinecap="round"
+                        className={l.alive ? "sb-axon on" : "sb-axon"}
                       />
-                      <circle r="2.4" fill="var(--signal)">
-                        <animateMotion dur={`${l.dur}s`} repeatCount="indefinite" path={`M${l.x1} ${l.y1} L${l.x2} ${l.y2}`} />
-                        <animate attributeName="opacity" values="0;1;0" dur={`${l.dur}s`} repeatCount="indefinite" />
-                      </circle>
+                      {/*
+                        A SIGNAL ONLY WHERE THERE IS TRAFFIC.
+                        Motion is a claim. This used to fire along all five
+                        links at the same rate whether the business had ten
+                        messages or none — four of them animating a flow that
+                        was flowing nowhere. Quiet businesses now get a still,
+                        dimmer dendrite, which is the honest picture and also
+                        makes the one that IS busy the thing your eye finds.
+                      */}
+                      {l.alive ? (
+                        <circle r="2.6" fill="var(--signal)" className="sb-pulse">
+                          <animateMotion dur={`${l.dur}s`} repeatCount="indefinite" path={l.d} />
+                          <animate
+                            attributeName="opacity"
+                            values="0;1;1;0"
+                            keyTimes="0;.15;.75;1"
+                            dur={`${l.dur}s`}
+                            repeatCount="indefinite"
+                          />
+                        </circle>
+                      ) : null}
                     </g>
+                  ))}
+                  {/* The synapse. Small, and the only mark that sits exactly
+                      where a dendrite meets a business — which is the join the
+                      whole routing question is about. */}
+                  {nodes.map((n) => (
+                    <circle
+                      key={`s${n.meta.slug}`}
+                      cx={n.x}
+                      cy={n.y}
+                      r={n.meta.count > 0 ? 4 : 3}
+                      className={n.meta.count > 0 ? "sb-syn on" : "sb-syn"}
+                    />
                   ))}
                 </svg>
                 <div className="core">

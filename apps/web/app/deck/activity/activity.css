@@ -162,3 +162,15 @@
 @media (max-width: 620px) {
   .act-event { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* The business switcher, shared by every screen that has one. */
+.deck-root .act-tabs .bt-only {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 6px 2px;
+}
+
+/* Drawn empty until we know who is asking — see BusinessTabs. Holds the row's
+   height so the page below does not jump when the answer arrives. */
+.deck-root .act-tabs.bt-waiting { min-height: 34px; }
