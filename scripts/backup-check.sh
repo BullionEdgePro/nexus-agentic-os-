@@ -108,8 +108,14 @@ stamp="$(basename "$newest" | sed -E 's/^nexus-([0-9]{8}-[0-9]{6})\.sql\.gz$/\1/
 stamp_epoch="$(date -u -d "${stamp:0:4}-${stamp:4:2}-${stamp:6:2} ${stamp:9:2}:${stamp:11:2}:${stamp:13:2}" +%s 2>/dev/null || echo 0)"
 recorded=""
 if [ "$stamp_epoch" -gt 0 ]; then
+  # 1/0 RATHER THAN THE BOOLEAN. `psql -tA` prints a boolean column as `t`, but
+  # the same value CONCATENATED into a string casts to `true` -- so a comparison
+  # against "t" silently never matched, and this whole branch fell through to
+  # the log check it was written to replace. It failed in the safe direction and
+  # was invisible for exactly that reason: the gate still went red, for the old
+  # wrong reason, and looked like the fix had not deployed.
   recorded="$("${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -tAc \
-    "select extract(epoch from ran_at)::bigint || ':' || verified
+    "select extract(epoch from ran_at)::bigint || ':' || (case when verified then 1 else 0 end)
        from backup_runs order by ran_at desc limit 1" 2>/dev/null | tr -d '[:space:]')"
 fi
 
@@ -117,7 +123,7 @@ if [ -n "$recorded" ]; then
   row_epoch="${recorded%%:*}"
   row_verified="${recorded##*:}"
   drift=$(( stamp_epoch > row_epoch ? stamp_epoch - row_epoch : row_epoch - stamp_epoch ))
-  if [ "$drift" -lt 900 ] && [ "$row_verified" = "t" ]; then
+  if [ "$drift" -lt 900 ] && [ "$row_verified" = "1" ]; then
     echo "Restore verified: backup_runs has a verified run within $((drift))s of $stamp."
     verified_line="recorded in backup_runs, ${drift}s from the dump's own timestamp"
     run="(read from backup_runs rather than the log)"
