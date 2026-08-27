@@ -80,6 +80,30 @@ interface Case {
 
 const CASES: Case[] = [
   {
+    // TWO BRANCHES PRODUCTION CANNOT SHOW ME. `backup-unprotected` fires on the
+    // real platform right now -- five standing findings, one per business,
+    // because the off-box copy is unconfigured -- so the branch that matters
+    // today is already proven. The two that are NOT proven are the ones that
+    // only appear on a bad morning: a run that failed, and no run at all.
+    //
+    // Seeding a failed run covers the first and is the more important of the
+    // two, because it is the branch that has to beat the "not off-box" one:
+    // reporting a missing off-box copy while the backup is failing outright
+    // would bury the worse fact under the lesser.
+    slug: "backup-unprotected/failed",
+    seed: async () => {
+      await getPool().query(
+        `insert into backup_runs (verified, off_box, failed_reason)
+         values (false, false, 'seeded by operator-fire-check')`
+      );
+    },
+    expect: (finding) => {
+      if (finding.severity !== "urgent") return `a failed backup should be urgent, got ${finding.severity}`;
+      if (!/failed/i.test(finding.title)) return `expected a failure title, got "${finding.title}"`;
+      return null;
+    },
+  },
+  {
     slug: "agent-unavailable",
     // Three fallbacks inside the six-hour window, which is the threshold that
     // turns a blip into a provider. Seeding two would exercise the warn branch
