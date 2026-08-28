@@ -61,9 +61,15 @@ code=$?
 
 # Read from the file, so this summary describes the run whose status was taken
 # above rather than a second one.
-tests="$(grep -E '^ℹ tests ' "$log" | tail -1 | tr -dc '0-9')"
-passed="$(grep -E '^ℹ pass ' "$log" | tail -1 | tr -dc '0-9')"
-failed="$(grep -E '^ℹ fail ' "$log" | tail -1 | tr -dc '0-9')"
+# SUMMED, NOT `tail -1`. There are two suites now -- the API's and the console's
+# render tests -- so each of these lines appears twice, and taking the last one
+# reported "5 passed" over a run of 1,407. A summary that under-reports by two
+# orders of magnitude is worse than none: it is the number somebody quotes.
+sum_of() { grep -E "^ℹ $1 " "$log" | tr -dc '0-9
+' | awk '{ total += $1 } END { print total + 0 }'; }
+tests="$(sum_of tests)"
+passed="$(sum_of pass)"
+failed="$(sum_of fail)"
 
 if [ "$code" -ne 0 ] || [ "${failed:-1}" != "0" ]; then
   # BOTH conditions, because they can disagree. A suite that crashes before

@@ -93,5 +93,10 @@ if [ "$code" -ne 0 ]; then
   exit 1
 fi
 
-echo "pre-commit: typecheck and $(grep -oE '^ℹ pass [0-9]+' "$log" | tail -1 | grep -oE '[0-9]+') tests pass"
+# SUMMED, for the same reason check.sh is. Two suites report two "pass" lines,
+# and `tail -1` printed "5 tests pass" over a run of 1,407 -- on the line that
+# tells somebody their commit was checked. The number people trust most is the
+# one it is least acceptable to get wrong.
+passed="$(grep -oE '^ℹ pass [0-9]+' "$log" | grep -oE '[0-9]+' | awk '{ total += $1 } END { print total + 0 }')"
+echo "pre-commit: typecheck and ${passed} tests pass"
 rm -f "$log"
