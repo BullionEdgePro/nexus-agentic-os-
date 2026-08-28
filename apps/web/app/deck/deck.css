@@ -662,3 +662,68 @@
 
 .deck-root .sb-net .sb-syn { fill: var(--hairline-strong); }
 .deck-root .sb-net .sb-syn.on { fill: var(--signal); }
+
+/* ------------------------------------------------------------
+   Viewing the console as staff
+   ------------------------------------------------------------
+   The banner is the feature. An operator looking at a narrowed console has
+   every reason to misread it: same screens, smaller numbers, and "nobody is
+   waiting" reads exactly as reassuringly as it always does. */
+
+.deck-root .vas-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  /* No new token: the pebble inset ground, made unmistakable by a cobalt
+     border, which nothing else on the deck has. A fallback colour would have
+     hidden an undefined token behind something that looked deliberate. */
+  background: var(--pebble);
+  border: 1px solid var(--signal-text);
+}
+
+.deck-root .vas-banner strong { font-size: 13.5px; color: var(--ink); }
+.deck-root .vas-banner span { font-size: 12.5px; color: var(--slate); flex: 1 1 320px; }
+
+.deck-root .vas-banner button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 12px;
+  background: var(--signal-text);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.deck-root .vas-open {
+  font: inherit;
+  font-size: 12px;
+  color: var(--slate);
+  background: none;
+  border: 0;
+  padding: 0 0 10px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.deck-root .vas-open:hover { color: var(--signal-text); }
+
+.deck-root .vas-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.deck-root .vas-pick > span { font-size: 12.5px; color: var(--slate); }
+.deck-root .vas-pick button {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--marble);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.deck-root .vas-pick button:hover { border-color: var(--signal-text); color: var(--signal-text); }
+.deck-root .vas-pick .vas-cancel { background: none; border-color: transparent; color: var(--slate); }

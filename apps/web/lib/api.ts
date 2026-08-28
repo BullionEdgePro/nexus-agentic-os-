@@ -8,7 +8,41 @@ import type {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
+/**
+ * The business an operator is previewing as staff, if any.
+ *
+ * Kept in sessionStorage rather than localStorage on purpose: a preview is a
+ * thing you are doing right now, not a setting. Closing the tab ends it, so
+ * nobody returns tomorrow to a console quietly showing one business and reads it
+ * as the whole platform.
+ *
+ * Read on every request rather than captured once, so exiting the preview takes
+ * effect immediately instead of on the next reload.
+ */
+export const VIEW_AS_KEY = "nexus.viewAs";
+
+export function viewingAs(): string | null {
+  try {
+    return typeof window === "undefined" ? null : window.sessionStorage.getItem(VIEW_AS_KEY);
+  } catch {
+    // Private windows and blocked site data throw on access. No preview is the
+    // right answer there -- it fails towards the operator's own view, which is
+    // the one they are entitled to.
+    return null;
+  }
+}
+
+export function setViewingAs(slug: string | null): void {
+  try {
+    if (slug) window.sessionStorage.setItem(VIEW_AS_KEY, slug);
+    else window.sessionStorage.removeItem(VIEW_AS_KEY);
+  } catch {
+    /* nothing to do: the preview simply will not start */
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const preview = viewingAs();
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     // The API authenticates browser traffic with the operator session cookie,
@@ -18,10 +52,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // generated multipart boundary the body is split on. Forcing
     // application/json over it produces a request the server parses as an
     // empty form and reports as "attach a file", with the file attached.
-    headers:
-      init?.body instanceof FormData
+    headers: {
+      ...(init?.body instanceof FormData
         ? { ...init?.headers }
-        : { "Content-Type": "application/json", ...init?.headers },
+        : { "Content-Type": "application/json", ...init?.headers }),
+      // Sent on EVERY request, including writes. A preview that narrowed reads
+      // and left writes at full access would let the owner do something as
+      // staff that staff could not do -- and then believe staff could.
+      ...(preview ? { "x-nexus-view-as": preview } : {}),
+    },
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");

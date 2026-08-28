@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { ViewAsStaff } from "./view-as-staff";
 import { NAV, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
@@ -109,7 +110,13 @@ export function ConsoleShell({
         </a>
         <RailLinks role={role} />
       </nav>
-      <main className="shell-main">{children}</main>
+      <main className="shell-main">
+        {/* Operator-only, and above everything: a narrowed console is
+            indistinguishable from a quiet one unless something says so on every
+            page. See ViewAsStaff. */}
+        {role === "operator" ? <ViewAsStaff /> : null}
+        {children}
+      </main>
     </div>
   );
 }
