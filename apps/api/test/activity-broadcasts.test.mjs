@@ -124,6 +124,32 @@ test("the send path takes its organization from the broadcast, not the request",
   );
 });
 
+test("the audience is who the business SERVES, not whose row it is", () => {
+  // THE ONE THAT DECIDES WHO GETS A MESSAGE, and it was wrong in both
+  // directions at once. Measured on production 2026-08-27 -- contacts each
+  // business would have been sent to, against contacts actually theirs:
+  //
+  //   abr                0  /  1
+  //   juris-prime        0  /  1
+  //   juris-prime-legal  0  /  0
+  //   sfs-international  0  /  2
+  //   zipicka           18  / 14
+  //
+  // Four businesses could not reach anybody: the send answers "audience filter
+  // matched zero contacts" and the feature is dead for them. Zipicka would have
+  // reached eighteen people, four of them the law firms' and the letting
+  // agent's clients -- a retail promotion, by name, to a law firm's customers.
+  //
+  // Never fired only because nothing has ever been sent. The first real
+  // broadcast would have been the test.
+  const sql = sqlOf(BROADCAST_SQL, "getContactsForAudience", "`select");
+  assert.match(sql, /\$\{contactServedBy\("\$1"\)\}/, "the audience must use the shared served-by predicate");
+  assert.ok(
+    !/where organization_id = \$1/.test(sql),
+    "organization_id is the number's owner, not the business whose customers these are"
+  );
+});
+
 test("an unapproved template is refused at send, not only at draft", () => {
   // Approval is checked when the draft is created, but Meta can withdraw it in
   // between. This is the last gate before messages leave.
@@ -483,8 +509,24 @@ test("audience counting uses the column that exists", () => {
   // explanation as the defect. Same false-positive class the SQL-comment
   // stripper exists for elsewhere in this suite.
   const sql = sqlOf(BROADCAST_SQL, "countReachableContacts", "`select");
-  assert.match(sql, /coalesce\(wa_id, ''\) <> ''/);
+  // The alias is optional; the column is not. This matched `coalesce(wa_id`
+  // exactly and went red when the table was aliased `ct` so it could share the
+  // served-by predicate -- a rename, not a regression.
+  assert.match(sql, /coalesce\((?:ct\.)?wa_id, ''\) <> ''/);
   assert.ok(!/whatsapp_number/.test(sql), "contacts has wa_id, not whatsapp_number");
+
+  // AND IT COUNTS THE RIGHT PEOPLE. The column existing was never the whole
+  // question: this counted `organization_id = $1`, which on a shared number is
+  // every contact for the number's owner and none for anybody else. The number
+  // shown before a send must be the audience the send will actually reach.
+  // Asserted as REUSE of the shared predicate rather than as its expanded text,
+  // which is the stronger property: contacts.ts defines it once and says so,
+  // and a fifth hand-written copy is exactly how this path came to be wrong.
+  assert.match(sql, /\$\{contactServedBy\("\$1"\)\}/, "the count must use the shared served-by predicate");
+  assert.ok(
+    !/organization_id = \$1/.test(sql),
+    "counting by organization_id is every contact for the number's owner and none for anyone else"
+  );
 });
 
 test("a parameter used in two contexts is cast in both", () => {

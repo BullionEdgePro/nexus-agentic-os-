@@ -1,4 +1,5 @@
 import { getPool, withAllTenants } from "./client.js";
+import { contactServedBy } from "./contacts.js";
 import type { AudienceFilter, BroadcastStatus, CreateBroadcastInput } from "@nexus/shared";
 
 export interface BroadcastRow {
@@ -91,8 +92,29 @@ export async function getContactsForAudience(
   audienceFilter: AudienceFilter
 ): Promise<Array<{ id: string; waId: string; displayName: string | null }>> {
   const { rows } = await getPool().query<{ id: string; wa_id: string; display_name: string | null }>(
-    `select id, wa_id, display_name from contacts
-     where organization_id = $1 and attributes @> $2::jsonb`,
+    // WHO THIS BUSINESS'S CUSTOMERS ARE, not whose row it is.
+    //
+    // This read `organization_id = $1`, and on a shared number that is wrong in
+    // both directions at once. Measured on production 2026-08-27, contacts each
+    // business would have been sent to versus contacts that are actually theirs:
+    //
+    //   abr                0  /  1
+    //   juris-prime        0  /  1
+    //   juris-prime-legal  0  /  0
+    //   sfs-international  0  /  2
+    //   zipicka           18  / 14
+    //
+    // Four businesses could not have reached anybody -- the send returns
+    // "audience filter matched zero contacts" and the feature is simply dead
+    // for them. Zipicka would have reached eighteen people, four of whom are
+    // the law firms' and the letting agent's clients: a retail promotion, by
+    // name, to a law firm's customers.
+    //
+    // `contactServedBy` is the predicate this repository already defined once
+    // for exactly this question, with a comment saying it exists so it is not
+    // "written out a fourth time". This path wrote it out a fourth time.
+    `select ct.id, ct.wa_id, ct.display_name from contacts ct
+      where ${contactServedBy("$1")} and ct.attributes @> $2::jsonb`,
     [organizationId, JSON.stringify(audienceFilter ?? {})]
   );
   return rows.map((row) => ({ id: row.id, waId: row.wa_id, displayName: row.display_name }));
@@ -345,9 +367,13 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
  */
 export async function countReachableContacts(organizationId: string): Promise<number> {
   const { rows } = await getPool().query<{ total: string }>(
+    // The same correction as getContactsForAudience, and it has to be the same
+    // predicate: this is the number shown on screen BEFORE a send, and a count
+    // that disagreed with the eventual audience would be worse than no count --
+    // somebody would approve a send to "14 people" and reach a different set.
     `select count(*)::text as total
-       from contacts
-      where organization_id = $1 and coalesce(wa_id, '') <> ''`,
+       from contacts ct
+      where ${contactServedBy("$1")} and coalesce(ct.wa_id, '') <> ''`,
     [organizationId]
   );
   return Number(rows[0]?.total ?? 0);
