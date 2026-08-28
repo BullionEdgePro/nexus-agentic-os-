@@ -142,7 +142,8 @@ export async function updateBroadcastStatus(broadcastId: string, status: Broadca
 export async function updateBroadcastRecipientStatus(
   recipientId: string,
   status: "sent" | "failed",
-  waMessageId?: string | null
+  waMessageId?: string | null,
+  deliveryError?: string | null
 ): Promise<void> {
   await getPool().query(
     `update broadcast_recipients
@@ -151,9 +152,21 @@ export async function updateBroadcastRecipientStatus(
          -- Migration 051. Kept even on the failed path, where it is null: the
          -- column exists so a receipt can find this row later, and a send that
          -- never reached Meta has no receipt to wait for.
-         wa_message_id = coalesce($3, wa_message_id)
+         wa_message_id = coalesce($3, wa_message_id),
+         -- WHY IT FAILED, not merely that it did. delivery_error has existed
+         -- (no backticks in here: this is inside a template literal, and one
+         -- ends the string -- the third time this file's family has done it)
+         -- since 051 and nothing has ever written to it: the reason lived in a
+         -- log line, so the screen could not tell a wrong number from a rate
+         -- limit from a template Meta had withdrawn -- three failures with
+         -- three different answers, rendered identically as "failed".
+         --
+         -- Cleared on success, so a recipient that failed and then succeeded on
+         -- a retry does not keep an explanation for something that no longer
+         -- happened.
+         delivery_error = case when $2 = 'sent' then null else $4 end
      where id = $1`,
-    [recipientId, status, waMessageId ?? null]
+    [recipientId, status, waMessageId ?? null, (deliveryError ?? null)?.slice(0, 500) ?? null]
   );
 }
 
@@ -217,13 +230,31 @@ const BROADCAST_STATUS_LADDER = ["pending", "sent", "delivered"] as const;
  * True once every recipient has moved off 'pending' — used by the broadcast
  * worker to decide when to flip the parent broadcast to a terminal status.
  */
-export async function isBroadcastFullyProcessed(broadcastId: string): Promise<boolean> {
-  const { rows } = await getPool().query<{ pending_count: string }>(
-    `select count(*)::text as pending_count from broadcast_recipients
-     where broadcast_id = $1 and status = 'pending'`,
+/**
+ * How a broadcast finished, not merely THAT it did.
+ *
+ * This returned a boolean and the caller wrote "completed" on true, so a
+ * campaign in which every single message failed ended in exactly the state of
+ * one where every message arrived. `failed` has been an allowed status since
+ * the table was created and nothing has ever set it.
+ */
+export async function broadcastOutcome(
+  broadcastId: string
+): Promise<{ done: boolean; sent: number; failed: number }> {
+  const { rows } = await getPool().query<{ pending: string; sent: string; failed: string }>(
+    `select count(*) filter (where status = 'pending')::text as pending,
+            count(*) filter (where status in ('sent', 'delivered'))::text as sent,
+            count(*) filter (where status = 'failed')::text as failed
+       from broadcast_recipients
+      where broadcast_id = $1`,
     [broadcastId]
   );
-  return Number(rows[0]?.pending_count ?? 0) === 0;
+  const row = rows[0];
+  return {
+    done: Number(row?.pending ?? 0) === 0,
+    sent: Number(row?.sent ?? 0),
+    failed: Number(row?.failed ?? 0),
+  };
 }
 
 export interface TemplateRow {
@@ -281,6 +312,16 @@ export async function listBroadcastTemplates(organizationId: string): Promise<Te
 
 export interface BroadcastSummary extends BroadcastRow {
   templateName: string;
+  /**
+   * Distinct reasons recipients failed, capped at three.
+   *
+   * "3 failed" sends somebody to read logs they do not have. "3 failed --
+   * recipient not in allowed list" is a thing they can act on. Capped because
+   * one rate limit fails hundreds of people with the same sentence, and
+   * repeating it would bury the second, different reason underneath it.
+   */
+  failureReasons: string[];
+
   recipients: number;
   /**
    * Accepted by Meta. NOT delivered, and the deck said otherwise until 051.
@@ -317,6 +358,7 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     sent: string;
     delivered: string;
     failed: string;
+    failure_reasons: string[] | null;
   }>(
     `select b.id, b.organization_id, b.template_id, b.status, b.audience_filter,
             b.scheduled_at, b.created_at,
@@ -324,7 +366,16 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
             count(r.id)::text                                 as recipients,
             count(r.id) filter (where r.status in ('sent', 'delivered'))::text as sent,
             count(r.id) filter (where r.status = 'delivered')::text          as delivered,
-            count(r.id) filter (where r.status = 'failed')::text as failed
+            count(r.id) filter (where r.status = 'failed')::text as failed,
+            -- WHY, not only how many. "3 failed" sends somebody to read logs
+            -- they do not have; "3 failed -- recipient not in allowed list" is
+            -- a thing they can act on this afternoon.
+            --
+            -- Distinct and capped: a campaign that hits one rate limit hits it
+            -- for hundreds of people, and repeating one sentence three hundred
+            -- times would bury the second, different reason underneath it.
+            (array_agg(distinct r.delivery_error)
+               filter (where r.delivery_error is not null))[1:3] as failure_reasons
        from broadcasts b
        join message_templates t on t.id = b.template_id
        left join broadcast_recipients r on r.broadcast_id = b.id
@@ -339,6 +390,7 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     organizationId: row.organization_id,
     templateId: row.template_id,
     status: row.status,
+    failureReasons: row.failure_reasons ?? [],
     audienceFilter: row.audience_filter,
     scheduledAt: row.scheduled_at,
     createdAt: row.created_at,

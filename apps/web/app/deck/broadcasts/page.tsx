@@ -352,7 +352,20 @@ export default function BroadcastsPage() {
                         <td className={broadcast.delivered ? "" : "act-zero"}>
                           {broadcast.sent > 0 && broadcast.delivered === 0 ? "—" : broadcast.delivered}
                         </td>
-                        <td className={broadcast.failed ? "" : "act-zero"}>{broadcast.failed}</td>
+                        {/* WHY, under the count. "3 failed" sends somebody to
+                            read logs they do not have; the vendor's own sentence
+                            is the whole answer and it was being written to a log
+                            line and nowhere else. */}
+                        <td className={broadcast.failed ? "" : "act-zero"}>
+                          {broadcast.failed}
+                          {broadcast.failed > 0 && broadcast.failureReasons.length > 0 ? (
+                            <span className="bc-why">
+                              {broadcast.failureReasons.map((reason) => (
+                                <em key={reason}>{reason}</em>
+                              ))}
+                            </span>
+                          ) : null}
+                        </td>
                         <td>{new Date(broadcast.createdAt).toLocaleDateString()}</td>
                       </tr>
                     ))}

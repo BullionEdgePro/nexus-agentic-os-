@@ -469,6 +469,15 @@ export interface BroadcastSummary {
   /** Confirmed delivered by a receipt. Unknown rather than zero before migration 051. */
   delivered: number;
   failed: number;
+  /**
+   * Distinct reasons recipients failed, capped at three.
+   *
+   * "3 failed" sends somebody to read logs they do not have. "3 failed --
+   * recipient not in allowed list" is a thing they can act on. Capped because
+   * one rate limit fails hundreds of people with the same sentence, and
+   * repeating it would bury the second, different reason underneath it.
+   */
+  failureReasons: string[];
   scheduledAt: string | null;
   createdAt: string;
 }

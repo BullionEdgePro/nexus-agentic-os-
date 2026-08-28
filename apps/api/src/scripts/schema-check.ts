@@ -43,7 +43,7 @@ import {
   createBroadcastRecipients,
   updateBroadcastStatus,
   updateBroadcastRecipientStatus,
-  isBroadcastFullyProcessed,
+  broadcastOutcome,
   upsertContactMemory,
   getContactMemory,
   forgetContact,
@@ -669,7 +669,7 @@ async function main(): Promise<void> {
                   return true;
                 });
 
-                await step("check completion", () => isBroadcastFullyProcessed(bid));
+                await step("check completion", () => broadcastOutcome(bid));
               }
             } else {
               console.log("  skip  create recipients             (no contacts)");
