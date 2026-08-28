@@ -205,6 +205,89 @@ export const CLASSES = [
   },
 
   {
+    id: "a-test-that-pins-the-spelling-not-the-property",
+    signals: [
+      "pinned the exact",
+      "went red on",
+      "matched the expression",
+      "widened",
+      "the condition grew",
+      "not the spelling",
+    ],
+    title: "A test that fails when the code gets BETTER, because it matched text and not a property",
+    mechanism:
+      "This suite asserts against source text on purpose -- several of the rules here are " +
+      "properties of the code as written, and there is no other way to check them. The trap " +
+      "is that copying the current line into the assertion is the quickest way to write one, " +
+      "and it produces a test that passes today and fails the first time the code IMPROVES. " +
+      "Its two siblings in this register go green when they should be red. This one goes RED " +
+      "WHEN IT SHOULD BE GREEN, and that is worse than it sounds: a red test on a correct " +
+      "change teaches the person to widen the assertion, and the habit of widening is what " +
+      "eventually waves the real defect through. Every instance below was a genuine " +
+      "improvement reported as a regression.",
+    instances: 7,
+    evidence: [
+      {
+        sha: "2e02b1578",
+        note:
+          "the notifications dot's condition was pinned WITH its leading brace; the test's " +
+          "own comment records going red three times as the condition grew -- for unaccepted " +
+          "urgency, for work assigned to the reader, and for an unreachable state",
+      },
+      {
+        sha: "ac87188db",
+        note:
+          "`canSend` was pinned as a verbatim expression, and template attribution made that " +
+          "condition STRICTER; a tightening arrived as a failure",
+      },
+      {
+        sha: "7691a59fd",
+        note:
+          "`rows.filter(looksLikeAnInboundPitch)` matched exactly, so adding a SECOND " +
+          "suppression rule beside it -- a colleague's own number -- read as the first one " +
+          "being deleted",
+      },
+      {
+        sha: "7d30c5e9d",
+        note:
+          "`coalesce(wa_id, '')` matched exactly, so aliasing the table to share the " +
+          "served-by predicate went red; the column had not changed, only its prefix",
+      },
+      {
+        sha: "750306034",
+        note:
+          "the inverse, and the reason this class is not merely annoying: an assertion found " +
+          "its string in the FILE while the branch printing it had become unreachable. " +
+          "Pinning text can hide the absence of behaviour as easily as it can punish its " +
+          "presence",
+      },
+      {
+        sha: null,
+        note:
+          "two parser instances of the same shape on 2026-08-27: a gate-list scan read a " +
+          "COMMENT inside GATES=() as a gate name, and the allow-list guarding the sweep " +
+          "against model imports read the prose `from \"remind me later\"` as an import. " +
+          "Both were checks broken by a sentence rather than by code",
+      },
+    ],
+    coverage: {
+      kind: "none",
+      whyUncoverable:
+        "A scanner cannot tell a fragment copied from the code from a fragment chosen as the " +
+        "property, because they are the same characters. Both versions compile, run, and " +
+        "pass today; they differ only in what they will do to a future change nobody has " +
+        "written yet. " +
+        "THE RECIPE, which resolved all seven in one line each: when an assertion goes red " +
+        "on a change you believe is correct, do not widen it and move on -- ask what it was " +
+        "FOR, and rewrite it as that. Match the condition, not the punctuation around it; " +
+        "the column, not its alias; the shared predicate being REUSED, not its expanded " +
+        "text. And say in the test why it was widened, because the next person needs to know " +
+        "the assertion was reconsidered rather than weakened -- those look identical in a " +
+        "diff.",
+    },
+  },
+
+  {
     id: "an-extraction-that-found-nothing",
     signals: ["indexof", "extraction", "marker", "vacuous", "tautolog"],
     title: "A test searching source for a marker the source no longer contains",
