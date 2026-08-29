@@ -290,7 +290,8 @@ export interface Employee {
   whatsappQualityRating?: string | null;
   /** Off by default: a staff campaign spends the shared number's quality rating. */
   canBroadcast?: boolean;
-  broadcastMonthlyCap?: number;
+  /** NULL means no ceiling set here — which is NOT unlimited; Meta's tier still applies. */
+  broadcastMonthlyCap?: number | null;
 
   timezone: string;
   workingHours: WeeklySchedule;

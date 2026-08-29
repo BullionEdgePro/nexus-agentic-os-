@@ -40,7 +40,7 @@
 import { getPool } from "./client.js";
 import { contactServedBy } from "./contacts.js";
 import { ensureContactForServingBusiness } from "./contact-identity.js";
-import { withTenant } from "./client.js";
+import { withTenant, withAllTenants } from "./client.js";
 
 /**
  * "May this person see this contact?"
@@ -314,15 +314,27 @@ export async function updateClientDetails(
 /**
  * How many people this person may still reach this calendar month.
  *
+ * ============================================================
+ * NULL IS NOT ZERO, AND IT IS NOT INFINITY EITHER
+ * ============================================================
+ *
+ * A null cap means this platform sets no ceiling — the owner's decision, made
+ * knowingly. It does NOT mean the sender can reach everybody: Meta caps the
+ * number at its messaging tier regardless, and that cap is shared by every
+ * business on it. `remaining` is null in that case rather than a large number,
+ * so nothing downstream can print a limit nobody chose or compare against one.
+ *
+ * `used` is still counted, because "how many have I sent this month" is a
+ * question worth answering whether or not anything is enforcing it.
+ *
  * Counted from `broadcast_recipients` — rows that were actually queued — rather
- * than from anything the campaign intended. A cap enforced against intent is
- * not a cap; the recipient rows are what cost money and what moved the shared
- * number's quality rating.
+ * than from anything a campaign intended. A cap enforced against intent is not
+ * a cap, and a count reported from intent is not a count.
  */
 export async function broadcastAllowanceRemaining(
   employeeId: string,
-  monthlyCap: number
-): Promise<{ used: number; cap: number; remaining: number }> {
+  monthlyCap: number | null
+): Promise<{ used: number; cap: number | null; remaining: number | null }> {
   const { rows } = await getPool().query<{ used: string }>(
     `select count(r.id) as used
        from broadcast_recipients r
@@ -332,8 +344,13 @@ export async function broadcastAllowanceRemaining(
     [employeeId]
   );
   const used = Number(rows[0]?.used ?? 0);
-  return { used, cap: monthlyCap, remaining: Math.max(0, monthlyCap - used) };
+  return {
+    used,
+    cap: monthlyCap,
+    remaining: monthlyCap === null ? null : Math.max(0, monthlyCap - used),
+  };
 }
+
 
 /**
  * Record that a number on the business account is this person's.
@@ -548,4 +565,38 @@ export async function optOutOfReengagement(contactId: string): Promise<boolean> 
   // False means already opted out, not a failure. The caller still confirms to
   // the customer: somebody who says stop twice deserves an answer both times.
   return (rowCount ?? 0) > 0;
+}
+
+/**
+ * How many people this NUMBER has already started a conversation with today.
+ *
+ * ============================================================
+ * THE CEILING THAT IS REAL
+ * ============================================================
+ *
+ * Meta limits a number to its messaging tier — 250 unique customers in any
+ * rolling 24 hours while the business is unverified — and that limit belongs to
+ * the NUMBER, not to a business or a person. Six businesses and every staff
+ * member share it. A campaign larger than what is left does not fail loudly; it
+ * queues, sends until the ceiling, and the rest quietly do not arrive.
+ *
+ * Counted CROSS-TENANT for exactly that reason. Scoped to one business this
+ * would return a fraction of the true figure and read as plenty of headroom.
+ *
+ * Business-initiated messages are what the tier counts, so this counts
+ * broadcast recipients. It is a floor, not the exact number Meta holds — a
+ * re-engagement message or a template sent outside a campaign is not in here —
+ * and it is described that way wherever it is shown. A floor that is honest
+ * about being a floor beats a precise number that is wrong.
+ */
+export async function dailyReachUsed(): Promise<number> {
+  return withAllTenants("daily reach: a ceiling that belongs to the number, not a tenant", async () => {
+    const { rows } = await getPool().query<{ n: string }>(
+      `select count(distinct r.contact_id) as n
+         from broadcast_recipients r
+        where r.created_at >= now() - interval '24 hours'
+          and r.status <> 'failed'`
+    );
+    return Number(rows[0]?.n ?? 0);
+  });
 }

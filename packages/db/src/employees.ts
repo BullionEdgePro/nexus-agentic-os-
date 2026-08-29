@@ -37,7 +37,7 @@ interface EmployeeRow {
   whatsapp_connected_at: string | null;
   whatsapp_quality_rating: string | null;
   can_broadcast: boolean;
-  broadcast_monthly_cap: number;
+  broadcast_monthly_cap: number | null;
 }
 
 const EMPLOYEE_COLUMNS = `

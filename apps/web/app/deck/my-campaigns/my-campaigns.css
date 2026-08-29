@@ -144,3 +144,17 @@
 .deck-root .cmp-numbers em { color: var(--slate); font-style: normal; }
 
 .deck-root .cmp-history { overflow-x: auto; }
+
+/* The ceiling that belongs to the number, not to us. Amber rather than red:
+   it is a fact to weigh, not a refusal. */
+.deck-root .cmp-ceiling {
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--pebble);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  padding: 10px 13px;
+  margin: 0 0 14px;
+  max-width: 78ch;
+}
+.deck-root .cmp-warn-line { color: var(--warn); }

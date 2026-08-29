@@ -84,9 +84,8 @@ export default function MyCampaignsPage() {
 
       {view && !view.canBroadcast ? (
         <p className="cmp-blocked">
-          Campaigns are switched off for your account. The owner turns this on per person, because a
-          bulk send spends the shared number&rsquo;s standing with WhatsApp — and that standing is
-          what every business here depends on to get its ordinary replies delivered.
+          Campaigns are switched off for your account. They are on by default, so somebody has
+          turned this one off deliberately — ask the owner.
         </p>
       ) : null}
 
@@ -97,14 +96,33 @@ export default function MyCampaignsPage() {
           <p className="cmp-facts">
             <strong>{audience.length}</strong>{" "}
             {audience.length === 1 ? "person" : "people"} in your book
-            {view.allowance.cap > 0 ? (
+            {view.allowance.cap !== null ? (
               <>
                 {" "}
                 · <strong>{view.allowance.remaining}</strong> of {view.allowance.cap} left this month
               </>
+            ) : view.allowance.used > 0 ? (
+              // No ceiling set here, so there is nothing to count DOWN from —
+              // but "how many have I sent this month" is still worth knowing,
+              // and printing a limit nobody chose would be worse than silence.
+              <>
+                {" "}
+                · <strong>{view.allowance.used}</strong> sent this month
+              </>
             ) : null}{" "}
             · sending from <strong>{view.sendsFrom}</strong>
           </p>
+
+          {view.dailyCeiling ? (
+            <p className="cmp-ceiling">
+              WhatsApp lets this number start <strong>{view.dailyCeiling.limit}</strong> new
+              conversations a day, shared across every business here, and at least{" "}
+              <strong>{view.dailyCeiling.usedToday}</strong> have already gone out today — about{" "}
+              <strong>{view.dailyCeiling.remainingToday}</strong> left. A campaign larger than that
+              will send until the ceiling and the rest will not arrive today. Nothing here will stop
+              you; this is so you are not surprised by the delivery report.
+            </p>
+          ) : null}
 
           <label className="cmp-pick">
             <span>Message</span>
@@ -156,6 +174,12 @@ export default function MyCampaignsPage() {
                 Sending <strong>{template?.name}</strong> from <strong>{view.sendsFrom}</strong>.
                 This cannot be recalled once it starts.
               </p>
+              {view.dailyCeiling ? (
+                <p className="cmp-final cmp-warn-line">
+                  About {view.dailyCeiling.remainingToday} of these {audience.length} will arrive
+                  today — the rest run past what WhatsApp allows this number to start in 24 hours.
+                </p>
+              ) : null}
               {refused ? <p className="mc-error">{refused}</p> : null}
               <div className="cmp-actions">
                 <button

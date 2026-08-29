@@ -188,3 +188,68 @@ test("a remembered business that is no longer visible is replaced", () => {
   assert.match(INBOX, /businesses\.some\(\(option\) => option\.slug === selectedOrg\)/);
   assert.match(INBOX, /setSelectedOrg\(businesses\[0\]\.slug\)/);
 });
+
+// ============================================================
+// The owner removed our ceiling, and Meta's stayed
+// ============================================================
+
+test("a null cap is not a zero cap", () => {
+  // Everyone's ceiling is null now. Coerced to 0 — the shape the code had while
+  // the column was NOT NULL — every campaign would be refused and the screen
+  // would read "0 of 0 left this month".
+  assert.ok(
+    !/broadcastMonthlyCap \?\? 0/.test(ROUTE),
+    "a null ceiling is being read as zero, which blocks every send"
+  );
+  assert.match(ROUTE, /broadcastMonthlyCap \?\? null/);
+});
+
+test("the monthly refusal only fires where a ceiling was actually chosen", () => {
+  assert.match(ROUTE, /allowance\.remaining !== null && audience\.length > allowance\.remaining/);
+});
+
+test("the real ceiling is reported, not enforced", () => {
+  // The owner asked for no limitation and gets none from us. What they must not
+  // get is a delivery report three days later revealing a third of the list was
+  // never reached, so the number's own daily limit is stated instead.
+  assert.match(ROUTE, /describeDailyCeiling/);
+  assert.match(ROUTE, /sending anyway, per policy/);
+  const send = ROUTE.slice(ROUTE.indexOf("const overDailyCeiling"));
+  assert.ok(
+    !/return c\.json\([\s\S]{0,200}429/.test(send.slice(0, 900)),
+    "the daily ceiling is refusing the campaign, which is not ours to refuse"
+  );
+});
+
+test("the daily count is cross-tenant, because the ceiling belongs to the number", () => {
+  // Scoped to one business this returns a fraction of the true figure and reads
+  // as plenty of headroom.
+  const BOOK = read("packages", "db", "src", "client-book.ts");
+  const fn = BOOK.slice(BOOK.indexOf("export async function dailyReachUsed"));
+  assert.match(fn, /withAllTenants/);
+  assert.match(fn, /count\(distinct r\.contact_id\)/);
+});
+
+test("the screen states the ceiling before the send, not only after", () => {
+  // Somebody deciding whether to message four hundred people should see it
+  // while they are deciding.
+  const PAGE = read("apps", "web", "app", "deck", "my-campaigns", "page.tsx");
+  assert.match(PAGE, /view\.dailyCeiling \? \(/);
+  assert.match(PAGE, /new\s+conversations a day/);
+  // And again at the point of no return.
+  //
+  // Anchored on the confirmation block's own class rather than on a phrase.
+  // The first draft searched for "cannot be recalled", which appears in this
+  // file's opening comment forty lines above the markup — so the slice began in
+  // prose about the screen instead of in the screen.
+  const confirm = PAGE.slice(PAGE.indexOf('className="cmp-confirm"'));
+  assert.match(confirm, /will arrive/);
+});
+
+test("the used figure is described as a floor", () => {
+  // Counted from our own queued recipients, so a template sent outside a
+  // campaign is not in it. A precise-looking number that is quietly low is
+  // worse than an honest approximation.
+  const PAGE = read("apps", "web", "app", "deck", "my-campaigns", "page.tsx");
+  assert.match(PAGE, /at least/);
+});

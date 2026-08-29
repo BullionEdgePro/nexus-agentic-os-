@@ -217,7 +217,7 @@ myDeskRoute.get("/channel", async (c) => {
   const own = employee.whatsappPhoneNumberId;
   const allowance = await broadcastAllowanceRemaining(
     desk.employeeId,
-    employee.broadcastMonthlyCap ?? 0
+    employee.broadcastMonthlyCap ?? null
   );
 
   // Asked of Meta, not of our own table. A row saying "connected" is a claim;

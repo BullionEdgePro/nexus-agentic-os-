@@ -1980,7 +1980,7 @@ export interface MyChannel {
   sharedNumber: { displayNumber: string; verifiedName: string; quality: string | null } | null;
   personalNumberOnFile: string | null;
   canBroadcast: boolean;
-  allowance: { used: number; cap: number; remaining: number };
+  allowance: { used: number; cap: number | null; remaining: number | null };
   lookupFailed: string | null;
 }
 
@@ -2042,7 +2042,10 @@ export interface MyCampaign {
 export interface MyCampaignsView {
   campaigns: MyCampaign[];
   canBroadcast: boolean;
-  allowance: { used: number; cap: number; remaining: number };
+  /** cap and remaining are null when no ceiling is set here — not the same as unlimited. */
+  allowance: { used: number; cap: number | null; remaining: number | null };
+  /** Present only when the campaign is larger than the number can start today. */
+  dailyCeiling: { tier: string | null; limit: number; usedToday: number; remainingToday: number } | null;
   sendsFrom: string;
   audience: Array<{ displayName: string | null; waId: string }>;
   templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;

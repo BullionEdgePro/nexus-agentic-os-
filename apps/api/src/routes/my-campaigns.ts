@@ -10,13 +10,15 @@ import {
   listMyBroadcasts,
   broadcastAllowanceRemaining,
   listBroadcastTemplates,
+  dailyReachUsed,
+  listOrganizations,
   getBroadcastTemplate,
   createBroadcastRecipients,
   updateBroadcastStatus,
 } from "@nexus/db";
 import { attributeTemplate, describeWrongTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
-import { listWabaNumbers } from "../lib/whatsapp-client.js";
+import { listWabaNumbers, readAccountStanding } from "../lib/whatsapp-client.js";
 import { deskOf, text } from "./my-desk.js";
 import { logger } from "../lib/logger.js";
 
@@ -136,13 +138,19 @@ myCampaignsRoute.get("/campaigns", async (c) => {
   );
   const allowance = await broadcastAllowanceRemaining(
     desk.employeeId,
-    employee.broadcastMonthlyCap ?? 0
+    employee.broadcastMonthlyCap ?? null
   );
+
+  // What the NUMBER can still start today, shared across all six businesses.
+  // Reported on the way in, not only after a send: a person deciding whether to
+  // message four hundred people should see the ceiling while they decide.
+  const ceiling = await describeDailyCeiling(audience.length);
 
   return c.json({
     campaigns,
     canBroadcast: employee.canBroadcast ?? false,
     allowance,
+    dailyCeiling: ceiling,
     sendsFrom: employee.whatsappPhoneNumberId ? "your own number" : "the shared company number",
     // The names, not only the count. A number is the thing somebody clicks send
     // on without reading; a list of names is one they check first.
@@ -234,16 +242,42 @@ myCampaignsRoute.post("/campaigns", async (c) => {
     );
   }
 
+  // ONLY WHERE A CEILING WAS ACTUALLY CHOSEN.
+  //
+  // The cap is null for everyone by default now — the owner's decision, made
+  // knowingly, recorded in migration 075. Where somebody HAS set one it still
+  // refuses the campaign whole rather than trimming it, because the people
+  // dropped from a trimmed send are invisible and the sender believes the whole
+  // book was reached.
   const allowance = await broadcastAllowanceRemaining(
     desk.employeeId,
-    employee.broadcastMonthlyCap ?? 0
+    employee.broadcastMonthlyCap ?? null
   );
-  if (audience.length > allowance.remaining) {
+  if (allowance.remaining !== null && audience.length > allowance.remaining) {
     return c.json(
       {
         error: `That would reach ${audience.length} people and you have ${allowance.remaining} left this month, of ${allowance.cap}. Nothing was sent — a campaign is not trimmed to fit, because the people dropped would be invisible.`,
       },
       429
+    );
+  }
+
+  // THE CEILING THAT IS NOT OURS TO REMOVE, reported rather than enforced.
+  //
+  // Meta limits the NUMBER to its messaging tier per rolling 24 hours, shared
+  // across all six businesses. A campaign larger than what is left does not
+  // fail loudly — it sends until the ceiling and the rest quietly do not
+  // arrive. The owner asked for no limitation and gets none from us; what they
+  // must not get is a delivery report three days later revealing that a third
+  // of the list was never reached.
+  //
+  // Logged at warn and returned to the caller, so the console can say it before
+  // the send and afterwards.
+  const overDailyCeiling = await describeDailyCeiling(audience.length);
+  if (overDailyCeiling) {
+    logger.warn(
+      { employeeId: desk.employeeId, audience: audience.length, ...overDailyCeiling },
+      "Campaign is larger than the number can start today — sending anyway, per policy"
     );
   }
 
@@ -295,7 +329,13 @@ myCampaignsRoute.post("/campaigns", async (c) => {
     { employeeId: desk.employeeId, broadcastId: broadcast.id, recipients: recipients.length, from },
     "Staff campaign enqueued"
   );
-  return c.json({ broadcastId: broadcast.id, enqueued: recipients.length });
+  return c.json({
+    broadcastId: broadcast.id,
+    enqueued: recipients.length,
+    // Present only when it matters. A warning that appears on every send is one
+    // nobody reads by the third campaign.
+    dailyCeiling: overDailyCeiling,
+  });
 });
 
 /**
@@ -310,4 +350,41 @@ function staffTemplateParams(count: number, displayName: string | null): string[
   if (count <= 0) return [];
   const first = displayName?.trim() || "there";
   return [first, ...Array.from({ length: count - 1 }, () => "-")];
+}
+
+/**
+ * Whether a campaign is larger than the number can still start today.
+ *
+ * Returns null when it comfortably fits, so the caller can treat presence as
+ * the signal and nothing has to interpret a "false" that looks like a failure.
+ *
+ * The tier is read from Meta and the usage is counted from our own queued
+ * recipients, which makes the used figure a FLOOR — a re-engagement message or
+ * a template sent outside a campaign is not counted. Said as "at least" wherever
+ * it is shown, because a precise-looking number that is quietly low is worse
+ * than an honest approximation.
+ */
+async function describeDailyCeiling(
+  audienceSize: number
+): Promise<{ tier: string | null; limit: number; usedToday: number; remainingToday: number } | null> {
+  try {
+    const organizations = await listOrganizations();
+    const waba = organizations.find((o) => o.whatsappBusinessAccountId)?.whatsappBusinessAccountId;
+    if (!waba) return null;
+
+    const standing = await readAccountStanding(waba);
+    const limit = standing?.dailyCustomerLimit ?? null;
+    // No limit reported means an unlimited tier. Nothing to warn about.
+    if (limit === null) return null;
+
+    const usedToday = await dailyReachUsed();
+    const remainingToday = Math.max(0, limit - usedToday);
+    if (audienceSize <= remainingToday) return null;
+
+    return { tier: standing?.tier ?? null, limit, usedToday, remainingToday };
+  } catch {
+    // Meta unreachable, or the count failed. The campaign is not blocked by our
+    // inability to describe a ceiling — it was never being enforced here.
+    return null;
+  }
 }
