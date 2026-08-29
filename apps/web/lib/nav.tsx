@@ -125,6 +125,19 @@ export const NAV: NavItem[] = [
     staffOnly: true,
   },
   {
+    href: "/deck/my-campaigns",
+    label: "My campaigns",
+    // A megaphone, but pointed at a small group: the same act as Broadcasts
+    // and a different audience. Staff-only for the same reason My clients is.
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M4 10v4a1 1 0 0 0 1 1h2.5L14 19V5L7.5 9H5a1 1 0 0 0-1 1Z" />
+        <path d="M17.5 9.5a3.5 3.5 0 0 1 0 5" />
+      </svg>
+    ),
+    staffOnly: true,
+  },
+  {
     href: "/deck/customers",
     label: "Customers",
     // ONE person, where Team is two. The distinction the icons carry is the one

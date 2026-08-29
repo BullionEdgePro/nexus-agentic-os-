@@ -2028,3 +2028,38 @@ export function getAvailableNumbers(): Promise<{
 }> {
   return request("/api/my/channel/available");
 }
+
+export interface MyCampaign {
+  id: string;
+  status: string;
+  createdAt: string;
+  templateName: string | null;
+  sent: number;
+  failed: number;
+  total: number;
+}
+
+export interface MyCampaignsView {
+  campaigns: MyCampaign[];
+  canBroadcast: boolean;
+  allowance: { used: number; cap: number; remaining: number };
+  sendsFrom: string;
+  audience: Array<{ displayName: string | null; waId: string }>;
+  templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;
+}
+
+export function getMyCampaigns(): Promise<MyCampaignsView> {
+  return request("/api/my/campaigns");
+}
+
+export function sendMyCampaign(templateId: string): Promise<{ broadcastId: string; enqueued: number }> {
+  return request("/api/my/campaigns", { method: "POST", body: JSON.stringify({ templateId }) });
+}
+
+export function claimMyNumber(phoneNumberId: string): Promise<{ ok: true }> {
+  return request("/api/my/channel/claim", { method: "POST", body: JSON.stringify({ phoneNumberId }) });
+}
+
+export function releaseMyNumber(): Promise<{ ok: true }> {
+  return request("/api/my/channel/release", { method: "POST" });
+}

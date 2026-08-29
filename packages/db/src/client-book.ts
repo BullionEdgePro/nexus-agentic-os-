@@ -334,3 +334,185 @@ export async function broadcastAllowanceRemaining(
   const used = Number(rows[0]?.used ?? 0);
   return { used, cap: monthlyCap, remaining: Math.max(0, monthlyCap - used) };
 }
+
+/**
+ * Record that a number on the business account is this person's.
+ *
+ * ============================================================
+ * ONE NUMBER, ONE OWNER
+ * ============================================================
+ *
+ * Two staff members claiming the same phone_number_id would each believe their
+ * messages were private while both sent from the same line, and inbound routing
+ * -- which keys on exactly this column -- would have two answers to a question
+ * that must have one. So this refuses when the number is already spoken for,
+ * rather than taking it.
+ *
+ * The claim is only ever recorded AFTER the number has been found on the
+ * business account at Meta. This function does not check that; its caller does,
+ * because the check is a network call and this is a transaction.
+ */
+export async function claimPhoneNumber(input: {
+  organizationId: string;
+  employeeId: string;
+  phoneNumberId: string;
+  displayNumber: string;
+  verifiedName: string;
+  qualityRating: string | null;
+}): Promise<{ ok: true } | { ok: false; heldBy: string }> {
+  const pool = getPool();
+
+  const taken = await pool.query<{ full_name: string }>(
+    `select full_name from employees
+      where whatsapp_phone_number_id = $1 and id <> $2 and is_active`,
+    [input.phoneNumberId, input.employeeId]
+  );
+  if (taken.rows[0]) return { ok: false, heldBy: taken.rows[0].full_name };
+
+  await pool.query(
+    `update employees
+        set whatsapp_phone_number_id = $2,
+            whatsapp_number = $3,
+            whatsapp_verified_name = $4,
+            whatsapp_quality_rating = $5,
+            whatsapp_connected_at = now()
+      where id = $1 and organization_id = $6`,
+    [
+      input.employeeId,
+      input.phoneNumberId,
+      input.displayNumber.replace(/\D/g, ""),
+      input.verifiedName,
+      input.qualityRating,
+      input.organizationId,
+    ]
+  );
+  return { ok: true };
+}
+
+/**
+ * Give a number back.
+ *
+ * Leaves `whatsapp_number` alone: that is how colleagues reach the person, and
+ * it was on file long before any of this. Only the API binding is released.
+ */
+export async function releasePhoneNumber(
+  organizationId: string,
+  employeeId: string
+): Promise<void> {
+  await getPool().query(
+    `update employees
+        set whatsapp_phone_number_id = null,
+            whatsapp_verified_name = null,
+            whatsapp_quality_rating = null,
+            whatsapp_connected_at = null
+      where id = $1 and organization_id = $2`,
+    [employeeId, organizationId]
+  );
+}
+
+/**
+ * A campaign a staff member owns, to their own book.
+ *
+ * Separate from `createBroadcast` rather than a flag on it, because the two
+ * differ in the thing that matters: whose audience it is. A business campaign
+ * resolves its audience from a filter over every contact the business serves; a
+ * staff campaign can only ever reach rows this person owns, and that is a
+ * property of the function rather than of the arguments passed to it.
+ *
+ * `from_phone_number_id` is stamped now and never recomputed. Asked later, "what
+ * did this go out from" must not change because somebody was reassigned.
+ */
+export async function createStaffBroadcast(input: {
+  organizationId: string;
+  employeeId: string;
+  templateId: string;
+  fromPhoneNumberId: string;
+}): Promise<{ id: string }> {
+  const { rows } = await getPool().query<{ id: string }>(
+    `insert into broadcasts
+       (organization_id, template_id, audience_filter, status, employee_id, from_phone_number_id)
+     values ($1, $2, '{"scope":"my-clients"}'::jsonb, 'draft', $3, $4)
+     returning id`,
+    [input.organizationId, input.templateId, input.employeeId, input.fromPhoneNumberId]
+  );
+  return { id: rows[0].id };
+}
+
+/**
+ * Who a staff campaign would actually reach.
+ *
+ * ============================================================
+ * THREE REASONS SOMEBODY IS NOT IN HERE
+ * ============================================================
+ *
+ * Owned by this person, served by this business, and not opted out. The last is
+ * not a nicety: `reengagement_opted_out` is set when somebody has asked to be
+ * left alone, and a client book is exactly where that request is easiest to
+ * forget — these are people the sender knows, so the sender feels entitled.
+ *
+ * Contacts who have never written in ARE included. They were added by hand,
+ * which is the whole point of the book, and a template message is the only
+ * thing that may be sent to them anyway.
+ */
+export async function myClientsForBroadcast(
+  organizationId: string,
+  employeeId: string
+): Promise<Array<{ id: string; waId: string; displayName: string | null }>> {
+  const { rows } = await getPool().query<{ id: string; wa_id: string; display_name: string | null }>(
+    `select ct.id, ct.wa_id, ct.display_name
+       from contacts ct
+      where ${contactServedBy("$1")}
+        and ${contactOwnedBy("$2")}
+        and ct.reengagement_opted_out = false
+      order by ct.display_name nulls last`,
+    [organizationId, employeeId]
+  );
+  return rows.map((row) => ({ id: row.id, waId: row.wa_id, displayName: row.display_name }));
+}
+
+/** Every campaign this person has run, newest first. */
+export async function listMyBroadcasts(
+  employeeId: string
+): Promise<
+  Array<{
+    id: string;
+    status: string;
+    createdAt: string;
+    templateName: string | null;
+    sent: number;
+    failed: number;
+    total: number;
+  }>
+> {
+  const { rows } = await getPool().query<{
+    id: string;
+    status: string;
+    created_at: string;
+    template_name: string | null;
+    sent: string;
+    failed: string;
+    total: string;
+  }>(
+    `select b.id, b.status, b.created_at, t.meta_template_name as template_name,
+            count(r.id) filter (where r.status in ('sent', 'delivered')) as sent,
+            count(r.id) filter (where r.status = 'failed') as failed,
+            count(r.id) as total
+       from broadcasts b
+       left join message_templates t on t.id = b.template_id
+       left join broadcast_recipients r on r.broadcast_id = b.id
+      where b.employee_id = $1
+      group by b.id, t.meta_template_name
+      order by b.created_at desc
+      limit 50`,
+    [employeeId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    createdAt: row.created_at,
+    templateName: row.template_name,
+    sent: Number(row.sent),
+    failed: Number(row.failed),
+    total: Number(row.total),
+  }));
+}

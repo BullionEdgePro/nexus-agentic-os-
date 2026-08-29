@@ -32,7 +32,7 @@ import { logger } from "../lib/logger.js";
  */
 export const myDeskRoute = new Hono();
 
-type Desk = { organizationId: string; employeeId: string };
+export type Desk = { organizationId: string; employeeId: string };
 
 function scopeOf(c: { get: (k: string) => unknown }): SessionScope {
   return (c.get("scope") as SessionScope | undefined) ?? { sub: "unknown", role: "employee" };
@@ -46,7 +46,7 @@ function scopeOf(c: { get: (k: string) => unknown }): SessionScope {
  * narrows the business, not the person — so it lands here too, which is why the
  * message names that case rather than saying something unhelpful about roles.
  */
-function deskOf(c: { get: (k: string) => unknown }): Desk | { error: string } {
+export function deskOf(c: { get: (k: string) => unknown }): Desk | { error: string } {
   const scope = scopeOf(c);
   if (scope.role !== "employee" || !scope.employeeId || !scope.organizationId) {
     return {
@@ -73,7 +73,7 @@ function normaliseWaId(raw: unknown): string | null {
   return digits;
 }
 
-function text(value: unknown, max: number): string | null {
+export function text(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, max) : null;

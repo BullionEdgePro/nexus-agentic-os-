@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useInboxStore, BUSINESS_OPTIONS } from "@/lib/store";
+import { useInboxStore } from "@/lib/store";
+import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
@@ -10,6 +11,20 @@ import "./inbox.css";
 
 export default function InboxPage() {
   useInboxSocket();
+
+  // WHOSE BUSINESSES THESE ARE.
+  //
+  // This column was built from a hardcoded list of every business on the
+  // platform, so a staff member assigned to one of them saw all five and could
+  // click any of them. The API refused four -- the scoping was never the
+  // problem -- but a column of names somebody cannot open is the same mistake
+  // the rail already fixed: it teaches that the product is broken rather than
+  // that the screen is not theirs, and it hands a staff member the client list
+  // of four businesses they have nothing to do with, by name.
+  //
+  // The hook fails closed: if it cannot establish who is asking, it shows
+  // nothing rather than everything.
+  const { businesses, known } = useVisibleBusinesses();
 
   const selectedOrg = useInboxStore((s) => s.selectedOrg);
   const setSelectedOrg = useInboxStore((s) => s.setSelectedOrg);
@@ -23,6 +38,20 @@ export default function InboxPage() {
   const loadConversations = useInboxStore((s) => s.loadConversations);
   const loadError = useInboxStore((s) => s.loadError);
   const sendError = useInboxStore((s) => s.sendError);
+
+  // A SELECTION THAT SURVIVED THE NARROWING.
+  //
+  // The chosen business is remembered across visits and defaults to the first
+  // in the old hardcoded list. A staff member at a different business would
+  // therefore land on somebody else's tab, ask for its conversations, and get a
+  // 403 rendered as "could not load" -- a permissions boundary working exactly
+  // as designed and reading as a broken screen.
+  useEffect(() => {
+    if (!known || businesses.length === 0) return;
+    if (businesses.some((option) => option.slug === selectedOrg)) return;
+    setSelectedOrg(businesses[0].slug);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [known, businesses, selectedOrg]);
 
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -59,7 +88,7 @@ export default function InboxPage() {
     // The business first: setSelectedOrg clears the selected conversation and
     // the loaded list, so choosing a conversation before it would be undone
     // half a line later.
-    if (business && BUSINESS_OPTIONS.some((option) => option.slug === business)) {
+    if (business && businesses.some((option) => option.slug === business)) {
       if (business !== selectedOrg) setSelectedOrg(business as typeof selectedOrg);
     }
     if (conversation) selectConversation(conversation);
@@ -90,17 +119,22 @@ export default function InboxPage() {
       <aside className="ibx-col ibx-biz">
         <h2 className="ibx-head">Businesses</h2>
         <ul className="ibx-list">
-          {BUSINESS_OPTIONS.map((option) => (
-            <li key={option.slug}>
-              <button
-                onClick={() => setSelectedOrg(option.slug)}
-                className={`ibx-biz-btn${selectedOrg === option.slug ? " on" : ""}`}
-                aria-current={selectedOrg === option.slug ? "true" : undefined}
-              >
-                {option.label}
-              </button>
-            </li>
-          ))}
+          {/* Nothing at all until the role is known. Rendering the full list
+              first and narrowing it a moment later would show every business's
+              name to a staff member for exactly as long as it takes to read. */}
+          {known
+            ? businesses.map((option) => (
+                <li key={option.slug}>
+                  <button
+                    onClick={() => setSelectedOrg(option.slug)}
+                    className={`ibx-biz-btn${selectedOrg === option.slug ? " on" : ""}`}
+                    aria-current={selectedOrg === option.slug ? "true" : undefined}
+                  >
+                    {option.name}
+                  </button>
+                </li>
+              ))
+            : null}
         </ul>
       </aside>
 

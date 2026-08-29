@@ -60,6 +60,9 @@ const TAB_API = {
   // Broadcasts from staff -- a door that answers "not yours" is worse than no
   // door.
   "/deck/my-clients": "/api/my/clients",
+  // Campaigns to a staff member's own book. Staff-only like the book itself:
+  // the audience is "contacts owned by me", which for an operator is nobody.
+  "/deck/my-campaigns": "/api/my/campaigns",
   // Customers. Addressed per organization deliberately rather than through a
   // bare /api/contacts scoped in the handler: every row is a real person, so
   // the :slug puts requireTenantScope in front of the read rather than
