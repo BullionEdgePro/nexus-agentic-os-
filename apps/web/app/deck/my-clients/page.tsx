@@ -10,6 +10,7 @@ import {
   type MyChannel,
   type MyClient,
 } from "@/lib/api";
+import { MyLinkPanel } from "./my-link";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "./my-clients.css";
@@ -92,6 +93,8 @@ export default function MyClientsPage() {
           the owner can.
         </p>
       </header>
+
+      <MyLinkPanel />
 
       <ChannelPanel channel={channel} />
 

@@ -34,3 +34,4 @@ export * from "./automation-rules.js";
 export * from "./automations.js";
 export * from "./contact-identity.js";
 export * from "./client-book.js";
+export * from "./referrals.js";

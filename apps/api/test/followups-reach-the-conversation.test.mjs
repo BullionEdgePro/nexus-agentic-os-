@@ -222,13 +222,21 @@ test("memory, obligations, appointments and the procedure stay separate notes", 
   // which overrides an instruction the system prompt gives unconditionally.
   // Merged, it would be unclear which warning governs which part.
   //
-  // FIVE NOW, NOT FOUR. The comment above is the invariant; the list below is
+  // SIX NOW, NOT FIVE. The comment above is the invariant; the list below is
   // what currently satisfies it, and pinning the exact array is deliberate —
   // reordering it is a one-character edit whose effect on the reply nobody
-  // would see in a diff.
+  // would see in a diff. This pin has now caught one such edit.
+  //
+  // The referral note is SIXTH, after the escalation note and before the
+  // procedure, and the order carries an argument. A referral names one specific
+  // colleague to hand over to; the escalation note is what says whether anybody
+  // can be handed to at all. Read the other way round, the agent would learn
+  // that Aqib is this customer's colleague and only afterwards that nobody is
+  // reachable — and naming a person who cannot be reached is precisely the
+  // failure describeNobodyToEscalateTo exists to prevent.
   assert.match(
     PROCESSOR,
-    /const notes = \[\s*recalled \? recallNote\(recalled\) : null,\s*owedNote,\s*bookedNote,[\s\S]*?canPromiseAPerson \? null : describeNobodyToEscalateTo\(\),\s*procedure\?\.note \?\? null,\s*\]/
+    /const notes = \[\s*recalled \? recallNote\(recalled\) : null,\s*owedNote,\s*bookedNote,[\s\S]*?canPromiseAPerson \? null : describeNobodyToEscalateTo\(\),[\s\S]*?referrer\?\.note \?\? null,\s*procedure\?\.note \?\? null,\s*\]/
   );
   assert.match(PROCESSOR, /function recallNote\(recalled: string\): string/);
 });

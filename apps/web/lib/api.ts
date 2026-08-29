@@ -2063,3 +2063,15 @@ export function claimMyNumber(phoneNumberId: string): Promise<{ ok: true }> {
 export function releaseMyNumber(): Promise<{ ok: true }> {
   return request("/api/my/channel/release", { method: "POST" });
 }
+
+export interface MyLink {
+  url: string | null;
+  unavailableReason: string | null;
+  handoverPossible: boolean;
+  personalNumber: string | null;
+  performance: { conversations: number; clients: number; firstAt: string | null };
+}
+
+export function getMyLink(): Promise<MyLink> {
+  return request("/api/my/link");
+}

@@ -33,6 +33,7 @@ import {
   wasAccountedFor,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
+import { findEmployeeByCode, attributeConversation } from "@nexus/db";
 import type { PhraseMoment } from "@nexus/shared";
 import {
   routeToEmployeeTwin,
@@ -47,6 +48,9 @@ import {
   upcomingBookingsNote,
   classifyIntent,
   describeNobodyToEscalateTo,
+  findStaffTag,
+  personalHandoffLink,
+  describeReferringColleague,
 } from "@nexus/agents";
 import { resolvePresence, containsDigitalSignature } from "@nexus/employees";
 import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads";
@@ -653,6 +657,14 @@ async function answerOneMessage(
   if (decision.kind === "asked") return; // triage question sent; wait for the answer
   const serving = decision.organization;
 
+  // WHOSE LINK BROUGHT THEM.
+  //
+  // Resolved AFTER the serving business is known and never before: a staff code
+  // is unique per business, so `#via-aqib` means nothing until there is a
+  // business to read it in. Best-effort throughout — a referral that cannot be
+  // resolved must degrade to an ordinary conversation, never to a failed reply.
+  const referrer = await resolveReferrer(serving, conversationId, contactId, text.body);
+
   // Employee Agent Layer. Resolved best-effort on purpose: a tenant that has
   // not onboarded employees resolves to null and takes exactly the original
   // org-level path, and a failure looking employees up must degrade to that
@@ -857,6 +869,11 @@ async function answerOneMessage(
       // hold in mind -- and it overrides an instruction the system prompt gives
       // unconditionally.
       canPromiseAPerson ? null : describeNobodyToEscalateTo(),
+      // Placed after the escalation note so that when there IS nobody to hand
+      // to, the instruction not to promise a person is read first. A referral
+      // names one specific colleague, and naming somebody who cannot be reached
+      // is the exact failure the note above exists to prevent.
+      referrer?.note ?? null,
       procedure?.note ?? null,
     ].filter((note): note is string => note !== null);
 
@@ -1495,6 +1512,104 @@ async function scoreLeadBestEffort(input: {
  * and a lookup failure does the same — the Employee Agent Layer must be
  * incapable of making the pre-existing reply path worse.
  */
+/**
+ * Whose published link this customer arrived through.
+ *
+ * ============================================================
+ * BEST-EFFORT, LOUDLY
+ * ============================================================
+ *
+ * Every failure here degrades to `null`, which is an ordinary unattributed
+ * conversation — exactly what happened before this feature existed. A referral
+ * is worth a great deal and is worth nothing at all compared to answering the
+ * customer, so nothing in this path is allowed to throw into the reply flow.
+ *
+ * What it does NOT do is guess. A tag naming somebody who does not work here,
+ * or who has left, attributes to nobody rather than to the nearest match: a
+ * lead handed to the wrong colleague is worse than a lead handed to no one,
+ * because somebody acts on it.
+ */
+async function resolveReferrer(
+  serving: Organization,
+  conversationId: string,
+  contactId: string,
+  text: string
+): Promise<{ employeeId: string; note: string } | null> {
+  const code = findStaffTag(text);
+  if (!code) return null;
+
+  try {
+    const employee = await findEmployeeByCode(serving.id, code);
+    if (!employee) {
+      // Recorded rather than shrugged at. A published link whose code resolves
+      // to nobody is a link on somebody's Instagram bio quietly wasting every
+      // lead it brings, and the only way anyone finds out is this line.
+      logger.warn(
+        { conversationId, servingSlug: serving.slug, code },
+        "A published staff link names a code no employee at this business has — lead left unattributed"
+      );
+      return null;
+    }
+
+    const attribution = await attributeConversation({
+      conversationId,
+      organizationId: serving.id,
+      employeeId: employee.id,
+      contactId,
+      // Only an ACTIVE colleague takes a client. A link belonging to somebody
+      // who has left still tells us where the lead came from, and must not put
+      // a new customer into the book of a person who is gone.
+      claimContact: employee.isActive,
+    });
+
+    if (attribution.conflictWith) {
+      logger.info(
+        { conversationId, code, heldBy: attribution.conflictWith },
+        "Referred customer is already another colleague's client — conversation attributed, book unchanged"
+      );
+    }
+
+    if (!employee.isActive) {
+      logger.info(
+        { conversationId, code },
+        "Referral link belongs to a former employee — recorded, but no handover offered"
+      );
+      return null;
+    }
+
+    const handoffLink = personalHandoffLink({
+      employeeName: employee.fullName,
+      whatsappNumber: employee.whatsappNumber,
+      businessName: serving.name,
+    });
+
+    logger.info(
+      {
+        conversationId,
+        servingSlug: serving.slug,
+        employeeCode: employee.employeeCode,
+        claimed: attribution.claimed,
+        canHandOff: handoffLink !== null,
+      },
+      "Conversation attributed to the staff member whose link brought it"
+    );
+
+    return {
+      employeeId: employee.id,
+      note: describeReferringColleague({
+        employeeName: employee.fullName,
+        handoffLink,
+      }),
+    };
+  } catch (err) {
+    logger.error(
+      { conversationId, code, err },
+      "Could not attribute a referral — answering as an ordinary conversation"
+    );
+    return null;
+  }
+}
+
 async function resolveAssignedEmployee(conversationId: string): Promise<Employee | null> {
   try {
     const employee = await findEmployeeForConversation(conversationId);

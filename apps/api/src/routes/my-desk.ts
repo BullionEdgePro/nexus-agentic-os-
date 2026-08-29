@@ -9,8 +9,11 @@ import {
   findEmployeeById,
   findOrganizationById,
   withTenant,
+  referralsForEmployee,
+  getDisplayNumbers,
 } from "@nexus/db";
 import { listWabaNumbers } from "../lib/whatsapp-client.js";
+import { buildStaffDeepLink } from "@nexus/agents";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 
@@ -289,4 +292,62 @@ myDeskRoute.get("/channel/available", async (c) => {
       502
     );
   }
+});
+
+/**
+ * The link this person publishes on their own socials.
+ *
+ * ============================================================
+ * WHY IT POINTS AT THE COMPANY NUMBER
+ * ============================================================
+ *
+ * A staff member could paste their own wa.me link into an Instagram bio today
+ * without any of this. What that gives them is a lead nobody else can see: no
+ * record, no answer while they sleep, nothing to hand over when they leave, and
+ * no way for the business to know the post worked.
+ *
+ * This link goes to the company number carrying a tag that names them. The
+ * agent answers the inquiry — which is what that number is for — the lead is
+ * theirs from the first word, and when the customer wants a person they get a
+ * one-tap link to this staff member's own WhatsApp. The handover is a link the
+ * CUSTOMER taps, which is why it needs no API and works today.
+ */
+myDeskRoute.get("/link", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const [employee, organization] = await withTenant(desk.organizationId, async () => [
+    await findEmployeeById(desk.employeeId),
+    await findOrganizationById(desk.organizationId),
+  ]);
+  if (!employee || !organization) return c.json({ error: "Account not found." }, 404);
+
+  // The DIALABLE number, never whatsapp_phone_number_id. That is Meta's
+  // internal id, and a wa.me link built from it looks correct, gets published
+  // on a website, and fails for every customer who taps it.
+  const numbers = await getDisplayNumbers();
+  const companyNumber = numbers.get(organization.id) ?? null;
+
+  const performance = await referralsForEmployee(desk.employeeId);
+
+  return c.json({
+    url: companyNumber
+      ? buildStaffDeepLink({
+          businessSlug: organization.slug,
+          businessName: organization.name,
+          employeeCode: employee.employeeCode,
+          employeeName: employee.fullName,
+          companyNumber,
+        })
+      : null,
+    unavailableReason: companyNumber
+      ? null
+      : "This business has no WhatsApp number a customer could message yet.",
+    // Whether a handover is even possible. Shown rather than assumed: a link
+    // that brings leads to somebody the customer can never be passed to is
+    // half a feature, and the person needs to know which half they have.
+    handoverPossible: Boolean(employee.whatsappNumber),
+    personalNumber: employee.whatsappNumber ?? null,
+    performance,
+  });
 });

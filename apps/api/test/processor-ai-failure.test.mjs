@@ -34,6 +34,17 @@ mock.module(new URL("../src/services/availability.ts", import.meta.url), {
 
 mock.module("@nexus/db", {
   exports: {
+    // Referral attribution (migration 074). Enumerated like everything else
+    // here: the processor imports these, so omitting them is a module-load
+    // failure rather than a wrong answer.
+    //
+    // No fixture in this file carries a `#via-` tag, so resolveReferrer returns
+    // before either is called. They answer "nobody, nothing changed" so that a
+    // fixture which DOES grow a tag takes the unattributed path rather than
+    // inventing a colleague.
+    findEmployeeByCode: async () => null,
+    attributeConversation: async () => ({ recorded: false, claimed: false, conflictWith: null }),
+
     // Added when delivery receipts landed (migration 048). These mocks stub
     // @nexus/db by ENUMERATION, so an export the processor imports and this
     // object omits is a module-load failure rather than a wrong answer — which
@@ -133,6 +144,14 @@ mock.module("@nexus/db", {
 
 mock.module("@nexus/agents", {
   exports: {
+    // Referral handover. Enumerated like the rest: the processor imports these
+    // three, so an omission is a module-load failure rather than a wrong
+    // answer. No fixture here carries a `#via-` tag, so findStaffTag returning
+    // null is both accurate and the path these tests were written for.
+    findStaffTag: () => null,
+    personalHandoffLink: () => null,
+    describeReferringColleague: () => "",
+
     // The REAL classifier, imported by path so it bypasses this very mock.
     // Stubbing it would have these tests assert against a classification no
     // customer message ever produces, and would hide the case that matters:

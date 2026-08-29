@@ -19,3 +19,4 @@ export * from "./procedure-recall.js";
 // the operator sweep) rather than in this package — it is a nightly job over
 // stored conversations, not part of answering one.
 export * from "./anthropic-text.js";
+export * from "./referral.js";

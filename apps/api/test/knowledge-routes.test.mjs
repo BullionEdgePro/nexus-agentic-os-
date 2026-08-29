@@ -11,6 +11,17 @@ class UnsafeUrlError extends Error {}
 
 mock.module("@nexus/db", {
   exports: {
+    // Referral attribution (migration 074). Enumerated like everything else
+    // here: the processor imports these, so omitting them is a module-load
+    // failure rather than a wrong answer.
+    //
+    // No fixture in this file carries a `#via-` tag, so resolveReferrer returns
+    // before either is called. They answer "nobody, nothing changed" so that a
+    // fixture which DOES grow a tag takes the unattributed path rather than
+    // inventing a colleague.
+    findEmployeeByCode: async () => null,
+    attributeConversation: async () => ({ recorded: false, claimed: false, conflictWith: null }),
+
     // Added when delivery receipts landed (migration 048). These mocks stub
     // @nexus/db by ENUMERATION, so an export the processor imports and this
     // object omits is a module-load failure rather than a wrong answer — which
