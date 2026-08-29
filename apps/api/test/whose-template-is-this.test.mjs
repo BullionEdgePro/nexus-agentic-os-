@@ -104,15 +104,22 @@ test("every provisioned template is attributed to the business that provisions i
   // connected them. The script creates the templates; the shared map decides
   // who may send them. If they disagree, a business is silently refused its own
   // template, or offered somebody else's.
-  for (const [slug, name] of Object.entries(PROVISIONED_TEMPLATE_BY_SLUG)) {
+  // A LIST PER BUSINESS since the first marketing template landed. Iterating
+  // the names rather than assuming one is the whole change here: written the
+  // old way, a second template for a business would have been checked as the
+  // string "a,b" and passed nothing.
+  for (const [slug, names] of Object.entries(PROVISIONED_TEMPLATE_BY_SLUG)) {
     assert.ok(
       PROVISION.includes(`slug: "${slug}"`),
       `${slug} is attributed a template but the provisioning script does not create one for it`
     );
-    assert.ok(
-      PROVISION.includes(`name: "${name}"`),
-      `${slug} is attributed "${name}", which the provisioning script never creates`
-    );
+    assert.ok(Array.isArray(names), `${slug} must map to a list of template names`);
+    for (const name of names) {
+      assert.ok(
+        PROVISION.includes(`name: "${name}"`),
+        `${slug} is attributed "${name}", which the provisioning script never creates`
+      );
+    }
   }
 });
 

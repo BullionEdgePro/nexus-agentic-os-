@@ -38,19 +38,32 @@
  * business's, and unknown — and only the middle one is refused.
  */
 
-/** The template this platform provisions for each business. */
-export const PROVISIONED_TEMPLATE_BY_SLUG: Readonly<Record<string, string>> = Object.freeze({
-  zipicka: "zipicka_order_update",
-  "sfs-international": "sfs_property_update",
-  "juris-prime": "juris_prime_attestation_update",
-  "juris-prime-legal": "juris_prime_legal_update",
-  abr: "abr_matter_update",
-});
+/**
+ * The templates this platform provisions for each business.
+ *
+ * A LIST PER BUSINESS, not one name. It was one name while every business had
+ * exactly one utility template, and the first marketing template made that
+ * false. The shape mattered more than it looked: a template absent from this
+ * map is "unattributed", which is the PERMISSIVE answer -- sendable by every
+ * business on the shared account. So the map growing a second entry for one
+ * business had to be possible, or the second template would have been added to
+ * the provisioning script alone and quietly become everybody's.
+ */
+export const PROVISIONED_TEMPLATE_BY_SLUG: Readonly<Record<string, readonly string[]>> =
+  Object.freeze({
+    zipicka: ["zipicka_order_update", "zipicka_promotions"],
+    "sfs-international": ["sfs_property_update"],
+    "juris-prime": ["juris_prime_attestation_update"],
+    "juris-prime-legal": ["juris_prime_legal_update"],
+    abr: ["abr_matter_update"],
+  });
 
 /** Reverse of the above, built once. */
 const SLUG_BY_TEMPLATE: Readonly<Record<string, string>> = Object.freeze(
   Object.fromEntries(
-    Object.entries(PROVISIONED_TEMPLATE_BY_SLUG).map(([slug, name]) => [name, slug])
+    Object.entries(PROVISIONED_TEMPLATE_BY_SLUG).flatMap(([slug, names]) =>
+      names.map((name) => [name, slug])
+    )
   )
 );
 

@@ -11,6 +11,10 @@ class UnsafeUrlError extends Error {}
 
 mock.module("@nexus/db", {
   exports: {
+    // Opt-out writer. Never reached while looksLikeAnOptOut returns false, but
+    // the import must resolve.
+    optOutOfReengagement: async () => true,
+
     // Referral attribution (migration 074). Enumerated like everything else
     // here: the processor imports these, so omitting them is a module-load
     // failure rather than a wrong answer.

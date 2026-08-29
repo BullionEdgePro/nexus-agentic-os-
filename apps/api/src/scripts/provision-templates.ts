@@ -1,6 +1,7 @@
 import { findOrganizationBySlug } from "@nexus/db";
 import { createMetaTemplate, type TemplateSpec } from "../lib/whatsapp-client.js";
 import { syncTemplatesForOrganization } from "../services/template-sync.js";
+import { OPT_OUT_BUTTON_LABEL } from "@nexus/agents";
 
 /**
  * Creates one message template per business and submits it to Meta for review.
@@ -13,7 +14,7 @@ import { syncTemplatesForOrganization } from "../services/template-sync.js";
  * restricted. Naming the business in the body is a deliverability decision as
  * much as a branding one.
  *
- * All five are UTILITY rather than MARKETING. Utility templates describe an
+ * THE FIRST FIVE are UTILITY rather than MARKETING. Utility templates describe an
  * existing relationship — a request the customer made, a matter already open —
  * and Meta approves them readily and prices them lower. A marketing template
  * needs explicit opt-in and, on an account still completing verification, is
@@ -22,6 +23,21 @@ import { syncTemplatesForOrganization } from "../services/template-sync.js";
  *
  * Each body carries one placeholder, the customer's name. Meta requires an
  * example value for every placeholder or the submission is rejected outright.
+ *
+ * THE SIXTH IS MARKETING, and is the exception the paragraph above describes.
+ * It exists because staff campaigns had nothing worth sending: the only
+ * templates a Zipicka staff member could pick were an order update and two
+ * generic Klaviyo ones. It carries a "Stop promotions" quick-reply button, and
+ * that button is not decoration — `contacts.reengagement_opted_out` had NO
+ * WRITER until this was built, so every customer on the platform had been
+ * unable to opt out since the column was created in migration 035. A marketing
+ * message nobody can stop is what produces a spam report, and the quality
+ * rating a spam report damages belongs to one number that six businesses share.
+ *
+ * Its wording claims nothing that could stop being true. The store's own site
+ * advertises 20% off and free delivery; neither is in here, because a template
+ * is approved once and sent for months, and the discount in particular is the
+ * claim a previous piece of work was blocked on for not actually existing.
  *
  * Run:  docker exec nexus-api-1 node dist/scripts/provision-templates.js
  * Safe to re-run: a name that already exists comes back as a duplicate error,
@@ -44,6 +60,21 @@ const PROVISIONS: Provision[] = [
         "Hello {{1}}, this is Zipicka. There is an update on your order with us. " +
         "Reply to this message and our team will help you right away.",
       example: ["Ahmed"],
+    },
+  },
+  {
+    slug: "zipicka",
+    spec: {
+      name: "zipicka_promotions",
+      language: "en",
+      category: "MARKETING",
+      body:
+        "Hello {{1}}, this is Zipicka. We stock beauty, pet care, home essentials and " +
+        "electronics with delivery across the UAE. Reply to this message to see what is " +
+        "available or to ask us anything. If you would rather not hear from us, tap Stop " +
+        "promotions below.",
+      example: ["Ahmed"],
+      buttons: [OPT_OUT_BUTTON_LABEL],
     },
   },
   {

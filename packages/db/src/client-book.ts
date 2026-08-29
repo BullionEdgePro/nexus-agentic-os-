@@ -516,3 +516,36 @@ export async function listMyBroadcasts(
     total: Number(row.total),
   }));
 }
+
+/**
+ * Record that somebody has asked not to be messaged.
+ *
+ * ============================================================
+ * WHY THIS IS NOT PER-BUSINESS
+ * ============================================================
+ *
+ * `reengagement_opted_out` sits on the contact, and a contact is one row shared
+ * by every business answering on the number. So opting out of Zipicka's
+ * promotions opts the person out of all six.
+ *
+ * That looks like a limitation and is in fact the honest reading. The customer
+ * sees ONE WhatsApp number. They did not know they were talking to six
+ * companies, they cannot tell which one sent the message they are objecting to,
+ * and "stop" from somebody who believes they are talking to one business means
+ * stop. Splitting it per business would keep messaging a person who has already
+ * said no, from what they experience as the same sender.
+ *
+ * Written under the contact's OWNING tenant — the number's owner — because that
+ * is the only scope in which the contacts policy's WITH CHECK passes.
+ */
+export async function optOutOfReengagement(contactId: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update contacts
+        set reengagement_opted_out = true, updated_at = now()
+      where id = $1 and reengagement_opted_out = false`,
+    [contactId]
+  );
+  // False means already opted out, not a failure. The caller still confirms to
+  // the customer: somebody who says stop twice deserves an answer both times.
+  return (rowCount ?? 0) > 0;
+}

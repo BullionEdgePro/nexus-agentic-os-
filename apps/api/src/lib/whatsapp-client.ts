@@ -177,6 +177,16 @@ export interface TemplateSpec {
   body: string;
   /** One sample value per placeholder — Meta rejects a parameterised template without them. */
   example: string[];
+  /**
+   * Quick-reply buttons, by label.
+   *
+   * Added for one reason: a MARKETING template needs a way to stop it. Meta's
+   * policy expects marketing messages to honour opt-out, and on this
+   * deployment the quality rating a spam report damages belongs to ONE number
+   * that six businesses answer on. A button sends its own label back as an
+   * ordinary inbound message, which is what `looksLikeAnOptOut` matches.
+   */
+  buttons?: string[];
 }
 
 export interface CreateTemplateResult {
@@ -209,6 +219,18 @@ export async function createMetaTemplate(
             text: spec.body,
             ...(spec.example.length ? { example: { body_text: [spec.example] } } : {}),
           },
+          // Omitted entirely when there are none. An empty BUTTONS component is
+          // a validation error at Meta rather than a no-op, so the five utility
+          // templates already on the account must keep submitting exactly what
+          // they submitted before.
+          ...(spec.buttons?.length
+            ? [
+                {
+                  type: "BUTTONS",
+                  buttons: spec.buttons.map((text) => ({ type: "QUICK_REPLY", text })),
+                },
+              ]
+            : []),
         ],
       }),
     }

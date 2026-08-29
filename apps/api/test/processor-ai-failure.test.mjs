@@ -34,6 +34,10 @@ mock.module(new URL("../src/services/availability.ts", import.meta.url), {
 
 mock.module("@nexus/db", {
   exports: {
+    // Opt-out writer. Never reached while looksLikeAnOptOut returns false, but
+    // the import must resolve.
+    optOutOfReengagement: async () => true,
+
     // Referral attribution (migration 074). Enumerated like everything else
     // here: the processor imports these, so omitting them is a module-load
     // failure rather than a wrong answer.
@@ -144,6 +148,13 @@ mock.module("@nexus/db", {
 
 mock.module("@nexus/agents", {
   exports: {
+    // Opt-out. Enumerated like the rest: the processor imports these, so an
+    // omission is a module-load failure rather than a wrong answer. No fixture
+    // in these files sends "stop", so returning false is both accurate and the
+    // path they were written for.
+    looksLikeAnOptOut: () => false,
+    optOutConfirmation: () => "",
+
     // Referral handover. Enumerated like the rest: the processor imports these
     // three, so an omission is a module-load failure rather than a wrong
     // answer. No fixture here carries a `#via-` tag, so findStaffTag returning

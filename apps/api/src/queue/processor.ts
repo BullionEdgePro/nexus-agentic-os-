@@ -33,7 +33,7 @@ import {
   wasAccountedFor,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
-import { findEmployeeByCode, attributeConversation } from "@nexus/db";
+import { findEmployeeByCode, attributeConversation, optOutOfReengagement } from "@nexus/db";
 import type { PhraseMoment } from "@nexus/shared";
 import {
   routeToEmployeeTwin,
@@ -48,6 +48,8 @@ import {
   upcomingBookingsNote,
   classifyIntent,
   describeNobodyToEscalateTo,
+  looksLikeAnOptOut,
+  optOutConfirmation,
   findStaffTag,
   personalHandoffLink,
   describeReferringColleague,
@@ -642,6 +644,53 @@ async function answerOneMessage(
   // immediately and costs one indexed query; on a shared number it decides
   // which business the enquiry is for, or asks.
   //
+  // SOMEBODY ASKING TO BE LEFT ALONE, HONOURED BEFORE ANYTHING ELSE.
+  //
+  // Placed here — after the message is recorded, before routing, retrieval,
+  // the model and governance — because an opt-out has to work on the day all
+  // of those are broken. That is precisely the day a frustrated customer sends
+  // one. Every step below this line can fail without the request being lost.
+  //
+  // It also returns immediately rather than opting out AND answering. Somebody
+  // who has just asked to stop hearing from us does not want a follow-up
+  // question, and an agent reply would be one.
+  if (looksLikeAnOptOut(text.body)) {
+    try {
+      const changed = await optOutOfReengagement(contactId);
+      logger.info(
+        { conversationId, contactId, alreadyOptedOut: !changed },
+        "Customer opted out of promotional messages"
+      );
+    } catch (err) {
+      // Confirming an opt-out that did not save would be a lie, and a
+      // particularly bad one. Say nothing, record it loudly, and let the
+      // customer's next attempt try again.
+      logger.error({ conversationId, contactId, err }, "Could not record an opt-out — NOT confirmed");
+      // Counted, because this is a customer message that got no answer. Without
+      // a row it is a person who asked to be left alone, was not, and left no
+      // trace of having asked — which is the exact shape of the defect the
+      // silent-return gate exists to catch, and the gate caught this one.
+      await recordMetricBestEffort({
+        organizationId: organization.id,
+        conversationId,
+        resolvedBy: "human_agent" as const,
+        inputTokens: 0,
+        outputTokens: 0,
+        replyOutcome: "none" as const,
+      });
+      return;
+    }
+
+    await sendWhatsAppText(phoneNumberId, message.from, optOutConfirmation(organization.name))
+      .catch((err) =>
+        // The flag is already set, which is the part that matters. A failed
+        // confirmation leaves somebody unsure, not somebody still being
+        // messaged.
+        logger.error({ conversationId, err }, "Opt-out recorded but the confirmation did not send")
+      );
+    return;
+  }
+
   // Deliberately placed before the agent is loaded and before governance is
   // evaluated, because the routed tenant selects BOTH — answering first and
   // attributing afterwards would mean the number owner's policy had already

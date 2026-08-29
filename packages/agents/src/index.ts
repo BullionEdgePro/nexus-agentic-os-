@@ -20,3 +20,4 @@ export * from "./procedure-recall.js";
 // stored conversations, not part of answering one.
 export * from "./anthropic-text.js";
 export * from "./referral.js";
+export * from "./opt-out.js";
