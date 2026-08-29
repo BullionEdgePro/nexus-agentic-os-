@@ -2124,15 +2124,68 @@ export function getMyDay(): Promise<MyDay> {
   return request("/api/my/day");
 }
 
+export interface AssistantFile {
+  name: string;
+  mediaType: string;
+  /** base64 without the data: prefix. */
+  data: string;
+}
+
 export function askAssistant(
   question: string,
-  history: Array<{ role: "user" | "assistant"; text: string }>
+  history: Array<{ role: "user" | "assistant"; text: string }>,
+  attachments: AssistantFile[] = []
 ): Promise<{ answer: string }> {
   return request("/api/assistant", {
     method: "POST",
     // Only the last few turns are sent. The server bounds it too — a history
     // the caller supplies is a history the caller can forge, so it is used for
     // continuity of wording and never for access.
-    body: JSON.stringify({ question, history: history.slice(-6) }),
+    body: JSON.stringify({ question, history: history.slice(-6), attachments }),
   });
+}
+
+/**
+ * A file the browser has read, ready to send.
+ *
+ * Reads as a data URI and splits off the prefix rather than using
+ * `arrayBuffer` and encoding by hand: FileReader is what every browser here
+ * has, and the base64 it produces is the format the API wants.
+ */
+export function readFileForAssistant(file: File): Promise<AssistantFile> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
+    reader.onload = () => {
+      const raw = String(reader.result);
+      const comma = raw.indexOf(",");
+      resolve({
+        name: file.name,
+        // The browser's type, falling back to the extension where it gives
+        // none — an empty type would be refused as unreadable, which is a
+        // confusing answer for an ordinary .txt.
+        mediaType: file.type || guessType(file.name),
+        data: comma === -1 ? raw : raw.slice(comma + 1),
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function guessType(name: string): string {
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  const known: Record<string, string> = {
+    txt: "text/plain",
+    csv: "text/csv",
+    md: "text/markdown",
+    json: "application/json",
+    html: "text/html",
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+  };
+  return known[ext] ?? "application/octet-stream";
 }

@@ -6,7 +6,14 @@ import {
   listMyClients,
   withTenant,
 } from "@nexus/db";
-import { completeText, helpSystemPrompt, helpPrompt, type HelpTurn } from "@nexus/agents";
+import {
+  completeRich,
+  helpSystemPrompt,
+  describeUnsupported,
+  decodedBytes,
+  type HelpTurn,
+  type Attachment,
+} from "@nexus/agents";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 
@@ -42,6 +49,15 @@ export const assistantRoute = new Hono();
 
 /** Questions per person per hour. */
 const HOURLY_LIMIT = 40;
+
+/**
+ * The largest single file, decoded.
+ *
+ * Well under what the model accepts, and chosen for the request rather than for
+ * the model: this arrives as base64 in a JSON body, which is a third larger
+ * again, and a person waiting on a phone connection notices.
+ */
+const MAX_FILE_BYTES = 4_500_000;
 const asked = new Map<string, { count: number; windowStartedAt: number }>();
 
 /**
@@ -102,28 +118,70 @@ assistantRoute.post("/", async (c) => {
 
   const context = await describeCaller(scope);
 
-  const answer = await completeText({
+  // ---- what they attached ------------------------------------------
+  //
+  // Refused HERE, before any model call, for the two reasons a person can act
+  // on: the file is a kind that cannot be read at all, or it is too big. Both
+  // are cheaper and clearer to answer without a round trip, and a refusal that
+  // arrives after a ten-second wait reads as a failure rather than an answer.
+  const attachments: Attachment[] = [];
+  const rawFiles = Array.isArray(body.attachments) ? body.attachments.slice(0, 4) : [];
+
+  for (const raw of rawFiles) {
+    const name = typeof raw?.name === "string" ? raw.name.slice(0, 120) : "that file";
+    const mediaType = typeof raw?.mediaType === "string" ? raw.mediaType : "";
+    const data = typeof raw?.data === "string" ? raw.data : "";
+    if (!data) continue;
+
+    const unsupported = describeUnsupported(mediaType, name);
+    if (unsupported) return c.json({ error: unsupported }, 415);
+
+    if (decodedBytes(data) > MAX_FILE_BYTES) {
+      return c.json(
+        {
+          error: `${name} is larger than ${Math.round(MAX_FILE_BYTES / 1_000_000)} MB, which is more than I can take in one go. A screenshot of the part you are asking about is usually enough.`,
+        },
+        413
+      );
+    }
+
+    attachments.push({ name, mediaType, data });
+  }
+
+  const result = await completeRich({
     system: helpSystemPrompt(context),
-    prompt: helpPrompt(history, question),
-    maxTokens: 420,
+    history,
+    question,
+    attachments,
+    maxTokens: 1400,
   });
 
-  if (!answer) {
-    // completeText returns null when there is no key or the call failed. Saying
-    // so is better than an empty bubble, and much better than a cheerful
-    // fallback that looks like an answer.
-    logger.warn({ sub: scope.sub }, "Help assistant could not reach the model");
+  if (!result.ok) {
+    // Each reason gets its own sentence. "Something went wrong" for a file that
+    // is simply a scan sends somebody looking for a fault that does not exist.
+    logger.warn({ sub: scope.sub, reason: result.reason }, "Assistant could not answer");
+
+    if (result.reason === "unreadable-file") return c.json({ error: result.detail }, 415);
+    if (result.reason === "too-large") {
+      return c.json(
+        { error: "That was too much to send at once. Try one file, or a smaller one." },
+        413
+      );
+    }
     return c.json(
       {
         error:
-          "I could not reach the assistant just now. Nothing is wrong with your account — try again in a moment, or ask the owner.",
+          "I could not reach the assistant just now. Nothing is wrong with your account — try again in a moment.",
       },
       502
     );
   }
 
-  logger.info({ sub: scope.sub, role: scope.role, chars: question.length }, "Help assistant answered");
-  return c.json({ answer });
+  logger.info(
+    { sub: scope.sub, role: scope.role, chars: question.length, files: attachments.length },
+    "Assistant answered"
+  );
+  return c.json({ answer: result.text });
 });
 
 /**

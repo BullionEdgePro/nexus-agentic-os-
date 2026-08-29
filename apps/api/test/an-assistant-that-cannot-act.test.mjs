@@ -62,8 +62,14 @@ test("refusing to invent is the first rule, not the last", () => {
   // the one the model trades away first.
   const prompt = helpSystemPrompt({ role: "employee", fullName: null, businessName: null, facts: [] });
   const refuse = prompt.indexOf("NEVER invent");
-  const brevity = prompt.indexOf("Keep it short");
-  assert.ok(refuse > -1 && brevity > refuse, "the instruction not to invent has slipped below tone");
+  assert.ok(refuse > -1, "the instruction not to invent is gone");
+
+  // Matched on the INSTRUCTION, not its wording. The first version looked for
+  // "Keep it short", which became "Keep it tight" when the prompt grew a second
+  // mode — a test failing on a synonym while the rule it guards is intact.
+  const brevity = prompt.search(/Keep it (short|tight|brief)/);
+  assert.ok(brevity > -1, "the brevity instruction is gone");
+  assert.ok(brevity > refuse, "the instruction not to invent has slipped below tone");
 });
 
 test("the facts describe what does NOT exist, not only what does", () => {
@@ -129,12 +135,55 @@ test("there is a ceiling on questions per person", () => {
   assert.match(ROUTE, /429/);
 });
 
-test("an unreachable model says so instead of inventing a fallback", () => {
-  // completeText returns null on failure. A cheerful canned reply would look
-  // exactly like an answer.
-  assert.match(ROUTE, /if \(!answer\)/);
+test("each way of failing gets its own sentence", () => {
+  // A cheerful canned reply would look exactly like an answer. And "something
+  // went wrong" for a file that is merely a scan sends somebody hunting for a
+  // fault that does not exist — so the reasons are distinguished rather than
+  // collapsed.
+  assert.match(ROUTE, /if \(!result\.ok\)/);
   assert.match(ROUTE, /could not reach the assistant/);
   assert.match(ROUTE, /502/);
+  assert.match(ROUTE, /unreadable-file/);
+  assert.match(ROUTE, /415/);
+  assert.match(ROUTE, /413/);
+});
+
+test("a file that cannot be read is refused before the model call", () => {
+  // Cheaper, and a refusal arriving after a ten-second wait reads as a failure
+  // rather than as an answer.
+  const before = ROUTE.indexOf("describeUnsupported(mediaType, name)");
+  const call = ROUTE.indexOf("await completeRich");
+  assert.ok(before > -1 && call > before, "unsupported files are checked after the model call");
+});
+
+test("video and audio are refused by name, with what does work", () => {
+  // The two people actually try. Accepting the upload and answering vaguely
+  // about the filename is worse than refusing.
+  const RICH = read("packages", "agents", "src", "rich-completion.ts");
+  assert.match(RICH, /cannot watch video/);
+  assert.match(RICH, /screenshot/);
+  assert.match(RICH, /cannot listen to audio/);
+  assert.match(RICH, /transcript/);
+});
+
+test("a scanned PDF is called a scan, not an empty document", () => {
+  // An extractor returns "" and the assistant then confidently discusses a
+  // blank page. Half the PDFs anybody attaches are scans.
+  const PDF = read("packages", "agents", "src", "pdf-text.ts");
+  assert.match(PDF, /reason: "scanned"/);
+  assert.match(RICH_OR(ROUTE), /is a scan/);
+});
+
+/** The scan wording lives in rich-completion; read it where it is. */
+function RICH_OR(_fallback) {
+  return read("packages", "agents", "src", "rich-completion.ts");
+}
+
+test("attachments are not re-sent with every later question", () => {
+  // Otherwise a long conversation costs the size of its largest file, again,
+  // on every turn.
+  const PANEL_SRC = read("apps", "web", "app", "assistant.tsx");
+  assert.match(PANEL_SRC, /turns\.map\(\(\{ role, text \}\) => \(\{ role, text \}\)\)/);
 });
 
 test("the panel keeps the question on screen when an answer fails", () => {
@@ -166,7 +215,7 @@ test("the disclaimer survives a long conversation", () => {
   assert.match(head, /cannot change anything/);
 });
 
-test("the openers are questions, not commands", () => {
+test("the platform openers are questions, not commands", () => {
   // "Add a client for me" invites the answer it cannot give.
   // Anchored on the ARRAY, not on the first occurrence of the phrase. That
   // phrase appears first in this component's own doc comment, which quotes
@@ -174,9 +223,21 @@ test("the openers are questions, not commands", () => {
   // arguing for the rule and failed on the thing it was arguing against. Third
   // time a doc comment has caught one of these; anchor on markup.
   const openers = PANEL.slice(PANEL.indexOf("{["), PANEL.indexOf("].map"));
-  for (const line of openers.split("\n").filter((l) => l.includes('"'))) {
-    assert.ok(/\?"/.test(line), `opener is not a question: ${line.trim()}`);
-  }
+  // At most ONE may be an instruction. The openers about Nexus must be
+  // questions — "Add a client for me" invites the one answer it cannot give —
+  // while the general-work opener is deliberately a command, because that half
+  // genuinely does act.
+  //
+  // Counted rather than matched line by line: the first version tried to tell
+  // the two kinds apart by keyword and misfiled the very opener it had been
+  // rewritten to allow.
+  const lines = openers.split("\n").filter((l) => l.includes('"'));
+  assert.ok(lines.length >= 5, `expected several openers, found ${lines.length}`);
+  const commands = lines.filter((l) => !/\?"/.test(l));
+  assert.ok(
+    commands.length <= 1,
+    `openers should be questions apart from the one demonstrating real work:\n${commands.join("\n")}`
+  );
 });
 
 // ============================================================

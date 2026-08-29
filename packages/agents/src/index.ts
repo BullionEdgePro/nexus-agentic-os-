@@ -22,3 +22,5 @@ export * from "./anthropic-text.js";
 export * from "./referral.js";
 export * from "./opt-out.js";
 export * from "./console-help.js";
+export * from "./rich-completion.js";
+export * from "./pdf-text.js";
