@@ -77,11 +77,32 @@ export function MyLinkPanel() {
               and nothing reads your messages. It is offered once per conversation, not in every
               message, so it reads as an introduction rather than a brush-off.
             </p>
+          ) : null}
+
+          {/* CHECK IT YOURSELF, BECAUSE NOTHING ELSE CAN.
+              A number is typed by a person and stored as typed. It is well
+              formed or it is refused, but well formed is not the same as
+              yours -- one wrong digit is a valid number belonging to a
+              stranger, and the way anybody would find out is a customer
+              arriving in somebody else's chat. Tapping this opens WhatsApp on
+              whatever was saved, so a mistake surfaces in one second rather
+              than in a complaint. */}
+          {link.handoverPossible ? (
+            <p className="lnk-note">
+              <a
+                href={`https://wa.me/${link.personalNumber}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Check this opens a chat with you
+              </a>{" "}
+              — one wrong digit is still a valid number, belonging to somebody else.
+            </p>
           ) : (
             <p className="lnk-warn">
-              You have no WhatsApp number on file, so a customer who asks for you cannot be handed
-              over — the assistant will help them itself instead. Ask the owner to add your number
-              to your staff record.
+              You have no WhatsApp number on file, so customers who come through your link cannot be
+              handed to you — the assistant will help them itself instead. Add it yourself: open the
+              account menu at the top right and set your WhatsApp number. Nothing else is needed.
             </p>
           )}
 
