@@ -516,6 +516,32 @@ async function main() {
         const after = await operator.run(org.id, sweep);
         const fresh = after.filter((finding) => !known.has(finding.fingerprint));
 
+        // ALREADY STANDING IS NOT THE SAME AS NOT FIRING, and reporting the
+        // first as the second is a false alarm about an alarm — which is how a
+        // gate stops being read.
+        //
+        // Several operators emit ONE finding under a fixed fingerprint. When
+        // the condition they watch for is genuinely true right now, that
+        // fingerprint is in the baseline, the seeded copy adds no NEW
+        // fingerprint, and this read as "no finding was produced at all". It
+        // happened the day a marketing template was submitted and sat PENDING:
+        // template-rejected was firing correctly for all five businesses and
+        // was reported as broken.
+        //
+        // An operator that produced findings, all of them pre-existing, has
+        // demonstrated it fires — that is stronger evidence than a seeded one,
+        // because the condition is real. Said out loud rather than passed
+        // quietly, so nobody reads it as a clean test.
+        if (fresh.length === 0 && after.length > 0) {
+          report(
+            true,
+            testCase.slug,
+            `already standing for a real condition (${after.length}) — the alarm fires, ` +
+              `so a seeded copy cannot be told apart from it`
+          );
+          throw new RolledBack();
+        }
+
         const problem = malformed(fresh[0]) ?? testCase.expect?.(fresh[0]) ?? null;
         report(
           problem === null,
