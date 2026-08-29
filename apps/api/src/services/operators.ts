@@ -1,6 +1,7 @@
 import {
   getPool,
   listOrganizations,
+  findOrganizationById,
   reconcileFindings,
   listJobHeartbeats,
   countKnowledgeSourcesAcrossPlatform,
@@ -22,6 +23,7 @@ import {
   JOB_STALE_AFTER_SECONDS,
   type ScheduledJob,
 } from "@nexus/shared";
+import { readAccountStanding, type AccountStanding } from "../lib/whatsapp-client.js";
 import { logger } from "../lib/logger.js";
 import { runAutomations } from "./automation-runner.js";
 import { dispatchRaisedFindings } from "./alert-dispatch.js";
@@ -100,6 +102,18 @@ import { dispatchRaisedFindings } from "./alert-dispatch.js";
 export interface SweepContext {
   /** Every active employee's WhatsApp number, across all businesses. */
   staffNumbers: Set<string>;
+  /**
+   * How Meta rates the shared number, read ONCE for the whole sweep.
+   *
+   * Not per business, deliberately. Every business here answers on the same
+   * number, so asking Meta five times would be four network calls to learn the
+   * same fact — and it would change what an operator IS. The rest are plain SQL
+   * against an open transaction, cheap enough to run every ten minutes without
+   * anybody thinking about it, and a per-business HTTP call quietly gives that
+   * up. Fetched by the sweep, shared by everyone, `null` when Meta could not be
+   * reached.
+   */
+  numberStanding: AccountStanding | null;
 }
 
 export interface Operator {
@@ -1346,6 +1360,107 @@ const bookingUnassigned: Operator = {
   },
 };
 
+/**
+ * The shared number's standing, read once per sweep.
+ *
+ * Every business here answers on one WhatsApp account, so this asks Meta once
+ * and hands the answer to all of them. Failure returns null rather than
+ * throwing: the standing operator stands down on null, and every other operator
+ * still has work to do when Meta is unreachable.
+ */
+async function readSharedNumberStanding(): Promise<AccountStanding | null> {
+  try {
+    const organizations = await listOrganizations();
+    const waba = organizations.find((o) => o.whatsappBusinessAccountId)?.whatsappBusinessAccountId;
+    if (!waba) return null;
+    return await readAccountStanding(waba);
+  } catch (err) {
+    logger.warn({ err }, "Could not read the WhatsApp account's standing — operators continue without it");
+    return null;
+  }
+}
+
+// The standing of the number everything else depends on.
+//
+// ============================================================
+// TWENTY-THREE OPERATORS AND NONE OF THEM LOOKED AT THIS
+// ============================================================
+//
+// Everything else here watches what happens INSIDE the platform: conversations
+// waiting, knowledge going stale, jobs stalling. All of it assumes the messages
+// actually leave. Whether they do is decided by three facts held at Meta, and
+// nothing read any of them.
+//
+//   QUALITY. A number rated YELLOW or RED is throttled by Meta. Replies arrive
+//   late or not at all, which looks exactly like a platform fault and is not
+//   one — and the rating belongs to ONE number six businesses answer on, so a
+//   single business's bulk send degrades everybody's ordinary replies.
+//
+//   THE DAILY CEILING. An unverified business is capped at 250 unique customers
+//   per day, across every business on the number. Nobody would discover that
+//   until a campaign stopped delivering partway through, silently.
+//
+//   VERIFICATION. What sets that ceiling. It is the owner's to fix — legal
+//   documents in Business Manager — and it can sit rejected indefinitely while
+//   everyone assumes the limit is something the platform chose.
+//
+// Raised against every business, like template-rejected, because the fact is
+// true for every business: they share the number.
+const accountStanding: Operator = {
+  slug: "account-standing",
+  title: "The WhatsApp number is not in full standing",
+  description:
+    "Quality rating, daily customer ceiling and business verification, as Meta reports them. These decide whether anything sent actually arrives.",
+  run: async (organizationId, sweep) => {
+
+    const standing = sweep.numberStanding;
+    // Null means the sweep could not reach Meta. STANDS DOWN rather than
+    // reporting a platform defect: an outage at Meta says nothing about this
+    // account, and an alarm that fires on somebody else's outage is one people
+    // learn to ignore.
+    if (!standing) return [];
+
+    const findings = [];
+
+    // Quality first: it is the one that is actively costing delivery today.
+    const quality = (standing.quality ?? "").toUpperCase();
+    if (quality === "RED" || quality === "YELLOW") {
+      findings.push({
+        fingerprint: `number-quality-${quality.toLowerCase()}`,
+        severity: quality === "RED" ? ("urgent" as const) : ("warn" as const),
+        title: `WhatsApp has rated ${standing.displayNumber} ${quality}`,
+        detail:
+          `Meta throttles a number at this rating, so replies to real customers arrive late or not at all — ` +
+          `and this number carries every business here. It is caused by people blocking or reporting messages, ` +
+          `which in practice means a campaign that went to the wrong list. Stop non-essential sending until it ` +
+          `returns to GREEN.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      });
+    }
+
+    // Then the ceiling, and only when it is low enough to actually bind.
+    const verification = (standing.businessVerification ?? "").toLowerCase();
+    if (verification && verification !== "verified") {
+      findings.push({
+        fingerprint: "business-not-verified",
+        severity: "warn" as const,
+        title: `Business verification is ${verification}`,
+        detail:
+          `Until the business behind this WhatsApp account is verified, Meta caps it at ` +
+          `${standing.dailyCustomerLimit ?? "a low number of"} unique customers per day — shared across all ` +
+          `businesses on ${standing.displayNumber}. Campaigns silently stop delivering once it is reached. ` +
+          `Verification is done by the owner in Business Manager under Security Centre, with the trade licence ` +
+          `and proof of address; nothing on this platform can complete it.`,
+        subjectKind: "organization",
+        subjectId: organizationId,
+      });
+    }
+
+    return findings;
+  },
+};
+
 // A template Meta has stopped accepting.
 //
 // Campaigns keep drafting against it perfectly well; the refusal only arrives at
@@ -2384,6 +2499,7 @@ export const OPERATORS: Operator[] = [
   unreachableFromOutside,
   bookingWithoutAnyone,
   bookingUnassigned,
+  accountStanding,
   templateRejected,
   reengagementCandidate,
 ];
@@ -2414,7 +2530,13 @@ export async function runOperators(): Promise<OperatorRunSummary[]> {
   const organizations = await listOrganizations();
   // BEFORE THE LOOP, and that is the whole point -- see SweepContext. Once
   // inside withTenant this read returns one business's staff and looks fine.
-  const sweep: SweepContext = { staffNumbers: await staffWhatsAppNumbers() };
+  // Both read outside any tenant transaction, and both read ONCE. The standing
+  // call reaches Meta, so a failure here must not take the sweep down with it:
+  // every other operator still has work to do when WhatsApp is unreachable.
+  const sweep: SweepContext = {
+    staffNumbers: await staffWhatsAppNumbers(),
+    numberStanding: await readSharedNumberStanding(),
+  };
   const summaries: OperatorRunSummary[] = [];
 
   // Collected across the whole sweep and dispatched once at the end, not per

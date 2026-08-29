@@ -67,6 +67,12 @@ const WHERE: Record<string, Destination> = {
 
   // Outbound machinery.
   "template-rejected": { screen: "broadcasts" },
+  // Broadcasts, not a settings screen, because nothing here is fixed by editing
+  // a row on this platform at all: the quality rating is repaired by sending
+  // less and better, and verification is done in Meta's Business Manager with
+  // legal documents. Broadcasts is where the person will be standing when the
+  // ceiling starts to matter to them.
+  "account-standing": { screen: "broadcasts" },
   "reengagement-candidate": { screen: "broadcasts" },
   "delivery-failing": { screen: "broadcasts" },
 

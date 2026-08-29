@@ -75,6 +75,18 @@ test("no operator calls a model", () => {
     "@nexus/shared",
     "../lib/logger.js",
     "./alert-dispatch.js",
+    // Added 2026-08-29 after checking, which is what this list is for.
+    // whatsapp-client reaches graph.facebook.com and nothing else — no model,
+    // no SDK, no inference. It is here because account-standing asks Meta how
+    // it rates the shared number, and nothing on the platform had ever asked.
+    //
+    // The cost question this list exists to force was asked and answered: the
+    // call is made ONCE PER SWEEP by readSharedNumberStanding and handed to
+    // every business through SweepContext, because all six answer on one
+    // number. The first draft called it per business, which would have turned
+    // a sweep of plain SQL into five network round trips every ten minutes —
+    // and this gate is what stopped it.
+    "../lib/whatsapp-client.js",
     // Added 2026-08-25 after checking, which is what this list is for. The
     // automation runner imports @nexus/db and a logger and nothing else; it
     // acts on findings the sweep has already made and calls no model. The

@@ -298,3 +298,88 @@ export async function listWabaNumbers(wabaId: string): Promise<WabaNumber[]> {
     qualityRating: row.quality_rating ? String(row.quality_rating) : null,
   }));
 }
+
+export interface AccountStanding {
+  /** Meta's business verification: "verified", "not_verified", "rejected", "pending". */
+  businessVerification: string | null;
+  /** Review state of the WhatsApp account itself. */
+  accountReview: string | null;
+  displayNumber: string;
+  /** GREEN / YELLOW / RED — how recipients have been reacting. */
+  quality: string | null;
+  /** TIER_250, TIER_1K, TIER_10K, TIER_100K, TIER_UNLIMITED. */
+  tier: string | null;
+  /** How many unique customers this number may start conversations with per day. */
+  dailyCustomerLimit: number | null;
+}
+
+const TIER_LIMITS: Record<string, number> = {
+  TIER_50: 50,
+  TIER_250: 250,
+  TIER_1K: 1_000,
+  TIER_10K: 10_000,
+  TIER_100K: 100_000,
+};
+
+/** The number in a tier string, or null for unlimited and for anything unrecognised. */
+export function tierToDailyLimit(tier: string | null | undefined): number | null {
+  if (!tier) return null;
+  return TIER_LIMITS[tier.toUpperCase()] ?? null;
+}
+
+/**
+ * How this WhatsApp account is actually doing, as Meta sees it.
+ *
+ * ============================================================
+ * NOBODY WAS WATCHING THE THING EVERYTHING DEPENDS ON
+ * ============================================================
+ *
+ * Twenty-three operators watch conversations, knowledge, staff, bookings and
+ * jobs. Not one watched whether the NUMBER carrying all six businesses is in
+ * good standing — its quality rating, its daily ceiling, or whether the
+ * business behind it is verified.
+ *
+ * Those are the facts that decide whether any of the rest reaches anybody. A
+ * number that has slipped to RED is rate-limited by Meta, so the symptom is
+ * replies arriving late or not at all, which looks exactly like a platform
+ * fault and is not one. And an unverified business is capped at 250 unique
+ * customers a day across every business on the number — a ceiling nobody would
+ * discover until a campaign quietly stopped delivering partway through.
+ *
+ * Read from Meta each time rather than cached. It is asked once per sweep.
+ */
+export async function readAccountStanding(wabaId: string): Promise<AccountStanding | null> {
+  const account = await fetch(
+    `https://graph.facebook.com/${env.metaGraphApiVersion}/${wabaId}` +
+      `?fields=account_review_status,business_verification_status` +
+      `&access_token=${encodeURIComponent(env.metaAccessToken)}`
+  );
+  if (!account.ok) {
+    throw new Error(`Reading account standing failed (${account.status}): ${await account.text()}`);
+  }
+  const accountJson = (await account.json()) as Record<string, unknown>;
+
+  const numbers = await fetch(
+    `https://graph.facebook.com/${env.metaGraphApiVersion}/${wabaId}/phone_numbers` +
+      `?fields=display_phone_number,quality_rating,messaging_limit_tier` +
+      `&access_token=${encodeURIComponent(env.metaAccessToken)}`
+  );
+  if (!numbers.ok) {
+    throw new Error(`Reading number standing failed (${numbers.status}): ${await numbers.text()}`);
+  }
+  const numbersJson = (await numbers.json()) as { data?: Array<Record<string, unknown>> };
+  const first = numbersJson.data?.[0];
+  if (!first) return null;
+
+  const tier = first.messaging_limit_tier ? String(first.messaging_limit_tier) : null;
+  return {
+    businessVerification: accountJson.business_verification_status
+      ? String(accountJson.business_verification_status)
+      : null,
+    accountReview: accountJson.account_review_status ? String(accountJson.account_review_status) : null,
+    displayNumber: String(first.display_phone_number ?? ""),
+    quality: first.quality_rating ? String(first.quality_rating) : null,
+    tier,
+    dailyCustomerLimit: tierToDailyLimit(tier),
+  };
+}

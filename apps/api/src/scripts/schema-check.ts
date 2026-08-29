@@ -158,7 +158,12 @@ async function main(): Promise<void> {
   console.log("\nOperators (read-only, run against a real tenant)");
   // Outside the loop below, for the reason SweepContext sets out: read inside a
   // tenant transaction, this returns a single business's staff and looks fine.
-  const sweep: SweepContext = { staffNumbers: await staffWhatsAppNumbers() };
+    // numberStanding is null: this proves every operator's SQL runs, not that
+  // Meta is reachable. account-standing has no SQL of its own and stands down.
+  const sweep: SweepContext = {
+    staffNumbers: await staffWhatsAppNumbers(),
+    numberStanding: null,
+  };
   for (const operator of OPERATORS) {
     await withTenant(org.id, () => step(`operator ${operator.slug}`, () => operator.run(org.id, sweep)));
   }

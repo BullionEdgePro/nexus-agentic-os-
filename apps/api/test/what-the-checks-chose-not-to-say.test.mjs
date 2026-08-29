@@ -293,9 +293,19 @@ test("the staff roster is read before any business's transaction is open", () =>
   // So it is a PARAMETER. A parameter cannot be forgotten the way a call can be
   // got wrong, and TypeScript found all three call sites the moment it changed.
   assert.match(OPERATORS, /export interface SweepContext/);
+  // Matched as a PROPERTY rather than as one line of source. The context grew a
+  // second field -- the shared number's standing at Meta -- and the object went
+  // multi-line, which broke a regex pinning the single-line spelling while the
+  // thing it was guarding stayed exactly true. The invariant is that the roster
+  // is fetched here, at top level, by that call; where the braces fall is not
+  // the invariant.
+  const construction = OPERATORS.slice(
+    OPERATORS.indexOf("const sweep: SweepContext"),
+    OPERATORS.indexOf("const sweep: SweepContext") + 400
+  );
   assert.match(
-    OPERATORS,
-    /const sweep: SweepContext = \{ staffNumbers: await staffWhatsAppNumbers\(\) \};/,
+    construction,
+    /staffNumbers: await staffWhatsAppNumbers\(\)/,
     "the roster must be built in runOperators"
   );
 

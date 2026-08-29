@@ -419,6 +419,8 @@ const UNCOVERED: Record<string, string> = {
     "not seeded here — the seed would have to back-date a real source past the derived 60h threshold, and a probe that ages production knowledge can leave the agent citing a stale page if its rollback fails. Proven by probe instead: silent at the measured 28.5h, fires at 80h, row restored",
   "thin-knowledge":
     "counts chunks against a floor, and the probe source seeded for broken-knowledge would move that count — the two would test each other rather than themselves",
+  "account-standing":
+    "reads the shared number's rating and ceiling from Meta, which this gate deliberately does not reach — it seeds rows and asserts alarms, and a gate that needs a third party to be up is one that fails for reasons that are not about this platform. It stands down on a null standing, which is what it is given here.",
   "reengagement-candidate":
     "needs a contact quiet for 30 days, which cannot be produced without back-dating a real contact's last_message_at",
 };
@@ -455,7 +457,13 @@ async function main() {
   // Built here, outside any tenant transaction, exactly as runOperators does.
   // Reading it inside one returns a single business's staff and looks correct
   // -- the trap SweepContext documents.
-  const sweep: SweepContext = { staffNumbers: await staffWhatsAppNumbers() };
+    // numberStanding is null: this gate seeds rows and asserts that alarms fire,
+  // and must not reach Meta to do it. account-standing stands down on null,
+  // which is why it appears in the not-covered list below.
+  const sweep: SweepContext = {
+    staffNumbers: await staffWhatsAppNumbers(),
+    numberStanding: null,
+  };
   console.log("Operator fire check — does each alarm produce a usable finding?\n");
 
   const organizations = await withAllTenants("fire-check: tenant registry", () => listOrganizations());
