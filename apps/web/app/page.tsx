@@ -4,6 +4,7 @@ import Landing from "./landing";
 import DeckConsole from "./deck-console";
 import TeamWorkspace from "./deck/team/team-workspace";
 import { ConsoleShell } from "./console-shell";
+import { MyDay } from "./my-day";
 import type { BusinessSlug } from "@nexus/shared";
 
 /**
@@ -44,6 +45,11 @@ export default async function Home() {
     // from the screen they land on.
     return (
       <ConsoleShell role="employee">
+      {/* WHAT NEEDS THEM, BEFORE WHAT THEY CAN ENTER.
+          The workspace below is a good screen and was the wrong first one: it
+          opens with a form, and a form asks a person for work rather than
+          showing them theirs. It keeps its place directly under this. */}
+      <MyDay />
       <TeamWorkspace
         lockedTo={{
           slug: session.organizationSlug as BusinessSlug,

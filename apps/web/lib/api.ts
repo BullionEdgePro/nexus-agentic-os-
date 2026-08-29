@@ -2075,3 +2075,48 @@ export interface MyLink {
 export function getMyLink(): Promise<MyLink> {
   return request("/api/my/link");
 }
+
+export interface MyDay {
+  who: {
+    fullName: string;
+    firstName: string;
+    jobTitle: string | null;
+    businessName: string;
+    whatsappNumber: string | null;
+  };
+  waiting: Array<{
+    conversationId: string;
+    contactName: string | null;
+    waId: string;
+    waitingHours: number;
+  }>;
+  tasks: Array<{
+    id: string;
+    title: string;
+    dueAt: string | null;
+    isOverdue: boolean;
+    contactName: string | null;
+    conversationId: string | null;
+  }>;
+  appointments: Array<{
+    id: string;
+    subject: string | null;
+    startsAt: string;
+    timezone: string;
+    contactName: string | null;
+  }>;
+  counts: {
+    waiting: number;
+    openTasks: number;
+    overdue: number;
+    appointments: number;
+    clients: number;
+    neverSpoken: number;
+    referredConversations: number;
+  };
+  nudges: Array<{ kind: string; severity: "urgent" | "warn" | "info"; text: string; href?: string }>;
+}
+
+export function getMyDay(): Promise<MyDay> {
+  return request("/api/my/day");
+}

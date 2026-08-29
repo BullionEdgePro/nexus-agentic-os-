@@ -1,0 +1,131 @@
+/* A staff member's day.
+   Every colour is a deck.css token — a literal here is a colour that works in
+   one theme and not the other. */
+
+.day { margin-bottom: 30px; }
+
+/* Nothing at all until the data is in. The alternative is a greeting with a
+   blank name in it, which reads as a bug for as long as it is on screen. */
+.day-waiting { min-height: 220px; }
+
+.day-head { margin-bottom: 18px; }
+.day-eyebrow {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--slate);
+  margin: 0 0 6px;
+}
+.day-head h1 {
+  font-size: 27px;
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 0 0 6px;
+  text-wrap: balance;
+}
+.day-lede { font-size: 14px; color: var(--slate); margin: 0; max-width: 62ch; }
+
+/* --- the nudges ------------------------------------------- */
+
+.day-nudges { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 8px; }
+.day-nudge {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--ink);
+  padding: 10px 13px;
+  border-radius: 6px;
+  background: var(--pebble);
+  border-left: 3px solid var(--hairline);
+}
+.day-nudge span { flex: 1 1 320px; }
+.day-nudge a { font-size: 12.5px; color: var(--signal-text); white-space: nowrap; }
+.day-urgent { border-left-color: var(--crit); }
+.day-warn { border-left-color: var(--warn); }
+.day-info { border-left-color: var(--signal-text); }
+
+.day-clear {
+  font-size: 14px;
+  color: var(--good);
+  margin: 0 0 24px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--good-soft);
+  max-width: 68ch;
+}
+
+/* --- the blocks ------------------------------------------- */
+
+.day-block { margin-bottom: 24px; }
+.day-block h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--slate);
+  margin: 0 0 9px;
+}
+.day-count {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--pebble);
+  color: var(--slate);
+  font-variant-numeric: tabular-nums;
+}
+.day-count-bad { background: var(--crit-soft); color: var(--crit); }
+
+.day-list { list-style: none; margin: 0; padding: 0; }
+.day-list li { border-bottom: 1px solid var(--hairline); }
+.day-list li:last-child { border-bottom: 0; }
+.day-list a {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 10px 2px;
+  text-decoration: none;
+  color: inherit;
+}
+.day-list a:hover { background: var(--marble); }
+.day-list strong { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.day-list span { font-size: 12.5px; color: var(--slate); font-variant-numeric: tabular-nums; }
+.day-late { color: var(--crit); font-weight: 600; }
+
+/* The queue at the top carries a rule down its left edge, so the eye finds it
+   before reading a word. Nothing else on the page does. */
+.day-first { border-left: 3px solid var(--signal-text); padding-left: 14px; }
+
+/* --- the three numbers ------------------------------------ */
+
+.day-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin: 26px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+}
+.day-stats dt {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--slate);
+  margin-bottom: 3px;
+}
+.day-stats dd {
+  margin: 0;
+  font-size: 22px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-error { font-size: 13px; color: var(--crit); }

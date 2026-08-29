@@ -296,7 +296,13 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
           <div className="eyebrow">
             {isOperator ? "Team · direct customer contact" : "My customers"}
           </div>
-          <h1>{isOperator ? "Who answers, and from which phone." : `Welcome back, ${lockedTo.fullName}.`}</h1>
+          {/* NO SECOND GREETING, AND NO EMAIL ADDRESS.
+              This printed "Welcome back, aiapps255+staff@gmail.com" -- the
+              session carries a subject, the page treated it as a name, and the
+              result greeted people with their own login. The greeting now
+              belongs to MyDay above, which fetches the real name; this is the
+              heading of a section rather than the top of a page. */}
+          <h1>{isOperator ? "Who answers, and from which phone." : "Your customers"}</h1>
           <p className="team-lede">
             {isOperator
               ? "Customers all arrive on one WhatsApp number. Assign a conversation to someone here and they carry it on from their own WhatsApp — the platform stops replying the moment they do, so nobody gets answered twice."

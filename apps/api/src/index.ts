@@ -6,6 +6,7 @@ import { whatsappWebhook } from "./webhook/whatsapp.js";
 import { organizationsRoute } from "./routes/organizations.js";
 import { myDeskRoute } from "./routes/my-desk.js";
 import { myCampaignsRoute } from "./routes/my-campaigns.js";
+import { myDayRoute } from "./routes/my-day.js";
 import { conversationsRoute } from "./routes/conversations.js";
 import { broadcastsRoute } from "./routes/broadcasts.js";
 import { metricsRoute } from "./routes/metrics.js";
@@ -296,6 +297,7 @@ app.route("/api/organizations", forecastsRoute);
 app.route("/api/organizations", phrasesRoute);
 app.route("/api/my", myDeskRoute);
 app.route("/api/my", myCampaignsRoute);
+app.route("/api/my", myDayRoute);
 app.route("/api/conversations", conversationsRoute);
 // Assignment and the personal-WhatsApp handoff hang off a conversation id,
 // so they compose onto the same /api/conversations router.
