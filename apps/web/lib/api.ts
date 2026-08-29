@@ -2189,3 +2189,62 @@ function guessType(name: string): string {
   };
   return known[ext] ?? "application/octet-stream";
 }
+
+export interface SocialConnection {
+  id: string;
+  provider: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  scopes: string[];
+  connectedAt: string;
+  lastSyncedAt: string | null;
+  lastError: string | null;
+  usable: boolean;
+}
+
+export interface ConnectionProvider {
+  id: string;
+  name: string;
+  configured: boolean;
+  offers: string;
+  cannot: string;
+  needs: string | null;
+  scopes: string[];
+}
+
+export function getConnections(): Promise<{
+  connections: SocialConnection[];
+  providers: ConnectionProvider[];
+}> {
+  return request("/api/connections");
+}
+
+export function startTikTokConnect(): Promise<{ url: string }> {
+  return request("/api/connections/tiktok/start");
+}
+
+export interface TikTokInsights {
+  profile: {
+    displayName: string | null;
+    username: string | null;
+    avatarUrl: string | null;
+    followerCount: number | null;
+  };
+  videos: Array<{
+    id: string;
+    title: string | null;
+    viewCount: number | null;
+    likeCount: number | null;
+    createdAt: string | null;
+    shareUrl: string | null;
+  }>;
+  canReadVideos: boolean;
+}
+
+export function getTikTokInsights(): Promise<TikTokInsights> {
+  return request("/api/connections/tiktok/insights");
+}
+
+export function disconnectTikTok(): Promise<{ ok: boolean }> {
+  return request("/api/connections/tiktok", { method: "DELETE" });
+}

@@ -71,7 +71,11 @@ test("every route that checks a secret is throttled", () => {
   // Both known sign-in paths must be among them, or the scan has stopped
   // finding what it is for and everything below is vacuous.
   const names = routes.map(([file]) => file).sort();
-  assert.deepEqual(names, ["admin-auth.ts", "employee-auth.ts"],
+  // connections.ts joined the list when TikTok sign-in landed: it verifies an
+  // HMAC over a state cookie, which is cryptography on caller-supplied input,
+  // and the scan is deliberately blind to how unlikely forging it would be.
+  // The right response was to throttle it, not to exempt it.
+  assert.deepEqual(names, ["admin-auth.ts", "connections.ts", "employee-auth.ts"],
     `the credential-route scan found ${names.join(", ") || "nothing"} — if a new sign-in path was ` +
     `added, throttle it and add it here; if a verifier was renamed, update VERIFIERS`);
 

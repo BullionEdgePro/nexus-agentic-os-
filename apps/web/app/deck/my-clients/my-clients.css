@@ -260,3 +260,107 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* --- connected accounts ----------------------------------- */
+
+.deck-root .cnx { margin-bottom: 22px; }
+.deck-root .cnx h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--slate);
+  margin: 0 0 10px;
+}
+.deck-root .cnx-card {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.deck-root .cnx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.deck-root .cnx-head strong { font-size: 14px; color: var(--ink); }
+.deck-root .cnx-on {
+  margin-left: 9px;
+  font-size: 12px;
+  color: var(--good);
+  background: var(--good-soft);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.deck-root .cnx-go {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 14px;
+  background: var(--signal-text);
+  color: var(--paper);
+  cursor: pointer;
+}
+.deck-root .cnx-off {
+  font: inherit;
+  font-size: 12.5px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: none;
+  color: var(--slate);
+  cursor: pointer;
+}
+.deck-root .cnx-off:hover { border-color: var(--crit); color: var(--crit); }
+
+.deck-root .cnx-offers { font-size: 12.5px; color: var(--ink); margin: 0 0 4px; max-width: 74ch; }
+/* The limit reads as a fact, not a warning — it is not a fault, and colouring
+   it red would make an ordinary truth look like something went wrong. */
+.deck-root .cnx-cannot { font-size: 12.5px; color: var(--slate); margin: 0; max-width: 74ch; }
+.deck-root .cnx-needs {
+  font-size: 12.5px;
+  color: var(--warn);
+  margin: 10px 0 0;
+  max-width: 74ch;
+  overflow-wrap: anywhere;
+}
+.deck-root .cnx-note { font-size: 12.5px; color: var(--slate); margin: 10px 0 0; max-width: 74ch; }
+
+.deck-root .cnx-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.deck-root .cnx-stats dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--slate);
+  margin-bottom: 2px;
+}
+.deck-root .cnx-stats dd {
+  margin: 0;
+  font-size: 19px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.deck-root .cnx-videos { list-style: none; margin: 12px 0 0; padding: 0; }
+.deck-root .cnx-videos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12.5px;
+}
+.deck-root .cnx-videos li:last-child { border-bottom: 0; }
+.deck-root .cnx-title { color: var(--ink); overflow-wrap: anywhere; }
+.deck-root .cnx-nums { color: var(--slate); font-variant-numeric: tabular-nums; white-space: nowrap; }

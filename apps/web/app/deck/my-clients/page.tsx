@@ -11,6 +11,7 @@ import {
   type MyClient,
 } from "@/lib/api";
 import { MyLinkPanel } from "./my-link";
+import { ConnectionsPanel } from "./connections";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "./my-clients.css";
@@ -95,6 +96,11 @@ export default function MyClientsPage() {
       </header>
 
       <MyLinkPanel />
+
+      {/* Directly under the link, because that is the relationship: the link
+          lives in the TikTok bio, and this is whether the bio is reaching
+          anybody. Apart, they are two facts; together they are a ratio. */}
+      <ConnectionsPanel />
 
       <ChannelPanel channel={channel} />
 
