@@ -166,6 +166,16 @@ test("video and audio are refused by name, with what does work", () => {
   assert.match(RICH, /transcript/);
 });
 
+test("an unreadable image is not reported as an outage", () => {
+  // "Could not process image" is a 400 about the FILE. Left in the upstream
+  // bucket it read as "I could not reach the assistant", sending somebody to
+  // check their connection over a picture that was simply too small.
+  const RICH = read("packages", "agents", "src", "rich-completion.ts");
+  assert.match(RICH, /could not process image/i);
+  assert.match(RICH, /"bad-image"/);
+  assert.match(ROUTE, /result\.reason === "bad-image"/);
+});
+
 test("a scanned PDF is called a scan, not an empty document", () => {
   // An extractor returns "" and the assistant then confidently discusses a
   // blank page. Half the PDFs anybody attaches are scans.

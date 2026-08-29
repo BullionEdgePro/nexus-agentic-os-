@@ -63,7 +63,7 @@ export interface RichTurn {
 
 export type RichResult =
   | { ok: true; text: string }
-  | { ok: false; reason: "no-key" | "unreadable-file" | "too-large" | "upstream"; detail: string };
+  | { ok: false; reason: "no-key" | "unreadable-file" | "bad-image" | "too-large" | "upstream"; detail: string };
 
 /**
  * Why a file cannot be looked at, in the words to show the person.
@@ -217,10 +217,19 @@ ${read.text.slice(0, 200_000)}`,
     // "the file was too big" and "the provider is down" need different ones.
     const message = err instanceof Error ? err.message : String(err);
     const tooLarge = /too large|exceeds|maximum size|request_too_large/i.test(message);
+
+    // "Could not process image" is a 400 about the FILE, not an outage. Left in
+    // the upstream bucket it became "I could not reach the assistant" — which
+    // sends somebody to check their connection over a picture that was simply
+    // too small. Found by a probe whose own 8x8 test fixture triggered it.
+    const badImage = /could not process image|unsupported image|image.*(invalid|corrupt)/i.test(message);
+
     return {
       ok: false,
-      reason: tooLarge ? "too-large" : "upstream",
-      detail: message.slice(0, 300),
+      reason: badImage ? "bad-image" : tooLarge ? "too-large" : "upstream",
+      detail: badImage
+        ? "I could not read that image. Very small or unusual files sometimes fail — try a normal screenshot or photo."
+        : message.slice(0, 300),
     };
   }
 }

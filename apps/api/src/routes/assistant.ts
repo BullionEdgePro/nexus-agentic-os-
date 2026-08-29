@@ -161,7 +161,9 @@ assistantRoute.post("/", async (c) => {
     // is simply a scan sends somebody looking for a fault that does not exist.
     logger.warn({ sub: scope.sub, reason: result.reason }, "Assistant could not answer");
 
-    if (result.reason === "unreadable-file") return c.json({ error: result.detail }, 415);
+    if (result.reason === "unreadable-file" || result.reason === "bad-image") {
+      return c.json({ error: result.detail }, 415);
+    }
     if (result.reason === "too-large") {
       return c.json(
         { error: "That was too much to send at once. Try one file, or a smaller one." },
