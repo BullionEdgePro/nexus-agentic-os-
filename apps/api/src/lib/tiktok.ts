@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { apiBaseUrl } from "./public-urls.js";
 
 /**
  * TikTok, for what TikTok actually permits.
@@ -66,7 +67,7 @@ export function tiktokConfigured(): boolean {
 export function tiktokRedirectUri(): string {
   return (
     process.env.TIKTOK_REDIRECT_URI ||
-    `${process.env.PUBLIC_APP_URL || "https://nexusagenticos.com"}/api/connections/tiktok/callback`
+    `${apiBaseUrl()}/api/connections/tiktok/callback`
   );
 }
 

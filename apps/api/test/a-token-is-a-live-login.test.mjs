@@ -291,3 +291,45 @@ test("the panel says what Gmail will never read", () => {
   assert.match(ROUTE, /never lists your inbox/i);
   assert.match(PANEL, /gmail\.cannot/);
 });
+
+// ============================================================
+// Two hosts that are not the same host
+// ============================================================
+
+test("the OAuth redirect_uri is the API host, the return is the app host", async () => {
+  // The redirect_uri Google sends the browser BACK to is an API endpoint, and
+  // must resolve to the API container. The page the person lands on AFTER is a
+  // console page, and must resolve to the web container. Crossing them returns
+  // redirect_uri_mismatch, or worse a 404 with the auth code still in the URL.
+  const prev = { ...process.env };
+  process.env.API_DOMAIN = "api.example.test";
+  process.env.WEB_DOMAIN = "app.example.test";
+  delete process.env.PUBLIC_API_URL;
+  delete process.env.PUBLIC_APP_URL;
+  delete process.env.GOOGLE_REDIRECT_URI;
+
+  const { apiBaseUrl, appBaseUrl } = await import(
+    "../src/lib/public-urls.ts?two-host-" + process.hrtime.bigint()
+  );
+  assert.equal(apiBaseUrl(), "https://api.example.test");
+  assert.equal(appBaseUrl(), "https://app.example.test");
+  assert.notEqual(apiBaseUrl(), appBaseUrl(), "the two hosts collapsed into one");
+
+  process.env = prev;
+});
+
+test("the callback redirect points at the console, not the API", () => {
+  // back() sends the browser to a /deck page. If it used the API host the person
+  // would land on JSON or a 404 after consenting.
+  assert.match(ROUTE, /const app = appBaseUrl\(\);/);
+  assert.match(ROUTE, /\$\{app\}\/deck\/my-clients\?connected=/);
+});
+
+test("the gmail redirect_uri is built from the API base, not the app base", () => {
+  const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
+  assert.match(GMAIL, /apiBaseUrl\(\)\}\/api\/connections\/gmail\/callback/);
+  assert.ok(
+    !/PUBLIC_APP_URL[^\n]*gmail\/callback/.test(GMAIL),
+    "the Gmail redirect_uri is still built from the app URL"
+  );
+});

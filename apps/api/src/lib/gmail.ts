@@ -35,6 +35,8 @@
  * it is why this is achievable in days rather than never.
  */
 
+import { apiBaseUrl } from "./public-urls.js";
+
 const AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN = "https://oauth2.googleapis.com/token";
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -65,10 +67,9 @@ export function gmailConfigured(): boolean {
 }
 
 export function gmailRedirectUri(): string {
-  return (
-    process.env.GOOGLE_REDIRECT_URI ||
-    `${process.env.PUBLIC_APP_URL || "https://nexusagenticos.com"}/api/connections/gmail/callback`
-  );
+  // The redirect_uri is an API endpoint, so it is the API host — not the app
+  // host. Pointing it at the console returns redirect_uri_mismatch from Google.
+  return process.env.GOOGLE_REDIRECT_URI || `${apiBaseUrl()}/api/connections/gmail/callback`;
 }
 
 /**

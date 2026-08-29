@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { appBaseUrl } from "../lib/public-urls.js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   listConnections,
@@ -228,7 +229,7 @@ connectionsRoute.get("/tiktok/start", async (c) => {
 // ============================================================
 
 connectionsRoute.get("/tiktok/callback", async (c) => {
-  const app = process.env.PUBLIC_APP_URL || "https://nexusagenticos.com";
+  const app = appBaseUrl();
   const back = (message: string) =>
     c.redirect(`${app}/deck/my-clients?connected=${encodeURIComponent(message)}`, 302);
 
@@ -484,7 +485,7 @@ connectionsRoute.get("/gmail/start", async (c) => {
 });
 
 connectionsRoute.get("/gmail/callback", async (c) => {
-  const app = process.env.PUBLIC_APP_URL || "https://nexusagenticos.com";
+  const app = appBaseUrl();
   const back = (message: string) =>
     c.redirect(`${app}/deck/my-clients?connected=${encodeURIComponent(message)}`, 302);
 
