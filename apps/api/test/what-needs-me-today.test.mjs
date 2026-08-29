@@ -162,3 +162,49 @@ test("the day is rendered above the workspace, not instead of it", () => {
   const workspace = HOME.indexOf("<TeamWorkspace");
   assert.ok(day > -1 && workspace > day, "the workspace no longer follows the day");
 });
+
+// ============================================================
+// An instruction that could not be followed
+// ============================================================
+
+test("staff are never sent to an account menu they do not have", () => {
+  // `AccountMenu` is rendered by deck-console, which is the OPERATOR's console.
+  // ConsoleShell — what an employee gets — has a rail and no header at all. So
+  // "open the account menu at the top right" was an instruction no staff member
+  // could follow, printed in the two places that told them to set the one field
+  // that makes their link work.
+  // Comments stripped first. Both files now CARRY a comment explaining that
+  // there is no account menu, and a test that forbids the phrase outright
+  // forbids describing the bug it guards against -- which is how the useful
+  // half of a fix gets deleted to make a test green.
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const SHELL = read("apps", "web", "app", "console-shell.tsx");
+  const LINK = strip(read("apps", "web", "app", "deck", "my-clients", "my-link.tsx"));
+  const hasMenu = /<AccountMenu/.test(SHELL);
+  if (!hasMenu) {
+    assert.ok(
+      !/account menu/i.test(LINK),
+      "the link panel sends staff to an account menu the employee shell does not render"
+    );
+    assert.ok(
+      !/account menu/i.test(strip(DAY_API)),
+      "the nudge sends staff to an account menu the employee shell does not render"
+    );
+  }
+});
+
+test("the number can be set from the screen that explains why it matters", () => {
+  // A screen that describes a problem and then sends you elsewhere to fix it
+  // loses most people at the doorway.
+  const LINK = read("apps", "web", "app", "deck", "my-clients", "my-link.tsx");
+  assert.match(LINK, /updateMe\(\{ whatsappNumber:/);
+  assert.match(LINK, /function NumberSetter/);
+});
+
+test("a number already set offers a way to check it, not just to admire it", () => {
+  // Stored exactly as typed: well formed or refused, and well formed is not the
+  // same as yours. One wrong digit is a stranger's number, and the way anybody
+  // finds out is a customer arriving in that stranger's chat.
+  const LINK = read("apps", "web", "app", "deck", "my-clients", "my-link.tsx");
+  assert.match(LINK, /Check this opens a chat with you/);
+});

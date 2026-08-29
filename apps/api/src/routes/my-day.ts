@@ -94,8 +94,9 @@ myDayRoute.get("/day", async (c) => {
       kind: "no-number",
       severity: "warn",
       text:
-        "You have no WhatsApp number on file, so customers who come through your link cannot be handed to you. " +
-        "Add it in your account menu — it takes ten seconds.",
+        "You have no WhatsApp number on file, so customers who come through your link " +
+        "cannot be handed to you. Set it on My clients — the field is on the same panel " +
+        "that explains it.",
       href: "/deck/my-clients",
     });
   }
