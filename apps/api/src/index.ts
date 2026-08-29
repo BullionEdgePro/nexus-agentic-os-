@@ -7,6 +7,7 @@ import { organizationsRoute } from "./routes/organizations.js";
 import { myDeskRoute } from "./routes/my-desk.js";
 import { myCampaignsRoute } from "./routes/my-campaigns.js";
 import { myDayRoute } from "./routes/my-day.js";
+import { assistantRoute } from "./routes/assistant.js";
 import { conversationsRoute } from "./routes/conversations.js";
 import { broadcastsRoute } from "./routes/broadcasts.js";
 import { metricsRoute } from "./routes/metrics.js";
@@ -298,6 +299,9 @@ app.route("/api/organizations", phrasesRoute);
 app.route("/api/my", myDeskRoute);
 app.route("/api/my", myCampaignsRoute);
 app.route("/api/my", myDayRoute);
+// Both roles. The assistant answers about the PLATFORM, and what it is told
+// about the caller is read with the caller's own scope.
+app.route("/api/assistant", assistantRoute);
 app.route("/api/conversations", conversationsRoute);
 // Assignment and the personal-WhatsApp handoff hang off a conversation id,
 // so they compose onto the same /api/conversations router.

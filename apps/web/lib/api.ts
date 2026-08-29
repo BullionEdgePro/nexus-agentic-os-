@@ -2123,3 +2123,16 @@ export interface MyDay {
 export function getMyDay(): Promise<MyDay> {
   return request("/api/my/day");
 }
+
+export function askAssistant(
+  question: string,
+  history: Array<{ role: "user" | "assistant"; text: string }>
+): Promise<{ answer: string }> {
+  return request("/api/assistant", {
+    method: "POST",
+    // Only the last few turns are sent. The server bounds it too — a history
+    // the caller supplies is a history the caller can forge, so it is used for
+    // continuity of wording and never for access.
+    body: JSON.stringify({ question, history: history.slice(-6) }),
+  });
+}

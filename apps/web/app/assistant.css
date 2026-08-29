@@ -1,0 +1,167 @@
+/* The help panel. Fixed to the corner on every signed-in screen.
+   Colours come from the deck tokens, which the console shell already defines
+   on .deck-root — repeated on :root here because this panel is a sibling of
+   the deck rather than a child of it. */
+
+:root {
+  --as-ink: #101828;
+  --as-slate: #5b6b82;
+  --as-paper: #ffffff;
+  --as-marble: #f8f9fb;
+  --as-pebble: #f0f3f8;
+  --as-hairline: #dde3ec;
+  --as-signal: #004eba;
+  --as-navy: #0b3558;
+  --as-crit: #c4342a;
+}
+
+.as-open {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--as-navy);
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 18px 11px 15px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(11, 53, 88, .22);
+}
+.as-open svg { width: 17px; height: 17px; }
+.as-open:hover { background: #123f66; }
+
+.as {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 60;
+  width: 370px;
+  max-width: calc(100vw - 32px);
+  height: 520px;
+  max-height: calc(100vh - 44px);
+  display: flex;
+  flex-direction: column;
+  background: var(--as-paper);
+  border: 1px solid var(--as-hairline);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 34px rgba(11, 53, 88, .18);
+}
+
+.as-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--as-navy);
+  color: #fff;
+}
+.as-head strong { display: block; font-size: 13.5px; }
+/* The disclaimer sits in the header rather than in the first message, so it is
+   still visible after twenty turns. */
+.as-head span { display: block; font-size: 11px; color: #a9c4de; margin-top: 1px; }
+.as-head button {
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  background: none;
+  border: 0;
+  color: #a9c4de;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.as-head button:hover { color: #fff; }
+
+.as-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 13px 14px;
+  background: var(--as-marble);
+}
+
+.as-turn {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 9px 12px;
+  border-radius: 10px;
+  margin-bottom: 9px;
+  max-width: 92%;
+  white-space: pre-wrap;
+}
+.as-user {
+  background: var(--as-signal);
+  color: #fff;
+  margin-left: auto;
+  border-bottom-right-radius: 3px;
+}
+.as-assistant {
+  background: var(--as-paper);
+  color: var(--as-ink);
+  border: 1px solid var(--as-hairline);
+  border-bottom-left-radius: 3px;
+}
+.as-thinking { color: var(--as-slate); font-style: italic; }
+
+.as-empty p { font-size: 13px; color: var(--as-slate); margin: 0 0 10px; }
+.as-empty ul { list-style: none; margin: 0; padding: 0; }
+.as-empty li { margin-bottom: 6px; }
+.as-empty button {
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  width: 100%;
+  background: var(--as-paper);
+  border: 1px solid var(--as-hairline);
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--as-ink);
+  cursor: pointer;
+}
+.as-empty button:hover { border-color: var(--as-signal); color: var(--as-signal); }
+
+.as-error { font-size: 12.5px; color: var(--as-crit); margin: 4px 0 0; }
+
+.as-ask {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--as-hairline);
+  background: var(--as-paper);
+}
+.as-ask input {
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 11px;
+  border: 1px solid var(--as-hairline);
+  border-radius: 8px;
+  background: var(--as-paper);
+  color: var(--as-ink);
+  min-width: 0;
+}
+.as-ask button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 15px;
+  background: var(--as-signal);
+  color: #fff;
+  cursor: pointer;
+}
+.as-ask button:disabled { background: var(--as-pebble); color: var(--as-slate); cursor: not-allowed; }
+
+/* On a phone it takes the width and sits above the thumb. */
+@media (max-width: 560px) {
+  .as { right: 8px; left: 8px; bottom: 8px; width: auto; height: 70vh; }
+  .as-open { right: 14px; bottom: 14px; }
+}

@@ -8,6 +8,7 @@ import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { RailLinks } from "./console-shell";
 import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
+import { Assistant } from "./assistant";
 import "./deck/deck.css";
 
 /* ---------------- static presentation data ---------------- */
@@ -809,6 +810,7 @@ function GovRow({
           {val === null ? null : <i style={{ width: `${pct}%`, background: color }} />}
         </div>
       </div>
-    </div>
+          <Assistant />
+</div>
   );
 }

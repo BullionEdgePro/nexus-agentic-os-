@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { ViewAsStaff } from "./view-as-staff";
+import { Assistant } from "./assistant";
 import { NAV, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
@@ -123,6 +124,10 @@ export function ConsoleShell({
         {role === "operator" ? <ViewAsStaff /> : null}
         {children}
       </main>
+      {/* Every signed-in screen, both roles. It sits outside <main> because it
+          is fixed to the viewport rather than part of the page's flow, and
+          starts closed so it is never in the way of the work. */}
+      <Assistant />
     </div>
   );
 }
