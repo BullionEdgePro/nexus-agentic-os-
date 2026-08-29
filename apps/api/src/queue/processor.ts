@@ -1599,6 +1599,13 @@ async function resolveReferrer(
       note: describeReferringColleague({
         employeeName: employee.fullName,
         handoffLink,
+        // TRUE EXACTLY ONCE PER CONVERSATION. `attributeConversation` guards its
+        // write on `referred_by_employee_id is null`, so this is the message
+        // that carried the tag -- the first one. That is what makes "hand over
+        // immediately" mean the first reply rather than every reply: a link
+        // repeated in each message stops reading as help and starts reading as
+        // an attempt to end the conversation.
+        firstReply: attribution.recorded,
       }),
     };
   } catch (err) {

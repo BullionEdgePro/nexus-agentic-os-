@@ -18,9 +18,9 @@
  *      that names them. The customer taps it; WhatsApp prefills the message.
  *   2. The message arrives here. The tag says whose link it was, so the lead is
  *      theirs from the first word — assigned, and in their client book.
- *   3. The agent answers the inquiry, which is what the company number is for.
- *   4. When a human is wanted, the customer is handed a one-tap link to THAT
- *      staff member's own WhatsApp.
+ *   3. The agent answers the inquiry, which is what the company number is for,
+ *      and in that same first reply hands them a one-tap link to THAT staff
+ *      member's own WhatsApp.
  *
  * Step 4 is the part that looked impossible and is not: a link the CUSTOMER
  * taps needs no API at all. The conversation moves to the staff member's real
@@ -71,8 +71,8 @@ export function findStaffTag(text: string): string | null {
  * The link one staff member publishes on their own socials.
  *
  * Points at the COMPANY number, never at their personal one. That is the whole
- * design: the business sees the conversation, the agent answers it, and the
- * handover to the person happens later and deliberately. A link straight to a
+ * design: the business sees the conversation and answers it, and the handover
+ * to the person happens in that same reply. A link straight to a
  * personal number would give the staff member their lead and give the business
  * nothing — no record, no answer out of hours, and nothing to hand to the next
  * person when they leave.
@@ -134,15 +134,31 @@ export function personalHandoffLink(input: {
  * the instruction stated a fact without saying it was internal. The model
  * followed it exactly and the customer read it.
  *
- * So this says what may be said and what may not, and it does NOT hand the
- * customer a colleague's mobile number unprompted. A person who asked a
- * question about a product has not asked to be passed to somebody's personal
- * phone, and pushing a number at them reads as a brush-off. The link is offered
- * when they want a human — which is exactly when it helps.
+ * ============================================================
+ * IMMEDIATE, BUT ONCE
+ * ============================================================
+ *
+ * The owner's instruction is that a customer who came through a staff member's
+ * link is handed to that person straight away, every time — not held until they
+ * think to ask for a human. So the link goes out in the FIRST reply, alongside
+ * a real answer to whatever they asked.
+ *
+ * `firstReply` is what keeps "immediately" from becoming "in every message".
+ * A link repeated in each reply stops reading as help and starts reading as an
+ * attempt to get rid of the customer, and it is exactly the kind of thing a
+ * model will do forever if the instruction does not say when to stop. It comes
+ * from the attribution write, which is guarded on `referred_by_employee_id is
+ * null` and therefore true exactly once per conversation — the message that
+ * carried the tag, which is the first one.
+ *
+ * The agent still ANSWERS. The company number exists so an inquiry gets a real
+ * reply at any hour; handing over a question without answering it would make
+ * every link a slower way of reaching the same person.
  */
 export function describeReferringColleague(input: {
   employeeName: string;
   handoffLink: string | null;
+  firstReply: boolean;
 }): string {
   const firstName = input.employeeName.trim().split(/\s+/)[0] || input.employeeName;
 
@@ -150,28 +166,44 @@ export function describeReferringColleague(input: {
     "INTERNAL — for you alone. Do not quote or explain this block.",
     "",
     `This customer arrived through ${input.employeeName}'s own link, so ${firstName} is`,
-    "the colleague this conversation belongs to. Answer the question yourself as usual:",
-    "arriving through somebody's link is not a request to be passed to them.",
+    "the colleague this conversation belongs to.",
   ];
 
-  if (input.handoffLink) {
-    lines.push(
-      "",
-      `If they ask to speak to a person, ask for ${firstName} by name, or the matter clearly`,
-      `needs a human, give them this link and say it opens a chat with ${firstName} directly:`,
-      input.handoffLink,
-      "",
-      "Give the link as it is written, on its own line, with nothing added to it and no",
-      "characters removed. Do not describe it as an automated system, a bot or a",
-      "transfer. Offer it once — repeating it reads as trying to end the conversation."
-    );
-  } else {
+  if (!input.handoffLink) {
     lines.push(
       "",
       `${firstName} has no direct number on file, so there is nothing to hand the customer.`,
       "Do NOT invent a number, and do not say you will pass a message to them personally —",
-      "no notification is sent by mentioning their name. Help the customer yourself, and if",
+      "no notification is sent by mentioning their name. Answer the customer yourself, and if",
       "they need a person, use the business's own contact details from your instructions."
+    );
+    return lines.join("\n");
+  }
+
+  if (input.firstReply) {
+    lines.push(
+      "",
+      "ANSWER THEIR QUESTION FIRST, properly and in full — they asked it and they deserve a",
+      "reply. Then, in the same message, hand them to " + firstName + ": say that " + firstName,
+      "looks after this personally and that this link opens a chat with them directly.",
+      "",
+      input.handoffLink,
+      "",
+      "Put the link on its own line, exactly as written, with nothing added and nothing",
+      "removed — no brackets, no full stop after it, no shortening. Do not describe it as a",
+      "transfer, a bot, an automated system or a ticket. One or two short sentences around",
+      "it; a paragraph of explanation makes a simple handover sound like a problem."
+    );
+  } else {
+    lines.push(
+      "",
+      `${firstName}'s direct link has ALREADY been sent to this customer earlier in this`,
+      "conversation. Do not send it again unless they ask for it or ask to speak to somebody:",
+      "a link repeated in every reply reads as trying to end the conversation rather than help",
+      "it. Keep answering them yourself.",
+      "",
+      "If they do ask, the link is:",
+      input.handoffLink
     );
   }
 

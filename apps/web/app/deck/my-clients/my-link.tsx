@@ -43,8 +43,9 @@ export function MyLinkPanel() {
         <>
           <p className="lnk-what">
             Put this on your Instagram, TikTok, LinkedIn, email signature — anywhere you already send
-            people. Whoever taps it messages the company number, the assistant answers them, and
-            they land in <strong>your</strong> client book straight away.
+            people. Whoever taps it messages the company number, the assistant answers them and
+            passes them straight to your WhatsApp, and they land in <strong>your</strong> client
+            book at the same moment.
           </p>
 
           <div className="lnk-box">
@@ -70,10 +71,11 @@ export function MyLinkPanel() {
 
           {link.handoverPossible ? (
             <p className="lnk-note">
-              When a customer who came through your link asks to speak to a person, the assistant
-              gives them a one-tap link to your own WhatsApp on {link.personalNumber}. The
-              conversation moves to your phone — nothing is installed and nothing reads your
-              messages.
+              The assistant answers their question and, in that same first reply, gives them a
+              one-tap link to your own WhatsApp on {link.personalNumber} — every time, without
+              waiting for them to ask. The conversation moves to your phone; nothing is installed
+              and nothing reads your messages. It is offered once per conversation, not in every
+              message, so it reads as an introduction rather than a brush-off.
             </p>
           ) : (
             <p className="lnk-warn">

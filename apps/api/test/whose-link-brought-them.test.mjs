@@ -8,8 +8,8 @@
  * A staff member's personal WhatsApp cannot be connected to this platform and
  * never will be. What was actually wanted is achievable without it: they
  * publish a link to the COMPANY number carrying a tag that names them, the
- * agent answers the inquiry, the lead is theirs from the first word, and when
- * the customer wants a person they tap through to that staff member's own
+ * agent answers the inquiry, the lead is theirs from the first word, and that
+ * same first reply hands them a one-tap link to that staff member's own
  * WhatsApp. The handover is a link the CUSTOMER taps, which is why it needs no
  * API and works today.
  *
@@ -140,23 +140,52 @@ test("no number means no link, rather than a broken one", () => {
 // What the agent is told
 // ============================================================
 
-test("the agent is told not to pass the customer on unprompted", () => {
+test("the first reply answers the question AND hands over", () => {
+  // The owner's instruction: a customer who came through somebody's link goes
+  // to that person straight away, every time. Answering still comes first --
+  // handing over a question without answering it would make every link a slower
+  // way of reaching the same person.
   const note = describeReferringColleague({
     employeeName: "Aqib Sarosh",
     handoffLink: "https://wa.me/971522654051",
+    firstReply: true,
   });
   assert.match(note, /INTERNAL/);
-  assert.match(note, /arriving through somebody's link is not a request to be passed to them/);
-  assert.match(note, /If they ask to speak to a person/);
+  assert.match(note, /ANSWER THEIR QUESTION FIRST/);
+  assert.match(note, /looks after this personally/);
+  assert.ok(note.includes("https://wa.me/971522654051"));
+});
+
+test("the link is not repeated in every later reply", () => {
+  // This is what stops "immediately" becoming "every message". A link in each
+  // reply reads as trying to end the conversation rather than help it, and it
+  // is exactly what a model will do forever if nothing says when to stop.
+  const note = describeReferringColleague({
+    employeeName: "Aqib Sarosh",
+    handoffLink: "https://wa.me/971522654051",
+    firstReply: false,
+  });
+  assert.match(note, /ALREADY been sent/);
+  assert.match(note, /Do not send it again unless they ask/);
+  // Still present, because a customer who asks for it must get it.
+  assert.ok(note.includes("https://wa.me/971522654051"));
 });
 
 test("with no reachable colleague the agent is told not to invent one", () => {
   // The neighbouring escalation note carries a long comment about the day an
-  // internal staffing fact reached a client verbatim. Same discipline here.
-  const note = describeReferringColleague({ employeeName: "Aqib Sarosh", handoffLink: null });
-  assert.match(note, /Do NOT invent a number/);
-  assert.match(note, /no notification is sent/);
-  assert.ok(!/wa\.me/.test(note), "a link is offered when there is none to offer");
+  // internal staffing fact reached a client verbatim. Same discipline here, and
+  // the no-number branch ignores firstReply entirely: there is nothing to send
+  // on any reply.
+  for (const firstReply of [true, false]) {
+    const note = describeReferringColleague({
+      employeeName: "Aqib Sarosh",
+      handoffLink: null,
+      firstReply,
+    });
+    assert.match(note, /Do NOT invent a number/);
+    assert.match(note, /no notification is sent/);
+    assert.ok(!/wa\.me/.test(note), "a link is offered when there is none to offer");
+  }
 });
 
 test("the link is to be given exactly as written", () => {
@@ -164,8 +193,18 @@ test("the link is to be given exactly as written", () => {
   const note = describeReferringColleague({
     employeeName: "Aqib",
     handoffLink: "https://wa.me/971522654051?text=Hello",
+    firstReply: true,
   });
-  assert.match(note, /as it is written/);
+  assert.match(note, /exactly as written/);
+  assert.match(note, /no full stop after it/);
+});
+
+test("the handover fires on the message that carried the tag", () => {
+  // `attribution.recorded` is guarded on `referred_by_employee_id is null`, so
+  // it is true exactly once per conversation -- the first message. Pinned
+  // because swapping it for something that looks equivalent, like "the
+  // conversation is referred", would put the link in every reply.
+  assert.match(PROCESSOR, /firstReply: attribution\.recorded/);
 });
 
 // ============================================================
