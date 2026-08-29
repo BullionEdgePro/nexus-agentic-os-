@@ -195,3 +195,99 @@ test("a missing video scope returns nothing rather than an error", () => {
   const fn = TIKTOK.slice(TIKTOK.indexOf("export async function fetchTikTokVideos"));
   assert.match(fn, /if \(!scopes\.includes\("video\.list"\)\) return \[\]/);
 });
+
+// ============================================================
+// Gmail: the mailbox this platform must never list
+// ============================================================
+
+test("an empty address list fetches nothing, rather than everything", () => {
+  // THE SINGLE MOST IMPORTANT LINE IN THE GMAIL INTEGRATION. The restriction is
+  // a search query built from the client book. Built from no addresses, that
+  // query is empty — and an empty Gmail query matches EVERY MESSAGE in the
+  // mailbox. One guard is the difference between a client view and somebody's
+  // whole life.
+  const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
+  const fn = GMAIL.slice(GMAIL.indexOf("export async function fetchClientMail"));
+  assert.match(fn, /if \(clean\.length === 0\) return \[\]/);
+  // And the guard must come BEFORE the query is built.
+  assert.ok(
+    fn.indexOf("clean.length === 0") < fn.indexOf("const query"),
+    "the query is built before the empty-list guard"
+  );
+});
+
+test("the query is an OR over client addresses and nothing else", () => {
+  const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
+  assert.match(GMAIL, /from:\$\{a\} to:\$\{a\}/);
+  // No path that lists the mailbox.
+  assert.ok(
+    !/\/messages\?maxResults=\d+`/.test(GMAIL),
+    "there is a message list call with no query on it"
+  );
+});
+
+test("the addresses come from the caller's own client book", () => {
+  // Both predicates, like every other read of a book. A missing ownership
+  // clause here would search a COLLEAGUE'S clients through this person's
+  // mailbox.
+  const BOOK = read("packages", "db", "src", "client-book.ts");
+  const fn = BOOK.slice(BOOK.indexOf("export async function clientEmailAddresses"));
+  assert.match(fn, /contactServedBy\("\$1"\)/);
+  assert.match(fn, /contactOwnedBy\("\$2"\)/);
+});
+
+test("only metadata is requested, never the message body", () => {
+  // The headers and Gmail's own snippet are what the screen shows. Asking for
+  // the body would pull entire private correspondence through this server for
+  // no reason anybody could point at.
+  const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
+  assert.match(GMAIL, /format=metadata/);
+  assert.ok(!/format=full/.test(GMAIL), "the full message body is being fetched");
+});
+
+test("sending is restricted to people already in the book", () => {
+  // An endpoint that sends to any address the caller supplies is an open relay
+  // wearing a CRM's clothes — and it sends from that person's real mailbox.
+  assert.match(ROUTE, /if \(!addresses\.includes\(to\)\)/);
+  assert.match(ROUTE, /not one of your clients/);
+});
+
+test("gmail.modify is not requested", () => {
+  // readonly plus send covers everything this does. modify would also permit
+  // DELETING somebody's mail, which nothing here does and no consent screen
+  // should have to explain.
+  const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
+  assert.match(GMAIL, /gmail\.readonly/);
+  assert.match(GMAIL, /gmail\.send/);
+  assert.ok(!/gmail\.modify/.test(GMAIL.replace(/\/\*[\s\S]*?\*\//g, "")), "gmail.modify is being requested");
+});
+
+test("consent asks for offline access, or the connection dies in an hour", () => {
+  // Google returns a refresh token ONLY with access_type=offline and a forced
+  // prompt. Without it the connection works, then fails a week later in a way
+  // nobody connects to the moment it was set up.
+  const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
+  assert.match(GMAIL, /access_type", "offline/);
+  assert.match(GMAIL, /prompt", "consent/);
+});
+
+test("a connection with no refresh token is refused, not stored", () => {
+  assert.match(ROUTE, /if \(!token\.refreshToken\)/);
+  assert.match(ROUTE, /myaccount\.google\.com\/permissions/);
+});
+
+test("refreshing never writes null over the refresh token", () => {
+  // A Google refresh response carries no new refresh token. Round-tripping
+  // through saveConnection would erase the working one.
+  const STORE_SRC = read("packages", "db", "src", "social-connections.ts");
+  assert.match(STORE_SRC, /export async function refreshStoredAccessToken/);
+  const fn = STORE_SRC.slice(STORE_SRC.indexOf("export async function refreshStoredAccessToken"));
+  assert.ok(!/refresh_token_enc/.test(fn.slice(0, fn.indexOf("\n}"))), "the refresh token is being rewritten");
+});
+
+test("the panel says what Gmail will never read", () => {
+  // "Connect Gmail" reads as handing over a whole mailbox. It has to be
+  // corrected before somebody clicks, not after.
+  assert.match(ROUTE, /never lists your inbox/i);
+  assert.match(PANEL, /gmail\.cannot/);
+});

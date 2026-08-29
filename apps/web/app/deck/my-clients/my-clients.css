@@ -364,3 +364,54 @@
 .deck-root .cnx-videos li:last-child { border-bottom: 0; }
 .deck-root .cnx-title { color: var(--ink); overflow-wrap: anywhere; }
 .deck-root .cnx-nums { color: var(--slate); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Two cards now, so they need separating. */
+.deck-root .cnx-card + .cnx-card { margin-top: 12px; }
+
+.deck-root .cnx-mail { list-style: none; margin: 12px 0 0; padding: 0; }
+.deck-root .cnx-mail li {
+  display: grid;
+  gap: 1px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.deck-root .cnx-mail li:last-child { border-bottom: 0; }
+.deck-root .cnx-subject { font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.deck-root .cnx-unread .cnx-subject { font-weight: 600; }
+.deck-root .cnx-who { font-size: 11.5px; color: var(--slate); overflow-wrap: anywhere; }
+.deck-root .cnx-snippet {
+  font-size: 12px;
+  color: var(--slate);
+  /* One line. The snippet is a hint that this is the right thread, not the
+     message — and a wall of quoted replies buries the subjects above it. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-root .cnx-reply {
+  justify-self: start;
+  margin-top: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--signal-text);
+  cursor: pointer;
+}
+.deck-root .cnx-compose { display: grid; gap: 6px; margin: 8px 0 4px; }
+.deck-root .cnx-to { margin: 0; font-size: 11.5px; color: var(--slate); }
+.deck-root .cnx-compose input,
+.deck-root .cnx-compose textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.deck-root .cnx-compose textarea { resize: vertical; }
+.deck-root .cnx-compose .cnx-go { justify-self: start; }

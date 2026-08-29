@@ -70,6 +70,8 @@ export interface ClientRow {
   displayName: string | null;
   note: string | null;
   company: string | null;
+  /** Their email, where one is known. What Gmail is searched for. */
+  email: string | null;
   lastMessageAt: string | null;
   optedOut: boolean;
   /** Have they ever actually written in? An imported number has not. */
@@ -95,6 +97,7 @@ const toClient = (row: Row): ClientRow => ({
   // source there — and each one as a column is a migration per idea.
   note: typeof row.attributes?.note === "string" ? row.attributes.note : null,
   company: typeof row.attributes?.company === "string" ? row.attributes.company : null,
+  email: typeof row.attributes?.email === "string" ? row.attributes.email : null,
   lastMessageAt: row.last_message_at?.toISOString() ?? null,
   optedOut: row.opted_out,
   hasSpoken: row.has_spoken,
@@ -136,6 +139,7 @@ export interface AddClientInput {
   displayName: string;
   company?: string | null;
   note?: string | null;
+  email?: string | null;
 }
 
 export type AddClientResult =
@@ -217,13 +221,14 @@ export async function addClient(input: AddClientInput): Promise<AddClientResult>
                 ct.attributes
                   || jsonb_build_object('company', $3::text)
                   || jsonb_build_object('note', $4::text)
+                  || jsonb_build_object('email', $5::text)
               ),
               updated_at = now()
         where ct.id = $1
         returning ct.id, ct.wa_id, ct.display_name, ct.attributes, ct.last_message_at,
                   ct.reengagement_opted_out as opted_out,
                   (ct.last_message_at is not null) as has_spoken`,
-      [ensured.contactId, input.employeeId, input.company ?? null, input.note ?? null]
+      [ensured.contactId, input.employeeId, input.company ?? null, input.note ?? null, input.email ?? null]
     )
   );
   return { ok: true, client: toClient(rows[0]) };
@@ -282,7 +287,7 @@ export async function updateClientDetails(
   organizationId: string,
   employeeId: string,
   contactId: string,
-  patch: { displayName?: string; company?: string | null; note?: string | null }
+  patch: { displayName?: string; company?: string | null; note?: string | null; email?: string | null }
 ): Promise<ClientRow | null> {
   const { rows } = await getPool().query<Row>(
     `update contacts ct
@@ -291,6 +296,7 @@ export async function updateClientDetails(
               ct.attributes
                 || jsonb_build_object('company', $5::text)
                 || jsonb_build_object('note', $6::text)
+                || jsonb_build_object('email', $7::text)
             ),
             updated_at = now()
       where ct.id = $3
@@ -306,6 +312,7 @@ export async function updateClientDetails(
       patch.displayName ?? null,
       patch.company ?? null,
       patch.note ?? null,
+      patch.email ?? null,
     ]
   );
   return rows[0] ? toClient(rows[0]) : null;
@@ -599,4 +606,36 @@ export async function dailyReachUsed(): Promise<number> {
     );
     return Number(rows[0]?.n ?? 0);
   });
+}
+
+/**
+ * The email addresses in this person's own client book.
+ *
+ * ============================================================
+ * THE ONLY THING GMAIL IS EVER SEARCHED FOR
+ * ============================================================
+ *
+ * Gmail has no scope meaning "only mail from these people", so the restriction
+ * has to be a query, and this is where the query's terms come from. An empty
+ * result means no mail is fetched at all — which is the correct behaviour and
+ * the important one: a Gmail search built from no addresses matches EVERY
+ * message.
+ *
+ * Both predicates, like every other read of a client book. A missing ownership
+ * clause here would search a colleague's clients through this person's mailbox.
+ */
+export async function clientEmailAddresses(
+  organizationId: string,
+  employeeId: string
+): Promise<string[]> {
+  const { rows } = await getPool().query<{ email: string }>(
+    `select ct.attributes->>'email' as email
+       from contacts ct
+      where ${contactServedBy("$1")}
+        and ${contactOwnedBy("$2")}
+        and ct.attributes->>'email' is not null
+        and ct.attributes->>'email' <> ''`,
+    [organizationId, employeeId]
+  );
+  return rows.map((row) => row.email);
 }

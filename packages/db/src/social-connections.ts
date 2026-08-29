@@ -221,3 +221,51 @@ export async function recordSync(
     [organizationId, employeeId, provider, error]
   );
 }
+
+/**
+ * Replace only the access token, keeping the refresh token that produced it.
+ *
+ * ============================================================
+ * WHY NOT saveConnection
+ * ============================================================
+ *
+ * A Google refresh response does NOT return a new refresh token. Round-tripping
+ * through `saveConnection` would write null over the working one, and the
+ * connection would die an hour later with no way to renew — a failure that
+ * looks like the platform breaking a week after somebody set it up.
+ *
+ * So refreshing touches exactly the two columns that changed.
+ */
+export async function refreshStoredAccessToken(
+  organizationId: string,
+  employeeId: string | null,
+  provider: string,
+  accessToken: string,
+  expiresAt: Date | null
+): Promise<void> {
+  await getPool().query(
+    `update social_connections
+        set access_token_enc = $4,
+            expires_at       = $5,
+            last_error       = null,
+            updated_at       = now()
+      where organization_id = $1
+        and employee_id is not distinct from $2
+        and provider = $3`,
+    [organizationId, employeeId, provider, sealToken(accessToken), expiresAt]
+  );
+}
+
+/** When the stored access token expires, or null if unknown. */
+export async function connectionExpiry(
+  organizationId: string,
+  employeeId: string | null,
+  provider: string
+): Promise<Date | null> {
+  const { rows } = await getPool().query<{ expires_at: Date | null }>(
+    `select expires_at from social_connections
+      where organization_id = $1 and employee_id is not distinct from $2 and provider = $3`,
+    [organizationId, employeeId, provider]
+  );
+  return rows[0]?.expires_at ?? null;
+}

@@ -76,6 +76,21 @@ function normaliseWaId(raw: unknown): string | null {
   return digits;
 }
 
+/**
+ * An email address, or nothing.
+ *
+ * Deliberately loose — one @ with something either side. A stricter pattern
+ * rejects addresses that genuinely work, and the cost of accepting a typo is a
+ * mail search that finds nothing, while the cost of rejecting a real address is
+ * somebody unable to record their client.
+ */
+export function emailOf(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().toLowerCase().slice(0, 200);
+  if (!trimmed) return null;
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed) ? trimmed : null;
+}
+
 export function text(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -120,6 +135,7 @@ myDeskRoute.post("/clients", async (c) => {
     displayName,
     company: text(body.company, 120),
     note: text(body.note, 1000),
+    email: emailOf(body.email),
   });
 
   if (result.ok) return c.json({ client: result.client }, 201);
@@ -176,6 +192,7 @@ myDeskRoute.patch("/clients/:id", async (c) => {
       displayName: text(body.displayName, 120) ?? undefined,
       company: text(body.company, 120),
       note: text(body.note, 1000),
+      email: emailOf(body.email),
     })
   );
   if (!client) return c.json({ error: "That is not one of your clients." }, 404);

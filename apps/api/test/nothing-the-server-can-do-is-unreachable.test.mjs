@@ -58,6 +58,8 @@ const REACHED_ELSEWHERE = {
   "GET /links": "the public links page is server-rendered",
   "GET /api/connections/tiktok/callback":
     "TikTok redirects the browser here after consent — it is reached by the platform, not by our client",
+  "GET /api/connections/gmail/callback":
+    "Google redirects the browser here after consent — same shape as the TikTok one",
   "GET /api/organizations/:slug/export/customers.csv": "download helper on the customers page",
   "GET /api/organizations/:slug/export/messages.csv": "download helper on the customers page",
   "GET /api/organizations/:slug/contacts/:contactId/export.json": "download helper on the customers page",

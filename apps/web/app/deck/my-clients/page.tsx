@@ -264,6 +264,7 @@ function AddClientForm({ onDone }: { onDone: () => void }) {
   const [waId, setWaId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -276,7 +277,7 @@ function AddClientForm({ onDone }: { onDone: () => void }) {
         setSaving(true);
         setError(null);
         try {
-          await addMyClient({ waId, displayName, company, note });
+          await addMyClient({ waId, displayName, company, note, email });
           onDone();
         } catch (err) {
           // The three collision refusals each name a different next action.
@@ -310,6 +311,19 @@ function AddClientForm({ onDone }: { onDone: () => void }) {
       <label>
         <span>Company</span>
         <input value={company} onChange={(event) => setCompany(event.target.value)} />
+      </label>
+      <label>
+        <span>Email</span>
+        <input
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          inputMode="email"
+          placeholder="optional"
+        />
+        {/* The only thing a connected mailbox is ever searched for. Without an
+            address here there is nothing to look up, and the Gmail panel says
+            so rather than showing an empty list that reads as "no mail". */}
+        <em>Used to find their emails if you connect Gmail.</em>
       </label>
       <label className="mc-wide">
         <span>Note</span>

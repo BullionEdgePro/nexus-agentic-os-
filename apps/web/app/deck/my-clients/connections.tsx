@@ -6,6 +6,11 @@ import {
   startTikTokConnect,
   getTikTokInsights,
   disconnectTikTok,
+  startGmailConnect,
+  getClientMail,
+  sendClientEmail,
+  disconnectGmail,
+  type ClientMail,
   readableError,
   type ConnectionProvider,
   type SocialConnection,
@@ -41,6 +46,8 @@ export function ConnectionsPanel() {
   const [connections, setConnections] = useState<SocialConnection[] | null>(null);
   const [providers, setProviders] = useState<ConnectionProvider[]>([]);
   const [insights, setInsights] = useState<TikTokInsights | null>(null);
+  const [mail, setMail] = useState<{ messages: ClientMail[]; note: string | null } | null>(null);
+  const [replyTo, setReplyTo] = useState<ClientMail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,6 +58,12 @@ export function ConnectionsPanel() {
       setConnections(data.connections);
       setProviders(data.providers);
       setError(null);
+
+      if (data.connections.some((c) => c.provider === "gmail" && c.usable)) {
+        getClientMail()
+          .then((m) => setMail({ messages: m.messages, note: m.note }))
+          .catch((err) => setNotice(readableError(err, "Gmail could not be read just now.")));
+      }
 
       if (data.connections.some((c) => c.provider === "tiktok" && c.usable)) {
         // Best-effort. A connected account whose insights fail to load is still
@@ -81,7 +94,9 @@ export function ConnectionsPanel() {
   }, []);
 
   const tiktok = providers.find((p) => p.id === "tiktok");
+  const gmail = providers.find((p) => p.id === "gmail");
   const connected = connections?.find((c) => c.provider === "tiktok") ?? null;
+  const mailbox = connections?.find((c) => c.provider === "gmail") ?? null;
 
   if (connections === null || !tiktok) return null;
 
@@ -203,6 +218,171 @@ export function ConnectionsPanel() {
           </ul>
         ) : null}
       </div>
+
+      {gmail ? (
+        <div className="cnx-card">
+          <div className="cnx-head">
+            <div>
+              <strong>Gmail</strong>
+              {mailbox ? <span className="cnx-on">{mailbox.displayName ?? "connected"}</span> : null}
+            </div>
+            {mailbox ? (
+              <button
+                type="button"
+                className="cnx-off"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  await disconnectGmail().catch(() => undefined);
+                  setMail(null);
+                  await load();
+                  setBusy(false);
+                }}
+              >
+                Disconnect
+              </button>
+            ) : gmail.configured ? (
+              <button
+                type="button"
+                className="cnx-go"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    const { url } = await startGmailConnect();
+                    window.location.href = url;
+                  } catch (err) {
+                    setError(readableError(err, "Could not start the Google sign-in."));
+                    setBusy(false);
+                  }
+                }}
+              >
+                Connect Gmail
+              </button>
+            ) : null}
+          </div>
+
+          <p className="cnx-offers">{gmail.offers}</p>
+          {/* The most important line on this screen. A mailbox holds a person's
+              bank, their doctor, their arguments — and "connect Gmail" reads as
+              handing all of it over. It does not, and that has to be said
+              before anybody clicks, not after. */}
+          <p className="cnx-cannot">{gmail.cannot}</p>
+
+          {!gmail.configured ? <p className="cnx-needs">Not set up on this server yet. {gmail.needs}</p> : null}
+          {mailbox && !mailbox.usable ? (
+            <p className="cnx-needs">The stored sign-in can no longer be read — connect it again.</p>
+          ) : null}
+          {mailbox?.lastError ? <p className="cnx-needs">Last read failed: {mailbox.lastError}</p> : null}
+
+          {mail?.note ? <p className="cnx-note">{mail.note}</p> : null}
+
+          {mail?.messages.length ? (
+            <ul className="cnx-mail">
+              {mail.messages.map((message) => (
+                <li key={message.id} className={message.unread ? "cnx-unread" : undefined}>
+                  <span className="cnx-subject">{message.subject ?? "(no subject)"}</span>
+                  <span className="cnx-who">{message.from ?? message.to ?? ""}</span>
+                  {message.snippet ? <span className="cnx-snippet">{message.snippet}</span> : null}
+                  {addressIn(message.from) || addressIn(message.to) ? (
+                    <button
+                      type="button"
+                      className="cnx-reply"
+                      onClick={() => setReplyTo(replyTo?.id === message.id ? null : message)}
+                    >
+                      {replyTo?.id === message.id ? "Cancel" : "Reply"}
+                    </button>
+                  ) : null}
+                  {replyTo?.id === message.id ? (
+                    <Composer
+                      to={addressIn(message.from) ?? addressIn(message.to) ?? ""}
+                      subject={message.subject ? `Re: ${message.subject.replace(/^re:\s*/i, "")}` : ""}
+                      onDone={(said) => {
+                        setReplyTo(null);
+                        setNotice(said);
+                      }}
+                    />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : mailbox && mail && !mail.note ? (
+            <p className="cnx-note">Nothing recent to or from your clients.</p>
+          ) : null}
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * The address inside a From or To header.
+ *
+ * Headers arrive as `Name <someone@example.com>` or bare. This is a convenience
+ * for prefilling the reply box, NOT a permission check — the server re-reads the
+ * client book and refuses anything not in it, which is what actually stops this
+ * from sending to a stranger.
+ */
+function addressIn(header: string | null): string | null {
+  if (!header) return null;
+  const angled = /<([^>]+)>/.exec(header);
+  const candidate = (angled ? angled[1] : header).trim().toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(candidate) ? candidate : null;
+}
+
+/** Write one email, to somebody already in the client book. */
+function Composer({
+  to,
+  subject: initialSubject,
+  onDone,
+}: {
+  to: string;
+  subject: string;
+  onDone: (message: string) => void;
+}) {
+  const [subject, setSubject] = useState(initialSubject);
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  return (
+    <form
+      className="cnx-compose"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (sending) return;
+        setSending(true);
+        setProblem(null);
+        try {
+          await sendClientEmail({ to, subject, body });
+          onDone(`Sent to ${to}.`);
+        } catch (err) {
+          setProblem(readableError(err, "It did not send."));
+          setSending(false);
+        }
+      }}
+    >
+      <p className="cnx-to">To {to}</p>
+      <input
+        value={subject}
+        onChange={(event) => setSubject(event.target.value)}
+        placeholder="Subject"
+        required
+      />
+      <textarea
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
+        rows={4}
+        placeholder="Your message"
+        required
+      />
+      {problem ? <p className="mc-error">{problem}</p> : null}
+      <button type="submit" className="cnx-go" disabled={sending}>
+        {sending ? "Sending…" : "Send from your mailbox"}
+      </button>
+      {/* Said on the button rather than beside it. It leaves as them, from their
+          real address, and a reply comes back to their inbox rather than here. */}
+    </form>
   );
 }

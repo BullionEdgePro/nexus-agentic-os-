@@ -1964,6 +1964,7 @@ export interface MyClient {
   displayName: string | null;
   company: string | null;
   note: string | null;
+  email: string | null;
   lastMessageAt: string | null;
   optedOut: boolean;
   hasSpoken: boolean;
@@ -1994,6 +1995,7 @@ export function addMyClient(input: {
   displayName: string;
   company?: string;
   note?: string;
+  email?: string;
 }): Promise<{ client: MyClient }> {
   return request("/api/my/clients", { method: "POST", body: JSON.stringify(input) });
 }
@@ -2247,4 +2249,39 @@ export function getTikTokInsights(): Promise<TikTokInsights> {
 
 export function disconnectTikTok(): Promise<{ ok: boolean }> {
   return request("/api/connections/tiktok", { method: "DELETE" });
+}
+
+export interface ClientMail {
+  id: string;
+  threadId: string;
+  from: string | null;
+  to: string | null;
+  subject: string | null;
+  snippet: string | null;
+  receivedAt: string | null;
+  unread: boolean;
+}
+
+export function startGmailConnect(): Promise<{ url: string }> {
+  return request("/api/connections/gmail/start");
+}
+
+export function getClientMail(): Promise<{
+  messages: ClientMail[];
+  addressesSearched: number;
+  note: string | null;
+}> {
+  return request("/api/connections/gmail/mail");
+}
+
+export function sendClientEmail(input: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ id: string }> {
+  return request("/api/connections/gmail/send", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function disconnectGmail(): Promise<{ ok: boolean }> {
+  return request("/api/connections/gmail", { method: "DELETE" });
 }
