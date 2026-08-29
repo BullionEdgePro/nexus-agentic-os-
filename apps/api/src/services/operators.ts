@@ -1442,16 +1442,27 @@ const accountStanding: Operator = {
     // Then the ceiling, and only when it is low enough to actually bind.
     const verification = (standing.businessVerification ?? "").toLowerCase();
     if (verification && verification !== "verified") {
+      // WAITING IS NOT THE SAME AS NEEDING TO ACT, and an alarm that tells
+      // somebody to do a thing they have already done is noise — the kind that
+      // teaches people to skim this list. `pending` means it is with Meta and
+      // the only correct action is to wait, so it drops to info and says so.
+      const submitted = verification === "pending";
+      const ceiling = standing.dailyCustomerLimit ?? "a low number of";
       findings.push({
         fingerprint: "business-not-verified",
-        severity: "warn" as const,
-        title: `Business verification is ${verification}`,
-        detail:
-          `Until the business behind this WhatsApp account is verified, Meta caps it at ` +
-          `${standing.dailyCustomerLimit ?? "a low number of"} unique customers per day — shared across all ` +
-          `businesses on ${standing.displayNumber}. Campaigns silently stop delivering once it is reached. ` +
-          `Verification is done by the owner in Business Manager under Security Centre, with the trade licence ` +
-          `and proof of address; nothing on this platform can complete it.`,
+        severity: submitted ? ("info" as const) : ("warn" as const),
+        title: submitted
+          ? "Business verification is with Meta"
+          : `Business verification is ${verification}`,
+        detail: submitted
+          ? `Submitted and under review. Until it completes, Meta caps this account at ${ceiling} unique ` +
+            `customers per day, shared across every business on ${standing.displayNumber} — so a large campaign ` +
+            `can still stop delivering partway through. Nothing to do but wait; this clears itself.`
+          : `Until the business behind this WhatsApp account is verified, Meta caps it at ${ceiling} unique ` +
+            `customers per day — shared across all businesses on ${standing.displayNumber}. Campaigns silently ` +
+            `stop delivering once it is reached. Verification is done by the owner in Business Manager under ` +
+            `Security Centre, with the trade licence and proof of address; nothing on this platform can ` +
+            `complete it, and the documents must match the portfolio's legal name and address exactly.`,
         subjectKind: "organization",
         subjectId: organizationId,
       });
