@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { env } from "./config/env.js";
 import { whatsappWebhook } from "./webhook/whatsapp.js";
 import { organizationsRoute } from "./routes/organizations.js";
+import { myDeskRoute } from "./routes/my-desk.js";
 import { conversationsRoute } from "./routes/conversations.js";
 import { broadcastsRoute } from "./routes/broadcasts.js";
 import { metricsRoute } from "./routes/metrics.js";
@@ -292,6 +293,7 @@ app.route("/api/organizations", forecastsRoute);
 // own staff are the people who know whether the wording fits, and the mount is
 // what gives `agent_phrases` a tenant context for RLS to enforce against.
 app.route("/api/organizations", phrasesRoute);
+app.route("/api/my", myDeskRoute);
 app.route("/api/conversations", conversationsRoute);
 // Assignment and the personal-WhatsApp handoff hang off a conversation id,
 // so they compose onto the same /api/conversations router.

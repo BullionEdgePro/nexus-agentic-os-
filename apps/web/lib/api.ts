@@ -1953,3 +1953,78 @@ export function setAutomationActive(
 export function deleteAutomation(id: string): Promise<{ ok: true }> {
   return request(`/api/automations/${id}`, { method: "DELETE" });
 }
+
+// ============================================================
+// A staff member's own desk
+// ============================================================
+
+export interface MyClient {
+  id: string;
+  waId: string;
+  displayName: string | null;
+  company: string | null;
+  note: string | null;
+  lastMessageAt: string | null;
+  optedOut: boolean;
+  hasSpoken: boolean;
+}
+
+export interface MyChannel {
+  /**
+   * Three states, kept distinct because two of them send and only one is
+   * private. Collapsing them into a boolean is how a staff member concludes
+   * they have their own line when every message leaves from the company's.
+   */
+  state: "own-number" | "claimed-but-not-on-the-account" | "shared";
+  ownNumber: { phoneNumberId: string; displayNumber: string; verifiedName: string; quality: string | null } | null;
+  sharedNumber: { displayNumber: string; verifiedName: string; quality: string | null } | null;
+  personalNumberOnFile: string | null;
+  canBroadcast: boolean;
+  allowance: { used: number; cap: number; remaining: number };
+  lookupFailed: string | null;
+}
+
+export function getMyClients(search?: string): Promise<{ clients: MyClient[] }> {
+  const query = search?.trim() ? `?q=${encodeURIComponent(search.trim())}` : "";
+  return request(`/api/my/clients${query}`);
+}
+
+export function addMyClient(input: {
+  waId: string;
+  displayName: string;
+  company?: string;
+  note?: string;
+}): Promise<{ client: MyClient }> {
+  return request("/api/my/clients", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateMyClient(
+  id: string,
+  patch: { displayName?: string; company?: string | null; note?: string | null }
+): Promise<{ client: MyClient }> {
+  return request(`/api/my/clients/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export function releaseMyClient(id: string): Promise<{ ok: true }> {
+  return request(`/api/my/clients/${id}/release`, { method: "POST" });
+}
+
+export function claimMyClient(id: string): Promise<{ ok: true }> {
+  return request(`/api/my/clients/${id}/claim`, { method: "POST" });
+}
+
+export function getMyChannel(): Promise<MyChannel> {
+  return request("/api/my/channel");
+}
+
+export function getAvailableNumbers(): Promise<{
+  numbers: Array<{
+    phoneNumberId: string;
+    displayNumber: string;
+    verifiedName: string;
+    quality: string | null;
+    isShared: boolean;
+  }>;
+}> {
+  return request("/api/my/channel/available");
+}

@@ -23,6 +23,13 @@ export interface NavItem {
   icon: ReactNode;
   /** Operators only. An employee reaching these gets a 403 from the API. */
   operatorOnly?: boolean;
+  /**
+   * Staff only — the mirror of operatorOnly, and needed for the same reason.
+   * An operator has no employee record, so their own client book is not empty,
+   * it does not exist. Offering them the door produces a screen explaining why
+   * it is not theirs, which is a worse answer than not offering it.
+   */
+  staffOnly?: boolean;
 }
 
 const stroke = {
@@ -102,6 +109,20 @@ export const NAV: NavItem[] = [
     // Deliberately NOT operatorOnly. The person who has been booked is the
     // person who needs the diary — /api/bookings narrows an employee to their
     // own business inside the route, exactly as follow-ups does.
+  },
+  {
+    href: "/deck/my-clients",
+    label: "My clients",
+    // A single person with a card: the book you keep, as against Customers,
+    // which is the whole business's list.
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <rect x="3" y="4.5" width="18" height="15" rx="2" />
+        <circle cx="9" cy="11" r="2.2" />
+        <path d="M5.6 16.4c0-1.7 1.5-2.9 3.4-2.9s3.4 1.2 3.4 2.9M15 10h4M15 13.5h4" />
+      </svg>
+    ),
+    staffOnly: true,
   },
   {
     href: "/deck/customers",

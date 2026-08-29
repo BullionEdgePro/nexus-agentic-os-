@@ -33,3 +33,4 @@ export * from "./self-improvement.js";
 export * from "./automation-rules.js";
 export * from "./automations.js";
 export * from "./contact-identity.js";
+export * from "./client-book.js";

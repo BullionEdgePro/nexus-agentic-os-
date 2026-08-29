@@ -1,0 +1,150 @@
+/* A staff member's own desk.
+   Every colour is a token defined in deck.css — a literal here would be a
+   colour that only works in one theme. */
+
+.deck-root .mc-head { margin-bottom: 20px; }
+.deck-root .mc-head h1 { font-size: 22px; color: var(--ink); margin: 0 0 4px; }
+.deck-root .mc-head p { font-size: 13px; color: var(--slate); margin: 0; max-width: 62ch; }
+
+.deck-root .mc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* --- the channel panel ------------------------------------ */
+
+.deck-root .mc-channel {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 22px;
+  background: var(--marble);
+}
+
+/* The three states read differently at a glance, because they mean different
+   things: a private line, a line that will not send, and the shared one. */
+.deck-root .mc-channel-own-number { border-left: 3px solid var(--signal-text); }
+.deck-root .mc-channel-claimed-but-not-on-the-account { border-left: 3px solid var(--warn); }
+.deck-root .mc-channel-shared { border-left: 3px solid var(--hairline); }
+
+.deck-root .mc-channel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--slate);
+  margin: 0 0 8px;
+}
+.deck-root .mc-channel p { font-size: 13px; color: var(--ink); margin: 0 0 8px; max-width: 72ch; }
+.deck-root .mc-channel p:last-child { margin-bottom: 0; }
+.deck-root .mc-note { color: var(--slate); font-size: 12.5px; }
+.deck-root .mc-warn { color: var(--warn); }
+.deck-root .mc-allowance { font-size: 12.5px; color: var(--slate); }
+
+/* --- the book --------------------------------------------- */
+
+.deck-root .mc-toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.deck-root .mc-toolbar input {
+  flex: 1 1 260px;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.deck-root .mc-toolbar button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--signal-text);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.deck-root .mc-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--marble);
+}
+.deck-root .mc-form label { display: flex; flex-direction: column; gap: 4px; }
+.deck-root .mc-form span { font-size: 12px; color: var(--slate); }
+.deck-root .mc-form em { font-size: 11.5px; color: var(--slate); font-style: normal; }
+.deck-root .mc-form input,
+.deck-root .mc-form textarea {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.deck-root .mc-form .mc-wide { grid-column: 1 / -1; }
+.deck-root .mc-form button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--signal-text);
+  color: var(--paper);
+  cursor: pointer;
+  justify-self: start;
+}
+
+.deck-root .mc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.deck-root .mc-table th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--slate);
+  font-weight: 600;
+  padding: 0 10px 7px;
+  border-bottom: 1px solid var(--hairline);
+}
+.deck-root .mc-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink);
+}
+.deck-root .mc-num { font-variant-numeric: tabular-nums; }
+.deck-root .mc-flag {
+  margin-left: 7px;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--pebble);
+  color: var(--slate);
+}
+.deck-root .mc-release {
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  padding: 4px 10px;
+  color: var(--slate);
+  cursor: pointer;
+}
+.deck-root .mc-release:hover { border-color: var(--signal-text); color: var(--signal-text); }
+
+.deck-root .mc-empty { font-size: 13px; color: var(--slate); max-width: 62ch; }
+.deck-root .mc-error { font-size: 13px; color: var(--crit); }
+
+/* The book is the widest thing here; it scrolls in its own box rather than
+   pushing the page sideways. */
+.deck-root .mc-book { overflow-x: auto; }

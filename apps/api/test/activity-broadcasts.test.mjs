@@ -580,7 +580,26 @@ test("operator-only screens are hidden from employees, not just refused", () => 
   // teaches the person that the product is broken rather than that the screen
   // is not theirs, and it hands them a list of internal URLs besides.
   const SHELL = read("apps", "web", "app", "console-shell.tsx");
-  assert.match(SHELL, /role === "operator" \? NAV : NAV\.filter\(\(item\) => !item\.operatorOnly\)/);
+
+  // Asserted as a PROPERTY, not as a spelling. The first version of this test
+  // pinned the exact filter expression, and went red the day the rail learned
+  // to hide staff-only screens from the operator too -- a correct change that
+  // no longer matched the string. A test that fails on improvement is a test
+  // that gets deleted rather than heeded.
+  //
+  // What must hold in both directions: whichever role is being rendered, the
+  // list it is built from excludes the flag belonging to the other one.
+  const filtering = SHELL.slice(SHELL.indexOf("const visible"), SHELL.indexOf("return ("));
+  assert.match(filtering, /operatorOnly/, "the rail no longer hides operator screens from staff");
+  assert.match(
+    filtering,
+    /role === "operator"/,
+    "the rail no longer decides what to hide from the role"
+  );
+  assert.ok(
+    /!item\.operatorOnly/.test(filtering),
+    "operator-only entries are no longer filtered out for employees"
+  );
 
   // The three that must carry the flag. Named explicitly: these are the routes
   // mounted behind `operatorOnly` in the API, and the rail has to agree with

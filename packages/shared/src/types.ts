@@ -284,6 +284,13 @@ export interface Employee {
 
   whatsappPhoneNumberId?: string | null;
   whatsappNumber?: string | null;
+  /** Set only once Meta has confirmed the number exists on the business account. */
+  whatsappVerifiedName?: string | null;
+  whatsappConnectedAt?: string | null;
+  whatsappQualityRating?: string | null;
+  /** Off by default: a staff campaign spends the shared number's quality rating. */
+  canBroadcast?: boolean;
+  broadcastMonthlyCap?: number;
 
   timezone: string;
   workingHours: WeeklySchedule;

@@ -53,6 +53,13 @@ const TAB_API = {
   // to their own business.
   "/deck/board": "/api/tasks",
   "/deck/bookings": "/api/bookings",
+  // A staff member's own client book. Staff-only rather than operator-only,
+  // which is the first entry in this table to run that way: an operator has no
+  // employee record, so the endpoint has nothing to key on and refuses them by
+  // design. The rail hides it from them for the same reason it hides
+  // Broadcasts from staff -- a door that answers "not yours" is worse than no
+  // door.
+  "/deck/my-clients": "/api/my/clients",
   // Customers. Addressed per organization deliberately rather than through a
   // bare /api/contacts scoped in the handler: every row is a real person, so
   // the :slug puts requireTenantScope in front of the read rather than
@@ -235,7 +242,16 @@ test("the rail is filtered by role at render time", () => {
   // The flag existed on three entries and was read by nothing at all for a
   // while. A flag nobody reads is worse than no flag, because it reads like a
   // control.
-  assert.match(SHELL, /role === "operator" \? NAV : NAV\.filter\(\(item\) => !item\.operatorOnly\)/);
+  // The property, not the spelling. A second copy of this assertion in
+  // activity-broadcasts.test.mjs pinned the same expression, and both went red
+  // together the day the rail also learned to hide staff-only screens from the
+  // operator -- one correct change, two failing tests, neither describing a
+  // fault. What has to be true is that the rail branches on the role and drops
+  // the other role's entries.
+  const filtering = SHELL.slice(SHELL.indexOf("const visible"), SHELL.indexOf("return ("));
+  assert.match(filtering, /role === "operator"/);
+  assert.ok(/!item\.operatorOnly/.test(filtering), "employees are shown operator screens again");
+  assert.ok(/!item\.staffOnly/.test(filtering), "the operator is shown a staff-only desk again");
 });
 
 test("scope comes from the signed session, never from the request", () => {

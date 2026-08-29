@@ -230,3 +230,49 @@ export async function createMetaTemplate(
 
   return { name: spec.name, ok: true, id: payload.id, status: payload.status };
 }
+
+export interface WabaNumber {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+  verifiedName: string;
+  qualityRating: string | null;
+}
+
+/**
+ * Every number registered on a WhatsApp Business Account.
+ *
+ * ============================================================
+ * THE ONLY HONEST WAY TO SAY "CONNECTED"
+ * ============================================================
+ *
+ * A staff member typing their mobile number into a settings box has connected
+ * nothing. Sending is `POST /{phone_number_id}/messages` against one access
+ * token, so a number can only ever send if Meta already holds it on this
+ * account — and that is a question with a real answer, asked here rather than
+ * assumed.
+ *
+ * The alternative, storing whatever was typed and finding out at send time, is
+ * how a campaign reports "queued" to five hundred people and delivers to none.
+ *
+ * NOT cached. This is asked when somebody is setting a number up and when a
+ * campaign is about to go out; both are rare, and a stale yes is worse than a
+ * slow no.
+ */
+export async function listWabaNumbers(wabaId: string): Promise<WabaNumber[]> {
+  const url =
+    `https://graph.facebook.com/${env.metaGraphApiVersion}/${wabaId}/phone_numbers` +
+    `?fields=id,display_phone_number,verified_name,quality_rating&limit=100` +
+    `&access_token=${encodeURIComponent(env.metaAccessToken)}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Listing WhatsApp numbers failed (${response.status}): ${await response.text()}`);
+  }
+  const payload = (await response.json()) as { data?: Array<Record<string, unknown>> };
+  return (payload.data ?? []).map((row) => ({
+    phoneNumberId: String(row.id ?? ""),
+    displayPhoneNumber: String(row.display_phone_number ?? ""),
+    verifiedName: String(row.verified_name ?? ""),
+    qualityRating: row.quality_rating ? String(row.quality_rating) : null,
+  }));
+}

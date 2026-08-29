@@ -33,6 +33,11 @@ interface EmployeeRow {
   last_login_device: string | null;
   human_first: boolean;
   is_active: boolean;
+  whatsapp_verified_name: string | null;
+  whatsapp_connected_at: string | null;
+  whatsapp_quality_rating: string | null;
+  can_broadcast: boolean;
+  broadcast_monthly_cap: number;
 }
 
 const EMPLOYEE_COLUMNS = `
@@ -40,7 +45,9 @@ const EMPLOYEE_COLUMNS = `
   permissions, whatsapp_phone_number_id, whatsapp_number, timezone, working_hours, break_schedule,
   languages, skills, expertise, twin_enabled, ai_personality, response_style, knowledge_collection,
   escalation_rules, twin_disclosure, digital_signature, manual_presence, manual_presence_until,
-  last_seen_at, last_login_at, last_login_device, human_first, is_active
+  last_seen_at, last_login_at, last_login_device, human_first, is_active,
+  whatsapp_verified_name, whatsapp_connected_at, whatsapp_quality_rating,
+  can_broadcast, broadcast_monthly_cap
 `;
 
 function toEmployee(row: EmployeeRow): Employee {
@@ -56,6 +63,11 @@ function toEmployee(row: EmployeeRow): Employee {
     permissions: row.permissions ?? {},
     whatsappPhoneNumberId: row.whatsapp_phone_number_id,
     whatsappNumber: row.whatsapp_number,
+    whatsappVerifiedName: row.whatsapp_verified_name,
+    whatsappConnectedAt: row.whatsapp_connected_at,
+    whatsappQualityRating: row.whatsapp_quality_rating,
+    canBroadcast: row.can_broadcast,
+    broadcastMonthlyCap: row.broadcast_monthly_cap,
     timezone: row.timezone,
     workingHours: row.working_hours ?? {},
     breakSchedule: row.break_schedule ?? {},

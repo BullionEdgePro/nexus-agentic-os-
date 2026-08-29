@@ -47,7 +47,13 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
   // each of which the API refuses with a 403. A menu of closed doors is worse
   // than a shorter menu: it teaches the person that the product is broken
   // rather than that the screen is not theirs.
-  const visible = role === "operator" ? NAV : NAV.filter((item) => !item.operatorOnly);
+  // Both directions, for the same reason: a door that answers "this is not
+  // yours" teaches that the product is broken rather than that the screen is
+  // somebody else's.
+  const visible =
+    role === "operator"
+      ? NAV.filter((item) => !item.staffOnly)
+      : NAV.filter((item) => !item.operatorOnly);
 
   return (
     <>
