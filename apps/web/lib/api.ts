@@ -253,6 +253,31 @@ export function saveSchedule(
   });
 }
 
+export interface MySchedule {
+  workingHours: WeeklySchedule;
+  weeklyHours: number;
+  timezone: string;
+}
+
+/** The signed-in staff member's OWN rota. Keyed off the session, not an id. */
+export function getMySchedule(): Promise<MySchedule> {
+  return request("/api/my/schedule");
+}
+
+/**
+ * Set your own working hours. The server validates and returns the recomputed
+ * weekly total, so the panel can say "0 hours — you are off-shift" the moment
+ * that becomes true rather than leaving it to be discovered later.
+ */
+export function saveMySchedule(
+  workingHours: WeeklySchedule
+): Promise<{ workingHours: WeeklySchedule; weeklyHours: number }> {
+  return request("/api/my/schedule", {
+    method: "PATCH",
+    body: JSON.stringify({ workingHours }),
+  });
+}
+
 export interface DirectContact {
   url: string;
   message: string;

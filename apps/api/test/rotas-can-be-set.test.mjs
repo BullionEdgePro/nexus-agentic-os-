@@ -220,3 +220,42 @@ test("a rota totalling zero hours is surfaced, not just stored", () => {
   assert.match(LIST, /no hours set/);
   console.log("PASS: a rota can be set, is validated, and an empty one is visible");
 });
+
+// ============================================================
+// Staff setting their OWN hours (self-service)
+// ============================================================
+
+const MY_DESK = read("apps", "api", "src", "routes", "my-desk.ts");
+const STAFF_PANEL = read("apps", "web", "app", "deck", "my-clients", "working-hours.tsx");
+
+test("a staff member has a self-scoped schedule endpoint, keyed off the session", () => {
+  // The owner's editor takes an :employeeId in the URL and can set anyone's in
+  // the business. The staff one must NOT — it edits only the caller's own, so it
+  // is reached through deskOf(c) (the session), never a colleague's id.
+  assert.match(MY_DESK, /myDeskRoute\.get\("\/schedule"/);
+  assert.match(MY_DESK, /myDeskRoute\.patch\("\/schedule"/);
+  const patch = MY_DESK.slice(MY_DESK.indexOf('myDeskRoute.patch("/schedule"'));
+  const body = patch.slice(0, patch.indexOf("\n});"));
+  assert.match(body, /const desk = deskOf\(c\)/);
+  assert.match(body, /updateEmployeeSchedule\(desk\.employeeId/);
+  // No employee id is read from the request — the only id used is the session's.
+  assert.ok(
+    !/param\("employeeId"\)/.test(body),
+    "the staff schedule endpoint reads an employee id from the request instead of the session"
+  );
+});
+
+test("the staff endpoint validates the rota the same way the owner's does", () => {
+  // Same jsonb-accepts-anything trap. A staff member typing a backwards window
+  // must be refused on the way in, not left silently unbookable.
+  const patch = MY_DESK.slice(MY_DESK.indexOf('myDeskRoute.patch("/schedule"'));
+  assert.match(patch, /parseWeeklySchedule\(body\.workingHours\)/);
+  assert.match(patch, /if \(!parsed\.ok\)/);
+});
+
+test("the staff panel says out loud when a saved rota is zero hours", () => {
+  // Off-shift is a state you can choose here, so it must be visible — the whole
+  // reason weeklyHours is surfaced rather than inferred from an empty diary.
+  assert.match(STAFF_PANEL, /off-shift/i);
+  assert.match(STAFF_PANEL, /saveMySchedule/);
+});

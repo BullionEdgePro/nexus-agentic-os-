@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { MyLinkPanel } from "./my-link";
 import { ConnectionsPanel } from "./connections";
+import { WorkingHoursPanel } from "./working-hours";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "./my-clients.css";
@@ -103,6 +104,8 @@ export default function MyClientsPage() {
       <ConnectionsPanel />
 
       <ChannelPanel channel={channel} />
+
+      <WorkingHoursPanel />
 
       <section className="mc-book">
         <div className="mc-toolbar">

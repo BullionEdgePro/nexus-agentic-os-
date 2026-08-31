@@ -11,7 +11,9 @@ import {
   withTenant,
   referralsForEmployee,
   getDisplayNumbers,
+  updateEmployeeSchedule,
 } from "@nexus/db";
+import { parseWeeklySchedule, weeklyHours, resolvePresence } from "@nexus/employees";
 import { listWabaNumbers } from "../lib/whatsapp-client.js";
 import { buildStaffDeepLink } from "@nexus/agents";
 import type { SessionScope } from "../lib/session.js";
@@ -197,6 +199,67 @@ myDeskRoute.patch("/clients/:id", async (c) => {
   );
   if (!client) return c.json({ error: "That is not one of your clients." }, 404);
   return c.json({ client });
+});
+
+// ============================================================
+// Your own working hours
+// ============================================================
+
+/**
+ * The hours a staff member is on shift — set by that person, for themselves.
+ *
+ * The owner's rota editor can set anyone's in the business; this sets only your
+ * own, keyed off the SESSION rather than a URL parameter, so a person can
+ * indicate their own time in and out and cannot touch a colleague's. An empty
+ * rota means off-shift on purpose: the assistant will not offer you for
+ * escalation and cannot book you a slot, so the weekly total is reported back
+ * plainly rather than left to infer from an empty diary.
+ */
+myDeskRoute.get("/schedule", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
+  if (!employee) return c.json({ error: "Account not found." }, 404);
+
+  return c.json({
+    workingHours: employee.workingHours ?? {},
+    weeklyHours: weeklyHours(employee.workingHours ?? {}),
+    timezone: employee.timezone,
+    presence: resolvePresence(employee),
+  });
+});
+
+myDeskRoute.patch("/schedule", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body || !("workingHours" in body)) return c.json({ error: "Nothing to change." }, 400);
+
+  // jsonb accepts any shape, so a mistyped day or a backwards window would save
+  // and then match nothing, ever — the person silently unbookable with nothing
+  // to see. Validated here, every problem named at once rather than the first.
+  const parsed = parseWeeklySchedule(body.workingHours);
+  if (!parsed.ok) return c.json({ error: parsed.errors.join(" "), errors: parsed.errors }, 400);
+
+  const updated = await withTenant(desk.organizationId, () =>
+    updateEmployeeSchedule(desk.employeeId, { workingHours: parsed.schedule })
+  );
+  if (!updated) return c.json({ error: "Account not found." }, 404);
+
+  const hours = weeklyHours(updated.workingHours);
+  logger.info(
+    { employeeId: desk.employeeId, weeklyHours: hours },
+    hours === 0
+      ? "Staff set their own rota to zero hours — off-shift, will not be offered for escalation"
+      : "Staff updated their own rota"
+  );
+  return c.json({
+    workingHours: updated.workingHours,
+    weeklyHours: hours,
+    presence: resolvePresence(updated),
+  });
 });
 
 // ============================================================
