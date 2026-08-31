@@ -88,14 +88,15 @@ export function WorkingHoursPanel() {
   const [timezone, setTimezone] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedHours, setSavedHours] = useState<number | null>(null);
+  // Only set after an actual save — never on load, or the panel would greet
+  // everyone with "Saved" for something they did not do.
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const load = async () => {
     try {
       const data = await getMySchedule();
       setWeek(toWeek(data.workingHours));
       setTimezone(data.timezone);
-      setSavedHours(data.weeklyHours);
       setError(null);
     } catch (err) {
       const message = readableError(err, "Could not load your working hours.");
@@ -114,8 +115,11 @@ export function WorkingHoursPanel() {
   const totalMinutes = DAYS.reduce((sum, { key }) => sum + dayMinutes(week[key]), 0);
   const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
 
-  const setDay = (key: Weekday, patch: Partial<DayState>) =>
+  const setDay = (key: Weekday, patch: Partial<DayState>) => {
+    // Editing invalidates the last "Saved" line — it described the old hours.
+    setSavedNotice(null);
     setWeek((current) => (current ? { ...current, [key]: { ...current[key], ...patch } } : current));
+  };
 
   return (
     <section className="wh">
@@ -176,7 +180,11 @@ export function WorkingHoursPanel() {
             setError(null);
             try {
               const result = await saveMySchedule(toSchedule(week));
-              setSavedHours(result.weeklyHours);
+              setSavedNotice(
+                result.weeklyHours === 0
+                  ? "Saved. You are currently off-shift."
+                  : `Saved — ${result.weeklyHours} hours a week on file.`
+              );
             } catch (err) {
               setError(readableError(err, "Those hours were not saved."));
             } finally {
@@ -188,13 +196,7 @@ export function WorkingHoursPanel() {
         </button>
       </div>
 
-      {savedHours !== null ? (
-        <p className="wh-saved">
-          {savedHours === 0
-            ? "Saved. You are currently off-shift."
-            : `Saved — ${savedHours} hours a week on file.`}
-        </p>
-      ) : null}
+      {savedNotice ? <p className="wh-saved">{savedNotice}</p> : null}
     </section>
   );
 }
