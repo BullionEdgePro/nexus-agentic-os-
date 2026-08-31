@@ -33,13 +33,19 @@ export interface Tenant {
 
 export const TENANTS: Tenant[] = [
   { slug: "zipicka", ref: "N-01", name: "Zipicka", role: "E-commerce", status: "live", angle: -90, note: "—" },
-  { slug: "juris-prime", ref: "N-02", name: "Juris Prime", role: "Attestation & Notary", status: "onboarding", angle: -18, note: "onboarding" },
-  { slug: "juris-prime-legal", ref: "N-03", name: "Juris Prime Legal", role: "Law Firm", status: "onboarding", angle: 54, note: "strict tier" },
-  { slug: "sfs-international", ref: "N-04", name: "SFS International", role: "Real Estate", status: "onboarding", angle: 126, note: "onboarding" },
+  // The four below went live on 2026-08-30 once Meta business verification
+  // cleared — the one thing "onboarding" was waiting on. All four were already
+  // indexed, keyworded, governed and template-approved; verification is what let
+  // them answer on the shared number in earnest. ABR still has no staff, so it
+  // answers by assistant only until one is added — that is a human-handoff gap,
+  // not a reason to call it not-live.
+  { slug: "juris-prime", ref: "N-02", name: "Juris Prime", role: "Attestation & Notary", status: "live", angle: -18, note: "—" },
+  { slug: "juris-prime-legal", ref: "N-03", name: "Juris Prime Legal", role: "Law Firm", status: "live", angle: 54, note: "strict tier" },
+  { slug: "sfs-international", ref: "N-04", name: "SFS International", role: "Real Estate", status: "live", angle: 126, note: "—" },
   // ABR replaced Atif Ali Production on 2026-08-08 (migration 014). It is the
   // SECOND law firm on the number — see the routing note in that migration for
   // why a vague "I need a lawyer" deliberately asks which firm.
-  { slug: "abr", ref: "N-05", name: "ABR Advocates", role: "Litigation & Criminal Defence", status: "onboarding", angle: 198, note: "onboarding" },
+  { slug: "abr", ref: "N-05", name: "ABR Advocates", role: "Litigation & Criminal Defence", status: "live", angle: 198, note: "assistant only" },
 ];
 
 export const LIVE_TENANT_COUNT = TENANTS.filter((t) => t.status === "live").length;
