@@ -28,14 +28,19 @@
  * WHAT ABOUT A TEMPLATE NOBODY HERE MADE
  * ============================================================
  *
- * `klaviyo_default_helpdesk_template` and `klaviyo_double_optin` are on the
- * account and were not created by this platform. They are NOT hidden, and that
- * is deliberate: hiding every unattributed template would make one created by
- * hand in Meta's console invisible with no explanation, and somebody would
- * reasonably conclude the sync was broken.
+ * Attribution has three answers, not two — this business's, another business's,
+ * and unknown — and of those only the middle one is refused. An unattributed
+ * template is NOT hidden as a rule: hiding every unrecognised template would
+ * make one created by hand in Meta's console vanish with no explanation, and
+ * somebody would reasonably conclude the sync was broken.
  *
- * So attribution has three answers, not two — this business's, another
- * business's, and unknown — and only the middle one is refused.
+ * The one exception is a short, explicit HIDDEN list (below).
+ * `klaviyo_double_optin` and `klaviyo_default_helpdesk_template` are Klaviyo's
+ * own system templates, left on the shared account by that integration and
+ * meant for nobody here to send. The owner asked for them gone (2026-08-30), so
+ * they are suppressed BY NAME — not for being unattributed. A hand-made
+ * template still shows; only these two, known to belong to another system, do
+ * not.
  */
 
 /**
@@ -57,6 +62,23 @@ export const PROVISIONED_TEMPLATE_BY_SLUG: Readonly<Record<string, readonly stri
     "juris-prime-legal": ["juris_prime_legal_update"],
     abr: ["abr_matter_update"],
   });
+
+/**
+ * Templates on the shared account that no business here should ever be offered —
+ * another system's, suppressed by name at the owner's request. Kept deliberately
+ * tiny and explicit: a blocklist of known outsiders, NOT a rule against
+ * unrecognised templates (see the note at the top of this file). The sync skips
+ * these so they never enter the mirror, and the pickers filter them so any row
+ * that predates the skip still never shows.
+ */
+export const HIDDEN_TEMPLATE_NAMES: ReadonlySet<string> = new Set([
+  "klaviyo_double_optin",
+  "klaviyo_default_helpdesk_template",
+]);
+
+export function isHiddenTemplate(metaTemplateName: string): boolean {
+  return HIDDEN_TEMPLATE_NAMES.has(metaTemplateName);
+}
 
 /** Reverse of the above, built once. */
 const SLUG_BY_TEMPLATE: Readonly<Record<string, string>> = Object.freeze(

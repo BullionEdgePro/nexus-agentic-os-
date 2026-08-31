@@ -4,6 +4,7 @@ import {
   retireMissingTemplates,
   withTenant,
 } from "@nexus/db";
+import { isHiddenTemplate } from "@nexus/shared";
 import { listMetaTemplates } from "../lib/whatsapp-client.js";
 import { logger } from "../lib/logger.js";
 
@@ -54,6 +55,11 @@ export async function syncTemplatesForOrganization(organization: {
       // A template with no id cannot be identified on the next sync, so storing
       // it would create a duplicate row on every run rather than updating one.
       if (!template.id) continue;
+
+      // Another system's template (Klaviyo's), suppressed by name — see
+      // HIDDEN_TEMPLATE_NAMES. Skipped entirely: not stored, and not added to
+      // `seen`, so any row that predates this is retired by the pass below.
+      if (isHiddenTemplate(template.name)) continue;
 
       seen.push(template.id);
       if (template.status === "APPROVED") approved++;

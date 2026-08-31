@@ -13,7 +13,7 @@ import {
   getBroadcast,
 } from "@nexus/db";
 import type { AudienceFilter } from "@nexus/shared";
-import { attributeTemplate, describeWrongTemplate } from "@nexus/shared";
+import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { syncTemplatesForOrganization } from "../services/template-sync.js";
 import { logger } from "../lib/logger.js";
@@ -40,10 +40,14 @@ broadcastsRoute.get("/:slug", async (c) => {
   // offerable; "other-business" is what the send path refuses, and saying so
   // here means the picker can grey it out instead of letting somebody choose it
   // and meet a 422 they did not expect.
-  const annotated = templates.map((template) => ({
-    ...template,
-    attribution: attributeTemplate(template.metaTemplateName, organization.slug),
-  }));
+  const annotated = templates
+    // Another system's templates, suppressed by name — never offered and never
+    // counted towards canSend. A row may linger until the next sync retires it.
+    .filter((template) => !isHiddenTemplate(template.metaTemplateName))
+    .map((template) => ({
+      ...template,
+      attribution: attributeTemplate(template.metaTemplateName, organization.slug),
+    }));
 
   return c.json({
     templates: annotated,

@@ -42,6 +42,8 @@ import {
   templateOwnerSlug,
   attributeTemplate,
   describeWrongTemplate,
+  isHiddenTemplate,
+  HIDDEN_TEMPLATE_NAMES,
 } from "@nexus/shared";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -83,6 +85,41 @@ test("a template nobody here made is not refused", () => {
   // not know", which the caller decides about.
   assert.equal(attributeTemplate("klaviyo_double_optin", "abr"), "unattributed");
   assert.equal(templateOwnerSlug("something_made_by_hand"), null);
+});
+
+test("the two Klaviyo system templates are hidden by name, not by attribution", () => {
+  // The owner asked for Klaviyo's own templates gone (2026-08-30). They are
+  // suppressed by an explicit blocklist, which is a SEPARATE concern from
+  // attribution: attributeTemplate still returns "unattributed" for them (above),
+  // so the "don't refuse the unrecognised" rule is untouched — only these two
+  // named outsiders are hidden.
+  assert.equal(isHiddenTemplate("klaviyo_double_optin"), true);
+  assert.equal(isHiddenTemplate("klaviyo_default_helpdesk_template"), true);
+  assert.equal(HIDDEN_TEMPLATE_NAMES.size, 2);
+});
+
+test("a hand-made or provisioned template is NOT hidden", () => {
+  // The blocklist must stay a list of known outsiders, never a rule that swallows
+  // anything unrecognised — that was the whole reason the original design refused
+  // to hide unattributed templates.
+  assert.equal(isHiddenTemplate("something_made_by_hand"), false);
+  assert.equal(isHiddenTemplate("zipicka_order_update"), false);
+  assert.equal(isHiddenTemplate("abr_matter_update"), false);
+});
+
+test("both pickers skip hidden templates", () => {
+  // A row may linger in the mirror until the next sync retires it, so the picker
+  // filters by name rather than trusting the mirror to be clean.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const root = join(here, "..", "..", "..");
+  const read = (...p) => readFileSync(join(root, ...p), "utf8");
+  const myCampaigns = read("apps", "api", "src", "routes", "my-campaigns.ts");
+  const broadcasts = read("apps", "api", "src", "routes", "broadcasts.ts");
+  const sync = read("apps", "api", "src", "services", "template-sync.ts");
+  assert.match(myCampaigns, /!isHiddenTemplate\(template\.metaTemplateName\)/);
+  assert.match(broadcasts, /!isHiddenTemplate\(template\.metaTemplateName\)/);
+  // And the sync skips them at the source, so they stop entering the mirror.
+  assert.match(sync, /if \(isHiddenTemplate\(template\.name\)\) continue/);
 });
 
 test("the refusal names both businesses", () => {

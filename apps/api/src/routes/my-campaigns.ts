@@ -16,7 +16,7 @@ import {
   createBroadcastRecipients,
   updateBroadcastStatus,
 } from "@nexus/db";
-import { attributeTemplate, describeWrongTemplate } from "@nexus/shared";
+import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { listWabaNumbers, readAccountStanding } from "../lib/whatsapp-client.js";
 import { deskOf, text } from "./my-desk.js";
@@ -161,6 +161,7 @@ myCampaignsRoute.get("/campaigns", async (c) => {
     // it may send, never who it is for.
     templates: templates
       .filter((template) => template.isApproved)
+      .filter((template) => !isHiddenTemplate(template.metaTemplateName))
       .filter(
         (template) =>
           attributeTemplate(template.metaTemplateName, organization.slug) !== "other-business"
