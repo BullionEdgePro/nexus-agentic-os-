@@ -298,6 +298,21 @@ export function saveMySocialAccounts(
   });
 }
 
+/** A business's own social accounts. Read by anyone in the business; set by the owner. */
+export function getBusinessSocialAccounts(slug: BusinessSlug): Promise<{ accounts: SocialAccount[] }> {
+  return request(`/api/organizations/${slug}/social-accounts`);
+}
+
+export function saveBusinessSocialAccounts(
+  slug: BusinessSlug,
+  accounts: SocialAccount[]
+): Promise<{ accounts: SocialAccount[] }> {
+  return request(`/api/organizations/${slug}/social-accounts`, {
+    method: "PATCH",
+    body: JSON.stringify({ accounts }),
+  });
+}
+
 export interface DirectContact {
   url: string;
   message: string;

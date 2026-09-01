@@ -1,5 +1,5 @@
 import { getPool } from "./client.js";
-import type { Organization } from "@nexus/shared";
+import type { Organization, SocialAccount } from "@nexus/shared";
 
 interface OrganizationRow {
   id: string;
@@ -150,4 +150,35 @@ export async function getDisplayNumbers(): Promise<Map<string, string>> {
     // recorded.
     return new Map();
   }
+}
+
+/**
+ * A business's own self-reported social accounts (the org-level twin of the
+ * staff directory). A focused pair of queries that touch only the one column —
+ * deliberately NOT threaded through the Organization type and its several
+ * SELECTs, because nothing else needs it and widening that shared shape would
+ * ripple through every call site that reads an organization.
+ */
+export async function getOrganizationSocialAccounts(
+  organizationId: string
+): Promise<SocialAccount[]> {
+  const { rows } = await getPool().query<{ social_accounts: SocialAccount[] }>(
+    `select social_accounts from organizations where id = $1`,
+    [organizationId]
+  );
+  return rows[0]?.social_accounts ?? [];
+}
+
+/** Takes an already-validated list (parseSocialAccounts at the edge). */
+export async function updateOrganizationSocialAccounts(
+  organizationId: string,
+  accounts: SocialAccount[]
+): Promise<SocialAccount[]> {
+  const { rows } = await getPool().query<{ social_accounts: SocialAccount[] }>(
+    `update organizations set social_accounts = $2::jsonb, updated_at = now()
+      where id = $1
+      returning social_accounts`,
+    [organizationId, JSON.stringify(accounts)]
+  );
+  return rows[0]?.social_accounts ?? [];
 }

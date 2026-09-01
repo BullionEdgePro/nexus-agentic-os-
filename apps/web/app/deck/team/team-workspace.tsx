@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
+import { BusinessSocialsPanel } from "./business-socials";
 import { BUSINESS_OPTIONS } from "@/lib/store";
 import {
   getTeam,
@@ -328,6 +329,8 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
         ))}
       </nav>
       )}
+
+      {isOperator && <BusinessSocialsPanel slug={business} />}
 
       {error && <p className="team-msg bad">{error}</p>}
       {notice && !error && <p className="team-msg ok">{notice}</p>}

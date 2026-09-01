@@ -80,3 +80,30 @@ test("it stays a directory — no token, no message reading", () => {
   assert.match(PANEL, /does not connect anything or read your messages/i);
   assert.ok(!/accessToken|connectionSecret|oauth/i.test(PANEL), "the directory panel touched a token path");
 });
+
+// ============================================================
+// The business-level twin (org social accounts, owner-set)
+// ============================================================
+
+const ORG_ROUTE = read("apps", "api", "src", "routes", "organizations.ts");
+
+test("a business's social accounts are operator-only to write", () => {
+  // Staff record their OWN on /api/my/social-accounts; the company's public
+  // pages are the owner's to set. The write refuses a non-operator.
+  assert.match(ORG_ROUTE, /organizationsRoute\.patch\("\/:slug\/social-accounts"/);
+  const patch = ORG_ROUTE.slice(ORG_ROUTE.indexOf('organizationsRoute.patch("/:slug/social-accounts"'));
+  const body = patch.slice(0, patch.indexOf("\n});"));
+  assert.match(body, /scope\?\.role !== "operator"/);
+  assert.match(body, /403/);
+  // Same validator as the staff directory — one check for both levels.
+  assert.match(body, /parseSocialAccounts\(body\.accounts\)/);
+  assert.match(body, /updateOrganizationSocialAccounts\(organization\.id/);
+});
+
+test("reading a business's social accounts is allowed to anyone scoped to it", () => {
+  // A staff member can see where the company is online; only writing is gated.
+  assert.match(ORG_ROUTE, /organizationsRoute\.get\("\/:slug\/social-accounts"/);
+  const get = ORG_ROUTE.slice(ORG_ROUTE.indexOf('organizationsRoute.get("/:slug/social-accounts"'));
+  const body = get.slice(0, get.indexOf("\n});"));
+  assert.ok(!/role !== "operator"/.test(body), "the read is gated to operators");
+});
