@@ -13,6 +13,7 @@ import {
 import { MyLinkPanel } from "./my-link";
 import { ConnectionsPanel } from "./connections";
 import { WorkingHoursPanel } from "./working-hours";
+import { SocialAccountsPanel } from "./social-accounts";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "./my-clients.css";
@@ -106,6 +107,8 @@ export default function MyClientsPage() {
       <ChannelPanel channel={channel} />
 
       <WorkingHoursPanel />
+
+      <SocialAccountsPanel />
 
       <section className="mc-book">
         <div className="mc-toolbar">

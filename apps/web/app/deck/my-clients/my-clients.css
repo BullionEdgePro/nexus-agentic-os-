@@ -460,3 +460,61 @@
 }
 .deck-root .wh-save:disabled { opacity: 0.6; cursor: default; }
 .deck-root .wh-saved { margin: 8px 0 0; font-size: 12px; color: var(--slate); }
+
+/* Your social accounts — self-reported directory. */
+.deck-root .soc { margin-top: 20px; }
+.deck-root .soc h2 { font-size: 15px; margin: 0 0 4px; color: var(--ink); }
+.deck-root .soc-lede { margin: 0 0 12px; font-size: 12.5px; color: var(--slate); max-width: 62ch; }
+.deck-root .soc-empty { margin: 0 0 12px; font-size: 12.5px; color: var(--slate); }
+.deck-root .soc-rows { display: grid; gap: 8px; margin-bottom: 12px; }
+.deck-root .soc-row { display: grid; grid-template-columns: 130px 1fr 1fr 32px; gap: 8px; align-items: center; }
+.deck-root .soc-row select,
+.deck-root .soc-row input {
+  padding: 7px 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+}
+.deck-root .soc-remove {
+  width: 30px; height: 30px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--slate);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.deck-root .soc-remove:hover { color: var(--crit); border-color: var(--crit); }
+.deck-root .soc-foot { display: flex; align-items: center; gap: 10px; }
+.deck-root .soc-add {
+  padding: 8px 12px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--signal-text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.deck-root .soc-save {
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--signal-text);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.deck-root .soc-save:disabled { opacity: 0.6; cursor: default; }
+.deck-root .soc-saved { margin: 8px 0 0; font-size: 12px; color: var(--slate); }
+@media (max-width: 560px) {
+  .deck-root .soc-row { grid-template-columns: 1fr 1fr 30px; }
+  .deck-root .soc-row select { grid-column: 1 / -1; }
+}

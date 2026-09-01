@@ -12,8 +12,9 @@ import {
   referralsForEmployee,
   getDisplayNumbers,
   updateEmployeeSchedule,
+  updateEmployeeSocialAccounts,
 } from "@nexus/db";
-import { parseWeeklySchedule, weeklyHours, resolvePresence } from "@nexus/employees";
+import { parseWeeklySchedule, weeklyHours, resolvePresence, parseSocialAccounts } from "@nexus/employees";
 import { listWabaNumbers } from "../lib/whatsapp-client.js";
 import { buildStaffDeepLink } from "@nexus/agents";
 import type { SessionScope } from "../lib/session.js";
@@ -260,6 +261,48 @@ myDeskRoute.patch("/schedule", async (c) => {
     weeklyHours: hours,
     presence: resolvePresence(updated),
   });
+});
+
+// ============================================================
+// Your own social accounts
+// ============================================================
+
+/**
+ * The socials a staff member says they are on — set by that person, for
+ * themselves.
+ *
+ * Self-scoped through deskOf(c) like the rota: a person edits only their own
+ * list, never a colleague's. This is a directory of handles and links, not a
+ * connection — nothing here reads a message or holds a token.
+ */
+myDeskRoute.get("/social-accounts", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
+  if (!employee) return c.json({ error: "Account not found." }, 404);
+
+  return c.json({ accounts: employee.socialAccounts ?? [] });
+});
+
+myDeskRoute.patch("/social-accounts", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body || !("accounts" in body)) return c.json({ error: "Nothing to change." }, 400);
+
+  // jsonb takes any shape, so a mistyped row would store and read back as
+  // nonsense. Validated at the edge, every problem named at once.
+  const parsed = parseSocialAccounts(body.accounts);
+  if (!parsed.ok) return c.json({ error: parsed.errors.join(" "), errors: parsed.errors }, 400);
+
+  const updated = await withTenant(desk.organizationId, () =>
+    updateEmployeeSocialAccounts(desk.employeeId, parsed.accounts ?? [])
+  );
+  if (!updated) return c.json({ error: "Account not found." }, 404);
+
+  return c.json({ accounts: updated.socialAccounts ?? [] });
 });
 
 // ============================================================

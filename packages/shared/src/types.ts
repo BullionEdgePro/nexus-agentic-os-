@@ -271,6 +271,33 @@ export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 /** Weekday → working windows. A missing or empty day means "not working". */
 export type WeeklySchedule = Partial<Record<Weekday, TimeWindow[]>>;
 
+/**
+ * The socials a person self-reports being on. A directory, not a connection —
+ * see packages/employees/src/social-accounts.ts. `website` and `other` are here
+ * because a link somewhere unlisted is still worth recording.
+ */
+export const SOCIAL_PLATFORMS = [
+  "facebook",
+  "instagram",
+  "tiktok",
+  "linkedin",
+  "youtube",
+  "x",
+  "snapchat",
+  "whatsapp",
+  "website",
+  "other",
+] as const;
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
+
+export interface SocialAccount {
+  platform: SocialPlatform;
+  /** The account name or handle, e.g. "@zipicka" or "Zipicka UAE". */
+  label: string;
+  /** A link to the page/profile; may be empty (a handle alone is still useful). */
+  url: string;
+}
+
 export interface Employee {
   id: string;
   organizationId: string;
@@ -296,6 +323,8 @@ export interface Employee {
   timezone: string;
   workingHours: WeeklySchedule;
   breakSchedule: WeeklySchedule;
+  /** Self-reported social presence — a directory of handles/links, never a token. */
+  socialAccounts: SocialAccount[];
 
   languages: string[];
   skills: string[];

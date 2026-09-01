@@ -278,6 +278,26 @@ export function saveMySchedule(
   });
 }
 
+export interface SocialAccount {
+  platform: string;
+  label: string;
+  url: string;
+}
+
+/** The signed-in staff member's OWN self-reported social accounts. */
+export function getMySocialAccounts(): Promise<{ accounts: SocialAccount[] }> {
+  return request("/api/my/social-accounts");
+}
+
+export function saveMySocialAccounts(
+  accounts: SocialAccount[]
+): Promise<{ accounts: SocialAccount[] }> {
+  return request("/api/my/social-accounts", {
+    method: "PATCH",
+    body: JSON.stringify({ accounts }),
+  });
+}
+
 export interface DirectContact {
   url: string;
   message: string;

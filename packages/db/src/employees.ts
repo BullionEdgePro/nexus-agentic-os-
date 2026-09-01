@@ -1,5 +1,5 @@
 import { getPool, withAllTenants, withTenant, withServingTenant } from "./client.js";
-import type { Employee, PresenceSource, PresenceStatus, WeeklySchedule } from "@nexus/shared";
+import type { Employee, PresenceSource, PresenceStatus, WeeklySchedule, SocialAccount } from "@nexus/shared";
 
 interface EmployeeRow {
   id: string;
@@ -16,6 +16,7 @@ interface EmployeeRow {
   timezone: string;
   working_hours: WeeklySchedule;
   break_schedule: WeeklySchedule;
+  social_accounts: SocialAccount[];
   languages: string[];
   skills: string[];
   expertise: string[];
@@ -42,7 +43,7 @@ interface EmployeeRow {
 
 const EMPLOYEE_COLUMNS = `
   id, organization_id, employee_code, full_name, email, avatar_url, job_title, department,
-  permissions, whatsapp_phone_number_id, whatsapp_number, timezone, working_hours, break_schedule,
+  permissions, whatsapp_phone_number_id, whatsapp_number, timezone, working_hours, break_schedule, social_accounts,
   languages, skills, expertise, twin_enabled, ai_personality, response_style, knowledge_collection,
   escalation_rules, twin_disclosure, digital_signature, manual_presence, manual_presence_until,
   last_seen_at, last_login_at, last_login_device, human_first, is_active,
@@ -71,6 +72,7 @@ function toEmployee(row: EmployeeRow): Employee {
     timezone: row.timezone,
     workingHours: row.working_hours ?? {},
     breakSchedule: row.break_schedule ?? {},
+    socialAccounts: row.social_accounts ?? [],
     languages: row.languages ?? [],
     skills: row.skills ?? [],
     expertise: row.expertise ?? [],
@@ -360,6 +362,28 @@ export async function updateEmployeeSchedule(
       input.breakSchedule ? JSON.stringify(input.breakSchedule) : null,
       input.timezone ?? null,
     ]
+  );
+  return rows[0] ? toEmployee(rows[0]) : null;
+}
+
+/**
+ * Store a staff member's self-reported social accounts.
+ *
+ * Takes an already-validated list (parseSocialAccounts, at the edge) and writes
+ * it whole — the list is small and always sent complete, so there is no partial
+ * merge to get wrong.
+ */
+export async function updateEmployeeSocialAccounts(
+  employeeId: string,
+  accounts: SocialAccount[]
+): Promise<Employee | null> {
+  const { rows } = await getPool().query<EmployeeRow>(
+    `update employees
+        set social_accounts = $2::jsonb,
+            updated_at      = now()
+      where id = $1
+      returning *`,
+    [employeeId, JSON.stringify(accounts)]
   );
   return rows[0] ? toEmployee(rows[0]) : null;
 }
