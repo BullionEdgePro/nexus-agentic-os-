@@ -524,6 +524,33 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                       calendar={calendars[member.id] ?? null}
                       onChanged={() => void loadCalendars(business)}
                     />
+                    {/* READ-ONLY. The person sets these themselves on their own
+                        deck; the owner only sees where they are online. Editing
+                        someone else's self-reported handles is not the owner's
+                        to do, so there is no control here — just the list. */}
+                    <div className="team-socials">
+                      <h4>Their social accounts</h4>
+                      {member.socialAccounts && member.socialAccounts.length > 0 ? (
+                        <ul>
+                          {member.socialAccounts.map((acct, i) => (
+                            <li key={i}>
+                              <span className="ts-plat">{acct.platform}</span>
+                              {acct.url ? (
+                                <a href={acct.url} target="_blank" rel="noreferrer noopener">
+                                  {acct.label}
+                                </a>
+                              ) : (
+                                <span className="ts-label">{acct.label}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="team-socials-empty">
+                          None listed. They can add these on My clients &rarr; Your social accounts.
+                        </p>
+                      )}
+                    </div>
                     </>
                   ) : null}
                 </li>

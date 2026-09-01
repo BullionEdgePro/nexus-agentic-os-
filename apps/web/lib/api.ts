@@ -226,6 +226,8 @@ export interface TeamMember {
    * value the UI can show rather than a consequence somebody discovers later.
    */
   weeklyHours: number;
+  /** What this person self-reported on their own deck — read-only to the owner. */
+  socialAccounts: SocialAccount[];
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";

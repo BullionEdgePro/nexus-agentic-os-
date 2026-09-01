@@ -107,3 +107,31 @@ test("reading a business's social accounts is allowed to anyone scoped to it", (
   const body = get.slice(0, get.indexOf("\n});"));
   assert.ok(!/role !== "operator"/.test(body), "the read is gated to operators");
 });
+
+// ============================================================
+// The owner SEES staff handles (read-only), never edits them
+// ============================================================
+
+test("the team listing carries each member's own social accounts", () => {
+  // Already flows through: EMPLOYEE_COLUMNS includes social_accounts, toEmployee
+  // maps it, and the route spreads ...employee. So the owner's roster has the
+  // handles without a second call.
+  const DB = read("packages", "db", "src", "employees.ts");
+  assert.match(DB, /social_accounts,/); // in EMPLOYEE_COLUMNS
+  assert.match(DB, /socialAccounts: row\.social_accounts \?\? \[\]/);
+});
+
+test("the owner's view of staff handles is read-only", () => {
+  // The person edits their own on their deck; the owner only looks. The team
+  // panel shows the list but offers no save/edit control for it, and points the
+  // owner at where the staff member sets them.
+  const TEAM = read("apps", "web", "app", "deck", "team", "team-workspace.tsx");
+  const start = TEAM.indexOf('className="team-socials"');
+  // Bound to the panel itself: up to the empty-state paragraph that closes it,
+  // so the slice never runs into the "Add someone" form below (which has its
+  // own onChange handlers).
+  const block = TEAM.slice(start, TEAM.indexOf("team-socials-empty", start) + 200);
+  assert.match(block, /Their social accounts/);
+  assert.match(block, /My clients &rarr; Your social accounts/);
+  assert.ok(!/saveMySocialAccounts|saveBusinessSocialAccounts|onChange=/.test(block), "the read-only staff-socials view grew an edit control");
+});

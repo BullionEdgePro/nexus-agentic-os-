@@ -679,3 +679,14 @@
   .deck-root .soc-row { grid-template-columns: 1fr 1fr 30px; }
   .deck-root .soc-row select { grid-column: 1 / -1; }
 }
+
+/* Owner's read-only view of a staff member's self-reported socials. */
+.deck-root .team-socials { margin-top: 12px; padding: 12px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--marble); }
+.deck-root .team-socials h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: 0.04em; }
+.deck-root .team-socials ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.deck-root .team-socials li { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.deck-root .team-socials .ts-plat { min-width: 78px; color: var(--slate); text-transform: capitalize; font-size: 12px; }
+.deck-root .team-socials a { color: var(--signal-text); text-decoration: none; overflow-wrap: anywhere; }
+.deck-root .team-socials a:hover { text-decoration: underline; }
+.deck-root .team-socials .ts-label { color: var(--ink); overflow-wrap: anywhere; }
+.deck-root .team-socials-empty { margin: 0; font-size: 12.5px; color: var(--slate); }
