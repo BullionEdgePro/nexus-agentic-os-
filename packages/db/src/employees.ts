@@ -180,6 +180,73 @@ export async function findEmployeeById(id: string): Promise<Employee | null> {
 }
 
 /**
+ * The staff member who owns an inbound WhatsApp number, if any.
+ *
+ * THE HINGE OF MULTI-NUMBER ROUTING. An inbound message resolves by
+ * phone_number_id to an ORGANIZATION first (the shared company number). When
+ * that finds nothing, the number may instead be a staff member's own dedicated
+ * business number — this answers whose. Unscoped on purpose: it runs in the
+ * webhook's cross-tenant context, before any tenant is known, exactly like
+ * findOrganizationByPhoneNumberId beside it.
+ *
+ * Returns null for an unknown or inactive number, which the caller treats the
+ * same as an unmapped one — a message on a number nobody owns is dropped, not
+ * guessed at.
+ */
+export async function findEmployeeByPhoneNumberId(
+  phoneNumberId: string
+): Promise<Employee | null> {
+  const { rows } = await getPool().query<EmployeeRow>(
+    `select ${EMPLOYEE_COLUMNS} from employees
+      where whatsapp_phone_number_id = $1 and is_active = true`,
+    [phoneNumberId]
+  );
+  return rows[0] ? toEmployee(rows[0]) : null;
+}
+
+/**
+ * Give a staff member a dedicated WhatsApp number, or take it away (null).
+ *
+ * A number belongs to exactly ONE person: assigning it here first clears it from
+ * anyone else who held it, in one statement, so two staff can never end up
+ * sharing an inbound line and the router can never be ambiguous about whose a
+ * message is. The verified name and "connected at" ride along so the desk can
+ * show which number, confirmed by Meta, and since when.
+ */
+export async function assignEmployeeWhatsAppNumber(
+  employeeId: string,
+  input: { phoneNumberId: string | null; displayNumber: string | null; verifiedName: string | null }
+): Promise<Employee | null> {
+  if (input.phoneNumberId === null) {
+    const { rows } = await getPool().query<EmployeeRow>(
+      `update employees
+          set whatsapp_phone_number_id = null, whatsapp_number = null,
+              whatsapp_verified_name = null, whatsapp_connected_at = null, updated_at = now()
+        where id = $1
+        returning *`,
+      [employeeId]
+    );
+    return rows[0] ? toEmployee(rows[0]) : null;
+  }
+
+  const { rows } = await getPool().query<EmployeeRow>(
+    `with freed as (
+       update employees
+          set whatsapp_phone_number_id = null, whatsapp_number = null,
+              whatsapp_verified_name = null, whatsapp_connected_at = null, updated_at = now()
+        where whatsapp_phone_number_id = $2 and id <> $1
+     )
+     update employees
+        set whatsapp_phone_number_id = $2, whatsapp_number = $3,
+            whatsapp_verified_name = $4, whatsapp_connected_at = now(), updated_at = now()
+      where id = $1
+      returning *`,
+    [employeeId, input.phoneNumberId, input.displayNumber, input.verifiedName]
+  );
+  return rows[0] ? toEmployee(rows[0]) : null;
+}
+
+/**
  * The employee who owns this conversation, if one has been assigned.
  *
  * Returns null for every conversation created before the Employee Agent Layer

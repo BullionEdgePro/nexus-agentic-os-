@@ -14,10 +14,12 @@ import {
   getConversationRouting,
   setEmployeeAccessCodeHash,
   updateEmployeeSchedule,
+  assignEmployeeWhatsAppNumber,
   listCalendars,
   connectCalendar,
   disconnectCalendar,
 } from "@nexus/db";
+import { listWabaNumbers } from "../lib/whatsapp-client.js";
 import {
   buildDirectContact,
   normalizeWhatsAppNumber,
@@ -322,6 +324,122 @@ employeesRoute.delete("/:slug/employees/:employeeId/calendar", async (c) => {
   const removed = await disconnectCalendar(organization.id, c.req.param("employeeId"));
   if (!removed) return c.json({ error: "No calendar is connected for that person." }, 404);
   return c.json({ ok: true });
+});
+
+/**
+ * The numbers on this business's WhatsApp account, and whose each one is.
+ *
+ * ============================================================
+ * MULTIPLE WHATSAPP, THE ONLY WAY IT CAN WORK
+ * ============================================================
+ *
+ * A staff member cannot connect their PERSONAL WhatsApp — the consumer app has
+ * no API, and the tools that fake it drive a hidden web session that gets the
+ * whole account banned. What IS possible is a DEDICATED number registered on the
+ * company's WhatsApp Business Account, one per staff member, which Meta then
+ * lets this platform send and receive on.
+ *
+ * So the owner does not "connect" anything here — they take a number that is
+ * already on the account (asked of Meta live, so the list is fact, not a stale
+ * row) and hand it to a person. The shared company number is shown but never
+ * offered: giving it to one staff member would route the whole business's
+ * traffic to them.
+ */
+employeesRoute.get("/:slug/whatsapp-numbers", async (c) => {
+  const scope = c.get("scope");
+  if (scope?.role !== "operator") {
+    return c.json({ error: "Only the owner can see the account's numbers." }, 403);
+  }
+
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const [live, employees] = await Promise.all([
+    listWabaNumbers(organization.whatsappBusinessAccountId).catch(() => []),
+    listEmployees(organization.id),
+  ]);
+
+  const byNumber = new Map(
+    employees
+      .filter((e) => e.whatsappPhoneNumberId)
+      .map((e) => [e.whatsappPhoneNumberId as string, { id: e.id, name: e.fullName }])
+  );
+
+  return c.json({
+    numbers: live.map((n) => ({
+      phoneNumberId: n.phoneNumberId,
+      displayPhoneNumber: n.displayPhoneNumber,
+      verifiedName: n.verifiedName,
+      qualityRating: n.qualityRating,
+      // The shared company line, which every business answers on. Not assignable.
+      isShared: n.phoneNumberId === organization.whatsappPhoneNumberId,
+      assignedTo: byNumber.get(n.phoneNumberId) ?? null,
+    })),
+  });
+});
+
+/**
+ * Give a staff member one of the account's numbers, or take it back (null).
+ *
+ * Operator-only, and it refuses the shared number outright — that is the guard
+ * that stops somebody accidentally routing the whole company's inbox to one
+ * person. The number must be one Meta actually holds on this account, checked
+ * against the live list rather than trusted from the request.
+ */
+employeesRoute.patch("/:slug/employees/:employeeId/whatsapp-number", async (c) => {
+  const scope = c.get("scope");
+  if (scope?.role !== "operator") {
+    return c.json({ error: "Only the owner can assign a WhatsApp number." }, 403);
+  }
+
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const employee = await findEmployeeById(c.req.param("employeeId"));
+  if (!employee || employee.organizationId !== organization.id) {
+    return c.json({ error: "Employee not found" }, 404);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  const phoneNumberId =
+    body && typeof body.phoneNumberId === "string" && body.phoneNumberId.trim()
+      ? body.phoneNumberId.trim()
+      : null;
+
+  if (phoneNumberId) {
+    if (phoneNumberId === organization.whatsappPhoneNumberId) {
+      return c.json(
+        { error: "That is the shared company number — assigning it would send every customer to one person." },
+        422
+      );
+    }
+    const live = await listWabaNumbers(organization.whatsappBusinessAccountId).catch(() => []);
+    const match = live.find((n) => n.phoneNumberId === phoneNumberId);
+    if (!match) {
+      return c.json(
+        { error: "That number is not on this WhatsApp account. Register it with Meta first." },
+        422
+      );
+    }
+    const updated = await assignEmployeeWhatsAppNumber(employee.id, {
+      phoneNumberId,
+      displayNumber: match.displayPhoneNumber,
+      verifiedName: match.verifiedName,
+    });
+    logger.info(
+      { employeeId: employee.id, organization: organization.slug, phoneNumberId },
+      "Assigned a dedicated WhatsApp number to a staff member"
+    );
+    return c.json({ employee: { ...updated, digitalSignature: undefined } });
+  }
+
+  const updated = await assignEmployeeWhatsAppNumber(employee.id, {
+    phoneNumberId: null,
+    displayNumber: null,
+    verifiedName: null,
+  });
+  logger.info({ employeeId: employee.id, organization: organization.slug }, "Cleared a staff member's WhatsApp number");
+  return c.json({ employee: { ...updated, digitalSignature: undefined } });
 });
 
 employeesRoute.post("/:slug/employees/:employeeId/access-code", async (c) => {

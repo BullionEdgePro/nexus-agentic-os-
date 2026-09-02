@@ -690,3 +690,13 @@
 .deck-root .team-socials a:hover { text-decoration: underline; }
 .deck-root .team-socials .ts-label { color: var(--ink); overflow-wrap: anywhere; }
 .deck-root .team-socials-empty { margin: 0; font-size: 12.5px; color: var(--slate); }
+
+/* Owner assigns a staff member's dedicated WhatsApp number. */
+.deck-root .wn { margin-top: 12px; padding: 12px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--paper); }
+.deck-root .wn h4 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: 0.04em; }
+.deck-root .wn-lede { margin: 0 0 10px; font-size: 12px; color: var(--slate); }
+.deck-root .wn select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--hairline-strong); border-radius: 8px;
+  background: var(--paper); color: var(--ink); font: inherit; font-size: 13px;
+}
+.deck-root .wn-loading, .deck-root .wn-none { margin: 8px 0 0; font-size: 12px; color: var(--slate); }

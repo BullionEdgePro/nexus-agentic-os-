@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { BusinessSocialsPanel } from "./business-socials";
+import { WhatsAppNumberPicker } from "./whatsapp-number";
 import { BUSINESS_OPTIONS } from "@/lib/store";
 import {
   getTeam,
@@ -551,6 +552,18 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                         </p>
                       )}
                     </div>
+                    <WhatsAppNumberPicker
+                      business={business}
+                      member={member}
+                      onChanged={(updated) => {
+                        setTeam((current) =>
+                          current.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+                        );
+                        setSelected((current) =>
+                          current && current.id === updated.id ? { ...current, ...updated } : current
+                        );
+                      }}
+                    />
                     </>
                   ) : null}
                 </li>

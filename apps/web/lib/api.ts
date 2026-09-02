@@ -201,6 +201,8 @@ export interface TeamMember {
   email?: string | null;
   jobTitle?: string | null;
   whatsappNumber?: string | null;
+  /** The Meta phone_number_id of this person's own dedicated number, if any. */
+  whatsappPhoneNumberId?: string | null;
   twinEnabled: boolean;
   isActive: boolean;
   whatsappReady: boolean;
@@ -297,6 +299,32 @@ export function saveMySocialAccounts(
   return request("/api/my/social-accounts", {
     method: "PATCH",
     body: JSON.stringify({ accounts }),
+  });
+}
+
+export interface WabaNumberRow {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+  verifiedName: string;
+  qualityRating: string | null;
+  isShared: boolean;
+  assignedTo: { id: string; name: string } | null;
+}
+
+/** The numbers on a business's WhatsApp account, and whose each one is (owner-only). */
+export function getWhatsAppNumbers(slug: BusinessSlug): Promise<{ numbers: WabaNumberRow[] }> {
+  return request(`/api/organizations/${slug}/whatsapp-numbers`);
+}
+
+/** Give a staff member one of the account's numbers, or clear it (phoneNumberId null). */
+export function assignWhatsAppNumber(
+  slug: BusinessSlug,
+  employeeId: string,
+  phoneNumberId: string | null
+): Promise<{ employee: TeamMember }> {
+  return request(`/api/organizations/${slug}/employees/${employeeId}/whatsapp-number`, {
+    method: "PATCH",
+    body: JSON.stringify({ phoneNumberId }),
   });
 }
 
