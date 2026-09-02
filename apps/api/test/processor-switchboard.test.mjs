@@ -157,6 +157,12 @@ mock.module("@nexus/db", {
     withAllTenants: async (_reason, fn) => fn(),
     withTenant: async (_organizationId, fn) => fn(),
     // Zipicka owns the number; contacts and conversations stay under it.
+    // Multi-number routing: the happy path resolves an organization above, so
+    // this branch never runs, but the processor imports these so the mock must
+    // declare them.
+    findEmployeeByPhoneNumberId: async () => null,
+    assignConversationToEmployee: async () => {},
+    setConversationPhoneNumber: async () => {},
     findOrganizationByPhoneNumberId: async () => org("org-zip"),
     findOrganizationById: async (id) => (ORGS[id] ? org(id) : null),
     findSharedNumberBusinesses: async () => BUSINESSES,

@@ -63,3 +63,43 @@ test("the picker states plainly this is not a personal WhatsApp", () => {
   // connect the app on their phone.
   assert.match(PICKER, /[Nn]ot a personal WhatsApp|cannot be connected by any tool/);
 });
+
+// ============================================================
+// Phase 2 — the routing (inbound to the owner, outbound from their number)
+// ============================================================
+
+const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
+const CONV = read("packages", "db", "src", "conversations.ts");
+
+test("a message on a staff number falls through to its owner, and only then", () => {
+  // The safety of the whole feature: the shared number ALWAYS resolves to an
+  // organization first, so this branch runs only for a number a person was
+  // given — dormant until one is assigned, and never able to touch the shared
+  // pipeline.
+  // Anchor on the inbound branch specifically (the delivery-status handler also
+  // calls findOrganizationByPhoneNumberId), via the comment that marks it.
+  const idx = PROCESSOR.indexOf("it may be a staff member's OWN");
+  assert.ok(idx > -1, "the staff-number branch comment is missing");
+  const block = PROCESSOR.slice(idx, idx + 500);
+  assert.match(block, /findEmployeeByPhoneNumberId\(phoneNumberId\)/);
+  assert.match(block, /handleStaffNumberMessage\(staffOwner/);
+});
+
+test("the staff-number path holds the twin out and hands the chat to the person", () => {
+  const fn = PROCESSOR.slice(PROCESSOR.indexOf("async function handleStaffNumberMessage"));
+  const body = fn.slice(0, fn.indexOf("\nasync function answerOneMessage"));
+  assert.match(body, /assignConversationToEmployee\(result\.conversationId, employee\.id\)/);
+  assert.match(body, /setConversationHandoff\(result\.conversationId, true, "taken_by_employee"/);
+  // Pins the number so the reply leaves from it.
+  assert.match(body, /setConversationPhoneNumber\(result\.conversationId, employee\.whatsappPhoneNumberId\)/);
+  // Never runs the shared-number AI pipeline for this message.
+  assert.ok(!/classifyBusiness|answerOneMessage\(/.test(body), "the staff path leaked into the AI pipeline");
+});
+
+test("a reply leaves from the number the conversation is on, not always the shared line", () => {
+  // coalesce(conversation's own number, org shared) — a staff-number chat
+  // replies from the staff number; everything else from the shared one, even
+  // when handed to a staff member who happens to own a dedicated number.
+  assert.match(CONV, /coalesce\(c\.phone_number_id, o\.whatsapp_phone_number_id\)/);
+  assert.match(CONV, /export async function setConversationPhoneNumber/);
+});

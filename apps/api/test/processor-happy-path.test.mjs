@@ -105,6 +105,12 @@ mock.module("@nexus/db", {
     // database scoping, and swallowing the callback would silently skip it.
     withAllTenants: async (_reason, fn) => fn(),
     withTenant: async (_organizationId, fn) => fn(),
+    // Multi-number routing: the happy path resolves an organization above, so
+    // this branch never runs, but the processor imports these so the mock must
+    // declare them.
+    findEmployeeByPhoneNumberId: async () => null,
+    assignConversationToEmployee: async () => {},
+    setConversationPhoneNumber: async () => {},
     findOrganizationByPhoneNumberId: async () => ({
       id: "org-1", slug: "zipicka", name: "Zipicka",
       whatsappPhoneNumberId: "000000000000001", whatsappBusinessAccountId: "1", timezone: "Asia/Dubai", createdAt: "now",

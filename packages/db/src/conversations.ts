@@ -79,7 +79,11 @@ export async function findConversationById(conversationId: string): Promise<Conv
     slug: BusinessSlug;
     whatsapp_phone_number_id: string;
   }>(
-    `select c.id, c.organization_id, c.contact_id, ct.wa_id, o.slug, o.whatsapp_phone_number_id
+    // The number the conversation is ON: its own if it has one (a staff member's
+    // dedicated line), otherwise the shared company number. A reply must leave
+    // from the number the customer wrote to, or WhatsApp opens a new thread.
+    `select c.id, c.organization_id, c.contact_id, ct.wa_id, o.slug,
+            coalesce(c.phone_number_id, o.whatsapp_phone_number_id) as whatsapp_phone_number_id
      from conversations c
      join organizations o on o.id = c.organization_id
      join contacts ct on ct.id = c.contact_id
@@ -136,6 +140,23 @@ export type CustodyReason =
  * held by a person does not accrue a row per inbound message, and the trace
  * cannot disagree with the flag it describes.
  */
+/**
+ * Pin which number a conversation is on.
+ *
+ * Set only by the staff-number inbound path, to the dedicated number the message
+ * arrived on, so replies leave from that same number. Left null everywhere else,
+ * where the shared company number is the right answer.
+ */
+export async function setConversationPhoneNumber(
+  conversationId: string,
+  phoneNumberId: string
+): Promise<void> {
+  await getPool().query(`update conversations set phone_number_id = $2 where id = $1`, [
+    conversationId,
+    phoneNumberId,
+  ]);
+}
+
 export async function setConversationHandoff(
   conversationId: string,
   isHumanHandoff: boolean,

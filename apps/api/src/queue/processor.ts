@@ -12,6 +12,8 @@ import { worstRetrievalOutcome } from "@nexus/shared";
 import {
   findOrganizationByPhoneNumberId,
   findOrganizationById,
+  findEmployeeByPhoneNumberId,
+  assignConversationToEmployee,
   findEmployeeForConversation,
   findSharedNumberBusinesses,
   getConversationRouting,
@@ -25,6 +27,7 @@ import {
   insertEvaluation,
   recordConversationMetric,
   setConversationHandoff,
+  setConversationPhoneNumber,
   hasActiveEmployees,
   listOpenTasksForContact,
   withTenant,
@@ -414,6 +417,73 @@ async function processSingleTextMessage(
   );
 }
 
+/**
+ * A message on a staff member's OWN dedicated number.
+ *
+ * Not the shared company line, so there is no business to classify and no AI
+ * turn to take: the customer messaged that one person, and that person answers.
+ * The message is recorded in their business, the conversation is put in their
+ * hands — assigned to them and in human custody, so the twin never speaks on
+ * somebody's personal line — and their inbox is nudged. The whole shared-number
+ * pipeline in answerOneMessage below is skipped on purpose.
+ */
+async function handleStaffNumberMessage(
+  employee: Employee,
+  message: WhatsAppTextMessage,
+  text: NonNullable<WhatsAppTextMessage["text"]>,
+  contactName: string | undefined
+): Promise<void> {
+  const result = await recordInboundMessage({
+    organizationId: employee.organizationId,
+    contactWaId: message.from,
+    contactName,
+    waMessageId: message.id,
+    body: text.body,
+    rawPayload: message,
+  });
+
+  // Null messageId means the webhook retried a message already recorded — the
+  // first delivery already routed it, so there is nothing to redo.
+  if (!result.messageId) return;
+
+  await withTenant(employee.organizationId, async () => {
+    await assignConversationToEmployee(result.conversationId, employee.id);
+    // Pin the conversation to this number so the reply leaves from it, not the
+    // shared line — the whole point of a person having their own.
+    if (employee.whatsappPhoneNumberId) {
+      await setConversationPhoneNumber(result.conversationId, employee.whatsappPhoneNumberId);
+    }
+    // Human custody: the twin must never answer on a person's own number. The
+    // conversation is theirs to work, the way a handed-over one is.
+    await setConversationHandoff(result.conversationId, true, "taken_by_employee", employee.id);
+  });
+
+  const organization = await findOrganizationById(employee.organizationId);
+  if (organization) {
+    const inboundDto: MessageDto = {
+      id: result.messageId,
+      conversationId: result.conversationId,
+      direction: "inbound",
+      senderType: "contact",
+      body: text.body,
+      status: "delivered",
+      createdAt: new Date().toISOString(),
+    };
+    await publishInboxEvent({
+      type: "message",
+      organizationId: organization.id,
+      organizationSlug: organization.slug,
+      conversationId: result.conversationId,
+      message: inboundDto,
+    });
+  }
+
+  logger.info(
+    { employeeId: employee.id, conversationId: result.conversationId },
+    "Inbound on a staff member's own number — routed to them, twin held out"
+  );
+}
+
 async function answerOneMessage(
   phoneNumberId: string,
   message: WhatsAppTextMessage,
@@ -427,6 +497,15 @@ async function answerOneMessage(
   // — it is the query that decides which tenant we are.
   const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
   if (!organization) {
+    // Not the shared company line — it may be a staff member's OWN dedicated
+    // number. This branch is why it is safe: the shared number always resolves
+    // to an organization above, so this only ever runs for a number a person
+    // was actually given, and does nothing until one is assigned.
+    const staffOwner = await findEmployeeByPhoneNumberId(phoneNumberId);
+    if (staffOwner) {
+      await handleStaffNumberMessage(staffOwner, message, text, contactName);
+      return;
+    }
     logger.warn({ phoneNumberId }, "No organization mapped to inbound phone_number_id");
     return;
   }
