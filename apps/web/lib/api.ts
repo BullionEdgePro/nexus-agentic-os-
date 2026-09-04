@@ -1915,6 +1915,8 @@ export interface Me {
   email: string;
   role: "operator" | "employee";
   fullName: string | null;
+  /** The signed-in staff member's own id. Absent for operators, who are not staff. */
+  employeeId?: string;
   employeeCode?: string;
   businessName: string | null;
   businessSlug: string | null;

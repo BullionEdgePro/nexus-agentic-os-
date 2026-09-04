@@ -99,6 +99,7 @@ export function BusinessTabs({
 export function useVisibleBusinesses() {
   const [role, setRole] = useState<"operator" | "employee" | null>(null);
   const [mine, setMine] = useState<string | null>(null);
+  const [myEmployeeId, setMyEmployeeId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,6 +108,7 @@ export function useVisibleBusinesses() {
         if (cancelled) return;
         setRole(me.role);
         setMine(me.businessSlug);
+        setMyEmployeeId(me.employeeId ?? null);
       })
       // FAILS CLOSED. If we cannot establish who is asking, the narrow answer
       // is the safe one: show nothing rather than every business's name to
@@ -115,6 +117,7 @@ export function useVisibleBusinesses() {
         if (!cancelled) {
           setRole("employee");
           setMine(null);
+          setMyEmployeeId(null);
         }
       });
     return () => {
@@ -127,5 +130,5 @@ export function useVisibleBusinesses() {
     ? TENANTS.filter((tenant) => tenant.status !== "offline")
     : TENANTS.filter((tenant) => tenant.slug === mine);
 
-  return { businesses, isOperator, known: role !== null, mySlug: mine };
+  return { businesses, isOperator, known: role !== null, mySlug: mine, myEmployeeId };
 }

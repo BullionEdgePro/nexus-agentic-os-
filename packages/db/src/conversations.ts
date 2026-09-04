@@ -10,6 +10,7 @@ interface ConversationSummaryRow {
   is_human_handoff: boolean;
   last_message_body: string | null;
   last_message_at: string | null;
+  assigned_employee_id: string | null;
 }
 
 function toSummary(row: ConversationSummaryRow): ConversationSummary {
@@ -22,6 +23,7 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     isHumanHandoff: row.is_human_handoff,
     lastMessagePreview: row.last_message_body,
     lastMessageAt: row.last_message_at,
+    assignedEmployeeId: row.assigned_employee_id,
   };
 }
 
@@ -37,6 +39,7 @@ export async function getConversationsForOrganization(
        ct.display_name,
        c.status,
        c.is_human_handoff,
+       c.employee_id as assigned_employee_id,
        lm.body as last_message_body,
        lm.created_at as last_message_at
      from conversations c

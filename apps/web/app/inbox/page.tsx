@@ -24,7 +24,26 @@ export default function InboxPage() {
   //
   // The hook fails closed: if it cannot establish who is asking, it shows
   // nothing rather than everything.
-  const { businesses, known } = useVisibleBusinesses();
+  const { businesses, known, myEmployeeId } = useVisibleBusinesses();
+
+  // "Mine" vs the whole business list. A staff member on a shared number sees
+  // every conversation their business handles; this narrows it to the ones a
+  // customer opened with THEM — assigned by their own link or handed to them.
+  // Defaults to "mine" the moment we know who they are, because that is the
+  // question they came to answer ("who is waiting for me?"); an operator has no
+  // employee id, so the toggle never appears and they always see everything.
+  const [scope, setScope] = useState<"mine" | "all">("all");
+  const scopeChosen = useRef(false);
+  useEffect(() => {
+    if (scopeChosen.current) return;
+    if (myEmployeeId) {
+      setScope("mine");
+      scopeChosen.current = true;
+    } else if (known && !myEmployeeId) {
+      // Role is known and there is no employee id — an operator. Lock to "all".
+      scopeChosen.current = true;
+    }
+  }, [known, myEmployeeId]);
 
   const selectedOrg = useInboxStore((s) => s.selectedOrg);
   const setSelectedOrg = useInboxStore((s) => s.setSelectedOrg);
@@ -98,6 +117,16 @@ export default function InboxPage() {
   const activeConversation = conversations.find((c) => c.id === selectedConversationId);
   const messages = selectedConversationId ? messagesByConversation[selectedConversationId] ?? [] : [];
 
+  // How many of this business's conversations are this person's own — shown on
+  // the toggle so "Mine" is not a leap of faith when the filtered list is empty.
+  const mineCount = myEmployeeId
+    ? conversations.filter((c) => c.assignedEmployeeId === myEmployeeId).length
+    : 0;
+  const visibleConversations =
+    scope === "mine" && myEmployeeId
+      ? conversations.filter((c) => c.assignedEmployeeId === myEmployeeId)
+      : conversations;
+
   async function handleSend() {
     if (!selectedConversationId || !draft.trim()) return;
     setIsSending(true);
@@ -140,6 +169,31 @@ export default function InboxPage() {
 
       <section className="ibx-col ibx-convos">
         <h2 className="ibx-head">Conversations</h2>
+        {/* Only a staff member has a "mine" — an operator owns none of the
+            conversations personally, so the toggle would offer them an always
+            empty list. Shown only once we know who they are. */}
+        {myEmployeeId ? (
+          <div className="ibx-scope" role="tablist" aria-label="Which conversations to show">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={scope === "mine"}
+              className={`ibx-scope-btn${scope === "mine" ? " on" : ""}`}
+              onClick={() => setScope("mine")}
+            >
+              Mine{mineCount > 0 ? ` (${mineCount})` : ""}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={scope === "all"}
+              className={`ibx-scope-btn${scope === "all" ? " on" : ""}`}
+              onClick={() => setScope("all")}
+            >
+              All
+            </button>
+          </div>
+        ) : null}
         {isLoadingConversations ? (
           <p className="ibx-empty">Loading…</p>
         ) : loadError ? (
@@ -160,11 +214,15 @@ export default function InboxPage() {
             This is not the same as having none — nothing was read, so nothing can be said
             about who is waiting.
           </p>
-        ) : conversations.length === 0 ? (
-          <p className="ibx-empty">No conversations yet for this business.</p>
+        ) : visibleConversations.length === 0 ? (
+          <p className="ibx-empty">
+            {scope === "mine"
+              ? "None of this business's conversations are yours yet. A customer who opens a chat through your link, or one handed to you, will appear here."
+              : "No conversations yet for this business."}
+          </p>
         ) : (
           <ul className="ibx-list">
-            {conversations.map((conversation) => (
+            {visibleConversations.map((conversation) => (
               <li key={conversation.id}>
                 <button
                   onClick={() => selectConversation(conversation.id)}

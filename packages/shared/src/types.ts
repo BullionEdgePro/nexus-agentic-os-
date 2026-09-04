@@ -119,6 +119,15 @@ export interface ConversationSummary {
   isHumanHandoff: boolean;
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
+  /**
+   * The staff member this conversation belongs to, or null when it is the
+   * business's shared pool. Set by a referral link (the customer arrived through
+   * someone's link) or by a manual assignment. It is what lets a staff member
+   * filter the shared business inbox down to "my conversations" — the ones a
+   * customer opened with them specifically — without the API having to serve a
+   * second, differently-scoped list.
+   */
+  assignedEmployeeId: string | null;
 }
 
 export interface MessageDto {

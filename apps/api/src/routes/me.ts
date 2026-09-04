@@ -86,6 +86,13 @@ meRoute.get("/", async (c) => {
   return c.json({
     email: employee.email ?? scope.sub,
     role: "employee" as const,
+    // The caller's OWN id. Read from the session-derived employee, never from a
+    // parameter. The inbox uses it to pick out the conversations that belong to
+    // this person from the shared business list — a comparison it can only make
+    // if it knows who it is. Not sensitive on its own (it is the reader's own
+    // id), and it never widens what they can load: the list is still scoped to
+    // their one business by the API, this only filters within it.
+    employeeId: employee.id,
     fullName: employee.fullName,
     employeeCode: employee.employeeCode,
     businessName: organization?.name ?? null,
