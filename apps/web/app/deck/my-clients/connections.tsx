@@ -10,6 +10,8 @@ import {
   getClientMail,
   sendClientEmail,
   disconnectGmail,
+  connectWhatsAppCoexistence,
+  disconnectWhatsApp,
   type ClientMail,
   readableError,
   type ConnectionProvider,
@@ -95,8 +97,10 @@ export function ConnectionsPanel() {
 
   const tiktok = providers.find((p) => p.id === "tiktok");
   const gmail = providers.find((p) => p.id === "gmail");
+  const whatsapp = providers.find((p) => p.id === "whatsapp");
   const connected = connections?.find((c) => c.provider === "tiktok") ?? null;
   const mailbox = connections?.find((c) => c.provider === "gmail") ?? null;
+  const whatsappConn = connections?.find((c) => c.provider === "whatsapp") ?? null;
 
   if (connections === null || !tiktok) return null;
 
@@ -312,8 +316,212 @@ export function ConnectionsPanel() {
           ) : null}
         </div>
       ) : null}
+
+      {whatsapp ? (
+        <WhatsAppCard
+          provider={whatsapp}
+          connection={whatsappConn}
+          busy={busy}
+          setBusy={setBusy}
+          onNotice={setNotice}
+          onError={setError}
+          onChange={load}
+        />
+      ) : null}
     </section>
   );
+}
+
+/**
+ * Connecting a staff member's own WhatsApp Business number via Coexistence.
+ *
+ * ============================================================
+ * WHY THIS ONE IS A POPUP, NOT A REDIRECT
+ * ============================================================
+ *
+ * TikTok and Gmail leave the page for their provider and come back. Meta's
+ * Embedded Signup runs in a popup opened by its own JS SDK: the staff member
+ * completes it on their phone, and the SDK hands back — right here in the page —
+ * a one-time code, while a window message carries the WABA and phone-number ids
+ * it created. The three are posted to the server together. Nothing is stored
+ * client-side and no token is ever seen here.
+ *
+ * The card refuses to open the popup unless the server reported the provider as
+ * configured (a real app id and Embedded Signup configuration exist), so on a
+ * server without them it reads as "not enabled yet" rather than failing when
+ * clicked.
+ */
+function WhatsAppCard({
+  provider,
+  connection,
+  busy,
+  setBusy,
+  onNotice,
+  onError,
+  onChange,
+}: {
+  provider: ConnectionProvider;
+  connection: SocialConnection | null;
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+  onNotice: (m: string) => void;
+  onError: (m: string) => void;
+  onChange: () => Promise<void>;
+}) {
+  return (
+    <div className="cnx-card">
+      <div className="cnx-head">
+        <div>
+          <strong>WhatsApp Business</strong>
+          {connection ? <span className="cnx-on">{connection.displayName ?? "connected"}</span> : null}
+        </div>
+        {connection ? (
+          <button
+            type="button"
+            className="cnx-off"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await disconnectWhatsApp().catch(() => undefined);
+              await onChange();
+              setBusy(false);
+            }}
+          >
+            Disconnect
+          </button>
+        ) : provider.configured ? (
+          <button
+            type="button"
+            className="cnx-go"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              onError("");
+              try {
+                const result = await launchWhatsAppSignup(provider);
+                const { number } = await connectWhatsAppCoexistence(result);
+                onNotice(`WhatsApp connected — ${number}. Messages to it now appear in your conversations.`);
+                await onChange();
+              } catch (err) {
+                onError(readableError(err, "WhatsApp could not be connected."));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Connect WhatsApp
+          </button>
+        ) : null}
+      </div>
+
+      <p className="cnx-offers">{provider.offers}</p>
+      {/* Said every time. The 'Business app, not personal' line is the whole
+          reason this is possible at all, and the thing people most misread. */}
+      <p className="cnx-cannot">{provider.cannot}</p>
+
+      {!provider.configured ? <p className="cnx-needs">{provider.needs}</p> : null}
+      {connection && !connection.usable ? (
+        <p className="cnx-needs">The stored connection can no longer be read — connect it again.</p>
+      ) : null}
+      {connection?.lastError ? <p className="cnx-needs">Last sync failed: {connection.lastError}</p> : null}
+    </div>
+  );
+}
+
+// Meta's JS SDK, loaded once and only when a staff member actually connects.
+const FB_SDK_ID = "facebook-jssdk";
+const FB_SDK_SRC = "https://connect.facebook.net/en_US/sdk.js";
+
+interface FacebookSdk {
+  init(params: { appId: string; version: string; cookie?: boolean; xfbml?: boolean }): void;
+  login(
+    callback: (response: { authResponse?: { code?: string } | null }) => void,
+    options: Record<string, unknown>
+  ): void;
+}
+
+type FbWindow = Window & { FB?: FacebookSdk; fbAsyncInit?: () => void };
+
+/** Load and initialise the SDK, resolving the FB object once it is ready. */
+function loadFacebookSdk(appId: string, version: string): Promise<FacebookSdk> {
+  return new Promise((resolve, reject) => {
+    const w = window as FbWindow;
+    if (w.FB) {
+      resolve(w.FB);
+      return;
+    }
+    w.fbAsyncInit = () => {
+      w.FB!.init({ appId, version, cookie: true, xfbml: false });
+      resolve(w.FB!);
+    };
+    if (document.getElementById(FB_SDK_ID)) return; // already loading; fbAsyncInit resolves
+    const script = document.createElement("script");
+    script.id = FB_SDK_ID;
+    script.src = FB_SDK_SRC;
+    script.async = true;
+    script.defer = true;
+    script.crossOrigin = "anonymous";
+    script.onerror = () => reject(new Error("Could not load Meta's sign-in. Check your connection and try again."));
+    document.body.appendChild(script);
+  });
+}
+
+/**
+ * Run Embedded Signup and return the three things the server needs.
+ *
+ * The `code` comes from the login callback; the WABA and phone-number ids arrive
+ * separately as a window message from Meta's popup, so both are captured and only
+ * a run that produced all three is treated as a success. `featureType` selects
+ * the coexistence variant (onboarding a WhatsApp Business app user); the config
+ * id decides the rest of the flow at Meta's end.
+ */
+async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
+  code: string;
+  wabaId: string;
+  phoneNumberId: string;
+}> {
+  if (!provider.appId || !provider.configId) {
+    throw new Error("WhatsApp connecting is not enabled on this server yet.");
+  }
+  const FB = await loadFacebookSdk(provider.appId, provider.graphVersion ?? "v21.0");
+
+  return new Promise((resolve, reject) => {
+    let captured: { wabaId?: string; phoneNumberId?: string } = {};
+    const onMessage = (event: MessageEvent) => {
+      if (!/(^|\.)facebook\.com$/.test(new URL(event.origin).hostname)) return;
+      try {
+        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        if (data?.type === "WA_EMBEDDED_SIGNUP" && data?.data) {
+          captured = { wabaId: data.data.waba_id, phoneNumberId: data.data.phone_number_id };
+        }
+      } catch {
+        // Not our message; ignore.
+      }
+    };
+    window.addEventListener("message", onMessage);
+
+    FB.login(
+      (response) => {
+        window.removeEventListener("message", onMessage);
+        const code = response?.authResponse?.code;
+        if (!code) {
+          reject(new Error("WhatsApp sign-in was cancelled."));
+          return;
+        }
+        if (!captured.wabaId || !captured.phoneNumberId) {
+          reject(new Error("WhatsApp sign-in did not return a number — please try again."));
+          return;
+        }
+        resolve({ code, wabaId: captured.wabaId, phoneNumberId: captured.phoneNumberId });
+      },
+      {
+        config_id: provider.configId,
+        response_type: "code",
+        override_default_response_type: true,
+        extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
+      }
+    );
+  });
 }
 
 /**

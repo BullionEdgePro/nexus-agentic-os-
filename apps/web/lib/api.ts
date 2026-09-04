@@ -2304,6 +2304,14 @@ export interface ConnectionProvider {
   cannot: string;
   needs: string | null;
   scopes: string[];
+  /**
+   * WhatsApp only: the public values the browser hands to Meta's Embedded Signup
+   * popup. Present (and non-empty) only when that provider is configured; absent
+   * on TikTok/Gmail, which redirect instead of opening an in-page popup.
+   */
+  appId?: string;
+  configId?: string;
+  graphVersion?: string;
 }
 
 export function getConnections(): Promise<{
@@ -2376,4 +2384,26 @@ export function sendClientEmail(input: {
 
 export function disconnectGmail(): Promise<{ ok: boolean }> {
   return request("/api/connections/gmail", { method: "DELETE" });
+}
+
+/**
+ * Finish a WhatsApp Business coexistence connect.
+ *
+ * The three values come from Meta's Embedded Signup popup (see the connections
+ * panel): a one-time code and the ids of the WABA and phone number it created.
+ * The server exchanges the code and links the number to this staff member.
+ */
+export function connectWhatsAppCoexistence(input: {
+  code: string;
+  wabaId: string;
+  phoneNumberId: string;
+}): Promise<{ ok: true; number: string }> {
+  return request("/api/connections/whatsapp/connect", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function disconnectWhatsApp(): Promise<{ ok: boolean }> {
+  return request("/api/connections/whatsapp", { method: "DELETE" });
 }

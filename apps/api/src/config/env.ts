@@ -96,6 +96,24 @@ export const env = {
   },
   metaGraphApiVersion: process.env.META_GRAPH_API_VERSION ?? "v21.0",
 
+  /**
+   * WhatsApp Embedded Signup — for staff connecting their OWN WhatsApp Business
+   * app number via Coexistence (keep the app, also connect to Nexus).
+   *
+   * BOTH OPTIONAL, and the feature is off until both are set. `metaAppId` is the
+   * public app id the browser hands to Meta's JS SDK; `metaWhatsappEmbeddedConfigId`
+   * is the Embedded Signup configuration created in the app dashboard with the
+   * coexistence option turned on. Until a real config exists these are empty and
+   * `whatsappCoexistenceConfigured()` reports the feature as not-yet-enabled —
+   * so nothing here changes behaviour on a server that has not set them.
+   *
+   * The app SECRET and the system-user ACCESS TOKEN it exchanges against are the
+   * same ones the shared number already uses (META_APP_SECRET / META_ACCESS_TOKEN),
+   * because coexistence extends the existing WhatsApp app rather than a new one.
+   */
+  metaAppId: process.env.META_APP_ID ?? "",
+  metaWhatsappEmbeddedConfigId: process.env.META_WHATSAPP_ESU_CONFIG_ID ?? "",
+
   /** Shared with apps/web so one operator login authenticates the UI and the API. */
   sessionSecret: process.env.NEXUS_SESSION_SECRET ?? "nexus-dev-secret-change-me",
 

@@ -10,8 +10,16 @@ import {
   connectionExpiry,
   refreshStoredAccessToken,
   clientEmailAddresses,
+  assignEmployeeWhatsAppNumber,
   withTenant,
 } from "@nexus/db";
+import {
+  whatsappCoexistenceConfigured,
+  whatsappEmbeddedConfig,
+  exchangeEmbeddedSignupCode,
+  subscribeAppToWaba,
+  fetchCoexistenceNumber,
+} from "../lib/whatsapp-onboarding.js";
 import {
   tiktokConfigured,
   tiktokScopes,
@@ -180,6 +188,23 @@ connectionsRoute.get("/", async (c) => {
           ? null
           : `Create a Google Cloud OAuth client, set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server, and add ${gmailRedirectUri()} as an authorised redirect URI. Use an INTERNAL consent screen on your own Workspace — that skips Google's verification entirely.`,
         scopes: gmailScopes(),
+      },
+      {
+        id: "whatsapp",
+        name: "WhatsApp Business",
+        // The one connection that is genuinely two-way. Said plainly because it
+        // is the thing people did not believe was possible.
+        offers:
+          "Your own WhatsApp Business number, kept on your phone AND connected here — a client who messages it appears in your conversations, and you reply from either place.",
+        cannot:
+          "It is the WhatsApp BUSINESS app only (version 2.24.17+), never the personal WhatsApp. Group chats do not sync, and messages are capped at 20 per second.",
+        needs: whatsappCoexistenceConfigured()
+          ? null
+          : "Not enabled on this server yet. It needs the WhatsApp app's Embedded Signup configuration (set META_APP_ID and META_WHATSAPP_ESU_CONFIG_ID), and — for staff beyond the app's own testers — Meta App Review of whatsapp_business_messaging.",
+        scopes: [],
+        // Public values the browser hands to Meta's Embedded Signup popup. Empty
+        // until configured, and the UI only opens the popup when configured is true.
+        ...whatsappEmbeddedConfig(),
       },
     ],
   });
@@ -662,4 +687,115 @@ connectionsRoute.delete("/gmail", async (c) => {
     removeConnection(owner.organizationId, owner.employeeId, "gmail")
   );
   return c.json({ ok: removed });
+});
+
+// ============================================================
+// WhatsApp Business (Coexistence)
+// ============================================================
+
+/**
+ * Finish the Embedded Signup a staff member ran on their phone.
+ *
+ * NOT a redirect callback like TikTok and Gmail. Coexistence runs entirely in
+ * Meta's own popup, which the browser opens with the SDK and which hands back —
+ * client-side — a one-time `code` and the ids of the WABA and phone number it
+ * created. The browser posts those three here; there is no round-trip through a
+ * redirect URI to protect, so the guard that matters is the session (only a
+ * staff member connects, only for themselves) rather than a state cookie.
+ *
+ * Everything is best-effort-to-a-point: the code exchange and the number link
+ * must succeed or the connection is refused rather than half-stored, but reading
+ * the number's display form is allowed to fail — a connection that works with an
+ * unknown label beats refusing one over a cosmetic lookup.
+ */
+connectionsRoute.post("/whatsapp/connect", async (c) => {
+  const scope = scopeOf(c);
+  const owner = ownerOf(scope);
+  if (!owner || !owner.employeeId) {
+    return c.json({ error: "Only a staff member can connect their own WhatsApp." }, 403);
+  }
+  if (!whatsappCoexistenceConfigured()) {
+    return c.json(
+      { error: "WhatsApp connecting is not enabled on this server yet." },
+      503
+    );
+  }
+
+  const body = await c.req.json<{ code?: string; wabaId?: string; phoneNumberId?: string }>().catch(() => null);
+  const code = body?.code?.trim();
+  const wabaId = body?.wabaId?.trim();
+  const phoneNumberId = body?.phoneNumberId?.trim();
+  if (!code || !wabaId || !phoneNumberId) {
+    return c.json({ error: "That WhatsApp sign-in did not complete — please try again." }, 400);
+  }
+
+  const employeeId = owner.employeeId;
+  try {
+    const businessToken = await exchangeEmbeddedSignupCode(code);
+    await subscribeAppToWaba(wabaId, businessToken);
+    const details = await fetchCoexistenceNumber(phoneNumberId, businessToken);
+
+    await withTenant(owner.organizationId, async () => {
+      // The credential, encrypted at rest like every other connection. external_id
+      // is the phone_number_id — the thing the webhook router matches an inbound
+      // message on — so a connection can always be traced back to the number.
+      await saveConnection({
+        organizationId: owner.organizationId,
+        employeeId,
+        provider: "whatsapp",
+        externalId: phoneNumberId,
+        displayName: details.displayNumber ?? details.verifiedName ?? phoneNumberId,
+        avatarUrl: null,
+        accessToken: businessToken,
+        refreshToken: null,
+        // System-user tokens from this exchange are long-lived; there is no
+        // refresh dance, so no expiry is recorded rather than a guessed one.
+        expiresAt: null,
+        scopes: [],
+      });
+
+      // THE LINE THAT MAKES INBOUND ARRIVE ON THEIR DESK. It sets
+      // whatsapp_phone_number_id on the employee, which is what
+      // findEmployeeByPhoneNumberId reads in the queue processor to route a
+      // message on this number to this person (handleStaffNumberMessage). A
+      // number belongs to one person, and assigning frees it from anyone else.
+      await assignEmployeeWhatsAppNumber(employeeId, {
+        phoneNumberId,
+        displayNumber: details.displayNumber,
+        verifiedName: details.verifiedName,
+      });
+    });
+
+    logger.info({ employeeId, phoneNumberId, wabaId }, "WhatsApp Business number connected via coexistence");
+    return c.json({
+      ok: true,
+      number: details.displayNumber ?? details.verifiedName ?? "connected",
+    });
+  } catch (err) {
+    logger.error({ err, employeeId }, "WhatsApp coexistence connection failed");
+    const message = err instanceof Error ? err.message.slice(0, 200) : "unknown error";
+    return c.json({ error: message }, 502);
+  }
+});
+
+connectionsRoute.delete("/whatsapp", async (c) => {
+  const scope = scopeOf(c);
+  const owner = ownerOf(scope);
+  if (!owner || !owner.employeeId) {
+    return c.json({ error: "Only a staff member can disconnect their own WhatsApp." }, 403);
+  }
+  const employeeId = owner.employeeId;
+
+  await withTenant(owner.organizationId, async () => {
+    await removeConnection(owner.organizationId, employeeId, "whatsapp");
+    // Unlink the number too, or inbound would keep routing to a desk whose
+    // credential is gone. Clearing it hands the number back to nobody — a new
+    // connect reclaims it.
+    await assignEmployeeWhatsAppNumber(employeeId, {
+      phoneNumberId: null,
+      displayNumber: null,
+      verifiedName: null,
+    });
+  });
+  return c.json({ ok: true });
 });
