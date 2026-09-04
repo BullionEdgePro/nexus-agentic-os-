@@ -20,6 +20,7 @@ import {
   setConversationRouting,
   recordTriagePrompt,
   recordInboundMessage,
+  recordOutboundEcho,
   findRecentBroadcastSender,
   insertOutboundMessage,
   recordDeliveryStatus,
@@ -283,7 +284,74 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
       // inbox and in the database, from one the customer read. See migration
       // 048; production had 24 outbound rows all claiming 'sent'.
       await processDeliveryStatuses(phoneNumberId, change);
+
+      // Coexistence: a message the staff member sent to a customer from their
+      // OWN WhatsApp Business app, mirrored here so the dashboard matches their
+      // phone. Isolated per echo for the same reason as the message loop — one
+      // malformed echo must not make BullMQ retry the whole batch.
+      const echoes = change.value.message_echoes ?? [];
+      for (const echo of echoes) {
+        await processMessageEcho(phoneNumberId, echo);
+      }
     }
+  }
+}
+
+/**
+ * Mirror a staff member's phone-sent message into their Nexus conversation.
+ *
+ * Only ever acts on a number that resolves to a staff member — an echo is
+ * meaningless on the shared line — and only on text, which is all the dashboard
+ * renders. Best-effort throughout: an echo records something that already
+ * happened, so a failure here costs the dashboard a line and must never fail the
+ * webhook and have Meta redeliver the customer messages beside it.
+ */
+async function processMessageEcho(phoneNumberId: string, echo: WhatsAppTextMessage): Promise<void> {
+  const to = typeof echo.to === "string" ? echo.to : null;
+  const body = echo.text?.body;
+  if (!to || !body) return;
+
+  try {
+    const employee = await findEmployeeByPhoneNumberId(phoneNumberId);
+    if (!employee) return;
+
+    const result = await recordOutboundEcho({
+      organizationId: employee.organizationId,
+      contactWaId: to,
+      body,
+      waMessageId: echo.id,
+      employeeId: employee.id,
+    });
+    // Null message means Meta redelivered an echo already recorded — the first
+    // delivery already mirrored it, so there is nothing to redo or re-publish.
+    if (!result.message) return;
+
+    await withTenant(employee.organizationId, async () => {
+      if (employee.whatsappPhoneNumberId) {
+        await setConversationPhoneNumber(result.conversationId, employee.whatsappPhoneNumberId);
+      }
+      // They answered from their phone, so the conversation is in their hands and
+      // the twin must stay out — the same custody an inbound on their number sets.
+      await setConversationHandoff(result.conversationId, true, "taken_by_employee", employee.id);
+    });
+
+    const organization = await findOrganizationById(employee.organizationId);
+    if (organization) {
+      await publishInboxEvent({
+        type: "message",
+        organizationId: organization.id,
+        organizationSlug: organization.slug,
+        conversationId: result.conversationId,
+        message: result.message,
+      });
+    }
+
+    logger.info(
+      { employeeId: employee.id, conversationId: result.conversationId },
+      "Mirrored a staff member's app-sent message into their Nexus conversation"
+    );
+  } catch (err) {
+    logger.error({ err, phoneNumberId }, "Failed to record a WhatsApp message echo");
   }
 }
 

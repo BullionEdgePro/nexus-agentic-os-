@@ -186,6 +186,101 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
   };
 }
 
+export interface RecordOutboundEchoInput {
+  organizationId: string;
+  /** The customer the staff member messaged (the echo's `to`). */
+  contactWaId: string;
+  body: string;
+  /** Meta's id for the message, used to ignore a redelivered echo. */
+  waMessageId: string;
+  /** The staff member who sent it from their own WhatsApp Business app. */
+  employeeId: string;
+}
+
+/**
+ * Record a message a staff member sent to a customer FROM their phone.
+ *
+ * Coexistence mirrors those sends to us as `smb_message_echoes`. This finds (or
+ * opens) the same conversation an inbound from that customer would land in and
+ * writes the message as an ordinary outbound `human_agent` reply — so the
+ * dashboard shows exactly what the customer sees, whichever device it was typed
+ * on.
+ *
+ * DEDUPED ON THE wamid like recordInboundMessage: Meta redelivers, and a `message`
+ * is returned only when a row was actually written, so the caller can publish a
+ * live update once and never twice. Mirrors the inbound writer's find-or-create
+ * so the two can never disagree about which conversation a customer is in.
+ */
+export async function recordOutboundEcho(
+  input: RecordOutboundEchoInput
+): Promise<{ conversationId: string; contactId: string; message: MessageDto | null }> {
+  return withTenant(input.organizationId, async () => {
+    const db = getPool();
+
+    const contact = await db.query<{ id: string }>(
+      `insert into contacts (organization_id, wa_id, last_message_at)
+       values ($1, $2, now())
+       on conflict (organization_id, wa_id)
+       do update set last_message_at = now()
+       returning id`,
+      [input.organizationId, input.contactWaId]
+    );
+    const contactId = contact.rows[0].id;
+
+    const existing = await db.query<{ id: string }>(
+      `select id from conversations
+        where organization_id = $1 and contact_id = $2 and status in ('open', 'pending')
+        order by opened_at desc limit 1`,
+      [input.organizationId, contactId]
+    );
+    const conversationId =
+      existing.rows[0]?.id ??
+      (
+        await db.query<{ id: string }>(
+          `insert into conversations (organization_id, contact_id) values ($1, $2) returning id`,
+          [input.organizationId, contactId]
+        )
+      ).rows[0].id;
+
+    const inserted = await db.query<{
+      id: string;
+      conversation_id: string;
+      direction: MessageDirection;
+      sender_type: SenderType;
+      body: string | null;
+      status: string;
+      created_at: string;
+    }>(
+      // 'delivered' rather than 'queued': an echo is a message that HAS been sent
+      // and received, not one we are asking Meta to send — there is no receipt to
+      // wait on. Deduped on the wamid, so a redelivered echo returns no row.
+      `insert into messages
+         (organization_id, conversation_id, contact_id, wa_message_id, direction, sender_type, message_type, body, status, employee_id)
+       values ($1, $2, $3, $4, 'outbound', 'human_agent', 'text', $5, 'delivered', $6)
+       on conflict (wa_message_id) where wa_message_id is not null do nothing
+       returning id, conversation_id, direction, sender_type, body, status, created_at`,
+      [input.organizationId, conversationId, contactId, input.waMessageId, input.body, input.employeeId]
+    );
+
+    const row = inserted.rows[0];
+    return {
+      conversationId,
+      contactId,
+      message: row
+        ? {
+            id: row.id,
+            conversationId: row.conversation_id,
+            direction: row.direction,
+            senderType: row.sender_type,
+            body: row.body,
+            status: row.status as MessageDto["status"],
+            createdAt: row.created_at,
+          }
+        : null,
+    };
+  });
+}
+
 export async function getMessagesForConversation(
   conversationId: string,
   limit = 50

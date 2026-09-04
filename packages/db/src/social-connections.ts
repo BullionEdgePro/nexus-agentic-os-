@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants } from "./client.js";
 import { sealToken, openToken } from "./token-crypto.js";
 
 /**
@@ -179,6 +179,43 @@ export async function connectionSecret(
     refreshToken: openToken(rows[0].refresh_token_enc),
     scopes: rows[0].scopes ?? [],
   };
+}
+
+/**
+ * The token an outbound message on this number must be SENT with.
+ *
+ * A coexistence number lives on the staff member's own WhatsApp Business
+ * Account, which the shared system-user token has no access to — so a reply
+ * from it has to go out with the token captured when that number was connected.
+ * Returns null for every other number (the shared company line, and dedicated
+ * numbers on the platform's own WABA), where the shared token is correct and the
+ * caller falls back to it.
+ *
+ * CROSS-TENANT ON PURPOSE, and the reason is the same one the delivery-status
+ * path has: the sender knows only a phone_number_id — an opaque routing key, not
+ * tenant data — and must resolve its credential whichever business owns the
+ * number. Wrapped in withAllTenants with a stated reason so the step out of RLS
+ * is deliberate and shows up in the logs, never silent.
+ *
+ * Returns null rather than throwing when the row is missing or the ciphertext
+ * will not open (a rotated key, a truncated column): the caller then uses the
+ * shared token, and for a coexistence number that send fails in a way that reads
+ * as "reconnect", which is the honest outcome.
+ */
+export async function whatsappSendTokenForNumber(phoneNumberId: string): Promise<string | null> {
+  return withAllTenants(
+    "outbound WhatsApp: resolve the sending number's own credential",
+    async () => {
+      const { rows } = await getPool().query<{ access_token_enc: string }>(
+        `select access_token_enc from social_connections
+          where provider = 'whatsapp' and external_id = $1
+          limit 1`,
+        [phoneNumberId]
+      );
+      if (!rows[0]) return null;
+      return openToken(rows[0].access_token_enc);
+    }
+  );
 }
 
 /** Forget a connection entirely, token included. */

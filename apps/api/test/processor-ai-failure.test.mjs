@@ -120,6 +120,7 @@ mock.module("@nexus/db", {
     // Both are listed because the processor imports them, and this mock is the
     // declaration of everything it may use.
     wasAccountedFor: async () => true,
+    recordOutboundEcho: async () => ({ conversationId: "conv-1", contactId: "contact-1", message: null }),
     recordInboundMessage: async () => ({
       conversationId: "conv-1", contactId: "contact-1", messageId: "msg-1",
       isHumanHandoff: false, aiPausedUntil: null,

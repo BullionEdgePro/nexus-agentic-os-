@@ -1,4 +1,32 @@
 import { env } from "../config/env.js";
+import { whatsappSendTokenForNumber } from "@nexus/db";
+import { logger } from "./logger.js";
+
+/**
+ * The bearer token a send from THIS number must use.
+ *
+ * A coexistence number lives on a staff member's own WhatsApp Business Account,
+ * which the shared system-user token cannot send from — so a reply from it goes
+ * out with the token captured when that number was connected. Every other number
+ * (the shared company line, dedicated numbers on the platform's own WABA) has no
+ * such connection row, resolves to null, and correctly uses the shared token.
+ *
+ * Resolved here rather than at each call site so no sender can forget it: text
+ * replies, twin replies, human replies and the fallback all pass through the two
+ * functions below. A lookup failure falls back to the shared token rather than
+ * blocking the send — the overwhelming majority of traffic is the shared number,
+ * and a genuine coexistence send that ends up on the wrong token simply fails at
+ * Meta and surfaces as "reconnect", which is better than refusing every send.
+ */
+async function bearerFor(phoneNumberId: string): Promise<string> {
+  try {
+    const token = await whatsappSendTokenForNumber(phoneNumberId);
+    if (token) return token;
+  } catch (err) {
+    logger.warn({ err, phoneNumberId }, "Could not resolve a per-number send token; using the shared token");
+  }
+  return env.metaAccessToken;
+}
 
 /**
  * Meta's id for a message we sent — the `wamid` — or null if it did not give one.
@@ -31,7 +59,7 @@ export async function sendWhatsAppText(
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.metaAccessToken}`,
+      Authorization: `Bearer ${await bearerFor(phoneNumberId)}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -65,7 +93,7 @@ export async function sendWhatsAppTemplate(
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.metaAccessToken}`,
+      Authorization: `Bearer ${await bearerFor(phoneNumberId)}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

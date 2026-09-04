@@ -39,6 +39,15 @@ export interface WhatsAppWebhookEntry {
       metadata: { display_phone_number: string; phone_number_id: string };
       contacts?: Array<{ profile: { name: string }; wa_id: string }>;
       messages?: WhatsAppTextMessage[];
+      /**
+       * Coexistence only (field `smb_message_echoes`): messages the staff member
+       * sent to a customer FROM their own WhatsApp Business app, mirrored to us so
+       * the dashboard shows what they said on their phone. Same shape as an
+       * inbound message but business→customer, so each carries a `to` (the
+       * customer) as well as a `from` (their number) — read off the index
+       * signature rather than typed here, since it is Meta's shape, not ours.
+       */
+      message_echoes?: WhatsAppTextMessage[];
       statuses?: Array<{
         id: string;
         status: MessageStatus;
