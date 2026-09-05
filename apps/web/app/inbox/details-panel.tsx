@@ -5,10 +5,12 @@ import {
   getConversationDetails,
   updateConversationDetails,
   setConversationCollaborators,
+  assignConversation,
   readableError,
   type ConversationDetails,
   type StaffRef,
 } from "@/lib/api";
+import { useInboxStore } from "@/lib/store";
 
 const LEAD_STAGES = ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"];
 
@@ -27,6 +29,11 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
   const [fields, setFields] = useState<{ key: string; value: string }[]>([]);
   const [collaborators, setCollaborators] = useState<StaffRef[]>([]);
   const [team, setTeam] = useState<StaffRef[]>([]);
+  // The staff this thread can be assigned to — the serving business's team, the
+  // exact set the assign endpoint accepts.
+  const [assignable, setAssignable] = useState<StaffRef[]>([]);
+  // Keep the loaded list's "Mine" folder and counts in step when we reassign.
+  const applyAssignment = useInboxStore((s) => s.applyAssignment);
 
   useEffect(() => {
     let live = true;
@@ -38,6 +45,7 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
         setDetails(res.details);
         setCollaborators(res.collaborators);
         setTeam(res.team);
+        setAssignable(res.assignableTeam ?? []);
         setFields(Object.entries(res.details.customFields).map(([key, value]) => ({ key, value })));
       })
       .catch((err) => live && setError(readableError(err, "Could not load these details.")));
@@ -45,6 +53,27 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
       live = false;
     };
   }, [conversationId]);
+
+  // Assign or hand back (employeeId null). Optimistic on both the panel and the
+  // inbox list; on failure the previous assignee goes back, because a picker that
+  // shows a change that did not save is the assignment version of a send that
+  // silently failed.
+  async function assign(employeeId: string | null) {
+    if (!details) return;
+    const prevId = details.assignedEmployeeId;
+    const prevName = details.assignedEmployeeName;
+    const chosen = employeeId ? assignable.find((t) => t.id === employeeId) ?? null : null;
+    setDetails((d) => (d ? { ...d, assignedEmployeeId: employeeId, assignedEmployeeName: chosen?.name ?? null } : d));
+    applyAssignment(conversationId, employeeId);
+    try {
+      await assignConversation(conversationId, employeeId);
+      setError(null);
+    } catch (err) {
+      setDetails((d) => (d ? { ...d, assignedEmployeeId: prevId, assignedEmployeeName: prevName } : d));
+      applyAssignment(conversationId, prevId);
+      setError(readableError(err, "Could not change who this is assigned to."));
+    }
+  }
 
   async function saveCollaborators(ids: string[]) {
     try {
@@ -90,16 +119,43 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
             <dd>{details.firstSeenAt ? new Date(details.firstSeenAt).toLocaleDateString() : "—"}</dd>
           </div>
           <div>
-            <dt>Assigned to</dt>
-            <dd>{details.assignedEmployeeName ?? "Unassigned"}</dd>
-          </div>
-          <div>
             <dt>Marketing</dt>
             <dd className={details.optedOut ? "dp-out" : "dp-in"}>
               {details.optedOut ? "Opted out" : "Opted in"}
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className="dp-block">
+        <h4 className="dp-h">Assigned to</h4>
+        {/* Who owns this thread — the one control that puts it in a person's
+            "Mine". The options are the serving business's staff (the set the API
+            accepts); "Unassigned" hands it back to no one in particular. */}
+        <select
+          className="dp-assign"
+          value={details.assignedEmployeeId ?? ""}
+          onChange={(e) => void assign(e.target.value || null)}
+          aria-label="Assign this conversation to a staff member"
+        >
+          <option value="">Unassigned</option>
+          {/* The current assignee may be inactive, or from before a routing
+              change, and so absent from the list — keep them selectable so their
+              name shows instead of the box silently reading "Unassigned". */}
+          {details.assignedEmployeeId && !assignable.some((t) => t.id === details.assignedEmployeeId) ? (
+            <option value={details.assignedEmployeeId}>
+              {details.assignedEmployeeName ?? "Current assignee"}
+            </option>
+          ) : null}
+          {assignable.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        {assignable.length === 0 ? (
+          <p className="dp-collab-none">This business has no staff to assign yet.</p>
+        ) : null}
       </section>
 
       <section className="dp-block">

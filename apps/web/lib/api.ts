@@ -568,7 +568,14 @@ export interface StaffRef {
 
 export function getConversationDetails(
   conversationId: string
-): Promise<{ details: ConversationDetails; collaborators: StaffRef[]; team: StaffRef[] }> {
+): Promise<{
+  details: ConversationDetails;
+  collaborators: StaffRef[];
+  team: StaffRef[];
+  /** The staff this thread can be ASSIGNED to — the serving business's active
+   *  team, which is the exact set POST /assign accepts (see the details route). */
+  assignableTeam: StaffRef[];
+}> {
   return request(`/api/conversations/${conversationId}/details`);
 }
 

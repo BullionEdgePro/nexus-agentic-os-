@@ -11,6 +11,7 @@ import {
   getConversationDetails,
   updateContactDetails,
   listOrgStaffNames,
+  getConversationRouting,
   createScheduledMessage,
   listPendingScheduledMessages,
   cancelScheduledMessage,
@@ -255,7 +256,8 @@ conversationsRoute.post("/:id/polish", async (c) => {
  * the conversation — a collaborator whose row is gone simply drops off the list.
  */
 conversationsRoute.get("/:id/details", async (c) => {
-  const details = await getConversationDetails(c.req.param("id"));
+  const conversationId = c.req.param("id");
+  const details = await getConversationDetails(conversationId);
   if (!details) return c.json({ error: "Conversation not found" }, 404);
 
   const roster = await listOrgStaffNames(details.organizationId);
@@ -267,7 +269,23 @@ conversationsRoute.get("/:id/details", async (c) => {
     .map((id) => ({ id, name: nameById.get(id)! }));
   const team = roster.filter((e) => e.isActive).map((e) => ({ id: e.id, name: e.name }));
 
-  return c.json({ details, collaborators, team });
+  // WHO CAN OWN THIS THREAD is the SERVING business's staff, not the owner's.
+  // On the shared number a conversation is OWNED by the number's org but ROUTED
+  // to another, and the assign endpoint (POST /:id/assign) enforces exactly
+  // that: it rejects an employee who is not active staff of the serving org. So
+  // the picker has to offer the same set the API will accept, or every choice on
+  // a routed conversation is a 400 rendered as "belongs to a different
+  // business". When nothing routed it, serving is the owner and this is `team`.
+  const routing = await getConversationRouting(conversationId).catch(() => null);
+  const servingOrgId = routing?.routedOrganizationId ?? details.organizationId;
+  const assignableTeam =
+    servingOrgId === details.organizationId
+      ? team
+      : (await listOrgStaffNames(servingOrgId))
+          .filter((e) => e.isActive)
+          .map((e) => ({ id: e.id, name: e.name }));
+
+  return c.json({ details, collaborators, team, assignableTeam });
 });
 
 /**

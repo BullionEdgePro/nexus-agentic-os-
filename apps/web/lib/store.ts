@@ -39,6 +39,13 @@ interface InboxState {
   setHumanHandoff: (conversationId: string, isHumanHandoff: boolean) => Promise<void>;
   applyHandoffChange: (conversationId: string, isHumanHandoff: boolean) => void;
   setTags: (conversationId: string, tags: string[]) => Promise<void>;
+  /**
+   * Reflect a changed assignee in the loaded list, so the "Mine" folder and the
+   * folder counts move the instant someone is assigned — the details panel owns
+   * the API call and calls this to keep the list in step (mirrors
+   * applyHandoffChange).
+   */
+  applyAssignment: (conversationId: string, employeeId: string | null) => void;
 }
 
 export const useInboxStore = create<InboxState>((set, get) => ({
@@ -153,6 +160,13 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     set((state) => ({
       conversations: state.conversations.map((c) =>
         c.id === conversationId ? { ...c, isHumanHandoff } : c
+      ),
+    })),
+
+  applyAssignment: (conversationId, employeeId) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === conversationId ? { ...c, assignedEmployeeId: employeeId } : c
       ),
     })),
 
