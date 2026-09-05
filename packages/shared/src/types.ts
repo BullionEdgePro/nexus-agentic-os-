@@ -146,6 +146,8 @@ export interface ConversationSummary {
   lastMessageDirection: MessageDirection | null;
   /** Free-text labels on the conversation, for finding and filtering it. */
   tags: string[];
+  /** True when this conversation has an open follow-up task whose time has passed. */
+  hasOverdueFollowup: boolean;
 }
 
 export interface MessageDto {

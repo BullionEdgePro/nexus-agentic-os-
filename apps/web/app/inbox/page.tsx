@@ -33,6 +33,7 @@ type FolderKey =
   | "all"
   | "awaiting"
   | "waiting"
+  | "followup"
   | "unassigned"
   | "human"
   | "open"
@@ -59,6 +60,8 @@ function matchesFolder(c: ConversationSummary, folder: FolderKey, me: string | n
       return c.lastMessageDirection === "inbound";
     case "waiting":
       return isWaitingTooLong(c);
+    case "followup":
+      return c.hasOverdueFollowup;
     case "unassigned":
       return c.assignedEmployeeId == null;
     case "human":
@@ -75,6 +78,7 @@ const STAFF_FOLDERS: { key: FolderKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "awaiting", label: "Awaiting reply" },
   { key: "waiting", label: `Waiting >${WAITING_HOURS}h` },
+  { key: "followup", label: "Follow-up due" },
   { key: "unassigned", label: "Unassigned" },
   { key: "human", label: "Human-held" },
   { key: "open", label: "Open" },
@@ -301,7 +305,7 @@ export default function InboxPage() {
                 role="tab"
                 aria-selected={folder === f.key}
                 className={`ibx-folder${folder === f.key ? " on" : ""}${
-                  f.key === "waiting" && counts[f.key] > 0 ? " urgent" : ""
+                  (f.key === "waiting" || f.key === "followup") && counts[f.key] > 0 ? " urgent" : ""
                 }`}
                 onClick={() => setFolder(f.key)}
               >
@@ -356,7 +360,9 @@ export default function InboxPage() {
                 ? "None of this business's conversations are yours yet. A customer who opens a chat through your link, or one handed to you, will appear here."
                 : folder === "waiting"
                   ? "Nobody has been left waiting — every customer who spoke last has had a reply."
-                  : "Nothing in this folder right now."}
+                  : folder === "followup"
+                    ? "No follow-ups are overdue. Add one from a conversation's Follow-ups panel."
+                    : "Nothing in this folder right now."}
           </p>
         ) : (
           <ul className="ibx-list">
@@ -382,6 +388,11 @@ export default function InboxPage() {
                     </span>
                     {conversation.isHumanHandoff && (
                       <span className="ibx-flag">human</span>
+                    )}
+                    {conversation.hasOverdueFollowup && (
+                      <span className="ibx-flag ibx-flag-due" title="Follow-up overdue">
+                        ⏰ follow-up
+                      </span>
                     )}
                   </div>
                   <p className="ibx-preview">

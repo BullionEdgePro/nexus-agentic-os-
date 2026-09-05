@@ -360,6 +360,14 @@
   border: 1px solid rgba(156, 93, 15, 0.4);
   background: rgba(156, 93, 15, 0.08);
 }
+/* Overdue follow-up — same shape, in the signal colour so it reads as "act now". */
+.ibx-flag-due {
+  color: var(--signal-text);
+  border-color: var(--signal-text);
+  background: transparent;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
 
 .ibx-preview {
   font-size: 12px;

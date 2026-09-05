@@ -13,6 +13,7 @@ interface ConversationSummaryRow {
   last_message_direction: ConversationSummary["lastMessageDirection"];
   assigned_employee_id: string | null;
   tags: string[] | null;
+  has_overdue_followup: boolean | null;
 }
 
 function toSummary(row: ConversationSummaryRow): ConversationSummary {
@@ -28,6 +29,7 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     assignedEmployeeId: row.assigned_employee_id,
     lastMessageDirection: row.last_message_direction,
     tags: row.tags ?? [],
+    hasOverdueFollowup: Boolean(row.has_overdue_followup),
   };
 }
 
@@ -47,7 +49,14 @@ export async function getConversationsForOrganization(
        lm.body as last_message_body,
        lm.created_at as last_message_at,
        lm.direction as last_message_direction,
-       c.tags
+       c.tags,
+       exists (
+         select 1 from tasks t
+          where t.conversation_id = c.id
+            and t.status = 'open'
+            and t.due_at is not null
+            and t.due_at < now()
+       ) as has_overdue_followup
      from conversations c
      join contacts ct on ct.id = c.contact_id
      left join lateral (
