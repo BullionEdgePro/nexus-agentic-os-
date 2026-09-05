@@ -179,6 +179,113 @@ export async function setConversationTags(conversationId: string, tags: string[]
   await getPool().query(`update conversations set tags = $2 where id = $1`, [conversationId, tags]);
 }
 
+/** Everything the contact/details panel shows for the open conversation. */
+export interface ConversationDetails {
+  conversationId: string;
+  contactId: string;
+  contactName: string | null;
+  contactWaId: string;
+  firstSeenAt: string | null;
+  assignedEmployeeId: string | null;
+  /** The assigned staff member's name, resolved for display. */
+  assignedEmployeeName: string | null;
+  /** True when the customer has opted OUT of re-engagement (i.e. NOT opted in). */
+  optedOut: boolean;
+  /** Manual pipeline stage a colleague sets. */
+  leadStage: string | null;
+  /** The AI's own read, shown read-only beside the manual stage. */
+  leadPriority: string | null;
+  leadScore: number | null;
+  notes: string | null;
+  customFields: Record<string, string>;
+}
+
+/**
+ * Read the panel for one conversation — contact, assignment, lead and custom
+ * fields in a single round trip.
+ *
+ * Runs in whatever scope the caller is in; the conversations route is
+ * cross-tenant (withAllTenants), which is why the join to `employees` — an
+ * RLS-scoped table — returns the assignee's name rather than null.
+ */
+export async function getConversationDetails(conversationId: string): Promise<ConversationDetails | null> {
+  const { rows } = await getPool().query<{
+    conversation_id: string;
+    employee_id: string | null;
+    contact_id: string;
+    wa_id: string;
+    display_name: string | null;
+    first_seen_at: string | null;
+    reengagement_opted_out: boolean | null;
+    lead_stage: string | null;
+    lead_priority: string | null;
+    lead_score: number | null;
+    notes: string | null;
+    custom_fields: Record<string, string> | null;
+    employee_name: string | null;
+  }>(
+    `select c.id as conversation_id, c.employee_id,
+            ct.id as contact_id, ct.wa_id, ct.display_name,
+            ct.created_at as first_seen_at, ct.reengagement_opted_out,
+            ct.lead_stage, ct.lead_priority, ct.lead_score, ct.notes, ct.custom_fields,
+            e.full_name as employee_name
+       from conversations c
+       join contacts ct on ct.id = c.contact_id
+       left join employees e on e.id = c.employee_id
+      where c.id = $1`,
+    [conversationId]
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    conversationId: r.conversation_id,
+    contactId: r.contact_id,
+    contactName: r.display_name,
+    contactWaId: r.wa_id,
+    firstSeenAt: r.first_seen_at,
+    assignedEmployeeId: r.employee_id,
+    assignedEmployeeName: r.employee_name,
+    optedOut: Boolean(r.reengagement_opted_out),
+    leadStage: r.lead_stage,
+    leadPriority: r.lead_priority,
+    leadScore: r.lead_score,
+    notes: r.notes,
+    customFields: r.custom_fields ?? {},
+  };
+}
+
+/**
+ * Update the hand-edited fields on a contact — the panel's writable half.
+ *
+ * Each field is written only when the caller actually sent it (a `$n::boolean`
+ * "present?" flag beside each value), so saving one field never blanks another
+ * a different tab has open. The AI lead columns are deliberately not touchable
+ * here — a human's stage and the model's guess live in different columns so
+ * neither overwrites the other.
+ */
+export async function updateContactDetails(
+  contactId: string,
+  input: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> }
+): Promise<void> {
+  await getPool().query(
+    `update contacts set
+       lead_stage    = case when $2::boolean then $3 else lead_stage end,
+       notes         = case when $4::boolean then $5 else notes end,
+       custom_fields = case when $6::boolean then $7::jsonb else custom_fields end,
+       updated_at    = now()
+     where id = $1`,
+    [
+      contactId,
+      input.leadStage !== undefined,
+      input.leadStage ?? null,
+      input.notes !== undefined,
+      input.notes ?? null,
+      input.customFields !== undefined,
+      JSON.stringify(input.customFields ?? {}),
+    ]
+  );
+}
+
 export async function setConversationHandoff(
   conversationId: string,
   isHumanHandoff: boolean,

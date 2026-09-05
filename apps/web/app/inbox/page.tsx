@@ -9,6 +9,7 @@ import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
 import { TagEditor } from "./tag-editor";
+import { DetailsPanel } from "./details-panel";
 import "./inbox.css";
 
 // ============================================================
@@ -463,6 +464,18 @@ export default function InboxPage() {
           </>
         )}
       </section>
+
+      {/* The Details panel — who this customer is and the fields kept on them.
+          Always the fourth column so the grid does not reflow when a
+          conversation is opened; a placeholder until one is. */}
+      <aside className="ibx-col ibx-details">
+        <h2 className="ibx-head">Details</h2>
+        {activeConversation ? (
+          <DetailsPanel key={activeConversation.id} conversationId={activeConversation.id} />
+        ) : (
+          <p className="dp-empty">Select a conversation to see its details.</p>
+        )}
+      </aside>
     </div>
   );
 }

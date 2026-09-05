@@ -7,6 +7,8 @@ import {
   resumeAiForContact,
   setConversationHandoff,
   setConversationTags,
+  getConversationDetails,
+  updateContactDetails,
   listCustody,
 } from "@nexus/db";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
@@ -116,6 +118,65 @@ conversationsRoute.post("/:id/messages", async (c) => {
   });
 
   return c.json({ message });
+});
+
+/**
+ * The contact/details panel for one conversation, in a single read.
+ */
+conversationsRoute.get("/:id/details", async (c) => {
+  const details = await getConversationDetails(c.req.param("id"));
+  if (!details) return c.json({ error: "Conversation not found" }, 404);
+  return c.json({ details });
+});
+
+/**
+ * Update the hand-edited fields on the conversation's contact.
+ *
+ * Partial: only the keys present in the body are written. Everything is
+ * normalised at the edge — a lead stage and notes trimmed and length-capped,
+ * custom fields reduced to a flat string→string map (values coerced to text,
+ * blank keys dropped, capped at 40 fields) so a jsonb column can never grow a
+ * shape the panel cannot render.
+ */
+conversationsRoute.patch("/:id/details", async (c) => {
+  const conversationId = c.req.param("id");
+  const body = await c.req.json<{
+    leadStage?: unknown;
+    notes?: unknown;
+    customFields?: unknown;
+  }>().catch(() => null);
+  if (!body) return c.json({ error: "Nothing to change." }, 400);
+
+  const details = await getConversationDetails(conversationId);
+  if (!details) return c.json({ error: "Conversation not found" }, 404);
+
+  const patch: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> } = {};
+
+  if ("leadStage" in body) {
+    const v = typeof body.leadStage === "string" ? body.leadStage.trim().slice(0, 60) : "";
+    patch.leadStage = v || null;
+  }
+  if ("notes" in body) {
+    const v = typeof body.notes === "string" ? body.notes.slice(0, 4000) : "";
+    patch.notes = v.trim() ? v : null;
+  }
+  if ("customFields" in body) {
+    const fields: Record<string, string> = {};
+    if (body.customFields && typeof body.customFields === "object") {
+      for (const [rawKey, rawVal] of Object.entries(body.customFields as Record<string, unknown>)) {
+        const key = rawKey.trim().slice(0, 40);
+        if (!key) continue;
+        const value = (typeof rawVal === "string" ? rawVal : String(rawVal ?? "")).slice(0, 400);
+        fields[key] = value;
+        if (Object.keys(fields).length >= 40) break;
+      }
+    }
+    patch.customFields = fields;
+  }
+
+  await updateContactDetails(details.contactId, patch);
+  const updated = await getConversationDetails(conversationId);
+  return c.json({ details: updated });
 });
 
 /**

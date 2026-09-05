@@ -542,6 +542,37 @@ export function setConversationTags(
   });
 }
 
+/** Everything the contact/details panel shows for one conversation. */
+export interface ConversationDetails {
+  conversationId: string;
+  contactId: string;
+  contactName: string | null;
+  contactWaId: string;
+  firstSeenAt: string | null;
+  assignedEmployeeId: string | null;
+  assignedEmployeeName: string | null;
+  optedOut: boolean;
+  leadStage: string | null;
+  leadPriority: string | null;
+  leadScore: number | null;
+  notes: string | null;
+  customFields: Record<string, string>;
+}
+
+export function getConversationDetails(conversationId: string): Promise<{ details: ConversationDetails }> {
+  return request(`/api/conversations/${conversationId}/details`);
+}
+
+export function updateConversationDetails(
+  conversationId: string,
+  patch: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> }
+): Promise<{ details: ConversationDetails }> {
+  return request(`/api/conversations/${conversationId}/details`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 export interface EmployeeActivity {
   employeeId: string;
   fullName: string;
