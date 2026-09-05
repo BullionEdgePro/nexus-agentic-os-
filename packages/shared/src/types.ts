@@ -137,6 +137,13 @@ export interface ConversationSummary {
    * second, differently-scoped list.
    */
   assignedEmployeeId: string | null;
+  /**
+   * Whether the LAST message on the thread came from the customer or from us.
+   * "inbound" means the customer spoke last and is waiting on a reply — the
+   * single fact the "Awaiting reply" folder and the waiting-too-long flag are
+   * built from. Null only when a conversation has no messages yet.
+   */
+  lastMessageDirection: MessageDirection | null;
 }
 
 export interface MessageDto {

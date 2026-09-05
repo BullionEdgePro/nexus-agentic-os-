@@ -1,13 +1,85 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import type { ConversationSummary } from "@nexus/shared";
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
 import "./inbox.css";
+
+// ============================================================
+// The folders down the side of a team inbox.
+// ============================================================
+//
+// Each is a plain predicate over a conversation, applied client-side to the
+// business's loaded list — the same place "Mine" already lived. The point of a
+// folder is not to hide work but to let a person answer one question at a time:
+// "who is waiting on me", "who has nobody", "who has been waiting too long".
+//
+// Everything here is derivable from data the summary already carries, so no
+// folder promises more than the row can back up. Deliberately NOT "Unread":
+// the platform tracks no per-viewer read state, and a folder that silently
+// meant something else would be the kind of confident-wrong answer this
+// codebase keeps having to unlearn.
+
+type FolderKey =
+  | "mine"
+  | "all"
+  | "awaiting"
+  | "waiting"
+  | "unassigned"
+  | "human"
+  | "open"
+  | "closed";
+
+// How long a customer's unanswered message sits before the inbox calls it out.
+// Matches the spirit of the operators deck's "waiting" flag; a folder, not an
+// SLA contract, so a round number rather than a per-business policy.
+const WAITING_HOURS = 3;
+
+function isWaitingTooLong(c: ConversationSummary): boolean {
+  if (c.lastMessageDirection !== "inbound" || !c.lastMessageAt) return false;
+  return Date.now() - new Date(c.lastMessageAt).getTime() > WAITING_HOURS * 3600_000;
+}
+
+function matchesFolder(c: ConversationSummary, folder: FolderKey, me: string | null): boolean {
+  switch (folder) {
+    case "mine":
+      return !!me && c.assignedEmployeeId === me;
+    case "all":
+      return true;
+    case "awaiting":
+      // The customer spoke last and nobody has answered.
+      return c.lastMessageDirection === "inbound";
+    case "waiting":
+      return isWaitingTooLong(c);
+    case "unassigned":
+      return c.assignedEmployeeId == null;
+    case "human":
+      return c.isHumanHandoff;
+    case "open":
+      return c.status === "open" || c.status === "pending";
+    case "closed":
+      return c.status === "resolved" || c.status === "closed";
+  }
+}
+
+const STAFF_FOLDERS: { key: FolderKey; label: string }[] = [
+  { key: "mine", label: "Mine" },
+  { key: "all", label: "All" },
+  { key: "awaiting", label: "Awaiting reply" },
+  { key: "waiting", label: `Waiting >${WAITING_HOURS}h` },
+  { key: "unassigned", label: "Unassigned" },
+  { key: "human", label: "Human-held" },
+  { key: "open", label: "Open" },
+  { key: "closed", label: "Closed" },
+];
+// An operator owns no conversations personally, so "Mine" would be an always
+// empty folder for them — dropped rather than shown broken.
+const OPERATOR_FOLDERS = STAFF_FOLDERS.filter((f) => f.key !== "mine");
 
 export default function InboxPage() {
   useInboxSocket();
@@ -26,22 +98,18 @@ export default function InboxPage() {
   // nothing rather than everything.
   const { businesses, known, myEmployeeId } = useVisibleBusinesses();
 
-  // "Mine" vs the whole business list. A staff member on a shared number sees
-  // every conversation their business handles; this narrows it to the ones a
-  // customer opened with THEM — assigned by their own link or handed to them.
-  // Defaults to "mine" the moment we know who they are, because that is the
-  // question they came to answer ("who is waiting for me?"); an operator has no
-  // employee id, so the toggle never appears and they always see everything.
-  const [scope, setScope] = useState<"mine" | "all">("all");
-  const scopeChosen = useRef(false);
+  // Which folder is open. A staff member lands on "Mine" the moment we know who
+  // they are — the question they came to answer ("who is waiting for me?") — and
+  // an operator, who owns no conversations personally, starts on "All".
+  const [folder, setFolder] = useState<FolderKey>("all");
+  const folderChosen = useRef(false);
   useEffect(() => {
-    if (scopeChosen.current) return;
+    if (folderChosen.current) return;
     if (myEmployeeId) {
-      setScope("mine");
-      scopeChosen.current = true;
+      setFolder("mine");
+      folderChosen.current = true;
     } else if (known && !myEmployeeId) {
-      // Role is known and there is no employee id — an operator. Lock to "all".
-      scopeChosen.current = true;
+      folderChosen.current = true;
     }
   }, [known, myEmployeeId]);
 
@@ -117,15 +185,16 @@ export default function InboxPage() {
   const activeConversation = conversations.find((c) => c.id === selectedConversationId);
   const messages = selectedConversationId ? messagesByConversation[selectedConversationId] ?? [] : [];
 
-  // How many of this business's conversations are this person's own — shown on
-  // the toggle so "Mine" is not a leap of faith when the filtered list is empty.
-  const mineCount = myEmployeeId
-    ? conversations.filter((c) => c.assignedEmployeeId === myEmployeeId).length
-    : 0;
-  const visibleConversations =
-    scope === "mine" && myEmployeeId
-      ? conversations.filter((c) => c.assignedEmployeeId === myEmployeeId)
-      : conversations;
+  // The folders offered, and a live count on each — so a person can see where
+  // the work is without opening every one, and "Mine (0)" is honest rather than
+  // a folder that looks broken when empty.
+  const folders = myEmployeeId ? STAFF_FOLDERS : OPERATOR_FOLDERS;
+  const counts = useMemo(() => {
+    const out = {} as Record<FolderKey, number>;
+    for (const f of folders) out[f.key] = conversations.filter((c) => matchesFolder(c, f.key, myEmployeeId)).length;
+    return out;
+  }, [conversations, folders, myEmployeeId]);
+  const visibleConversations = conversations.filter((c) => matchesFolder(c, folder, myEmployeeId));
 
   async function handleSend() {
     if (!selectedConversationId || !draft.trim()) return;
@@ -169,29 +238,25 @@ export default function InboxPage() {
 
       <section className="ibx-col ibx-convos">
         <h2 className="ibx-head">Conversations</h2>
-        {/* Only a staff member has a "mine" — an operator owns none of the
-            conversations personally, so the toggle would offer them an always
-            empty list. Shown only once we know who they are. */}
-        {myEmployeeId ? (
-          <div className="ibx-scope" role="tablist" aria-label="Which conversations to show">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={scope === "mine"}
-              className={`ibx-scope-btn${scope === "mine" ? " on" : ""}`}
-              onClick={() => setScope("mine")}
-            >
-              Mine{mineCount > 0 ? ` (${mineCount})` : ""}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={scope === "all"}
-              className={`ibx-scope-btn${scope === "all" ? " on" : ""}`}
-              onClick={() => setScope("all")}
-            >
-              All
-            </button>
+        {/* The folders. Nothing until the role is known, so a staff member never
+            sees "Mine" flash for an operator or vice versa. */}
+        {known ? (
+          <div className="ibx-folders" role="tablist" aria-label="Filter conversations">
+            {folders.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                role="tab"
+                aria-selected={folder === f.key}
+                className={`ibx-folder${folder === f.key ? " on" : ""}${
+                  f.key === "waiting" && counts[f.key] > 0 ? " urgent" : ""
+                }`}
+                onClick={() => setFolder(f.key)}
+              >
+                {f.label}
+                <span className="ibx-folder-n">{counts[f.key]}</span>
+              </button>
+            ))}
           </div>
         ) : null}
         {isLoadingConversations ? (
@@ -216,9 +281,13 @@ export default function InboxPage() {
           </p>
         ) : visibleConversations.length === 0 ? (
           <p className="ibx-empty">
-            {scope === "mine"
-              ? "None of this business's conversations are yours yet. A customer who opens a chat through your link, or one handed to you, will appear here."
-              : "No conversations yet for this business."}
+            {conversations.length === 0
+              ? "No conversations yet for this business."
+              : folder === "mine"
+                ? "None of this business's conversations are yours yet. A customer who opens a chat through your link, or one handed to you, will appear here."
+                : folder === "waiting"
+                  ? "Nobody has been left waiting — every customer who spoke last has had a reply."
+                  : "Nothing in this folder right now."}
           </p>
         ) : (
           <ul className="ibx-list">
@@ -230,6 +299,15 @@ export default function InboxPage() {
                   aria-current={selectedConversationId === conversation.id ? "true" : undefined}
                 >
                   <div className="ibx-convo-top">
+                    {/* The customer spoke last — this thread is waiting on us.
+                        Turns amber once it has been waiting too long. */}
+                    {conversation.lastMessageDirection === "inbound" && (
+                      <span
+                        className={`ibx-await${isWaitingTooLong(conversation) ? " late" : ""}`}
+                        title={isWaitingTooLong(conversation) ? "Waiting too long" : "Waiting on a reply"}
+                        aria-hidden="true"
+                      />
+                    )}
                     <span className="ibx-convo-name">
                       {conversation.contactName ?? conversation.contactWaId}
                     </span>

@@ -59,34 +59,47 @@
 .ibx-biz-btn:hover { background: var(--paper); color: var(--ink); }
 .ibx-biz-btn.on { background: var(--ink); color: var(--marble); }
 
-/* --- mine / all --- */
+/* --- folders --- */
 
-.ibx-scope {
+.ibx-folders {
   display: flex;
-  gap: 2px;
-  padding: 2px;
+  flex-wrap: wrap;
+  gap: 4px;
   margin: 0 0 12px;
-  background: var(--paper);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-sm);
 }
 
-.ibx-scope-btn {
-  flex: 1;
+.ibx-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: calc(var(--r-sm) - 2px);
+  padding: 5px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
   background: transparent;
   color: var(--slate);
   cursor: pointer;
 }
 
-.ibx-scope-btn:hover { color: var(--ink); }
-.ibx-scope-btn.on { background: var(--ink); color: var(--marble); }
+.ibx-folder:hover { color: var(--ink); border-color: var(--hairline-strong); }
+.ibx-folder.on { background: var(--ink); color: var(--marble); border-color: var(--ink); }
+.ibx-folder-n { font-variant-numeric: tabular-nums; opacity: 0.65; }
+.ibx-folder.on .ibx-folder-n { opacity: 0.85; }
+/* The one folder that is a problem when non-empty draws the eye even unselected. */
+.ibx-folder.urgent:not(.on) { border-color: var(--signal-text); color: var(--signal-text); }
+
+/* Waiting-on-a-reply dot on a conversation row. */
+.ibx-await {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--slate);
+  flex: none;
+}
+.ibx-await.late { background: var(--signal-text); }
 
 /* --- conversation list --- */
 

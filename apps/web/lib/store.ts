@@ -107,7 +107,13 @@ export const useInboxStore = create<InboxState>((set, get) => ({
         },
         conversations: state.conversations.map((c) =>
           c.id === conversationId
-            ? { ...c, lastMessagePreview: message.body, lastMessageAt: message.createdAt }
+            ? {
+                ...c,
+                lastMessagePreview: message.body,
+                lastMessageAt: message.createdAt,
+                // Keep the "awaiting reply" dot honest as messages stream in.
+                lastMessageDirection: message.direction,
+              }
             : c
         ),
       };

@@ -10,6 +10,7 @@ interface ConversationSummaryRow {
   is_human_handoff: boolean;
   last_message_body: string | null;
   last_message_at: string | null;
+  last_message_direction: ConversationSummary["lastMessageDirection"];
   assigned_employee_id: string | null;
 }
 
@@ -24,6 +25,7 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     lastMessagePreview: row.last_message_body,
     lastMessageAt: row.last_message_at,
     assignedEmployeeId: row.assigned_employee_id,
+    lastMessageDirection: row.last_message_direction,
   };
 }
 
@@ -41,11 +43,12 @@ export async function getConversationsForOrganization(
        c.is_human_handoff,
        c.employee_id as assigned_employee_id,
        lm.body as last_message_body,
-       lm.created_at as last_message_at
+       lm.created_at as last_message_at,
+       lm.direction as last_message_direction
      from conversations c
      join contacts ct on ct.id = c.contact_id
      left join lateral (
-       select body, created_at from messages
+       select body, created_at, direction from messages
        where conversation_id = c.id
        order by created_at desc
        limit 1
