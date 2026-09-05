@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import {
   getConversationDetails,
   updateConversationDetails,
+  setConversationCollaborators,
   readableError,
   type ConversationDetails,
+  type StaffRef,
 } from "@/lib/api";
 
 const LEAD_STAGES = ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"];
@@ -23,22 +25,36 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
   const [details, setDetails] = useState<ConversationDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<{ key: string; value: string }[]>([]);
+  const [collaborators, setCollaborators] = useState<StaffRef[]>([]);
+  const [team, setTeam] = useState<StaffRef[]>([]);
 
   useEffect(() => {
     let live = true;
     setDetails(null);
     setError(null);
     getConversationDetails(conversationId)
-      .then(({ details }) => {
+      .then((res) => {
         if (!live) return;
-        setDetails(details);
-        setFields(Object.entries(details.customFields).map(([key, value]) => ({ key, value })));
+        setDetails(res.details);
+        setCollaborators(res.collaborators);
+        setTeam(res.team);
+        setFields(Object.entries(res.details.customFields).map(([key, value]) => ({ key, value })));
       })
       .catch((err) => live && setError(readableError(err, "Could not load these details.")));
     return () => {
       live = false;
     };
   }, [conversationId]);
+
+  async function saveCollaborators(ids: string[]) {
+    try {
+      const res = await setConversationCollaborators(conversationId, ids);
+      setCollaborators(res.collaborators);
+      setError(null);
+    } catch (err) {
+      setError(readableError(err, "Could not update collaborators."));
+    }
+  }
 
   async function save(patch: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> }) {
     try {
@@ -84,6 +100,54 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className="dp-block">
+        <h4 className="dp-h">Collaborators</h4>
+        {collaborators.length ? (
+          <div className="dp-collabs">
+            {collaborators.map((p) => (
+              <span key={p.id} className="dp-collab">
+                {p.name}
+                <button
+                  type="button"
+                  className="dp-collab-x"
+                  aria-label={`Remove ${p.name}`}
+                  onClick={() => saveCollaborators(collaborators.filter((c) => c.id !== p.id).map((c) => c.id))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="dp-collab-none">Nobody extra on this thread.</p>
+        )}
+        {(() => {
+          // Only people not already on the thread and not the owner (they are on
+          // it by assignment). An empty picker means everyone is already here.
+          const addable = team.filter(
+            (t) => !collaborators.some((c) => c.id === t.id) && t.id !== details.assignedEmployeeId
+          );
+          return addable.length ? (
+            <select
+              className="dp-collab-add"
+              value=""
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id) saveCollaborators([...collaborators.map((c) => c.id), id]);
+              }}
+              aria-label="Add a collaborator"
+            >
+              <option value="">+ Add colleague…</option>
+              {addable.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          ) : null;
+        })()}
       </section>
 
       <section className="dp-block">

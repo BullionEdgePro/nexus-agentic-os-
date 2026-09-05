@@ -179,14 +179,28 @@ export async function setConversationTags(conversationId: string, tags: string[]
   await getPool().query(`update conversations set tags = $2 where id = $1`, [conversationId, tags]);
 }
 
+/** Replace the set of extra staff on a thread. Whole-set, like tags. */
+export async function setConversationCollaborators(
+  conversationId: string,
+  employeeIds: string[]
+): Promise<void> {
+  await getPool().query(`update conversations set collaborator_ids = $2 where id = $1`, [
+    conversationId,
+    employeeIds,
+  ]);
+}
+
 /** Everything the contact/details panel shows for the open conversation. */
 export interface ConversationDetails {
   conversationId: string;
+  organizationId: string;
   contactId: string;
   contactName: string | null;
   contactWaId: string;
   firstSeenAt: string | null;
   assignedEmployeeId: string | null;
+  /** Extra staff pulled onto this thread, by id — names resolved by the caller. */
+  collaboratorIds: string[];
   /** The assigned staff member's name, resolved for display. */
   assignedEmployeeName: string | null;
   /** True when the customer has opted OUT of re-engagement (i.e. NOT opted in). */
@@ -211,7 +225,9 @@ export interface ConversationDetails {
 export async function getConversationDetails(conversationId: string): Promise<ConversationDetails | null> {
   const { rows } = await getPool().query<{
     conversation_id: string;
+    organization_id: string;
     employee_id: string | null;
+    collaborator_ids: string[] | null;
     contact_id: string;
     wa_id: string;
     display_name: string | null;
@@ -224,7 +240,7 @@ export async function getConversationDetails(conversationId: string): Promise<Co
     custom_fields: Record<string, string> | null;
     employee_name: string | null;
   }>(
-    `select c.id as conversation_id, c.employee_id,
+    `select c.id as conversation_id, c.organization_id, c.employee_id, c.collaborator_ids,
             ct.id as contact_id, ct.wa_id, ct.display_name,
             ct.created_at as first_seen_at, ct.reengagement_opted_out,
             ct.lead_stage, ct.lead_priority, ct.lead_score, ct.notes, ct.custom_fields,
@@ -239,11 +255,13 @@ export async function getConversationDetails(conversationId: string): Promise<Co
   if (!r) return null;
   return {
     conversationId: r.conversation_id,
+    organizationId: r.organization_id,
     contactId: r.contact_id,
     contactName: r.display_name,
     contactWaId: r.wa_id,
     firstSeenAt: r.first_seen_at,
     assignedEmployeeId: r.employee_id,
+    collaboratorIds: r.collaborator_ids ?? [],
     assignedEmployeeName: r.employee_name,
     optedOut: Boolean(r.reengagement_opted_out),
     leadStage: r.lead_stage,

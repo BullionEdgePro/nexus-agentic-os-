@@ -559,8 +559,27 @@ export interface ConversationDetails {
   customFields: Record<string, string>;
 }
 
-export function getConversationDetails(conversationId: string): Promise<{ details: ConversationDetails }> {
+/** A staff member referenced by the panel — id plus a display name. */
+export interface StaffRef {
+  id: string;
+  name: string;
+}
+
+export function getConversationDetails(
+  conversationId: string
+): Promise<{ details: ConversationDetails; collaborators: StaffRef[]; team: StaffRef[] }> {
   return request(`/api/conversations/${conversationId}/details`);
+}
+
+/** Replace the extra staff on a thread. Returns the resolved collaborators. */
+export function setConversationCollaborators(
+  conversationId: string,
+  employeeIds: string[]
+): Promise<{ collaborators: StaffRef[] }> {
+  return request(`/api/conversations/${conversationId}/collaborators`, {
+    method: "PATCH",
+    body: JSON.stringify({ employeeIds }),
+  });
 }
 
 /** Ask the AI to draft the next reply from the conversation so far. Never sends. */

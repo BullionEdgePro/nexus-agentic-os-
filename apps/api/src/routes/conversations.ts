@@ -7,8 +7,10 @@ import {
   resumeAiForContact,
   setConversationHandoff,
   setConversationTags,
+  setConversationCollaborators,
   getConversationDetails,
   updateContactDetails,
+  listEmployees,
   listCustody,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
@@ -184,11 +186,58 @@ conversationsRoute.post("/:id/polish", async (c) => {
 
 /**
  * The contact/details panel for one conversation, in a single read.
+ *
+ * Also carries the two things the Collaborators control needs: who is already on
+ * the thread (resolved to names) and the roster to pick more from. Names come
+ * from the org's employee list, so a rename or a departure needs no backfill on
+ * the conversation — a collaborator whose row is gone simply drops off the list.
  */
 conversationsRoute.get("/:id/details", async (c) => {
   const details = await getConversationDetails(c.req.param("id"));
   if (!details) return c.json({ error: "Conversation not found" }, 404);
-  return c.json({ details });
+
+  const roster = await listEmployees(details.organizationId);
+  const nameById = new Map(roster.map((e) => [e.id, e.fullName]));
+  // Drop any whose employee row is gone — a departed colleague simply falls off
+  // the thread rather than showing as a mystery id.
+  const collaborators = details.collaboratorIds
+    .filter((id) => nameById.has(id))
+    .map((id) => ({ id, name: nameById.get(id)! }));
+  const team = roster
+    .filter((e) => e.isActive)
+    .map((e) => ({ id: e.id, name: e.fullName }));
+
+  return c.json({ details, collaborators, team });
+});
+
+/**
+ * Set who else is on this thread.
+ *
+ * Whole-set replace, normalised to ids that are actually active staff of THIS
+ * business — a collaborator from another org would be a cross-tenant leak by
+ * request body, so the roster is the allow-list. Returns the resolved names so
+ * the panel updates without a second read.
+ */
+conversationsRoute.patch("/:id/collaborators", async (c) => {
+  const conversationId = c.req.param("id");
+  const body = await c.req.json<{ employeeIds?: unknown }>().catch(() => null);
+  if (!Array.isArray(body?.employeeIds)) return c.json({ error: "employeeIds (an array) is required" }, 400);
+
+  const details = await getConversationDetails(conversationId);
+  if (!details) return c.json({ error: "Conversation not found" }, 404);
+
+  const roster = await listEmployees(details.organizationId);
+  const active = new Map(roster.filter((e) => e.isActive).map((e) => [e.id, e.fullName]));
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const raw of body.employeeIds) {
+    if (typeof raw !== "string" || !active.has(raw) || seen.has(raw)) continue;
+    seen.add(raw);
+    ids.push(raw);
+  }
+
+  await setConversationCollaborators(conversationId, ids);
+  return c.json({ collaborators: ids.map((id) => ({ id, name: active.get(id)! })) });
 });
 
 /**
