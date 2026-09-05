@@ -4,6 +4,7 @@ import type {
   MessageDto,
   Organization,
   OverviewMetrics,
+  ScheduledMessageStatus,
 } from "@nexus/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -592,6 +593,43 @@ export function polishText(conversationId: string, text: string): Promise<{ text
   return request(`/api/conversations/${conversationId}/polish`, {
     method: "POST",
     body: JSON.stringify({ text }),
+  });
+}
+
+/** A reply written now to send later. */
+export interface ScheduledMessage {
+  id: string;
+  conversationId: string;
+  body: string;
+  sendAt: string;
+  status: ScheduledMessageStatus;
+  createdBy: string | null;
+  error: string | null;
+  createdAt: string;
+  sentAt: string | null;
+}
+
+export function getScheduledMessages(conversationId: string): Promise<{ scheduled: ScheduledMessage[] }> {
+  return request(`/api/conversations/${conversationId}/scheduled`);
+}
+
+export function scheduleMessage(
+  conversationId: string,
+  body: string,
+  sendAt: string
+): Promise<{ scheduled: ScheduledMessage }> {
+  return request(`/api/conversations/${conversationId}/scheduled`, {
+    method: "POST",
+    body: JSON.stringify({ body, sendAt }),
+  });
+}
+
+export function cancelScheduledMessage(
+  conversationId: string,
+  scheduledId: string
+): Promise<{ ok: boolean }> {
+  return request(`/api/conversations/${conversationId}/scheduled/${scheduledId}`, {
+    method: "DELETE",
   });
 }
 

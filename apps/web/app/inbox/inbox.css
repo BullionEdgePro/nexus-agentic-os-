@@ -301,6 +301,35 @@
 }
 .dp-collab-add:focus { outline: none; border-color: var(--signal-text); }
 
+/* --- scheduled messages --- */
+.ibx-sched { margin: 0 0 8px; display: flex; flex-direction: column; gap: 6px; }
+.ibx-sched-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ibx-sched-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+}
+.ibx-sched-when { font-family: var(--mono); font-size: 10px; color: var(--signal-text); white-space: nowrap; }
+.ibx-sched-body { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.ibx-sched-cancel { border: 0; background: transparent; color: var(--slate); cursor: pointer; font-size: 11px; }
+.ibx-sched-cancel:hover { color: var(--ink); }
+.ibx-sched-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ibx-sched-when-input {
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 4px 7px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+}
+.ibx-sched-hint { font-size: 11px; color: var(--slate); }
+
 /* --- AI Assist toolbar in the compose box --- */
 .ibx-ai-bar { display: flex; gap: 6px; margin: 0 0 6px; }
 .ibx-ai-btn {

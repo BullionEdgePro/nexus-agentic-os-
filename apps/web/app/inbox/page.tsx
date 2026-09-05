@@ -11,6 +11,7 @@ import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
 import { TagEditor } from "./tag-editor";
 import { DetailsPanel } from "./details-panel";
+import { ScheduledMessages } from "./scheduled-messages";
 import "./inbox.css";
 
 // ============================================================
@@ -507,6 +508,12 @@ export default function InboxPage() {
                 {ai === "polish" ? "Polishing…" : "Polish"}
               </button>
             </div>
+            <ScheduledMessages
+              key={activeConversation.id}
+              conversationId={activeConversation.id}
+              draft={draft}
+              onScheduled={() => setDraft("")}
+            />
             <form
               onSubmit={(e) => {
                 e.preventDefault();

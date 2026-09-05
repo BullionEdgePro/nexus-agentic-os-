@@ -21,6 +21,11 @@ import {
 import { processProcedureInferenceJob } from "./queue/procedures-processor.js";
 import { FORECAST_QUEUE, scheduleForecastCycle } from "./queue/forecast-queue.js";
 import { processForecastJob } from "./queue/forecast-processor.js";
+import {
+  SCHEDULED_MESSAGES_QUEUE,
+  scheduleScheduledMessageSweep,
+} from "./queue/scheduled-messages-queue.js";
+import { processScheduledMessageSweep } from "./queue/scheduled-messages-processor.js";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -105,6 +110,17 @@ forecastWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Forecast cycle failed")
 );
 
+// Concurrency 1. The claim is race-safe on its own (for update skip locked), but
+// one sweep is plenty for a per-minute query, and a single runner keeps the send
+// order the soonest-first the claim asks for.
+const scheduledMessagesWorker = new Worker(SCHEDULED_MESSAGES_QUEUE, processScheduledMessageSweep, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+scheduledMessagesWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Scheduled message sweep failed")
+);
+
 reindexWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Knowledge re-index job failed")
 );
@@ -168,6 +184,11 @@ scheduleForecastCycle()
   .then(() => logger.info("Forecast cycle scheduled (daily)"))
   .catch((err) => logger.warn({ err }, "Could not schedule forecast cycle"));
 
+// Every minute: a person schedules in minutes, so the sweep sends within one.
+scheduleScheduledMessageSweep()
+  .then(() => logger.info("Scheduled-message sweep scheduled (every 1m)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule the scheduled-message sweep"));
+
 // Verify every configured model is actually callable. A model that 404s does
 // not crash anything — it just makes every customer receive the generic
 // fallback reply while the system looks healthy — so it has to be shouted
@@ -202,6 +223,7 @@ async function shutdown() {
     operatorsWorker.close(),
     proceduresWorker.close(),
     forecastWorker.close(),
+    scheduledMessagesWorker.close(),
   ]);
   process.exit(0);
 }

@@ -39,6 +39,7 @@ const PAIRS = [
   { union: "MessageDirection", constraint: "direction" },
   { union: "SenderType", constraint: "sender_type" },
   { union: "MessageStatus", constraint: "status", table: "messages" },
+  { union: "ScheduledMessageStatus", constraint: "status", table: "scheduled_messages" },
 ];
 
 const SHARED = (() => {
@@ -96,7 +97,12 @@ function unionValues(name) {
 function constraintValues(column, table) {
   let found = null;
   for (const { file, sql } of MIGRATIONS) {
-    if (table && !sql.includes(table)) continue;
+    // Match where the TABLE is declared or altered — `table <name>` — not any
+    // mention of the word. A bare `sql.includes("messages")` also matched
+    // `scheduled_messages` (and even a comment reading "Scheduled messages"),
+    // so a second table's status check was read as the first's. Anchoring on
+    // `table <name>` keeps each constraint tied to its own table.
+    if (table && !new RegExp(`table\\s+${table}\\b`, "i").test(sql)) continue;
     // Every `check ( ... )` clause, balanced enough for these: the bodies here
     // are flat lists with no nested parentheses beyond the array literal.
     for (const m of sql.matchAll(/check\s*\(([\s\S]*?)\)\s*(?:,|;|\n\s*\))/gi)) {

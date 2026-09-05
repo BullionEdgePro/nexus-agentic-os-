@@ -20,6 +20,8 @@ export interface Organization {
 export type MessageDirection = "inbound" | "outbound";
 export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed";
 export type SenderType = "contact" | "ai_agent" | "human_agent" | "system";
+/** Lifecycle of a scheduled message; matches the CHECK in migration 083. */
+export type ScheduledMessageStatus = "pending" | "sending" | "sent" | "failed" | "cancelled";
 
 export interface WhatsAppTextMessage {
   from: string;

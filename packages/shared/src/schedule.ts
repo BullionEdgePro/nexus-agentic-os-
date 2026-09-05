@@ -22,6 +22,7 @@ export const SCHEDULED_JOBS = [
   "procedure-inference",
   "forecast-cycle",
   "calendar-sync",
+  "scheduled-messages",
 ] as const;
 
 export type ScheduledJob = (typeof SCHEDULED_JOBS)[number];
@@ -49,6 +50,12 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
   // free as they were the last time it ran, and the agent goes on promising
   // them to customers. Three intervals plus room for a deploy.
   "calendar-sync": 60 * MINUTE,
+  // The sweep runs every minute, but its heartbeat tolerance is deliberately
+  // loose — above the operators sweep, which must stay the tightest alarm on the
+  // platform. This number is about noticing a DEAD sweep, not the lateness of one
+  // message: a stalled sweep is caught within the hour, and an individual send's
+  // own failure is recorded on its row regardless.
+  "scheduled-messages": 45 * MINUTE,
 };
 
 /**

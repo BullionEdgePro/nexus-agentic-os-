@@ -11,6 +11,9 @@ import {
   getConversationDetails,
   updateContactDetails,
   listOrgStaffNames,
+  createScheduledMessage,
+  listPendingScheduledMessages,
+  cancelScheduledMessage,
   listCustody,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
@@ -121,6 +124,65 @@ conversationsRoute.post("/:id/messages", async (c) => {
   });
 
   return c.json({ message });
+});
+
+// ============================================================
+// Scheduled messages
+// ============================================================
+
+/** The still-pending scheduled sends on this conversation. */
+conversationsRoute.get("/:id/scheduled", async (c) => {
+  const scheduled = await listPendingScheduledMessages(c.req.param("id"));
+  return c.json({ scheduled });
+});
+
+/**
+ * Schedule a reply to send later.
+ *
+ * The one inbox action that reaches a customer with no human at the moment of
+ * sending, so it is validated hard: a real message, a time that is actually in
+ * the future and not absurdly far off. It records who scheduled it. It does NOT
+ * check the 24-hour window here — that window is about when it FIRES, not when it
+ * is set, and the sweep marks a send Meta refuses as failed-with-reason rather
+ * than pretending at schedule time to know what the window will be then.
+ */
+conversationsRoute.post("/:id/scheduled", async (c) => {
+  const conversationId = c.req.param("id");
+  const body = await c.req.json<{ body?: unknown; sendAt?: unknown }>().catch(() => null);
+
+  const text = typeof body?.body === "string" ? body.body.trim() : "";
+  if (!text) return c.json({ error: "Write the message to schedule." }, 400);
+  if (text.length > 4000) return c.json({ error: "That message is too long." }, 400);
+
+  const when = typeof body?.sendAt === "string" ? new Date(body.sendAt) : new Date(NaN);
+  if (Number.isNaN(when.getTime())) return c.json({ error: "That is not a valid time." }, 400);
+  if (when.getTime() < Date.now() + 30_000) {
+    return c.json({ error: "Pick a time at least a minute from now." }, 400);
+  }
+  if (when.getTime() > Date.now() + 60 * 24 * 3600_000) {
+    return c.json({ error: "That is more than 60 days away — closer, please." }, 400);
+  }
+
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  const createdBy = (c.get("scope") as { sub?: string } | undefined)?.sub ?? null;
+  const scheduled = await createScheduledMessage({
+    organizationId: conversation.organizationId,
+    conversationId,
+    contactId: conversation.contactId,
+    body: text,
+    sendAt: when,
+    createdBy,
+  });
+  return c.json({ scheduled }, 201);
+});
+
+/** Cancel a pending scheduled send before it fires. */
+conversationsRoute.delete("/:id/scheduled/:scheduledId", async (c) => {
+  const ok = await cancelScheduledMessage(c.req.param("id"), c.req.param("scheduledId"));
+  if (!ok) return c.json({ error: "That message has already sent or been cancelled." }, 409);
+  return c.json({ ok: true });
 });
 
 /**
