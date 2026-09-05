@@ -265,6 +265,24 @@
 }
 .dp-add:hover { color: var(--ink); }
 
+/* --- AI Assist toolbar in the compose box --- */
+.ibx-ai-bar { display: flex; gap: 6px; margin: 0 0 6px; }
+.ibx-ai-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+.ibx-ai-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--hairline-strong); }
+.ibx-ai-btn:disabled { opacity: 0.55; cursor: default; }
+.ibx-ai-error { color: var(--signal-text); font-size: 12px; margin: 0 0 6px; }
+
 /* --- conversation list --- */
 
 .ibx-convo {

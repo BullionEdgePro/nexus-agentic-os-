@@ -563,6 +563,19 @@ export function getConversationDetails(conversationId: string): Promise<{ detail
   return request(`/api/conversations/${conversationId}/details`);
 }
 
+/** Ask the AI to draft the next reply from the conversation so far. Never sends. */
+export function suggestReply(conversationId: string): Promise<{ suggestion: string }> {
+  return request(`/api/conversations/${conversationId}/suggest`, { method: "POST" });
+}
+
+/** Fix the spelling and grammar of a draft without changing what it says. */
+export function polishText(conversationId: string, text: string): Promise<{ text: string }> {
+  return request(`/api/conversations/${conversationId}/polish`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
 export function updateConversationDetails(
   conversationId: string,
   patch: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> }

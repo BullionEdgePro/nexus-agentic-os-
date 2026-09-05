@@ -11,6 +11,7 @@ import {
   updateContactDetails,
   listCustody,
 } from "@nexus/db";
+import { completeText } from "@nexus/agents";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
@@ -118,6 +119,67 @@ conversationsRoute.post("/:id/messages", async (c) => {
   });
 
   return c.json({ message });
+});
+
+/**
+ * Draft a reply for the human to send — AI Assist.
+ *
+ * Reads the recent transcript and drafts the next reply in the business's voice.
+ * It NEVER sends: the text comes back to the compose box for a person to read,
+ * edit and send (or discard). The model is told not to invent facts, prices or
+ * promises and to leave a holding reply it cannot answer confidently — the same
+ * discipline the auto-reply path keeps, because a suggestion a tired person
+ * sends unread is an auto-reply by another name.
+ */
+conversationsRoute.post("/:id/suggest", async (c) => {
+  const conversationId = c.req.param("id");
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  const messages = await getMessagesForConversation(conversationId, 14);
+  const transcript = messages
+    .filter((m) => m.body)
+    .map((m) => `${m.direction === "inbound" ? "Customer" : "Us"}: ${m.body}`)
+    .join("\n");
+  if (!transcript) return c.json({ error: "Nothing to reply to yet." }, 400);
+
+  const suggestion = await completeText({
+    system:
+      "You draft the next reply for a business's support team on WhatsApp. Write one concise, warm, professional message answering the customer's latest point, using the conversation so far. NEVER invent facts, prices, availability, dates or promises — if the answer is not in the conversation, write a short holding reply a colleague can finish. Return ONLY the reply text, with no preamble, labels or quotation marks.",
+    prompt: `Conversation so far:\n${transcript}\n\nDraft the next reply from Us.`,
+    maxTokens: 400,
+  });
+
+  if (!suggestion) {
+    return c.json({ error: "The assistant is not available right now — write the reply yourself." }, 503);
+  }
+  return c.json({ suggestion });
+});
+
+/**
+ * Polish a draft's spelling and grammar without changing what it says.
+ *
+ * Takes whatever is in the box and returns a cleaner version — meaning, tone and
+ * every specific fact or number left exactly as written. Body-only; it does not
+ * read the conversation, so a half-typed reply is polished on its own terms.
+ */
+conversationsRoute.post("/:id/polish", async (c) => {
+  const body = await c.req.json<{ text?: unknown }>().catch(() => null);
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "Nothing to polish." }, 400);
+  if (text.length > 2000) return c.json({ error: "That is longer than the polisher takes at once." }, 413);
+
+  const polished = await completeText({
+    system:
+      "You fix spelling, grammar and clarity in a support agent's draft reply. Keep the meaning, the tone, and every specific fact, name, price and number exactly as written. Do not add or remove information, and do not answer anything — only correct. Return ONLY the corrected text, with no preamble or quotation marks.",
+    prompt: text,
+    maxTokens: 500,
+  });
+
+  if (!polished) {
+    return c.json({ error: "The polisher is not available right now." }, 503);
+  }
+  return c.json({ text: polished });
 });
 
 /**

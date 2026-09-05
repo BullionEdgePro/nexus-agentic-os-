@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { ConversationSummary } from "@nexus/shared";
+import { suggestReply, polishText, readableError } from "@/lib/api";
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
@@ -231,6 +232,38 @@ export default function InboxPage() {
     }
   }
 
+  // AI Assist, in the compose box. Both fill the draft and never send — a person
+  // reads and sends. "ai" tracks which is running so the buttons can say so; the
+  // error sits beside the box, cleared on the next try.
+  const [ai, setAi] = useState<"" | "suggest" | "polish">("");
+  const [aiError, setAiError] = useState<string | null>(null);
+  async function handleSuggest() {
+    if (!selectedConversationId || ai) return;
+    setAi("suggest");
+    setAiError(null);
+    try {
+      const { suggestion } = await suggestReply(selectedConversationId);
+      setDraft(suggestion);
+    } catch (err) {
+      setAiError(readableError(err, "Could not draft a reply."));
+    } finally {
+      setAi("");
+    }
+  }
+  async function handlePolish() {
+    if (!selectedConversationId || ai || !draft.trim()) return;
+    setAi("polish");
+    setAiError(null);
+    try {
+      const { text } = await polishText(selectedConversationId, draft.trim());
+      setDraft(text);
+    } catch (err) {
+      setAiError(readableError(err, "Could not polish that."));
+    } finally {
+      setAi("");
+    }
+  }
+
   return (
     <div className="ibx">
       <aside className="ibx-col ibx-biz">
@@ -440,6 +473,29 @@ export default function InboxPage() {
                 <strong>Not sent.</strong> {sendError} Your message is still in the box below.
               </p>
             ) : null}
+            {aiError ? <p className="ibx-ai-error">{aiError}</p> : null}
+            {/* AI Assist. Both fill the box for a person to read and send — never
+                a send of their own. */}
+            <div className="ibx-ai-bar">
+              <button
+                type="button"
+                className="ibx-ai-btn"
+                onClick={handleSuggest}
+                disabled={!!ai}
+                title="Draft a reply from the conversation so far"
+              >
+                {ai === "suggest" ? "Drafting…" : "✨ Suggest reply"}
+              </button>
+              <button
+                type="button"
+                className="ibx-ai-btn"
+                onClick={handlePolish}
+                disabled={!!ai || !draft.trim()}
+                title="Fix spelling and grammar without changing what it says"
+              >
+                {ai === "polish" ? "Polishing…" : "Polish"}
+              </button>
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
