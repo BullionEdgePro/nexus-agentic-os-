@@ -10,7 +10,7 @@ import {
   setConversationCollaborators,
   getConversationDetails,
   updateContactDetails,
-  listEmployees,
+  listOrgStaffNames,
   listCustody,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
@@ -196,16 +196,14 @@ conversationsRoute.get("/:id/details", async (c) => {
   const details = await getConversationDetails(c.req.param("id"));
   if (!details) return c.json({ error: "Conversation not found" }, 404);
 
-  const roster = await listEmployees(details.organizationId);
-  const nameById = new Map(roster.map((e) => [e.id, e.fullName]));
+  const roster = await listOrgStaffNames(details.organizationId);
+  const nameById = new Map(roster.map((e) => [e.id, e.name]));
   // Drop any whose employee row is gone — a departed colleague simply falls off
   // the thread rather than showing as a mystery id.
   const collaborators = details.collaboratorIds
     .filter((id) => nameById.has(id))
     .map((id) => ({ id, name: nameById.get(id)! }));
-  const team = roster
-    .filter((e) => e.isActive)
-    .map((e) => ({ id: e.id, name: e.fullName }));
+  const team = roster.filter((e) => e.isActive).map((e) => ({ id: e.id, name: e.name }));
 
   return c.json({ details, collaborators, team });
 });
@@ -226,8 +224,8 @@ conversationsRoute.patch("/:id/collaborators", async (c) => {
   const details = await getConversationDetails(conversationId);
   if (!details) return c.json({ error: "Conversation not found" }, 404);
 
-  const roster = await listEmployees(details.organizationId);
-  const active = new Map(roster.filter((e) => e.isActive).map((e) => [e.id, e.fullName]));
+  const roster = await listOrgStaffNames(details.organizationId);
+  const active = new Map(roster.filter((e) => e.isActive).map((e) => [e.id, e.name]));
   const seen = new Set<string>();
   const ids: string[] = [];
   for (const raw of body.employeeIds) {

@@ -179,6 +179,26 @@ export async function setConversationTags(conversationId: string, tags: string[]
   await getPool().query(`update conversations set tags = $2 where id = $1`, [conversationId, tags]);
 }
 
+/**
+ * The staff of one business, as id + name, for the collaborators picker.
+ *
+ * A plain org-scoped query on purpose: the conversations route runs
+ * cross-tenant (withAllTenants), where a direct read returns rows and the
+ * withServingTenant wrapper that `listEmployees` uses would be a needless nested
+ * narrowing. Returns inactive staff too, tagged, so a collaborator who has since
+ * been deactivated still resolves to a name while the picker offers only active
+ * ones.
+ */
+export async function listOrgStaffNames(
+  organizationId: string
+): Promise<{ id: string; name: string; isActive: boolean }[]> {
+  const { rows } = await getPool().query<{ id: string; full_name: string; is_active: boolean }>(
+    `select id, full_name, is_active from employees where organization_id = $1 order by full_name`,
+    [organizationId]
+  );
+  return rows.map((r) => ({ id: r.id, name: r.full_name, isActive: r.is_active }));
+}
+
 /** Replace the set of extra staff on a thread. Whole-set, like tags. */
 export async function setConversationCollaborators(
   conversationId: string,
