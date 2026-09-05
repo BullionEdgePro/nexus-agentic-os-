@@ -531,6 +531,17 @@ export function setHandoff(
   });
 }
 
+/** Replace the labels on a conversation. Returns the normalised set the server kept. */
+export function setConversationTags(
+  conversationId: string,
+  tags: string[]
+): Promise<{ tags: string[] }> {
+  return request(`/api/conversations/${conversationId}/tags`, {
+    method: "PATCH",
+    body: JSON.stringify({ tags }),
+  });
+}
+
 export interface EmployeeActivity {
   employeeId: string;
   fullName: string;

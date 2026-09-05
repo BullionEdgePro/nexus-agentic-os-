@@ -8,6 +8,7 @@ import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
+import { TagEditor } from "./tag-editor";
 import "./inbox.css";
 
 // ============================================================
@@ -120,6 +121,7 @@ export default function InboxPage() {
   const selectedConversationId = useInboxStore((s) => s.selectedConversationId);
   const selectConversation = useInboxStore((s) => s.selectConversation);
   const setHumanHandoff = useInboxStore((s) => s.setHumanHandoff);
+  const setTags = useInboxStore((s) => s.setTags);
   const sendMessage = useInboxStore((s) => s.sendMessage);
   const messagesByConversation = useInboxStore((s) => s.messagesByConversation);
   const loadConversations = useInboxStore((s) => s.loadConversations);
@@ -142,6 +144,12 @@ export default function InboxPage() {
 
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
+  // A single label to narrow the list to, on top of the folder. Cleared when the
+  // business changes, since a label from one business is meaningless in another.
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  useEffect(() => {
+    setTagFilter(null);
+  }, [selectedOrg]);
 
   useEffect(() => {
     loadConversations();
@@ -194,7 +202,17 @@ export default function InboxPage() {
     for (const f of folders) out[f.key] = conversations.filter((c) => matchesFolder(c, f.key, myEmployeeId)).length;
     return out;
   }, [conversations, folders, myEmployeeId]);
-  const visibleConversations = conversations.filter((c) => matchesFolder(c, folder, myEmployeeId));
+  // Every label in use across the loaded inbox — the vocabulary for the filter
+  // chips and the editor's suggestions, sorted so it is stable to read.
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of conversations) for (const t of c.tags) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [conversations]);
+
+  const visibleConversations = conversations.filter(
+    (c) => matchesFolder(c, folder, myEmployeeId) && (!tagFilter || c.tags.includes(tagFilter))
+  );
 
   async function handleSend() {
     if (!selectedConversationId || !draft.trim()) return;
@@ -259,6 +277,23 @@ export default function InboxPage() {
             ))}
           </div>
         ) : null}
+        {/* Narrow to one label, on top of the folder. Only shown once the
+            business actually uses labels, so it never sits there empty. */}
+        {allTags.length ? (
+          <div className="ibx-tagfilter" aria-label="Filter by label">
+            {allTags.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`ibx-tagchip${tagFilter === t ? " on" : ""}`}
+                aria-pressed={tagFilter === t}
+                onClick={() => setTagFilter((cur) => (cur === t ? null : t))}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {isLoadingConversations ? (
           <p className="ibx-empty">Loading…</p>
         ) : loadError ? (
@@ -318,6 +353,20 @@ export default function InboxPage() {
                   <p className="ibx-preview">
                     {conversation.lastMessagePreview ?? "No messages yet"}
                   </p>
+                  {conversation.tags.length ? (
+                    <span className="ibx-row-tags">
+                      {conversation.tags.slice(0, 3).map((t) => (
+                        <span key={t} className="ibx-row-tag">
+                          {t}
+                        </span>
+                      ))}
+                      {conversation.tags.length > 3 ? (
+                        <span className="ibx-row-tag ibx-row-tag-more">
+                          +{conversation.tags.length - 3}
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
                 </button>
               </li>
             ))}
@@ -336,6 +385,12 @@ export default function InboxPage() {
                   {activeConversation.contactName ?? activeConversation.contactWaId}
                 </h1>
                 <p className="ibx-wa">+{activeConversation.contactWaId}</p>
+                <TagEditor
+                  key={activeConversation.id}
+                  tags={activeConversation.tags}
+                  suggestions={allTags}
+                  onChange={(next) => setTags(activeConversation.id, next)}
+                />
               </div>
               {/* The checkbox shows one boolean; six different things in the
                   platform can set it, and until migration 062 nothing recorded

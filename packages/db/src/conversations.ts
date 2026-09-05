@@ -12,6 +12,7 @@ interface ConversationSummaryRow {
   last_message_at: string | null;
   last_message_direction: ConversationSummary["lastMessageDirection"];
   assigned_employee_id: string | null;
+  tags: string[] | null;
 }
 
 function toSummary(row: ConversationSummaryRow): ConversationSummary {
@@ -26,6 +27,7 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     lastMessageAt: row.last_message_at,
     assignedEmployeeId: row.assigned_employee_id,
     lastMessageDirection: row.last_message_direction,
+    tags: row.tags ?? [],
   };
 }
 
@@ -44,7 +46,8 @@ export async function getConversationsForOrganization(
        c.employee_id as assigned_employee_id,
        lm.body as last_message_body,
        lm.created_at as last_message_at,
-       lm.direction as last_message_direction
+       lm.direction as last_message_direction,
+       c.tags
      from conversations c
      join contacts ct on ct.id = c.contact_id
      left join lateral (
@@ -161,6 +164,19 @@ export async function setConversationPhoneNumber(
     conversationId,
     phoneNumberId,
   ]);
+}
+
+/**
+ * Replace the whole set of labels on a conversation.
+ *
+ * A replace rather than add/remove because the editor holds the whole set and
+ * sends it back — one round trip, and no chance of the client and the row
+ * disagreeing about which labels are on it. The caller normalises (trims,
+ * de-dupes, caps); this just writes what it is given. Runs the same way as the
+ * handoff and phone-number setters in this route — a plain update by id.
+ */
+export async function setConversationTags(conversationId: string, tags: string[]): Promise<void> {
+  await getPool().query(`update conversations set tags = $2 where id = $1`, [conversationId, tags]);
 }
 
 export async function setConversationHandoff(

@@ -38,6 +38,7 @@ interface InboxState {
   sendMessage: (conversationId: string, text: string) => Promise<void>;
   setHumanHandoff: (conversationId: string, isHumanHandoff: boolean) => Promise<void>;
   applyHandoffChange: (conversationId: string, isHumanHandoff: boolean) => void;
+  setTags: (conversationId: string, tags: string[]) => Promise<void>;
 }
 
 export const useInboxStore = create<InboxState>((set, get) => ({
@@ -154,6 +155,27 @@ export const useInboxStore = create<InboxState>((set, get) => ({
         c.id === conversationId ? { ...c, isHumanHandoff } : c
       ),
     })),
+
+  setTags: async (conversationId, tags) => {
+    // Optimistic: the chip appears the moment it is typed. The server normalises
+    // (trim, de-dupe, cap) and we adopt whatever it kept; on failure we put the
+    // previous set back rather than leaving a label that was never saved.
+    const previous = get().conversations.find((c) => c.id === conversationId)?.tags ?? [];
+    const apply = (next: string[]) =>
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === conversationId ? { ...c, tags: next } : c
+        ),
+      }));
+    apply(tags);
+    try {
+      const res = await api.setConversationTags(conversationId, tags);
+      apply(res.tags);
+    } catch (err) {
+      apply(previous);
+      set({ sendError: readableError(err, "Could not update the labels.") });
+    }
+  },
 }));
 
 // Re-exported so existing imports keep working; the list itself lives in

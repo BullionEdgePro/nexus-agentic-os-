@@ -6,6 +6,7 @@ import {
   pauseAiForContact,
   resumeAiForContact,
   setConversationHandoff,
+  setConversationTags,
   listCustody,
 } from "@nexus/db";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
@@ -115,6 +116,40 @@ conversationsRoute.post("/:id/messages", async (c) => {
   });
 
   return c.json({ message });
+});
+
+/**
+ * Set the labels on a conversation.
+ *
+ * The whole set is sent and the whole set is stored — see setConversationTags.
+ * Normalised HERE, at the edge, so nothing malformed reaches the column: each
+ * label trimmed, empties dropped, de-duped case-insensitively (keeping the first
+ * spelling), each capped at 40 characters and the set at 15. A jsonb-free text
+ * array, so the cap is a courtesy to the UI, not a safety boundary.
+ */
+conversationsRoute.patch("/:id/tags", async (c) => {
+  const conversationId = c.req.param("id");
+  const body = await c.req.json<{ tags?: unknown }>().catch(() => null);
+  if (!Array.isArray(body?.tags)) return c.json({ error: "tags (an array) is required" }, 400);
+
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of body.tags) {
+    if (typeof raw !== "string") continue;
+    const label = raw.trim().slice(0, 40);
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(label);
+    if (tags.length >= 15) break;
+  }
+
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  await setConversationTags(conversationId, tags);
+  return c.json({ tags });
 });
 
 // Manual handoff toggle (the Unified Inbox checkbox). Turning it on also

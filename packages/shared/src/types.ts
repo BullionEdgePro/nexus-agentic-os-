@@ -144,6 +144,8 @@ export interface ConversationSummary {
    * built from. Null only when a conversation has no messages yet.
    */
   lastMessageDirection: MessageDirection | null;
+  /** Free-text labels on the conversation, for finding and filtering it. */
+  tags: string[];
 }
 
 export interface MessageDto {
