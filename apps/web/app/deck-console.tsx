@@ -10,6 +10,7 @@ import { RailLinks } from "./console-shell";
 import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { SystemHealth } from "./system-health";
 import { Assistant } from "./assistant";
+import { CommandPalette } from "./command-palette";
 import "./deck/deck.css";
 
 /* ---------------- static presentation data ---------------- */
@@ -385,6 +386,10 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
       <div className="vignette" />
       <div className="cur-ring" />
       <div className="cur-dot" />
+
+      {/* ⌘K here too — this front page is the one operator screen outside the
+          shared shell, so it needs its own mount to match every other page. */}
+      <CommandPalette role="operator" />
 
       <div className="app">
         <header className="topbar">

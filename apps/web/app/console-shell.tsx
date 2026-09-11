@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import { usePathname } from "next/navigation";
 import { ViewAsStaff } from "./view-as-staff";
 import { Assistant } from "./assistant";
+import { CommandPalette } from "./command-palette";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
@@ -159,6 +160,8 @@ export function ConsoleShell({
           is fixed to the viewport rather than part of the page's flow, and
           starts closed so it is never in the way of the work. */}
       <Assistant />
+      {/* ⌘K / Ctrl-K from anywhere signed in. Role-filtered like the rail. */}
+      <CommandPalette role={role} />
     </div>
   );
 }
