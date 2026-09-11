@@ -8,6 +8,7 @@ import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { RailLinks } from "./console-shell";
 import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
+import { SystemHealth } from "./system-health";
 import { Assistant } from "./assistant";
 import "./deck/deck.css";
 
@@ -430,6 +431,9 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                 <span className="dot live" />
                 Webhook connected
               </span>
+              {/* Whether the SWEEPS are alive, not just the data — a stopped
+                  operator looks exactly like a quiet platform without this. */}
+              <SystemHealth />
             </div>
           </div>
 

@@ -147,6 +147,28 @@ export function getOverview(): Promise<{ metrics: OverviewMetrics }> {
   return request("/api/metrics/overview");
 }
 
+/**
+ * Whether the background half of the platform is alive — the sweeps that answer
+ * waiting customers, the sends, the daily jobs. `/health/jobs` sits at the API
+ * root (not under /api) and needs no session; `request` still prefixes the API
+ * origin, which is all this needs. The shape mirrors the endpoint in index.ts:
+ * `ok` already folds in stalled jobs, failing/backed-up queues, and an
+ * unreadable queue layer, so the strip trusts it rather than recomputing.
+ */
+export interface JobsHealth {
+  ok: boolean;
+  stalled: string[];
+  failing: string[];
+  backedUp: string[];
+  queuesUnreadable: boolean;
+  jobs: { job: string; lastRunFailed: boolean; stalled: boolean; runs: number; failures: number }[];
+  queues: { queue: string; waiting: number; active: number; failed: number; failing: boolean; backedUp: boolean }[];
+}
+
+export function getJobsHealth(): Promise<JobsHealth> {
+  return request("/health/jobs");
+}
+
 export function getConversations(orgSlug: BusinessSlug): Promise<{ conversations: ConversationSummary[] }> {
   return request(`/api/organizations/${orgSlug}/conversations`);
 }
