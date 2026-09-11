@@ -1,9 +1,10 @@
 "use client";
 
+import { Fragment } from "react";
 import { usePathname } from "next/navigation";
 import { ViewAsStaff } from "./view-as-staff";
 import { Assistant } from "./assistant";
-import { NAV, activeHref } from "@/lib/nav";
+import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
 import "./console-shell.css";
@@ -56,23 +57,53 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
       ? NAV.filter((item) => !item.staffOnly)
       : NAV.filter((item) => !item.operatorOnly);
 
+  // The link itself, so the grouped run and the fallback render it identically.
+  const link = (item: (typeof NAV)[number]) => (
+    <a
+      key={item.href}
+      href={item.href}
+      title={item.label}
+      className={item.href === current ? "on" : undefined}
+      // The current page is announced, not merely coloured. A rail whose
+      // only "you are here" is a background swap says nothing to anyone
+      // navigating by keyboard or screen reader.
+      aria-current={item.href === current ? "page" : undefined}
+    >
+      <span className="rail-icon">{item.icon}</span>
+      <span className="rail-label">{item.label}</span>
+    </a>
+  );
+
+  // Render group by group, in the order the sections argue for. An item the
+  // role cannot see drops out; a group left empty by that renders no heading.
+  const visibleSet = new Set(visible.map((i) => i.href));
+  const byHref = new Map(NAV.map((i) => [i.href, i] as const));
+  const grouped = new Set<string>();
+
   return (
     <>
-      {visible.map((item) => (
-        <a
-          key={item.href}
-          href={item.href}
-          title={item.label}
-          className={item.href === current ? "on" : undefined}
-          // The current page is announced, not merely coloured. A rail whose
-          // only "you are here" is a background swap says nothing to anyone
-          // navigating by keyboard or screen reader.
-          aria-current={item.href === current ? "page" : undefined}
-        >
-          <span className="rail-icon">{item.icon}</span>
-          <span className="rail-label">{item.label}</span>
-        </a>
-      ))}
+      {NAV_GROUPS.map((group) => {
+        const items = group.hrefs
+          .map((href) => byHref.get(href))
+          .filter((item): item is NonNullable<typeof item> => !!item && visibleSet.has(item.href));
+        if (items.length === 0) return null;
+        items.forEach((i) => grouped.add(i.href));
+        return (
+          <Fragment key={group.title}>
+            {/* A quiet section label, not a control — the heading names the run
+                below it and is skipped by the tab order and the screen reader,
+                which reach the links themselves. */}
+            <span className="rail-group" aria-hidden="true">
+              {group.title}
+            </span>
+            {items.map(link)}
+          </Fragment>
+        );
+      })}
+
+      {/* Any visible screen that no group claims still gets a door — a new NAV
+          entry must never be invisible just because it was not filed here. */}
+      {visible.filter((item) => !grouped.has(item.href)).map(link)}
 
       <span className="sep" />
 

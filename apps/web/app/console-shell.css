@@ -162,6 +162,21 @@
   text-overflow: ellipsis;
 }
 
+/* The section heading. A landmark, not a link: it names the run under it so the
+   eye can skip whole groups it does not want, which is the entire point of
+   grouping nineteen doors. Quiet enough to read as scaffolding, not as an item. */
+.deck-root.shell .rail-group {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--mist);
+  padding: 12px 10px 3px;
+}
+/* The first heading sits right under the brand rule — no extra air above it. */
+.deck-root.shell .rail-brand + .rail-group { padding-top: 2px; }
+
 /* --- narrow: back to a compact bar, labels dropped rather than truncated ---
    Nine names do not fit across a phone. Below this width the bar scrolls
    horizontally as icons, which is the one arrangement that keeps every
@@ -169,6 +184,9 @@
 @media (max-width: 860px) {
   .deck-root.shell .rail-brand { display: none; }
   .deck-root.shell .rail-label { display: none; }
+  /* Headings are wordless landmarks; on the icon-only bar they would be blank
+     gaps that scroll, so they go entirely. */
+  .deck-root.shell .rail-group { display: none; }
   .deck-root.shell .shell-rail { align-items: center; padding: 8px 10px; }
   .deck-root.shell .shell-rail a { padding: 9px 11px; }
 }

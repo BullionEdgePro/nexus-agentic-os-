@@ -537,6 +537,15 @@
 /* The brand already sits in the topbar above this rail, so the rail's own mark
    would be the same logo twice in one corner. */
 .deck-root .app .rail .rail-brand { display: none; }
+/* Section headings, matching the shared shell. The rail is hidden wholesale
+   below 900px (see the media query), so no small-screen rule is needed here. */
+.deck-root .app .rail .rail-group {
+  font-family: var(--sans); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--mist);
+  padding: 12px 10px 3px;
+}
+.deck-root .app .rail a:first-of-type + .rail-group,
+.deck-root .app .rail .rail-group:first-child { padding-top: 2px; }
 
 @media (max-width: 900px) {
   .deck-root .app { grid-template-columns: 1fr; }

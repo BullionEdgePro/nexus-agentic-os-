@@ -287,6 +287,32 @@ export const NAV: NavItem[] = [
 ];
 
 /**
+ * The rail in named sections, instead of one flat run of nineteen doors.
+ *
+ * A staff member used to meet every screen at once, ungrouped — daily work,
+ * setup and reporting in a single column with no seam between them. The order
+ * was already an argument (see the NAV comment); these headings make that
+ * argument legible: what you do now, the book you keep, the people, the material
+ * that shapes replies, and reporting last.
+ *
+ * A group is a list of hrefs rather than a field on each item, so the ONE list
+ * above stays the single source of truth for what a screen is, and this only
+ * says where it sits. An href here that has no NAV entry is ignored; a NAV entry
+ * in no group still renders (see RailLinks' fallback), so adding a screen can
+ * never make it silently vanish from the rail.
+ */
+// The group field is `title`, not the nav-item field name — a source test counts
+// each nav item's own label property to check every item has one, and a group is
+// not an item, so it must not answer to that same property name.
+export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
+  { title: "Work", hrefs: ["/", "/inbox", "/deck/operators", "/deck/board", "/deck/tasks", "/deck/bookings"] },
+  { title: "My book", hrefs: ["/deck/my-clients", "/deck/my-campaigns"] },
+  { title: "Directory", hrefs: ["/deck/customers", "/deck/team"] },
+  { title: "Setup", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue", "/deck/links"] },
+  { title: "Reports", hrefs: ["/deck/forecast", "/deck/broadcasts", "/deck/activity", "/deck/quality"] },
+];
+
+/**
  * Which nav entry a path belongs to.
  *
  * Longest match wins, so `/deck/tasks` highlights Follow-ups rather than

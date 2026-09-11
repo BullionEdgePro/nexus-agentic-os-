@@ -49,6 +49,29 @@ test("no nav item renders without a destination", () => {
   assert.equal(labels.length, routes.length, "every nav entry needs a label");
 });
 
+test("every screen is filed in exactly one nav section", () => {
+  // The rail groups nineteen destinations under named headings (NAV_GROUPS).
+  // The shell renders any UNgrouped item in a fallback run, so a new screen can
+  // never vanish — but a screen that quietly lands in the fallback is a screen
+  // nobody decided where to put. This keeps that decision explicit: every nav
+  // destination sits in one section, and no section points at a screen the nav
+  // does not have.
+  const navHrefs = [...DECK.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+  // Just the NAV_GROUPS array literal — end at its own closing `];`, so the
+  // prose that follows (which quotes "/" as an example) is not read as an href.
+  const start = DECK.indexOf("export const NAV_GROUPS");
+  const block = DECK.slice(start, DECK.indexOf("];", start) + 2);
+  const groupHrefs = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]).filter((s) => s.startsWith("/"));
+
+  for (const href of groupHrefs) {
+    assert.ok(navHrefs.includes(href), `a section lists a screen the nav does not have: ${href}`);
+  }
+  for (const href of navHrefs) {
+    const count = groupHrefs.filter((h) => h === href).length;
+    assert.equal(count, 1, `${href} should sit in exactly one section, found ${count}`);
+  }
+});
+
 test("the nav points only at pages that exist", () => {
   const rail = DECK;
   const routes = [...rail.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
