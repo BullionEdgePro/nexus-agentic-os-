@@ -38,3 +38,4 @@ export * from "./referrals.js";
 export * from "./token-crypto.js";
 export * from "./social-connections.js";
 export * from "./scheduled-messages.js";
+export * from "./quick-replies.js";

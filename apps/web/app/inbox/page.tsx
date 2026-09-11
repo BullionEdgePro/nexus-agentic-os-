@@ -12,6 +12,7 @@ import { ConversationCustody } from "./conversation-custody";
 import { TagEditor } from "./tag-editor";
 import { DetailsPanel } from "./details-panel";
 import { ScheduledMessages } from "./scheduled-messages";
+import { QuickReplies } from "./quick-replies";
 import "./inbox.css";
 
 // ============================================================
@@ -498,8 +499,16 @@ export default function InboxPage() {
             ) : null}
             {aiError ? <p className="ibx-ai-error">{aiError}</p> : null}
             {/* AI Assist. Both fill the box for a person to read and send — never
-                a send of their own. */}
+                a send of their own. Quick replies sit alongside: the same "fill
+                the box, never send" contract, from the business's own library. */}
             <div className="ibx-ai-bar">
+              <QuickReplies
+                orgSlug={selectedOrg}
+                draft={draft}
+                onInsert={(body) =>
+                  setDraft((current) => (current.trim() ? `${current.replace(/\s+$/, "")}\n${body}` : body))
+                }
+              />
               <button
                 type="button"
                 className="ibx-ai-btn"

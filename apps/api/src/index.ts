@@ -23,6 +23,7 @@ import { qualityRoute } from "./routes/quality.js";
 import { linksRoute, publicLinksRoute } from "./routes/links.js";
 import { automationsRoute } from "./routes/automations.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
+import { quickRepliesRoute } from "./routes/quick-replies.js";
 import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
 import { proceduresRoute } from "./routes/procedures.js";
@@ -297,6 +298,10 @@ app.route("/api/organizations", forecastsRoute);
 // own staff are the people who know whether the wording fits, and the mount is
 // what gives `agent_phrases` a tenant context for RLS to enforce against.
 app.route("/api/organizations", phrasesRoute);
+// The composer's canned replies (084). Per-business material like the three
+// above, and mounted here for the same reason: the slug gives `quick_replies` a
+// tenant context for RLS, without the handler narrowing by hand.
+app.route("/api/organizations", quickRepliesRoute);
 app.route("/api/my", myDeskRoute);
 app.route("/api/my", myCampaignsRoute);
 app.route("/api/my", myDayRoute);

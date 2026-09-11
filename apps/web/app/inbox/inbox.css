@@ -706,3 +706,75 @@
 @media (prefers-reduced-motion: reduce) {
   .ibx-offline-dot { animation: none; }
 }
+
+/* --- quick replies (composer canned responses) --- */
+.ibx-qr { position: relative; display: inline-flex; }
+.ibx-qr-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 320px;
+  max-width: min(320px, calc(100vw - 40px));
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--marble);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--lift);
+}
+.ibx-qr-empty { margin: 4px 6px; font-size: 12px; color: var(--slate); }
+.ibx-qr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ibx-qr-item { display: flex; align-items: stretch; gap: 4px; }
+.ibx-qr-pick {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.ibx-qr-pick:hover { background: var(--paper); }
+.ibx-qr-pick strong { font-size: 12.5px; font-weight: 600; }
+.ibx-qr-pick span {
+  font-size: 11.5px;
+  color: var(--slate);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ibx-qr-del {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+}
+.ibx-qr-del:hover { color: var(--ink); background: var(--paper); }
+.ibx-qr-save {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  text-align: left;
+  padding: 7px 9px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+.ibx-qr-save:hover:not(:disabled) { color: var(--ink); border-color: var(--signal-text); }
+.ibx-qr-save:disabled { opacity: 0.5; cursor: default; }

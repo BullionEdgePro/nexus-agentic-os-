@@ -169,6 +169,34 @@ export function getJobsHealth(): Promise<JobsHealth> {
   return request("/health/jobs");
 }
 
+/** A business's saved replies — the composer's canned-response library. */
+export interface QuickReply {
+  id: string;
+  title: string;
+  body: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export function getQuickReplies(orgSlug: BusinessSlug): Promise<{ quickReplies: QuickReply[] }> {
+  return request(`/api/organizations/${orgSlug}/quick-replies`);
+}
+
+export function createQuickReply(
+  orgSlug: BusinessSlug,
+  title: string,
+  body: string
+): Promise<{ quickReply: QuickReply }> {
+  return request(`/api/organizations/${orgSlug}/quick-replies`, {
+    method: "POST",
+    body: JSON.stringify({ title, body }),
+  });
+}
+
+export function deleteQuickReply(orgSlug: BusinessSlug, id: string): Promise<{ ok: true }> {
+  return request(`/api/organizations/${orgSlug}/quick-replies/${id}`, { method: "DELETE" });
+}
+
 export function getConversations(orgSlug: BusinessSlug): Promise<{ conversations: ConversationSummary[] }> {
   return request(`/api/organizations/${orgSlug}/conversations`);
 }
