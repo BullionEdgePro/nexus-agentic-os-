@@ -134,6 +134,7 @@ export default function InboxPage() {
   const loadConversations = useInboxStore((s) => s.loadConversations);
   const loadError = useInboxStore((s) => s.loadError);
   const sendError = useInboxStore((s) => s.sendError);
+  const socketStatus = useInboxStore((s) => s.socketStatus);
 
   // A SELECTION THAT SURVIVED THE NARROWING.
   //
@@ -271,6 +272,16 @@ export default function InboxPage() {
 
   return (
     <div className="ibx">
+      {/* Live feed down and retrying. A fixed toast rather than a layout row,
+          so it never reflows the columns; only shown for "closed" — "off" (no
+          socket configured) and "connecting" are not faults to announce. */}
+      {socketStatus === "closed" ? (
+        <div className="ibx-offline" role="status" aria-live="polite">
+          <span className="ibx-offline-dot" aria-hidden="true" />
+          Live updates paused — reconnecting. New messages may be delayed.
+        </div>
+      ) : null}
+
       <aside className="ibx-col ibx-biz">
         <h2 className="ibx-head">Businesses</h2>
         <ul className="ibx-list">

@@ -30,6 +30,19 @@ interface InboxState {
    */
   sendError: string;
 
+  /**
+   * WHETHER THE LIVE FEED IS ACTUALLY LIVE.
+   *
+   * The socket reconnects with backoff and said nothing to the person while it
+   * did — so a dropped connection looked identical to a quiet one, on the screen
+   * where "did a new message arrive?" is the whole question. `closed` means the
+   * feed is down and retrying (new messages may lag until it returns); `open` is
+   * connected; `off` is no socket configured, which is not a fault and must not
+   * raise the banner; `connecting` is the first attempt.
+   */
+  socketStatus: "connecting" | "open" | "closed" | "off";
+  setSocketStatus: (status: "connecting" | "open" | "closed" | "off") => void;
+
   setSelectedOrg: (org: BusinessSlug) => void;
   selectConversation: (conversationId: string) => void;
   loadConversations: () => Promise<void>;
@@ -57,6 +70,9 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   isLoadingMessages: false,
   loadError: "",
   sendError: "",
+  socketStatus: "connecting",
+
+  setSocketStatus: (status) => set({ socketStatus: status }),
 
   setSelectedOrg: (org) => {
     set({ selectedOrg: org, selectedConversationId: null, conversations: [], loadError: "", sendError: "" });
