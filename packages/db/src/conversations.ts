@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants } from "./client.js";
 import type { BusinessSlug, ConversationSummary } from "@nexus/shared";
 
 interface ConversationSummaryRow {
@@ -89,35 +89,55 @@ export interface ConversationLookup {
 }
 
 export async function findConversationById(conversationId: string): Promise<ConversationLookup | null> {
-  const { rows } = await getPool().query<{
-    id: string;
-    organization_id: string;
-    contact_id: string;
-    wa_id: string;
-    slug: BusinessSlug;
-    whatsapp_phone_number_id: string;
-  }>(
-    // The number the conversation is ON: its own if it has one (a staff member's
-    // dedicated line), otherwise the shared company number. A reply must leave
-    // from the number the customer wrote to, or WhatsApp opens a new thread.
-    `select c.id, c.organization_id, c.contact_id, ct.wa_id, o.slug,
-            coalesce(c.phone_number_id, o.whatsapp_phone_number_id) as whatsapp_phone_number_id
-     from conversations c
-     join organizations o on o.id = c.organization_id
-     join contacts ct on ct.id = c.contact_id
-     where c.id = $1`,
-    [conversationId]
+  // A LOOKUP BY ID THAT RESOLVES A TENANT, so it MUST run cross-tenant.
+  //
+  // requireConversationScope calls this to learn which business a conversation
+  // belongs to — that is, it runs BEFORE any tenant scope exists, because the
+  // answer is what the scope will be. The query joins `contacts` (for the wa_id
+  // a reply is sent to), which is RLS-scoped, so under DB_TENANT_ASSERT=strict
+  // it threw "no tenant context" and every conversation-scoped request 500'd for
+  // staff — the inbox reported "could not load conversations".
+  //
+  // Widening the lookup is safe: a conversation id is globally unique, this
+  // returns the org, and every caller enforces access AFTER (the middleware
+  // compares the serving org to the employee's; the cross-tenant inbox routes
+  // are cross-tenant by design). This is the same shape as the webhook resolving
+  // a phone_number_id to a tenant — a named cross-tenant entry point.
+  return withAllTenants(
+    "resolve a conversation id to its tenant — the caller has only the id and scopes from the result",
+    async () => {
+      const { rows } = await getPool().query<{
+        id: string;
+        organization_id: string;
+        contact_id: string;
+        wa_id: string;
+        slug: BusinessSlug;
+        whatsapp_phone_number_id: string;
+      }>(
+        // The number the conversation is ON: its own if it has one (a staff
+        // member's dedicated line), otherwise the shared company number. A reply
+        // must leave from the number the customer wrote to, or WhatsApp opens a
+        // new thread.
+        `select c.id, c.organization_id, c.contact_id, ct.wa_id, o.slug,
+                coalesce(c.phone_number_id, o.whatsapp_phone_number_id) as whatsapp_phone_number_id
+         from conversations c
+         join organizations o on o.id = c.organization_id
+         join contacts ct on ct.id = c.contact_id
+         where c.id = $1`,
+        [conversationId]
+      );
+      const row = rows[0];
+      if (!row) return null;
+      return {
+        id: row.id,
+        organizationId: row.organization_id,
+        contactWaId: row.wa_id,
+        contactId: row.contact_id,
+        organizationSlug: row.slug,
+        phoneNumberId: row.whatsapp_phone_number_id,
+      };
+    }
   );
-  const row = rows[0];
-  if (!row) return null;
-  return {
-    id: row.id,
-    organizationId: row.organization_id,
-    contactWaId: row.wa_id,
-    contactId: row.contact_id,
-    organizationSlug: row.slug,
-    phoneNumberId: row.whatsapp_phone_number_id,
-  };
 }
 
 /**
