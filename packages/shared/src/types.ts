@@ -156,7 +156,17 @@ export interface ConversationSummary {
    * the inbox can filter by it like a category. Null when nobody has set one.
    */
   leadStage: string | null;
+  /**
+   * Which channel this conversation arrived on — "whatsapp" today for every
+   * real thread, with "email" | "sms" | "instagram" | "phone" reserved for the
+   * other channels as each one's adapter comes online. Lets the inbox badge and
+   * filter by where a conversation came from.
+   */
+  channel: ConversationChannel;
 }
+
+/** The channels a conversation can arrive on. See {@link ConversationSummary.channel}. */
+export type ConversationChannel = "whatsapp" | "email" | "sms" | "instagram" | "phone";
 
 export interface MessageDto {
   id: string;

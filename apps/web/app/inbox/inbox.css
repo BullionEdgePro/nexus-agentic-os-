@@ -810,3 +810,81 @@
   color: var(--signal-text);
   border: 1px solid var(--hairline);
 }
+
+/* --- channel: filter strip, row glyph, thread header ---
+   The multi-channel seam. A conversation carries a channel; the inbox shows it
+   as a small glyph on the row and offers a filter once a business has more than
+   one. WhatsApp is the only live channel today — the rest badge correctly the
+   moment their adapter is connected. */
+.ibx-chanfilter { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
+.ibx-chanchip {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+.ibx-chanchip:hover { color: var(--ink); border-color: var(--ink); }
+.ibx-chanchip.on { background: var(--ink); color: var(--marble); border-color: var(--ink); }
+.ibx-convo-chan { font-size: 12px; line-height: 1; margin-right: 2px; }
+.ibx-thread-chan {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--signal-text);
+}
+
+/* --- call log: a real CRM record of a call that happened ---
+   Not a message — a direction, an outcome and a length. Logged by hand today,
+   by a telephony provider once one is wired in. */
+.ibx-calls { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.ibx-calls-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ibx-call {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--slate);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+}
+.ibx-call-answered { border-left-color: var(--good); }
+.ibx-call-voicemail { border-left-color: var(--warn); }
+.ibx-call-busy { border-left-color: var(--warn); }
+.ibx-call-no-answer { border-left-color: var(--crit); }
+.ibx-call-failed { border-left-color: var(--crit); }
+.ibx-call-dir { font-size: 13px; line-height: 1.4; color: var(--slate); }
+.ibx-call-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ibx-call-line { font-size: 12px; color: var(--ink); }
+.ibx-call-when { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.03em; color: var(--slate); }
+.ibx-call-notes { font-size: 11.5px; color: var(--ink-soft); word-break: break-word; }
+.ibx-call-x {
+  border: none;
+  background: transparent;
+  color: var(--slate);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.ibx-call-x:hover { color: var(--crit); }
+.ibx-call-form { display: flex; flex-direction: column; gap: 6px; }
+.ibx-call-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ibx-call-select,
+.ibx-call-mins,
+.ibx-call-note-input {
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--marble);
+  color: var(--ink);
+}
+.ibx-call-mins { width: 70px; }
+.ibx-call-note-input { width: 100%; }

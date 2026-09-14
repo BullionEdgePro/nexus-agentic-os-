@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import type { ConversationSummary } from "@nexus/shared";
+import type { ConversationSummary, ConversationChannel } from "@nexus/shared";
 import { suggestReply, polishText, readableError } from "@/lib/api";
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
@@ -13,6 +13,7 @@ import { TagEditor } from "./tag-editor";
 import { DetailsPanel } from "./details-panel";
 import { ScheduledMessages } from "./scheduled-messages";
 import { QuickReplies } from "./quick-replies";
+import { CallLogPanel } from "./call-log";
 import "./inbox.css";
 
 // ============================================================
@@ -50,6 +51,22 @@ const WAITING_HOURS = 3;
 // details panel sets, kept here so the inbox can offer them as category filters
 // and show them in that order rather than alphabetically.
 const LEAD_STAGE_ORDER = ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"];
+
+// How each channel reads in the inbox — a glyph for the row badge and a word for
+// the filter and the thread header. WhatsApp is the only one live today; the
+// rest are here so an email or SMS conversation, once its adapter is connected,
+// slots straight in with a badge that already means something.
+const CHANNEL_META: Record<ConversationChannel, { glyph: string; label: string }> = {
+  whatsapp: { glyph: "💬", label: "WhatsApp" },
+  email: { glyph: "✉️", label: "Email" },
+  sms: { glyph: "📱", label: "SMS" },
+  instagram: { glyph: "📷", label: "Instagram" },
+  phone: { glyph: "📞", label: "Phone" },
+};
+
+function channelMeta(channel: string): { glyph: string; label: string } {
+  return CHANNEL_META[channel as ConversationChannel] ?? { glyph: "💬", label: channel };
+}
 
 function isWaitingTooLong(c: ConversationSummary): boolean {
   if (c.lastMessageDirection !== "inbound" || !c.lastMessageAt) return false;
@@ -165,9 +182,13 @@ export default function InboxPage() {
   // filters by (Prospect, Won, …), on top of the folder. Same field the details
   // panel sets; cleared when the business changes.
   const [stageFilter, setStageFilter] = useState<string | null>(null);
+  // Which channel to narrow to — only ever offered once a business has more than
+  // one, so it stays invisible until multi-channel actually means something here.
+  const [channelFilter, setChannelFilter] = useState<string | null>(null);
   useEffect(() => {
     setTagFilter(null);
     setStageFilter(null);
+    setChannelFilter(null);
   }, [selectedOrg]);
 
   useEffect(() => {
@@ -240,11 +261,24 @@ export default function InboxPage() {
     );
   }, [conversations]);
 
+  // The channels actually in use. Kept in a fixed order (WhatsApp first) so the
+  // strip is stable, and only surfaced as a filter once a business has more than
+  // one — a single-channel business gets no redundant "WhatsApp only" control.
+  const allChannels = useMemo(() => {
+    const present = new Set<string>();
+    for (const c of conversations) present.add(c.channel);
+    const order = ["whatsapp", "email", "sms", "instagram", "phone"];
+    return order
+      .filter((ch) => present.has(ch))
+      .concat([...present].filter((ch) => !order.includes(ch)).sort((a, b) => a.localeCompare(b)));
+  }, [conversations]);
+
   const visibleConversations = conversations.filter(
     (c) =>
       matchesFolder(c, folder, myEmployeeId) &&
       (!tagFilter || c.tags.includes(tagFilter)) &&
-      (!stageFilter || c.leadStage === stageFilter)
+      (!stageFilter || c.leadStage === stageFilter) &&
+      (!channelFilter || c.channel === channelFilter)
   );
 
   async function handleSend() {
@@ -387,6 +421,23 @@ export default function InboxPage() {
             ))}
           </div>
         ) : null}
+        {/* Narrow to one channel — only shown once a business actually has more
+            than one, so it never sits there as a lone "WhatsApp" chip. */}
+        {allChannels.length > 1 ? (
+          <div className="ibx-chanfilter" aria-label="Filter by channel">
+            {allChannels.map((ch) => (
+              <button
+                key={ch}
+                type="button"
+                className={`ibx-chanchip${channelFilter === ch ? " on" : ""}`}
+                aria-pressed={channelFilter === ch}
+                onClick={() => setChannelFilter((cur) => (cur === ch ? null : ch))}
+              >
+                <span aria-hidden="true">{channelMeta(ch).glyph}</span> {channelMeta(ch).label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {isLoadingConversations ? (
           <p className="ibx-empty">Loading…</p>
         ) : loadError ? (
@@ -438,6 +489,15 @@ export default function InboxPage() {
                         aria-hidden="true"
                       />
                     )}
+                    {/* Which channel this thread is on — a glyph rather than a
+                        word so the row stays scannable. */}
+                    <span
+                      className="ibx-convo-chan"
+                      title={channelMeta(conversation.channel).label}
+                      aria-label={channelMeta(conversation.channel).label}
+                    >
+                      {channelMeta(conversation.channel).glyph}
+                    </span>
                     <span className="ibx-convo-name">
                       {conversation.contactName ?? conversation.contactWaId}
                     </span>
@@ -487,7 +547,13 @@ export default function InboxPage() {
                 <h1 className="ibx-who">
                   {activeConversation.contactName ?? activeConversation.contactWaId}
                 </h1>
-                <p className="ibx-wa">+{activeConversation.contactWaId}</p>
+                <p className="ibx-wa">
+                  <span className="ibx-thread-chan" title={channelMeta(activeConversation.channel).label}>
+                    {channelMeta(activeConversation.channel).glyph} {channelMeta(activeConversation.channel).label}
+                  </span>
+                  {" · +"}
+                  {activeConversation.contactWaId}
+                </p>
                 <TagEditor
                   key={activeConversation.id}
                   tags={activeConversation.tags}
@@ -518,6 +584,10 @@ export default function InboxPage() {
                 draft — without it, a half-typed follow-up for one person
                 would still be sitting in the box for the next. */}
             <ConversationTasks key={activeConversation.id} conversationId={activeConversation.id} />
+            {/* Calls logged against this customer — a real CRM feature that does
+                not need telephony: a person records that they rang, and how it
+                went. A provider, once connected, writes the same rows. */}
+            <CallLogPanel key={`calls-${activeConversation.id}`} conversationId={activeConversation.id} />
             <div className="ibx-msgs">
               {messages.map((message) => (
                 <div

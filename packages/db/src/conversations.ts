@@ -1,5 +1,5 @@
 import { getPool, withAllTenants } from "./client.js";
-import type { BusinessSlug, ConversationSummary } from "@nexus/shared";
+import type { BusinessSlug, ConversationSummary, ConversationChannel } from "@nexus/shared";
 
 interface ConversationSummaryRow {
   id: string;
@@ -15,6 +15,7 @@ interface ConversationSummaryRow {
   tags: string[] | null;
   has_overdue_followup: boolean | null;
   lead_stage: string | null;
+  channel: string | null;
 }
 
 function toSummary(row: ConversationSummaryRow): ConversationSummary {
@@ -32,6 +33,7 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     tags: row.tags ?? [],
     hasOverdueFollowup: Boolean(row.has_overdue_followup),
     leadStage: row.lead_stage,
+    channel: (row.channel ?? "whatsapp") as ConversationChannel,
   };
 }
 
@@ -53,6 +55,7 @@ export async function getConversationsForOrganization(
        lm.direction as last_message_direction,
        c.tags,
        ct.lead_stage,
+       c.channel,
        exists (
          select 1 from tasks t
           where t.conversation_id = c.id

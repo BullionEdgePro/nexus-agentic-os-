@@ -16,6 +16,11 @@ import {
   listPendingScheduledMessages,
   cancelScheduledMessage,
   listCustody,
+  listCallLogs,
+  createCallLog,
+  deleteCallLog,
+  type CallDirection,
+  type CallOutcome,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
@@ -183,6 +188,95 @@ conversationsRoute.post("/:id/scheduled", async (c) => {
 conversationsRoute.delete("/:id/scheduled/:scheduledId", async (c) => {
   const ok = await cancelScheduledMessage(c.req.param("id"), c.req.param("scheduledId"));
   if (!ok) return c.json({ error: "That message has already sent or been cancelled." }, 409);
+  return c.json({ ok: true });
+});
+
+// ============================================================
+// Call logs
+// ============================================================
+//
+// A record that a phone call happened — logged by hand today, and by a
+// telephony provider automatically once one is wired in. The platform cannot
+// place a call itself, so this deliberately does not pretend to: it stores what
+// a person tells it about a call that already occurred. A call is not a message,
+// so it lives in its own table and its own panel rather than in the transcript.
+
+const CALL_DIRECTIONS: CallDirection[] = ["inbound", "outbound"];
+const CALL_OUTCOMES: CallOutcome[] = ["answered", "no-answer", "voicemail", "busy", "failed"];
+
+/** The calls logged on this conversation, most recent first. */
+conversationsRoute.get("/:id/calls", async (c) => {
+  const calls = await listCallLogs(c.req.param("id"));
+  return c.json({ calls });
+});
+
+/**
+ * Log a call. Validated at the edge: a known direction and outcome, a duration
+ * that is a non-negative whole number of seconds if given, notes length-capped.
+ * The org and contact are taken from the resolved conversation, never the body,
+ * so a call cannot be filed against a tenant the caller does not hold.
+ */
+conversationsRoute.post("/:id/calls", async (c) => {
+  const conversationId = c.req.param("id");
+  const body = await c.req.json<{
+    direction?: unknown;
+    outcome?: unknown;
+    durationSeconds?: unknown;
+    notes?: unknown;
+    occurredAt?: unknown;
+  }>().catch(() => null);
+
+  const direction = body?.direction;
+  if (typeof direction !== "string" || !CALL_DIRECTIONS.includes(direction as CallDirection)) {
+    return c.json({ error: "Say whether the call was inbound or outbound." }, 400);
+  }
+  const outcome = body?.outcome;
+  if (typeof outcome !== "string" || !CALL_OUTCOMES.includes(outcome as CallOutcome)) {
+    return c.json({ error: "Pick how the call went." }, 400);
+  }
+
+  let durationSeconds: number | null = null;
+  if (body?.durationSeconds != null && body.durationSeconds !== "") {
+    const n = Number(body.durationSeconds);
+    if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+      return c.json({ error: "Duration must be a whole number of seconds." }, 400);
+    }
+    if (n > 24 * 3600) return c.json({ error: "That call is longer than a day — check the duration." }, 400);
+    durationSeconds = n;
+  }
+
+  const notes = typeof body?.notes === "string" ? body.notes.slice(0, 2000).trim() || null : null;
+
+  let occurredAt: Date | undefined;
+  if (typeof body?.occurredAt === "string" && body.occurredAt) {
+    const when = new Date(body.occurredAt);
+    if (Number.isNaN(when.getTime())) return c.json({ error: "That is not a valid time." }, 400);
+    if (when.getTime() > Date.now() + 60_000) return c.json({ error: "A call cannot be in the future." }, 400);
+    occurredAt = when;
+  }
+
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  const loggedBy = (c.get("scope") as { sub?: string } | undefined)?.sub ?? null;
+  const call = await createCallLog({
+    organizationId: conversation.organizationId,
+    conversationId,
+    contactId: conversation.contactId,
+    direction: direction as CallDirection,
+    outcome: outcome as CallOutcome,
+    durationSeconds,
+    notes,
+    loggedBy,
+    occurredAt,
+  });
+  return c.json({ call }, 201);
+});
+
+/** Remove a logged call — a mistyped entry, not a way to rewrite history. */
+conversationsRoute.delete("/:id/calls/:callId", async (c) => {
+  const ok = await deleteCallLog(c.req.param("id"), c.req.param("callId"));
+  if (!ok) return c.json({ error: "That call log is already gone." }, 409);
   return c.json({ ok: true });
 });
 

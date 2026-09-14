@@ -690,6 +690,52 @@ export function cancelScheduledMessage(
   });
 }
 
+/** A logged phone call — a fact about a call that happened, not a message. */
+export type CallDirection = "inbound" | "outbound";
+export type CallOutcome = "answered" | "no-answer" | "voicemail" | "busy" | "failed";
+
+export interface CallLog {
+  id: string;
+  conversationId: string | null;
+  contactId: string | null;
+  direction: CallDirection;
+  outcome: CallOutcome;
+  durationSeconds: number | null;
+  notes: string | null;
+  loggedBy: string | null;
+  occurredAt: string;
+  createdAt: string;
+}
+
+export function getCallLogs(conversationId: string): Promise<{ calls: CallLog[] }> {
+  return request(`/api/conversations/${conversationId}/calls`);
+}
+
+export function logCall(
+  conversationId: string,
+  input: {
+    direction: CallDirection;
+    outcome: CallOutcome;
+    durationSeconds?: number | null;
+    notes?: string | null;
+    occurredAt?: string;
+  }
+): Promise<{ call: CallLog }> {
+  return request(`/api/conversations/${conversationId}/calls`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteCallLog(
+  conversationId: string,
+  callId: string
+): Promise<{ ok: boolean }> {
+  return request(`/api/conversations/${conversationId}/calls/${callId}`, {
+    method: "DELETE",
+  });
+}
+
 export function updateConversationDetails(
   conversationId: string,
   patch: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> }
