@@ -14,6 +14,7 @@ interface ConversationSummaryRow {
   assigned_employee_id: string | null;
   tags: string[] | null;
   has_overdue_followup: boolean | null;
+  lead_stage: string | null;
 }
 
 function toSummary(row: ConversationSummaryRow): ConversationSummary {
@@ -30,6 +31,7 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     lastMessageDirection: row.last_message_direction,
     tags: row.tags ?? [],
     hasOverdueFollowup: Boolean(row.has_overdue_followup),
+    leadStage: row.lead_stage,
   };
 }
 
@@ -50,6 +52,7 @@ export async function getConversationsForOrganization(
        lm.created_at as last_message_at,
        lm.direction as last_message_direction,
        c.tags,
+       ct.lead_stage,
        exists (
          select 1 from tasks t
           where t.conversation_id = c.id

@@ -150,6 +150,12 @@ export interface ConversationSummary {
   tags: string[];
   /** True when this conversation has an open follow-up task whose time has passed. */
   hasOverdueFollowup: boolean;
+  /**
+   * The manual pipeline stage a colleague set on the contact (New, Contacted,
+   * Won, …) — the same field the details panel edits, surfaced on the summary so
+   * the inbox can filter by it like a category. Null when nobody has set one.
+   */
+  leadStage: string | null;
 }
 
 export interface MessageDto {

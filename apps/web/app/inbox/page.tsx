@@ -46,6 +46,11 @@ type FolderKey =
 // SLA contract, so a round number rather than a per-business policy.
 const WAITING_HOURS = 3;
 
+// The pipeline stages, in the order a lead moves through them — the same set the
+// details panel sets, kept here so the inbox can offer them as category filters
+// and show them in that order rather than alphabetically.
+const LEAD_STAGE_ORDER = ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"];
+
 function isWaitingTooLong(c: ConversationSummary): boolean {
   if (c.lastMessageDirection !== "inbound" || !c.lastMessageAt) return false;
   return Date.now() - new Date(c.lastMessageAt).getTime() > WAITING_HOURS * 3600_000;
@@ -156,8 +161,13 @@ export default function InboxPage() {
   // A single label to narrow the list to, on top of the folder. Cleared when the
   // business changes, since a label from one business is meaningless in another.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // A pipeline stage to narrow to — the "category" a DoubleTick-style inbox
+  // filters by (Prospect, Won, …), on top of the folder. Same field the details
+  // panel sets; cleared when the business changes.
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
   useEffect(() => {
     setTagFilter(null);
+    setStageFilter(null);
   }, [selectedOrg]);
 
   useEffect(() => {
@@ -219,8 +229,22 @@ export default function InboxPage() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [conversations]);
 
+  // The pipeline stages actually in use, in the pipeline's own order (not
+  // alphabetical — "New" precedes "Won"). Only shown once a business uses them,
+  // so the strip never sits there empty.
+  const allStages = useMemo(() => {
+    const present = new Set<string>();
+    for (const c of conversations) if (c.leadStage) present.add(c.leadStage);
+    return LEAD_STAGE_ORDER.filter((s) => present.has(s)).concat(
+      [...present].filter((s) => !LEAD_STAGE_ORDER.includes(s)).sort((a, b) => a.localeCompare(b))
+    );
+  }, [conversations]);
+
   const visibleConversations = conversations.filter(
-    (c) => matchesFolder(c, folder, myEmployeeId) && (!tagFilter || c.tags.includes(tagFilter))
+    (c) =>
+      matchesFolder(c, folder, myEmployeeId) &&
+      (!tagFilter || c.tags.includes(tagFilter)) &&
+      (!stageFilter || c.leadStage === stageFilter)
   );
 
   async function handleSend() {
@@ -345,6 +369,24 @@ export default function InboxPage() {
             ))}
           </div>
         ) : null}
+        {/* Narrow to one pipeline stage — the "category" a DoubleTick-style
+            inbox filters by. Only shown once a business actually stages its
+            leads, in pipeline order. */}
+        {allStages.length ? (
+          <div className="ibx-stagefilter" aria-label="Filter by pipeline stage">
+            {allStages.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`ibx-stagechip${stageFilter === s ? " on" : ""}`}
+                aria-pressed={stageFilter === s}
+                onClick={() => setStageFilter((cur) => (cur === s ? null : s))}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {isLoadingConversations ? (
           <p className="ibx-empty">Loading…</p>
         ) : loadError ? (
@@ -411,6 +453,9 @@ export default function InboxPage() {
                   <p className="ibx-preview">
                     {conversation.lastMessagePreview ?? "No messages yet"}
                   </p>
+                  {conversation.leadStage ? (
+                    <span className="ibx-row-stage">{conversation.leadStage}</span>
+                  ) : null}
                   {conversation.tags.length ? (
                     <span className="ibx-row-tags">
                       {conversation.tags.slice(0, 3).map((t) => (

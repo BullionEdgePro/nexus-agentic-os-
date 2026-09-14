@@ -778,3 +778,35 @@
 }
 .ibx-qr-save:hover:not(:disabled) { color: var(--ink); border-color: var(--signal-text); }
 .ibx-qr-save:disabled { opacity: 0.5; cursor: default; }
+
+/* --- pipeline stage (category) filter + row chip ---
+   The "category" a DoubleTick-style inbox filters by, drawn a shade stronger
+   than a tag so a stage reads as structure and a tag reads as a label. */
+.ibx-stagefilter { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
+.ibx-stagechip {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+.ibx-stagechip:hover { color: var(--ink); border-color: var(--ink); }
+.ibx-stagechip.on { background: var(--ink); color: var(--marble); border-color: var(--ink); }
+.ibx-row-stage {
+  display: inline-block;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--signal-text);
+  border: 1px solid var(--hairline);
+}
