@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants } from "./client.js";
 
 /**
  * A tenant reachable through a shared WhatsApp number.
@@ -61,23 +61,37 @@ export interface ConversationRouting {
 export async function getConversationRouting(
   conversationId: string
 ): Promise<ConversationRouting | null> {
-  const { rows } = await getPool().query<{
-    routed_organization_id: string | null;
-    triage_prompted_at: string | null;
-    triage_attempts: number;
-  }>(
-    `select routed_organization_id, triage_prompted_at, triage_attempts
-     from conversations
-     where id = $1`,
-    [conversationId]
-  );
-  if (!rows[0]) return null;
+  // A LOOKUP BY ID THAT DECIDES WHICH TENANT A CONVERSATION BELONGS TO, so it
+  // MUST run cross-tenant — exactly like findConversationById. requireConversationScope
+  // calls this from OUTSIDE any tenant context (the scope middleware runs before
+  // the tenant-context middleware, by design: what a caller may reach is settled
+  // before which rows the DB returns). Reading the RLS-scoped `conversations`
+  // table there with no context throws under strict tenant-assert, and the
+  // middleware's catch turns that throw into a 403 — so every non-operator was
+  // denied every conversation. withAllTenants is a no-op when a context already
+  // exists (the route and worker callers), so it never widens their scope.
+  return withAllTenants(
+    "resolve a conversation's routed tenant — the scope check runs before any tenant context is set",
+    async () => {
+      const { rows } = await getPool().query<{
+        routed_organization_id: string | null;
+        triage_prompted_at: string | null;
+        triage_attempts: number;
+      }>(
+        `select routed_organization_id, triage_prompted_at, triage_attempts
+         from conversations
+         where id = $1`,
+        [conversationId]
+      );
+      if (!rows[0]) return null;
 
-  return {
-    routedOrganizationId: rows[0].routed_organization_id,
-    triagePromptedAt: rows[0].triage_prompted_at,
-    triageAttempts: Number(rows[0].triage_attempts ?? 0),
-  };
+      return {
+        routedOrganizationId: rows[0].routed_organization_id,
+        triagePromptedAt: rows[0].triage_prompted_at,
+        triageAttempts: Number(rows[0].triage_attempts ?? 0),
+      };
+    }
+  );
 }
 
 /**

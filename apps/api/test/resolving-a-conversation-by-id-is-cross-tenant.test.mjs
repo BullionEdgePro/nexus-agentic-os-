@@ -22,6 +22,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
 
 const DB = read("packages", "db", "src", "conversations.ts");
+const ROUTING = read("packages", "db", "src", "routing.ts");
 
 function bodyOf(src, marker) {
   const start = src.indexOf(marker);
@@ -39,5 +40,23 @@ test("findConversationById resolves its tenant cross-tenant", () => {
     fn,
     /withAllTenants\(/,
     "findConversationById must wrap its query in withAllTenants — it is called before a tenant scope exists"
+  );
+});
+
+test("getConversationRouting resolves the routed tenant cross-tenant", () => {
+  // requireConversationScope reads BOTH findConversationById AND
+  // getConversationRouting to decide the serving business — and it runs before
+  // any tenant context. getConversationRouting selects from the RLS-scoped
+  // `conversations` table, so without its own wrapper it threw under
+  // DB_TENANT_ASSERT=strict, the middleware's catch turned that into a 403, and
+  // every non-operator was denied every conversation (the inbox could not open a
+  // thread or send a message). withAllTenants is a no-op inside an existing
+  // context, so wrapping never widens the route and worker callers' scope.
+  const fn = bodyOf(ROUTING, "export async function getConversationRouting");
+  assert.match(fn, /from conversations/i, "it still reads the RLS-scoped conversations table");
+  assert.match(
+    fn,
+    /withAllTenants\(/,
+    "getConversationRouting must wrap its query in withAllTenants — the scope check calls it before a tenant scope exists"
   );
 });
