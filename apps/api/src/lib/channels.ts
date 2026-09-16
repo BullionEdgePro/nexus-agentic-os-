@@ -55,17 +55,22 @@ export function channelStatuses(): ChannelStatus[] {
     },
     {
       channel: "email",
+      // Honest about a half-built thing: the Gmail connection exists (staff can
+      // already work their own clients' mail through it), but email is not yet a
+      // threaded inbox channel — that build is next. So it is never "live" here
+      // just because the app credentials are present.
       label: "Email",
-      state: email ? "live" : "needs-setup",
+      state: "needs-setup",
       summary: email
-        ? "Live. Staff send and receive from their connected Gmail, threaded into the inbox."
-        : "Ready. Connect Gmail to turn email into an inbox channel — no extra cost.",
+        ? "Gmail is connected for staff client mail. Email as a threaded inbox channel — send and receive here — is the next build."
+        : "Ready. Connect Gmail to add email as an inbox channel — no extra cost.",
       requirements: email
-        ? []
-        : ["A Google Workspace app (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) and each staff member connecting their Gmail in Settings."],
-      // Sending is per-staff-connection; the route checks the actual token. The
-      // channel itself is available once the app is configured.
-      canSend: email,
+        ? ["Finish the email-channel build (in progress).", "Each staff member connecting their Gmail."]
+        : [
+            "A Google Workspace app (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).",
+            "Each staff member connecting their Gmail, then the email-channel build.",
+          ],
+      canSend: false,
     },
     {
       channel: "sms",
