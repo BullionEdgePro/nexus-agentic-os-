@@ -294,6 +294,111 @@ export async function fetchClientMail(
 }
 
 /**
+ * The plain-text body of a Gmail message payload.
+ *
+ * A message is a MIME tree: a single part with `body.data`, or a `multipart/*`
+ * with `parts`, each of which may itself be multipart. We walk it for the first
+ * `text/plain` and fall back to stripping tags out of `text/html` when a sender
+ * offered no plain part — an email with neither is rare and returns "".
+ *
+ * Gmail base64url-encodes each part's data. Empty parts (an attachment's stub)
+ * carry no `data` and are skipped.
+ */
+function extractPlainBody(payload: Record<string, unknown>): string {
+  const mime = String(payload.mimeType ?? "");
+  const body = (payload.body ?? {}) as Record<string, unknown>;
+  const data = typeof body.data === "string" ? body.data : "";
+
+  if (mime === "text/plain" && data) {
+    return Buffer.from(data, "base64url").toString("utf8");
+  }
+
+  const parts = Array.isArray(payload.parts) ? (payload.parts as Array<Record<string, unknown>>) : [];
+  // Prefer a plain part anywhere in the tree before settling for HTML.
+  for (const part of parts) {
+    const found = extractPlainBody(part);
+    if (found) return found;
+  }
+  if (mime === "text/html" && data) {
+    return Buffer.from(data, "base64url")
+      .toString("utf8")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+\n/g, "\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+  }
+  return "";
+}
+
+export interface MailMessage extends MailHeader {
+  /** The plain-text body, trimmed. Empty when the message carried no text part. */
+  body: string;
+}
+
+/**
+ * The full messages of a client's correspondence — headers AND body.
+ *
+ * The metadata-only {@link fetchClientMail} powers the read-only connections
+ * view; this one powers the email CHANNEL, where the thread is shown in the
+ * inbox and a body is the point. It keeps the exact same privacy boundary — the
+ * query is still an OR over addresses in the client book, so an empty list
+ * returns nothing and no code path omits it — and only widens the FORMAT, from
+ * metadata to full, for those already-scoped messages.
+ */
+export async function fetchClientMailFull(
+  accessToken: string,
+  addresses: string[],
+  limit = 25
+): Promise<MailMessage[]> {
+  const clean = [...new Set(addresses.map((a) => a.trim().toLowerCase()).filter(Boolean))];
+  if (clean.length === 0) return [];
+
+  const query = `{${clean.map((a) => `from:${a} to:${a}`).join(" ")}}`;
+  const list = await gmailGet(
+    `/messages?maxResults=${Math.min(limit, 50)}&q=${encodeURIComponent(query)}`,
+    accessToken
+  );
+
+  const ids = Array.isArray(list.messages) ? list.messages : [];
+  if (ids.length === 0) return [];
+
+  const messages = await Promise.all(
+    ids.slice(0, limit).map(async (raw) => {
+      const id = String((raw as Record<string, unknown>).id ?? "");
+      if (!id) return null;
+      try {
+        const message = await gmailGet(`/messages/${id}?format=full`, accessToken);
+        const payload = (message.payload ?? {}) as Record<string, unknown>;
+        const headers = Array.isArray(payload.headers)
+          ? (payload.headers as Array<Record<string, unknown>>)
+          : [];
+        const labels = Array.isArray(message.labelIds) ? (message.labelIds as string[]) : [];
+        const internal = message.internalDate;
+        return {
+          id,
+          threadId: String(message.threadId ?? ""),
+          from: header(headers, "from"),
+          to: header(headers, "to"),
+          subject: header(headers, "subject"),
+          snippet: typeof message.snippet === "string" ? message.snippet : null,
+          receivedAt:
+            typeof internal === "string" && internal
+              ? new Date(Number(internal)).toISOString()
+              : null,
+          unread: labels.includes("UNREAD"),
+          body: extractPlainBody(payload).slice(0, 20_000),
+        } satisfies MailMessage;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return messages.filter((m): m is MailMessage => m !== null);
+}
+
+/**
  * Send one, as the connected account.
  *
  * RFC 2822 assembled here rather than by a library: the message is a subject, a

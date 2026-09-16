@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { ConversationSummary, ConversationChannel } from "@nexus/shared";
-import { suggestReply, polishText, readableError } from "@/lib/api";
+import { suggestReply, polishText, syncGmailInbox, readableError } from "@/lib/api";
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
@@ -195,6 +195,25 @@ export default function InboxPage() {
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOrg]);
+
+  // BEST-EFFORT: pull this staff member's client email into the inbox as email
+  // conversations when it opens. The sync is idempotent (deduped server-side), so
+  // calling it on open never doubles anything; a newly-stored message triggers one
+  // reload so it appears without a manual refresh. Runs once, and only for staff —
+  // an operator has no mailbox and would get a 403, which is swallowed along with
+  // the "Gmail not connected" case, because neither is a fault to raise on a
+  // WhatsApp-only user just opening their inbox.
+  const emailSynced = useRef(false);
+  useEffect(() => {
+    if (emailSynced.current || !myEmployeeId) return;
+    emailSynced.current = true;
+    syncGmailInbox()
+      .then((r) => {
+        if (r.newMessages > 0) loadConversations();
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myEmployeeId]);
 
   // ARRIVING FROM A LINK, which until now was not possible.
   //

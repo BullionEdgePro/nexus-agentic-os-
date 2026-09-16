@@ -236,13 +236,32 @@ test("the addresses come from the caller's own client book", () => {
   assert.match(fn, /contactOwnedBy\("\$2"\)/);
 });
 
-test("only metadata is requested, never the message body", () => {
-  // The headers and Gmail's own snippet are what the screen shows. Asking for
-  // the body would pull entire private correspondence through this server for
-  // no reason anybody could point at.
+test("the read-only mail VIEW requests only metadata, never the body", () => {
+  // The read-only connections view shows headers and Gmail's own snippet. It
+  // must never pull the body: that would drag entire private correspondence
+  // through the server for a screen that shows none of it. The email CHANNEL is
+  // the deliberate exception (next test) — this guards the view specifically, by
+  // slicing out fetchClientMail's own body rather than scanning the whole file.
   const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
-  assert.match(GMAIL, /format=metadata/);
-  assert.ok(!/format=full/.test(GMAIL), "the full message body is being fetched");
+  const start = GMAIL.indexOf("export async function fetchClientMail(");
+  const fn = GMAIL.slice(start, GMAIL.indexOf("export ", start + 10));
+  assert.match(fn, /format=metadata/, "the view must request metadata");
+  assert.ok(!/format=full/.test(fn), "the read-only view must not fetch the body");
+});
+
+test("the email CHANNEL may read the body — but only of a client's own thread", () => {
+  // The owner chose to let email be a real inbox channel, which means the reply's
+  // text, not just its snippet. The widening is deliberate and bounded: the SAME
+  // client-book query still scopes it (an empty book fetches nothing), so a body
+  // is only ever read for a thread already in the book. See the dedicated guard
+  // in email-channel-never-lists-the-mailbox.test.mjs.
+  const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
+  const start = GMAIL.indexOf("export async function fetchClientMailFull(");
+  assert.ok(start !== -1, "fetchClientMailFull must exist");
+  const fn = GMAIL.slice(start, GMAIL.indexOf("\nexport ", start + 10));
+  assert.match(fn, /format=full/, "the channel fetch reads the body");
+  assert.match(fn, /clean\.length === 0/, "and is still guarded by the empty-book check");
+  assert.match(fn, /from:.*to:/, "and still scoped by the client-book address query");
 });
 
 test("sending is restricted to people already in the book", () => {

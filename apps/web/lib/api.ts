@@ -2617,6 +2617,15 @@ export function disconnectGmail(): Promise<{ ok: boolean }> {
 }
 
 /**
+ * Pull the staff member's client email into the inbox as email conversations.
+ * Idempotent (deduped server-side), so the inbox can call it on open without
+ * fear of doubling anything; returns how many messages were newly stored.
+ */
+export function syncGmailInbox(): Promise<{ newMessages: number; threads: number }> {
+  return request("/api/connections/gmail/sync", { method: "POST" });
+}
+
+/**
  * Finish a WhatsApp Business coexistence connect.
  *
  * The three values come from Meta's Embedded Signup popup (see the connections

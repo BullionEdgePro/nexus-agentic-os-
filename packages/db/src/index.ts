@@ -40,3 +40,4 @@ export * from "./social-connections.js";
 export * from "./scheduled-messages.js";
 export * from "./quick-replies.js";
 export * from "./call-logs.js";
+export * from "./email-sync.js";
