@@ -1,0 +1,66 @@
+/* The Channels status board. Card per channel, a state pill that carries the
+   answer at a glance, and a left rule in the state's colour so the board reads
+   as a column of live / waiting before a word is read. Tokens from .deck-root. */
+
+.ch-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--slate);
+  margin: 0 0 14px;
+}
+
+.ch-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.ch-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--slate);
+  border-radius: var(--r-sm);
+}
+.ch-card.ch-live { border-left-color: var(--good); }
+.ch-card.ch-needs-setup { border-left-color: var(--warn); }
+.ch-card.ch-awaiting-approval { border-left-color: var(--signal); }
+
+.ch-top { display: flex; align-items: center; gap: 9px; }
+.ch-glyph { font-size: 17px; line-height: 1; }
+.ch-name { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); flex: 1; }
+
+.ch-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.ch-pill-live { color: var(--good); background: var(--good-soft); border: 1px solid var(--good); }
+.ch-pill-needs-setup { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); }
+.ch-pill-awaiting-approval { color: var(--signal-text); background: var(--signal-soft); border: 1px solid var(--signal); }
+
+.ch-summary { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+
+.ch-reqs {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ch-reqs li { font-size: 12px; line-height: 1.45; color: var(--slate); }
+
+.ch-ready { margin: 0; font-size: 12px; color: var(--good); }
+
+.ch-note { margin-top: 22px; }
+.ch-note ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.ch-note li { font-size: 13px; line-height: 1.5; color: var(--slate); }
+.ch-note strong { color: var(--ink); }

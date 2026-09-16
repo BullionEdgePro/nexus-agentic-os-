@@ -28,6 +28,7 @@ import { bookingsRoute, conversationBookingsRoute } from "./routes/bookings.js";
 import { operatorsRoute } from "./routes/operators.js";
 import { proceduresRoute } from "./routes/procedures.js";
 import { catalogRoute } from "./routes/catalog.js";
+import { channelsRoute } from "./routes/channels.js";
 import { phrasesRoute } from "./routes/phrases.js";
 import { forecastsRoute } from "./routes/forecasts.js";
 import { searchRoute } from "./routes/search.js";
@@ -107,6 +108,12 @@ app.use("/api/broadcasts/*", operatorOnly);
 // owner's decision and an owner's view, not a sales executive's.
 app.use("/api/catalog", operatorOnly);
 app.use("/api/catalog/*", operatorOnly);
+
+// Which messaging channels are connected is a setup decision the owner makes,
+// and the screen it feeds shows configuration for the whole platform at once —
+// an owner's view, like the marketplace above it.
+app.use("/api/channels", operatorOnly);
+app.use("/api/channels/*", operatorOnly);
 
 // Every /api/* request runs inside a database tenant context — a named one for
 // a single business, an explicitly-reasoned cross-tenant one otherwise. Placed
@@ -327,6 +334,9 @@ app.route("/api/links", linksRoute);
 // business explicitly in the request; see routes/catalog.ts for why that is the
 // boundary here rather than RLS.
 app.route("/api/catalog", catalogRoute);
+// The Channels status screen — configuration for the whole platform, mounted
+// flat like the marketplace and gated operator-only at the prefix above.
+app.route("/api/channels", channelsRoute);
 // Not operator-only, unlike the four above it. A follow-up list is the working
 // surface of the person doing the work, not management information about them,
 // so employees reach it too — narrowed to their own business inside the route,

@@ -223,6 +223,20 @@ export const NAV: NavItem[] = [
     operatorOnly: true,
   },
   {
+    href: "/deck/channels",
+    label: "Channels",
+    // Where the business's messaging channels are connected — WhatsApp, email,
+    // SMS, calls, Instagram — and what each still needs to go live. A setup
+    // decision for the whole platform, so operator-only, like the marketplace.
+    operatorOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M4 6.5h16M4 12h16M4 17.5h10" />
+        <circle cx="18.5" cy="17.5" r="2.5" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/links",
     label: "Customer links",
     icon: (
@@ -308,7 +322,7 @@ export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
   { title: "Work", hrefs: ["/", "/inbox", "/deck/operators", "/deck/board", "/deck/tasks", "/deck/bookings"] },
   { title: "My book", hrefs: ["/deck/my-clients", "/deck/my-campaigns"] },
   { title: "Directory", hrefs: ["/deck/customers", "/deck/team"] },
-  { title: "Setup", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue", "/deck/links"] },
+  { title: "Setup", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue", "/deck/channels", "/deck/links"] },
   { title: "Reports", hrefs: ["/deck/forecast", "/deck/broadcasts", "/deck/activity", "/deck/quality"] },
 ];
 

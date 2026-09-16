@@ -201,6 +201,21 @@ export function getConversations(orgSlug: BusinessSlug): Promise<{ conversations
   return request(`/api/organizations/${orgSlug}/conversations`);
 }
 
+/** Where a messaging channel stands — mirrors the API's ChannelStatus. */
+export type ChannelState = "live" | "needs-setup" | "awaiting-approval";
+export interface ChannelStatus {
+  channel: string;
+  label: string;
+  state: ChannelState;
+  summary: string;
+  requirements: string[];
+  canSend: boolean;
+}
+
+export function getChannels(): Promise<{ channels: ChannelStatus[] }> {
+  return request(`/api/channels`);
+}
+
 export function getMessages(conversationId: string): Promise<{ messages: MessageDto[] }> {
   return request(`/api/conversations/${conversationId}/messages`);
 }

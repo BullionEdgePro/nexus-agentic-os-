@@ -97,6 +97,10 @@ const TAB_API = {
   // flat at /api/catalog rather than under /api/organizations/:slug precisely so
   // `operatorOnly` can guard the whole prefix.
   "/deck/catalogue": "/api/catalog",
+  // The Channels status board. Operator-only, and mounted flat at /api/channels
+  // so `operatorOnly` guards the whole prefix — which is a setup decision for
+  // the whole platform, like the marketplace above it, not a staff concern.
+  "/deck/channels": "/api/channels",
   "/deck/links": "/api/links",
   "/deck/broadcasts": "/api/broadcasts",
   "/deck/activity": "/api/activity",
