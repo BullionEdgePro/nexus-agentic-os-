@@ -45,6 +45,15 @@ import {
   fetchClientMailFull,
   sendGmail,
 } from "../lib/gmail.js";
+import {
+  facebookConfigured,
+  facebookScopes,
+  facebookRedirectUri,
+  facebookAuthorizeUrl,
+  exchangeFacebookCode,
+  fetchFacebookPages,
+  subscribePageToWebhook,
+} from "../lib/facebook-onboarding.js";
 import type { SessionScope } from "../lib/session.js";
 import { env } from "../config/env.js";
 import { clientKey, loginBlocked, recordLoginFailure, clearLoginFailures } from "../lib/login-throttle.js";
@@ -210,6 +219,20 @@ connectionsRoute.get("/", async (c) => {
         // until configured, and the UI only opens the popup when configured is true.
         ...whatsappEmbeddedConfig(),
       },
+      {
+        id: "facebook",
+        name: "Facebook Page & Instagram",
+        // Genuinely two-way, like WhatsApp — a Page/IG message lands in the inbox
+        // and a reply goes back as the Page. Said plainly, and gated honestly.
+        offers:
+          "Your Facebook Page's Messenger and your linked Instagram DMs, answered here in the same inbox as WhatsApp — connect the Page once and both come with it.",
+        cannot:
+          "Instagram must be a Business account linked to the Page. It answers people who message you first, within Meta's standard window — it is not for cold outreach.",
+        needs: facebookConfigured()
+          ? "Answering Page/Instagram messages needs Meta App Review of pages_messaging and instagram_manage_messages. Until that clears you can connect your own Page as an app admin to test it, no further."
+          : `Not enabled on this server yet. It needs the shared Meta app (set META_APP_ID and META_APP_SECRET) and ${facebookRedirectUri()} added as a Valid OAuth Redirect URI, plus Meta App Review for the messaging permissions.`,
+        scopes: facebookScopes(),
+      },
     ],
   });
 });
@@ -339,6 +362,165 @@ connectionsRoute.get("/tiktok/callback", async (c) => {
     logger.error({ err }, "TikTok connection failed");
     return back(
       `TikTok could not be connected: ${err instanceof Error ? err.message.slice(0, 140) : "unknown error"}`
+    );
+  }
+});
+
+// ============================================================
+// Facebook Page + Instagram — the connect that lights up the channels
+// ============================================================
+
+connectionsRoute.get("/facebook/start", async (c) => {
+  const scope = scopeOf(c);
+  const owner = ownerOf(scope);
+  if (!owner) return c.json({ error: "Only a staff member can connect the business's Page." }, 403);
+
+  if (!facebookConfigured()) {
+    return c.json(
+      {
+        error:
+          "Facebook is not set up on this server yet. The owner needs the shared Meta app's id and secret before a Page can be connected.",
+      },
+      503
+    );
+  }
+
+  // No PKCE (Facebook Login does not require it for the server-side code flow with
+  // an app secret); the signed state cookie is the CSRF protection, and it also
+  // carries WHICH business this Page is being connected for.
+  const state = signState({
+    organizationId: owner.organizationId,
+    employeeId: owner.employeeId,
+    verifier: "",
+    provider: "facebook",
+    issuedAt: Date.now(),
+    nonce: randomBytes(12).toString("base64url"),
+  });
+
+  c.header(
+    "set-cookie",
+    `${STATE_COOKIE}=${encodeURIComponent(state)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`
+  );
+  return c.json({ url: facebookAuthorizeUrl(state) });
+});
+
+connectionsRoute.get("/facebook/callback", async (c) => {
+  const app = appBaseUrl();
+  const back = (message: string) =>
+    c.redirect(`${app}/deck/channels?connected=${encodeURIComponent(message)}`, 302);
+
+  const refused = c.req.query("error");
+  if (refused) {
+    logger.info({ refused }, "Facebook sign-in was refused or cancelled");
+    return back(
+      refused === "access_denied"
+        ? "The Facebook Page was not connected — you cancelled."
+        : `Facebook said: ${refused}`
+    );
+  }
+
+  // Same throttle as the TikTok callback: this verifies a signature over
+  // caller-supplied input and writes rows on success.
+  const source = clientKey(c.req.raw.headers);
+  if (await loginBlocked(source)) {
+    return c.json({ error: "Too many attempts from here. Wait a few minutes and try again." }, 429);
+  }
+
+  const code = c.req.query("code");
+  const returnedState = c.req.query("state");
+  const cookie = c.req.header("cookie") ?? "";
+  const stored = /(?:^|;\s*)nexus_oauth_state=([^;]+)/.exec(cookie)?.[1];
+  if (!code || !returnedState || !stored || decodeURIComponent(stored) !== returnedState) {
+    await recordLoginFailure(source, "facebook-callback");
+    return back("That sign-in could not be verified. Please try connecting again.");
+  }
+
+  const state = readState(returnedState);
+  if (!state) {
+    await recordLoginFailure(source, "facebook-callback");
+    return back("That sign-in link had expired. Please try again.");
+  }
+  await clearLoginFailures(source);
+  c.header("set-cookie", `${STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+
+  try {
+    const userToken = await exchangeFacebookCode(code);
+    const pages = await fetchFacebookPages(userToken);
+    if (pages.length === 0) {
+      return back("No Facebook Page was found on that account. Connect an account that manages a Page.");
+    }
+
+    // ONE PAGE PER BUSINESS. saveConnection is keyed on (org, employee, provider),
+    // so a business has one Facebook connection and one Instagram connection —
+    // storing several Pages would collapse to the last one written. The first
+    // Page is connected; connecting a specific one of several is a later refinement.
+    const page = pages[0];
+
+    // Stored at the BUSINESS level (employeeId null), because a Page belongs to
+    // the business, not the person who happened to click connect — which is
+    // exactly what pageConnectionForOutbound and organizationForConnectedPage read.
+    await withTenant(state.organizationId, async () => {
+      await saveConnection({
+        organizationId: state.organizationId,
+        employeeId: null,
+        provider: "facebook",
+        externalId: page.pageId,
+        displayName: page.name,
+        avatarUrl: null,
+        accessToken: page.pageAccessToken,
+        refreshToken: null,
+        // A page access token derived from a long-lived user token does not expire.
+        expiresAt: null,
+        scopes: facebookScopes(),
+      });
+
+      // The linked Instagram business account, keyed by ITS OWN id — the inbound
+      // parser resolves an IG delivery by entry.id, which is the IG account id,
+      // not the Page id. Same page token: Instagram messaging is addressed through
+      // the Page it is linked to.
+      if (page.instagram) {
+        await saveConnection({
+          organizationId: state.organizationId,
+          employeeId: null,
+          provider: "instagram",
+          externalId: page.instagram.id,
+          displayName: page.instagram.username ? `@${page.instagram.username}` : page.name,
+          avatarUrl: null,
+          accessToken: page.pageAccessToken,
+          refreshToken: null,
+          expiresAt: null,
+          scopes: facebookScopes(),
+        });
+      }
+    });
+
+    // Without a webhook subscription Meta accepts the connection and delivers
+    // nothing. Best-effort: a stored connection can still SEND, so a failed
+    // subscription is logged, not fatal — the person is told it may need a retry.
+    let subscribed = true;
+    try {
+      await subscribePageToWebhook(page.pageId, page.pageAccessToken);
+    } catch (err) {
+      subscribed = false;
+      logger.error({ err, pageId: page.pageId }, "Page connected but webhook subscription failed");
+    }
+
+    logger.info(
+      { organizationId: state.organizationId, pageId: page.pageId, instagram: Boolean(page.instagram), subscribed },
+      "Facebook Page connected"
+    );
+    const igNote = page.instagram
+      ? ` and Instagram${page.instagram.username ? ` (@${page.instagram.username})` : ""}`
+      : "";
+    return back(
+      subscribed
+        ? `Connected ${page.name}${igNote}. Messages will now appear in the inbox.`
+        : `Connected ${page.name}${igNote}, but message delivery could not be switched on — try reconnecting.`
+    );
+  } catch (err) {
+    logger.error({ err }, "Facebook connection failed");
+    return back(
+      `Facebook could not be connected: ${err instanceof Error ? err.message.slice(0, 140) : "unknown error"}`
     );
   }
 });

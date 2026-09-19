@@ -2599,6 +2599,10 @@ export function startGmailConnect(): Promise<{ url: string }> {
   return request("/api/connections/gmail/start");
 }
 
+export function startFacebookConnect(): Promise<{ url: string }> {
+  return request("/api/connections/facebook/start");
+}
+
 export function getClientMail(): Promise<{
   messages: ClientMail[];
   addressesSearched: number;

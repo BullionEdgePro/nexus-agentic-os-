@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   getConnections,
   startGmailConnect,
+  startFacebookConnect,
   getClientMail,
   sendClientEmail,
   disconnectGmail,
@@ -73,10 +74,11 @@ export function ConnectionsPanel() {
 
   const gmail = providers.find((p) => p.id === "gmail");
   const whatsapp = providers.find((p) => p.id === "whatsapp");
+  const facebook = providers.find((p) => p.id === "facebook");
   const mailbox = connections?.find((c) => c.provider === "gmail") ?? null;
   const whatsappConn = connections?.find((c) => c.provider === "whatsapp") ?? null;
 
-  if (connections === null || (!gmail && !whatsapp)) return null;
+  if (connections === null || (!gmail && !whatsapp && !facebook)) return null;
 
   return (
     <section className="cnx">
@@ -189,6 +191,43 @@ export function ConnectionsPanel() {
           onError={setError}
           onChange={load}
         />
+      ) : null}
+
+      {facebook ? (
+        <div className="cnx-card">
+          <div className="cnx-head">
+            <div>
+              <strong>Facebook Page &amp; Instagram</strong>
+            </div>
+            {facebook.configured ? (
+              <button
+                type="button"
+                className="cnx-go"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    const { url } = await startFacebookConnect();
+                    window.location.href = url;
+                  } catch (err) {
+                    setError(readableError(err, "Could not start the Facebook sign-in."));
+                    setBusy(false);
+                  }
+                }}
+              >
+                Connect Page
+              </button>
+            ) : null}
+          </div>
+
+          <p className="cnx-offers">{facebook.offers}</p>
+          <p className="cnx-cannot">{facebook.cannot}</p>
+          {/* Honest about the Meta gate: the connect works for the app's own
+              admins to test and demo, but answering the public needs App Review.
+              `needs` carries that whether or not the server is configured. */}
+          {facebook.needs ? <p className="cnx-needs">{facebook.needs}</p> : null}
+        </div>
       ) : null}
     </section>
   );
