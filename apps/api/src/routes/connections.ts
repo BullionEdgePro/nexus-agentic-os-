@@ -222,6 +222,9 @@ connectionsRoute.get("/", async (c) => {
       {
         id: "facebook",
         name: "Facebook Page & Instagram",
+        // Whether the shared Meta app is set up on this server — the flag the UI
+        // reads to decide whether to offer the "Connect Page" button at all.
+        configured: facebookConfigured(),
         // Genuinely two-way, like WhatsApp — a Page/IG message lands in the inbox
         // and a reply goes back as the Page. Said plainly, and gated honestly.
         offers:

@@ -84,4 +84,8 @@ test("the connect flow is protected exactly like the other OAuth callbacks", () 
 test("the panel is told about Facebook, and told the truth about the Meta gate", () => {
   assert.match(ROUTES, /id: "facebook"/);
   assert.match(ROUTES, /App Review/);
+  // The UI shows the Connect button only when the provider reports configured —
+  // the facebook entry MUST carry that flag, or the button never renders even
+  // though the server is set up (the bug this asserts against).
+  assert.match(ROUTES, /id: "facebook",[\s\S]*?configured: facebookConfigured\(\)/);
 });
