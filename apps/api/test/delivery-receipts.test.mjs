@@ -142,7 +142,9 @@ test("every send site carries the receipt, not just the convenient one", () => {
   // write a row that can never be corrected, and nothing would say so.
   const sites = PROCESSOR.match(/waMessageId: waMessageId \?\? undefined/g) ?? [];
   assert.equal(sites.length, 3, "all three processor send sites must pass the receipt");
-  assert.match(ROUTES, /waMessageId: waMessageId \?\? undefined/);
+  // The inbox send now dispatches by channel (slice 4), so the receipt comes back
+  // on the dispatcher's result — still carried, just from `dispatched.waMessageId`.
+  assert.match(ROUTES, /waMessageId: dispatched\.waMessageId \?\? undefined/);
 });
 
 test("a status-only webhook has a stable identity", () => {

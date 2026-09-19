@@ -89,7 +89,12 @@ export interface ConversationLookup {
   id: string;
   organizationId: string;
   contactId: string;
-  contactWaId: string;
+  /** The WhatsApp id a reply is sent to; null for a contact reached on another channel. */
+  contactWaId: string | null;
+  /** The channel this conversation is on — decides how a reply is dispatched. */
+  channel: ConversationChannel;
+  /** The channel-scoped recipient (a Messenger PSID / Instagram IGSID) for a social reply; null on WhatsApp. */
+  contactExternalId: string | null;
   organizationSlug: BusinessSlug;
   phoneNumberId: string;
 }
@@ -116,15 +121,19 @@ export async function findConversationById(conversationId: string): Promise<Conv
         id: string;
         organization_id: string;
         contact_id: string;
-        wa_id: string;
+        wa_id: string | null;
+        channel: ConversationChannel;
+        external_id: string | null;
         slug: BusinessSlug;
         whatsapp_phone_number_id: string;
       }>(
         // The number the conversation is ON: its own if it has one (a staff
         // member's dedicated line), otherwise the shared company number. A reply
         // must leave from the number the customer wrote to, or WhatsApp opens a
-        // new thread.
-        `select c.id, c.organization_id, c.contact_id, ct.wa_id, o.slug,
+        // new thread. `channel` and the contact's `external_id` come along too,
+        // so a reply can be dispatched to the right platform — a WhatsApp number,
+        // a Messenger PSID, an Instagram IGSID.
+        `select c.id, c.organization_id, c.contact_id, ct.wa_id, c.channel, ct.external_id, o.slug,
                 coalesce(c.phone_number_id, o.whatsapp_phone_number_id) as whatsapp_phone_number_id
          from conversations c
          join organizations o on o.id = c.organization_id
@@ -138,6 +147,8 @@ export async function findConversationById(conversationId: string): Promise<Conv
         id: row.id,
         organizationId: row.organization_id,
         contactWaId: row.wa_id,
+        channel: row.channel,
+        contactExternalId: row.external_id,
         contactId: row.contact_id,
         organizationSlug: row.slug,
         phoneNumberId: row.whatsapp_phone_number_id,

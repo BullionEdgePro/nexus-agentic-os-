@@ -247,6 +247,45 @@ export async function organizationForConnectedPage(pageId: string): Promise<stri
   );
 }
 
+/**
+ * The connected Page/IG a business replies AS on a given channel — id and token.
+ *
+ * A social reply is sent by the Page, so the outbound path needs two things it
+ * cannot get from the conversation: the Page id (the sender) and its access
+ * token (the credential). Both live on the business's own connection row
+ * (employee_id null) for that provider — the one the connect flow writes.
+ *
+ * withAllTenants, the same as whatsappSendTokenForNumber and for the same reason:
+ * the outbound conversation route runs without a tenant scope (it resolved the
+ * conversation cross-tenant), and this filters by organization_id itself. The
+ * step out of RLS is named so it shows in the logs.
+ *
+ * Returns null when nothing is connected — which is EVERY business today, so a
+ * social reply fails with an honest "not connected yet" until the connect flow
+ * (a later slice) writes the row. The token is decrypted here and nowhere else.
+ */
+export async function pageConnectionForOutbound(
+  organizationId: string,
+  provider: "facebook" | "instagram"
+): Promise<{ pageId: string; token: string } | null> {
+  return withAllTenants(
+    "outbound social: resolve the connected Page's id and credential",
+    async () => {
+      const { rows } = await getPool().query<{ external_id: string; access_token_enc: string | null }>(
+        `select external_id, access_token_enc from social_connections
+          where organization_id = $1 and provider = $2 and employee_id is null
+          limit 1`,
+        [organizationId, provider]
+      );
+      const row = rows[0];
+      if (!row || !row.access_token_enc) return null;
+      const token = openToken(row.access_token_enc);
+      if (!token) return null;
+      return { pageId: row.external_id, token };
+    }
+  );
+}
+
 /** Forget a connection entirely, token included. */
 export async function removeConnection(
   organizationId: string,

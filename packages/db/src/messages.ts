@@ -131,6 +131,8 @@ export interface InsertOutboundMessageInput {
   senderId?: string;
   body: string;
   waMessageId?: string;
+  /** Meta's Messenger/Instagram message id (the mid), for a reply sent on those channels. */
+  socialMessageId?: string;
   /** Employee this reply is attributed to (their twin authored it). */
   employeeId?: string | null;
 }
@@ -158,9 +160,14 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
     // confirmed — and `recordDeliveryStatus` moves it. Without one there will
     // never be a receipt, and parking it at 'queued' forever would have the
     // operator report a permanent backlog of messages that were fine.
+    // social_message_id carries Meta's mid for a Messenger/Instagram reply. It
+    // does NOT drive the status: those channels have no delivery-receipt webhook
+    // wired here, so a social reply parks at 'sent' (accepted), exactly as a
+    // WhatsApp send with no wamid does — only a wa_message_id means "await a
+    // receipt", so the status CASE stays keyed on it alone.
     `insert into messages
-       (organization_id, conversation_id, contact_id, wa_message_id, direction, sender_type, sender_id, message_type, body, status, employee_id)
-     values ($1, $2, $3, $4, 'outbound', $5, $6, 'text', $7,
+       (organization_id, conversation_id, contact_id, wa_message_id, social_message_id, direction, sender_type, sender_id, message_type, body, status, employee_id)
+     values ($1, $2, $3, $4, $9, 'outbound', $5, $6, 'text', $7,
              case when $4::text is null then 'sent' else 'queued' end, $8)
      returning id, conversation_id, direction, sender_type, body, status, created_at`,
     [
@@ -172,6 +179,7 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
       input.senderId ?? null,
       input.body,
       input.employeeId ?? null,
+      input.socialMessageId ?? null,
     ]
   );
   const row = rows[0];

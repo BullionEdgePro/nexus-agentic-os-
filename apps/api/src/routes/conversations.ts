@@ -23,7 +23,7 @@ import {
   type CallOutcome,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
-import { sendWhatsAppText } from "../lib/whatsapp-client.js";
+import { sendReplyOnChannel } from "../lib/reply-dispatch.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
 
@@ -81,18 +81,25 @@ conversationsRoute.post("/:id/messages", async (c) => {
   const conversation = await findConversationById(conversationId);
   if (!conversation) return c.json({ error: "Conversation not found" }, 404);
 
-  // Declared out here so the insert below can carry Meta's receipt. Null when
-  // Meta accepted the send without returning an id — rare, and not a failure.
-  let waMessageId: string | null = null;
+  // Sent on the channel the conversation is actually on — WhatsApp, Messenger or
+  // Instagram — not always WhatsApp. The dispatcher returns the provider's id in
+  // the field that belongs to that channel; both null when it accepted without
+  // one, which is rare and not a failure.
+  let dispatched: { waMessageId: string | null; socialMessageId: string | null };
   try {
-    waMessageId = await sendWhatsAppText(
-      conversation.phoneNumberId,
-      conversation.contactWaId,
+    dispatched = await sendReplyOnChannel(
+      {
+        organizationId: conversation.organizationId,
+        channel: conversation.channel,
+        phoneNumberId: conversation.phoneNumberId,
+        contactWaId: conversation.contactWaId,
+        contactExternalId: conversation.contactExternalId,
+      },
       body.text
     );
   } catch (err) {
-    logger.error({ conversationId, err }, "Failed to send human-agent reply via WhatsApp");
-    return c.json({ error: "Failed to send message" }, 502);
+    logger.error({ conversationId, channel: conversation.channel, err }, "Failed to send human-agent reply");
+    return c.json({ error: err instanceof Error ? err.message : "Failed to send message" }, 502);
   }
 
   const message = await insertOutboundMessage({
@@ -104,7 +111,8 @@ conversationsRoute.post("/:id/messages", async (c) => {
     body: body.text,
     // A person's own words to a customer. If anything on this platform deserves
     // to know whether it arrived, it is this rather than an agent's reply.
-    waMessageId: waMessageId ?? undefined,
+    waMessageId: dispatched.waMessageId ?? undefined,
+    socialMessageId: dispatched.socialMessageId ?? undefined,
   });
 
   await Promise.all([

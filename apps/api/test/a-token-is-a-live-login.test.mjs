@@ -86,8 +86,14 @@ test("the listing query never selects the ciphertext", () => {
 
 test("exactly one function returns a usable token, and it is named for it", () => {
   assert.match(STORE, /export async function connectionSecret/);
+  // The secret path is a small, auditable set of named functions that decrypt a
+  // credential to use it: connectionSecret, whatsappSendTokenForNumber, and now
+  // pageConnectionForOutbound (the FB/IG reply send, slice 4). A bump here is a
+  // deliberate decision — token decryption sprinkled anywhere else is the leak
+  // this guards against.
+  assert.match(STORE, /export async function pageConnectionForOutbound/);
   const others = STORE.match(/openToken\(/g) ?? [];
-  assert.ok(others.length <= 3, `openToken is called in ${others.length} places; keep it to the secret path`);
+  assert.ok(others.length <= 4, `openToken is called in ${others.length} places; keep it to the secret path`);
 });
 
 test("the migration says the token is encrypted", () => {

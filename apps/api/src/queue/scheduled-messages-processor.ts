@@ -10,7 +10,7 @@ import {
   pauseAiForContact,
   setConversationHandoff,
 } from "@nexus/db";
-import { sendWhatsAppText } from "../lib/whatsapp-client.js";
+import { sendReplyOnChannel } from "../lib/reply-dispatch.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
 
@@ -42,16 +42,29 @@ export async function processScheduledMessageSweep(_job: Job): Promise<void> {
           continue;
         }
 
-        let waMessageId: string | null = null;
+        let dispatched: { waMessageId: string | null; socialMessageId: string | null };
         try {
-          waMessageId = await sendWhatsAppText(convo.phoneNumberId, convo.contactWaId, m.body);
+          // Sent on the conversation's own channel, like a live reply. A
+          // scheduled reply on a channel that is not connected (or unsupported)
+          // fails here with the dispatcher's reason, which is the honest outcome.
+          dispatched = await sendReplyOnChannel(
+            {
+              organizationId: convo.organizationId,
+              channel: convo.channel,
+              phoneNumberId: convo.phoneNumberId,
+              contactWaId: convo.contactWaId,
+              contactExternalId: convo.contactExternalId,
+            },
+            m.body
+          );
         } catch (err) {
           // The commonest failure is Meta refusing a free-form message outside
           // the 24-hour window. Its own words are the most useful thing to keep.
           await markScheduledMessageFailed(m.id, err instanceof Error ? err.message : String(err));
-          logger.warn({ id: m.id, conversationId: convo.id }, "Scheduled message refused by WhatsApp");
+          logger.warn({ id: m.id, conversationId: convo.id, channel: convo.channel }, "Scheduled message refused");
           continue;
         }
+        const waMessageId = dispatched.waMessageId;
 
         const message = await insertOutboundMessage({
           organizationId: convo.organizationId,
@@ -61,6 +74,7 @@ export async function processScheduledMessageSweep(_job: Job): Promise<void> {
           senderId: m.createdBy ?? undefined,
           body: m.body,
           waMessageId: waMessageId ?? undefined,
+          socialMessageId: dispatched.socialMessageId ?? undefined,
         });
 
         // A person's message took this conversation, just on a delay: pause the

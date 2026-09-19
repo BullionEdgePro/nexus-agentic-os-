@@ -34,7 +34,8 @@ export function normalizeWhatsAppNumber(raw: string | null | undefined): string 
 export interface DirectContactInput {
   employee: Pick<Employee, "fullName" | "jobTitle" | "whatsappNumber">;
   businessName: string;
-  customerWaId: string;
+  /** Null for a customer reached on a non-WhatsApp channel; no direct link is offered then. */
+  customerWaId: string | null;
   customerName?: string | null;
 }
 
@@ -71,7 +72,7 @@ export interface DirectContact {
  * spam — which is the difference between a warm handoff and a blocked contact.
  */
 export function buildDirectContact(input: DirectContactInput): DirectContact | null {
-  const customer = normalizeWhatsAppNumber(input.customerWaId);
+  const customer = normalizeWhatsAppNumber(input.customerWaId ?? "");
   if (!customer) return null;
 
   const greeting = input.customerName ? `Hello ${input.customerName}` : "Hello";
