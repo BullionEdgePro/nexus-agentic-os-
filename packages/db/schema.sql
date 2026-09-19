@@ -44,7 +44,9 @@ create table organization_users (
 create table contacts (
   id                  uuid primary key default gen_random_uuid(),
   organization_id     uuid not null references organizations(id) on delete cascade,
-  wa_id               text not null, -- WhatsApp user id (phone in international format, no '+')
+  wa_id               text, -- WhatsApp user id, phone in international format without a plus; null for a contact reached only on another channel
+  channel             text not null default 'whatsapp' check (channel in ('whatsapp', 'email', 'sms', 'instagram', 'phone', 'facebook')), -- id space external_id lives in
+  external_id         text, -- channel-scoped identity: a Messenger PSID, an Instagram IGSID, an email address; null for WhatsApp contacts
   display_name        text,
   locale              text,
   attributes          jsonb not null default '{}', -- freeform CRM fields (order history refs, license status, etc.)
@@ -52,11 +54,14 @@ create table contacts (
   last_message_at     timestamptz,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
-  unique (organization_id, wa_id)
+  unique (organization_id, wa_id), -- one row per WhatsApp number per business; NULLs are distinct, so non-WhatsApp contacts are unconstrained here
+  constraint contacts_has_identity check (wa_id is not null or external_id is not null) -- every contact is reachable on at least one channel
 );
 
 create index idx_contacts_org on contacts(organization_id);
 create index idx_contacts_last_message on contacts(organization_id, last_message_at desc);
+-- One row per person per non-WhatsApp channel (Messenger/Instagram/email/…).
+create unique index contacts_external_identity_key on contacts(organization_id, channel, external_id) where external_id is not null;
 
 -- ============================================================
 -- Conversations & Messages
