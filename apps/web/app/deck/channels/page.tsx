@@ -29,6 +29,7 @@ const CHANNEL_GLYPH: Record<string, string> = {
   sms: "📱",
   phone: "📞",
   instagram: "📷",
+  facebook: "📘",
 };
 
 export default function ChannelsPage() {

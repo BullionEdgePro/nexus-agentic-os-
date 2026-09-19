@@ -166,7 +166,7 @@ export interface ConversationSummary {
 }
 
 /** The channels a conversation can arrive on. See {@link ConversationSummary.channel}. */
-export type ConversationChannel = "whatsapp" | "email" | "sms" | "instagram" | "phone";
+export type ConversationChannel = "whatsapp" | "email" | "sms" | "instagram" | "phone" | "facebook";
 
 export interface MessageDto {
   id: string;

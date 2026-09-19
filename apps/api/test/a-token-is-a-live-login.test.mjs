@@ -105,20 +105,19 @@ test("the API states what TikTok cannot do, not just what it can", () => {
   assert.match(ROUTE, /cannot:/);
 });
 
-test("the limit is shown whether or not the account is connected", () => {
-  // It is the expectation the panel exists to correct, so it cannot be hidden
-  // behind a connected state.
-  const cannot = PANEL.indexOf("tiktok.cannot");
-  const connectedBlock = PANEL.indexOf("connected && !connected.usable");
-  assert.ok(cannot > -1, "the panel never shows what TikTok cannot do");
-  assert.ok(cannot < connectedBlock, "the limit is only shown once connected");
+test("TikTok was removed from the connections panel", () => {
+  // The TikTok card was taken out of the staff UI (Facebook Page + Instagram
+  // messaging channels replace it). Its backend is left dormant, so the server
+  // and lib checks below still stand — but the panel must no longer offer it.
+  assert.ok(!/tiktok\./.test(PANEL), "the connections panel still references TikTok");
+  assert.ok(!/Connect TikTok/.test(PANEL), "the panel still offers Connect TikTok");
 });
 
 test("an unconfigured provider names the exact thing the owner must do", () => {
-  // "Not configured" with no next step is a dead end.
+  // "Not configured" with no next step is a dead end. (Server-side copy; the
+  // dormant TikTok provider still carries it.)
   assert.match(ROUTE, /TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET/);
   assert.match(ROUTE, /redirect URI/i);
-  assert.match(PANEL, /tiktok\.needs/);
 });
 
 // ============================================================

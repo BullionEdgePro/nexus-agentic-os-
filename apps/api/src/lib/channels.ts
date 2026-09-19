@@ -108,10 +108,21 @@ export function channelStatuses(): ChannelStatus[] {
       channel: "instagram",
       label: "Instagram DMs",
       state: "awaiting-approval",
-      summary: "Waiting on Meta. Instagram messaging needs App Review, the same wall as WhatsApp.",
+      summary: "Waiting on Meta. Answering Instagram DMs in the inbox needs App Review, the same wall as WhatsApp.",
       requirements: [
-        "Meta Instagram App Review (instagram_manage_messages).",
+        "Meta App Review for instagram_manage_messages, and an Instagram Business account connected to the Facebook Page.",
         "A submission cannot be edited while one is in review — Instagram is added once the WhatsApp review resolves.",
+      ],
+      canSend: false,
+    },
+    {
+      channel: "facebook",
+      label: "Facebook Page",
+      state: "awaiting-approval",
+      summary: "Waiting on Meta. Answering Facebook Page (Messenger) messages in the inbox needs App Review.",
+      requirements: [
+        "Meta App Review for pages_messaging, and a Facebook Page connected via Facebook Login.",
+        "Added to the Meta review alongside Instagram once the WhatsApp submission clears.",
       ],
       canSend: false,
     },

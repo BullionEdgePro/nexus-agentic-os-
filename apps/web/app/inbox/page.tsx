@@ -62,6 +62,7 @@ const CHANNEL_META: Record<ConversationChannel, { glyph: string; label: string }
   sms: { glyph: "📱", label: "SMS" },
   instagram: { glyph: "📷", label: "Instagram" },
   phone: { glyph: "📞", label: "Phone" },
+  facebook: { glyph: "📘", label: "Facebook" },
 };
 
 function channelMeta(channel: string): { glyph: string; label: string } {
