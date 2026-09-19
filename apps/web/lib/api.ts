@@ -2603,6 +2603,10 @@ export function startFacebookConnect(): Promise<{ url: string }> {
   return request("/api/connections/facebook/start");
 }
 
+export function startInstagramConnect(): Promise<{ url: string }> {
+  return request("/api/connections/instagram/start");
+}
+
 export function getClientMail(): Promise<{
   messages: ClientMail[];
   addressesSearched: number;

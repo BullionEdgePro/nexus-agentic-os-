@@ -29,6 +29,26 @@ test("the authorize URL asks Facebook for the messaging permissions, as a code f
   }
 });
 
+test("Facebook and Instagram ask for SEPARATE scope sets", () => {
+  // Two connects, each asking only for its channel. Connecting the Page must not
+  // make a person grant Instagram access, so the Facebook set carries no
+  // instagram_* scope; the Instagram set carries the IG permissions plus the page
+  // access it rides on.
+  assert.match(ONBOARDING, /export function facebookScopes/);
+  assert.match(ONBOARDING, /export function instagramScopes/);
+  const fbBlock = ONBOARDING.slice(
+    ONBOARDING.indexOf("const FACEBOOK_PAGE_SCOPES = ["),
+    ONBOARDING.indexOf("const INSTAGRAM_SCOPES = [")
+  );
+  assert.ok(fbBlock.includes("pages_messaging"), "the Facebook set must carry pages_messaging");
+  assert.ok(!fbBlock.includes("instagram_"), "the Facebook set must NOT carry any instagram_ scope");
+  const igBlock = ONBOARDING.slice(
+    ONBOARDING.indexOf("const INSTAGRAM_SCOPES = ["),
+    ONBOARDING.indexOf("function scopesFrom")
+  );
+  assert.ok(igBlock.includes("instagram_manage_messages"), "the Instagram set must carry instagram_manage_messages");
+});
+
 test("the code is exchanged for a LONG-LIVED token, in two hops", () => {
   // A page token minted from a long-lived user token does not expire, which is
   // what a channel that must keep answering needs.
@@ -64,28 +84,45 @@ test("the linked Instagram is stored under ITS OWN id, not the Page id", () => {
   // An IG webhook arrives as object 'instagram' with entry.id = the IG account
   // id; organizationForConnectedPage must find THAT. Keying the IG row on the
   // Page id would make every inbound Instagram message unroutable.
-  assert.match(ROUTES, /provider: "instagram",\s*\n\s*externalId: page\.instagram\.id/);
+  assert.match(ROUTES, /provider: "instagram",\s*\n\s*externalId: page\.instagram!\.id/);
 });
 
-test("both channels share the one Page token, and it is stored not-expiring", () => {
+test("the connected token is the page token, stored not-expiring", () => {
   assert.match(ROUTES, /accessToken: page\.pageAccessToken/);
   assert.match(ROUTES, /expiresAt: null/);
+});
+
+test("Facebook and Instagram are two separate connects sharing one callback", () => {
+  // Two start routes, one shared callback; the state's `target` decides which row
+  // the callback writes, so connecting one never writes the other.
+  assert.match(ROUTES, /connectionsRoute\.get\("\/facebook\/start"/);
+  assert.match(ROUTES, /connectionsRoute\.get\("\/instagram\/start"/);
+  assert.match(ROUTES, /connectionsRoute\.get\("\/facebook\/callback"/);
+  assert.match(ROUTES, /startFacebookLogin\(c, "facebook", facebookScopes\(\)\)/);
+  assert.match(ROUTES, /startFacebookLogin\(c, "instagram", instagramScopes\(\)\)/);
+  // The callback writes only the target channel.
+  assert.match(ROUTES, /const target = state\.target \?\? "facebook"/);
+  assert.match(ROUTES, /if \(target === "facebook"\)/);
+});
+
+test("connecting Instagram with no linked IG is refused, not stored as a Page", () => {
+  assert.match(ROUTES, /if \(target === "instagram" && !page\.instagram\)/);
+  assert.match(ROUTES, /no Instagram Business account linked/i);
 });
 
 test("the connect flow is protected exactly like the other OAuth callbacks", () => {
   // Signed state cookie + login throttle + single-use clearing — the TikTok
   // callback's protections, not a weaker home-grown set.
-  assert.match(ROUTES, /connectionsRoute\.get\("\/facebook\/start"/);
-  assert.match(ROUTES, /connectionsRoute\.get\("\/facebook\/callback"/);
   assert.match(ROUTES, /recordLoginFailure\(source, "facebook-callback"\)/);
   assert.match(ROUTES, /signState\(\{[\s\S]*provider: "facebook"/);
 });
 
-test("the panel is told about Facebook, and told the truth about the Meta gate", () => {
+test("the panel is told about BOTH channels, and told the truth about the Meta gate", () => {
   assert.match(ROUTES, /id: "facebook"/);
+  assert.match(ROUTES, /id: "instagram"/);
   assert.match(ROUTES, /App Review/);
-  // The UI shows the Connect button only when the provider reports configured —
-  // the facebook entry MUST carry that flag, or the button never renders even
-  // though the server is set up (the bug this asserts against).
+  // The UI shows each Connect button only when the provider reports configured —
+  // both entries MUST carry that flag (the bug this asserts against).
   assert.match(ROUTES, /id: "facebook",[\s\S]*?configured: facebookConfigured\(\)/);
+  assert.match(ROUTES, /id: "instagram",[\s\S]*?configured: facebookConfigured\(\)/);
 });

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { appBaseUrl } from "../lib/public-urls.js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
@@ -48,6 +49,7 @@ import {
 import {
   facebookConfigured,
   facebookScopes,
+  instagramScopes,
   facebookRedirectUri,
   facebookAuthorizeUrl,
   exchangeFacebookCode,
@@ -118,6 +120,13 @@ interface StatePayload {
   employeeId: string | null;
   verifier: string;
   provider: string;
+  /**
+   * Which channel this Facebook-Login flow is connecting. Facebook and Instagram
+   * are separate connects that share one redirect_uri and callback, so the
+   * callback reads this to know which row to write. Absent on the tiktok/gmail
+   * flows and, for backward compatibility, treated as "facebook" if missing.
+   */
+  target?: "facebook" | "instagram";
   issuedAt: number;
   nonce: string;
 }
@@ -221,20 +230,31 @@ connectionsRoute.get("/", async (c) => {
       },
       {
         id: "facebook",
-        name: "Facebook Page & Instagram",
+        name: "Facebook Page",
         // Whether the shared Meta app is set up on this server — the flag the UI
-        // reads to decide whether to offer the "Connect Page" button at all.
+        // reads to decide whether to offer the "Connect" button at all.
         configured: facebookConfigured(),
-        // Genuinely two-way, like WhatsApp — a Page/IG message lands in the inbox
-        // and a reply goes back as the Page. Said plainly, and gated honestly.
         offers:
-          "Your Facebook Page's Messenger and your linked Instagram DMs, answered here in the same inbox as WhatsApp — connect the Page once and both come with it.",
+          "Your Facebook Page's Messenger, answered here in the same inbox as WhatsApp — a message to the Page lands in your conversations and you reply as the Page.",
         cannot:
-          "Instagram must be a Business account linked to the Page. It answers people who message you first, within Meta's standard window — it is not for cold outreach.",
+          "It answers people who message the Page first, within Meta's standard window — it is not for cold outreach.",
         needs: facebookConfigured()
-          ? "Answering Page/Instagram messages needs Meta App Review of pages_messaging and instagram_manage_messages. Until that clears you can connect your own Page as an app admin to test it, no further."
+          ? "Answering Page messages needs Meta App Review of pages_messaging. Until that clears you can connect your own Page as an app admin to test it, no further."
           : `Not enabled on this server yet. It needs the shared Meta app (set META_APP_ID and META_APP_SECRET) and ${facebookRedirectUri()} added as a Valid OAuth Redirect URI, plus Meta App Review for the messaging permissions.`,
         scopes: facebookScopes(),
+      },
+      {
+        id: "instagram",
+        name: "Instagram",
+        configured: facebookConfigured(),
+        offers:
+          "Your Instagram DMs, answered here in the same inbox as WhatsApp — a message to your professional account lands in your conversations and you reply as the account.",
+        cannot:
+          "Instagram must be a Business account linked to a Facebook Page you manage. It answers people who message you first, within Meta's standard window.",
+        needs: facebookConfigured()
+          ? "Answering Instagram DMs needs Meta App Review of instagram_manage_messages, and an Instagram Business account linked to your Page. Until that clears you can connect your own account as an app admin to test it, no further."
+          : `Not enabled on this server yet. It needs the shared Meta app (set META_APP_ID and META_APP_SECRET) and ${facebookRedirectUri()} added as a Valid OAuth Redirect URI, plus Meta App Review for the messaging permissions.`,
+        scopes: instagramScopes(),
       },
     ],
   });
@@ -373,16 +393,22 @@ connectionsRoute.get("/tiktok/callback", async (c) => {
 // Facebook Page + Instagram — the connect that lights up the channels
 // ============================================================
 
-connectionsRoute.get("/facebook/start", async (c) => {
-  const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member can connect the business's Page." }, 403);
+// Facebook and Instagram are TWO separate connects that share one Facebook-Login
+// redirect_uri and callback. Each asks only for its own channel's scopes; the
+// signed state carries `target` so the callback knows which row to write.
+function startFacebookLogin(
+  c: Context,
+  target: "facebook" | "instagram",
+  scopes: string[]
+) {
+  const owner = ownerOf(scopeOf(c));
+  if (!owner) return c.json({ error: "Only a staff member can connect the business's account." }, 403);
 
   if (!facebookConfigured()) {
     return c.json(
       {
         error:
-          "Facebook is not set up on this server yet. The owner needs the shared Meta app's id and secret before a Page can be connected.",
+          "Facebook is not set up on this server yet. The owner needs the shared Meta app's id and secret before an account can be connected.",
       },
       503
     );
@@ -390,12 +416,13 @@ connectionsRoute.get("/facebook/start", async (c) => {
 
   // No PKCE (Facebook Login does not require it for the server-side code flow with
   // an app secret); the signed state cookie is the CSRF protection, and it also
-  // carries WHICH business this Page is being connected for.
+  // carries WHICH business and WHICH channel is being connected.
   const state = signState({
     organizationId: owner.organizationId,
     employeeId: owner.employeeId,
     verifier: "",
     provider: "facebook",
+    target,
     issuedAt: Date.now(),
     nonce: randomBytes(12).toString("base64url"),
   });
@@ -404,8 +431,11 @@ connectionsRoute.get("/facebook/start", async (c) => {
     "set-cookie",
     `${STATE_COOKIE}=${encodeURIComponent(state)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`
   );
-  return c.json({ url: facebookAuthorizeUrl(state) });
-});
+  return c.json({ url: facebookAuthorizeUrl(state, scopes) });
+}
+
+connectionsRoute.get("/facebook/start", (c) => startFacebookLogin(c, "facebook", facebookScopes()));
+connectionsRoute.get("/instagram/start", (c) => startFacebookLogin(c, "instagram", instagramScopes()));
 
 connectionsRoute.get("/facebook/callback", async (c) => {
   const app = appBaseUrl();
@@ -458,72 +488,86 @@ connectionsRoute.get("/facebook/callback", async (c) => {
     // storing several Pages would collapse to the last one written. The first
     // Page is connected; connecting a specific one of several is a later refinement.
     const page = pages[0];
+    // Absent target means an older flow — treat it as the Facebook connect.
+    const target = state.target ?? "facebook";
 
-    // Stored at the BUSINESS level (employeeId null), because a Page belongs to
+    // Instagram is connected THROUGH the Page it is linked to. No linked IG means
+    // there is nothing to connect — say so plainly rather than storing a Page row
+    // the person did not ask for.
+    if (target === "instagram" && !page.instagram) {
+      return back(
+        `${page.name} has no Instagram Business account linked to it. Link one in Meta Business settings, then connect Instagram again.`
+      );
+    }
+
+    // Stored at the BUSINESS level (employeeId null), because a Page/IG belongs to
     // the business, not the person who happened to click connect — which is
     // exactly what pageConnectionForOutbound and organizationForConnectedPage read.
+    // Only the channel being connected is written: the two connects are separate.
     await withTenant(state.organizationId, async () => {
-      await saveConnection({
-        organizationId: state.organizationId,
-        employeeId: null,
-        provider: "facebook",
-        externalId: page.pageId,
-        displayName: page.name,
-        avatarUrl: null,
-        accessToken: page.pageAccessToken,
-        refreshToken: null,
-        // A page access token derived from a long-lived user token does not expire.
-        expiresAt: null,
-        scopes: facebookScopes(),
-      });
-
-      // The linked Instagram business account, keyed by ITS OWN id — the inbound
-      // parser resolves an IG delivery by entry.id, which is the IG account id,
-      // not the Page id. Same page token: Instagram messaging is addressed through
-      // the Page it is linked to.
-      if (page.instagram) {
+      if (target === "facebook") {
+        await saveConnection({
+          organizationId: state.organizationId,
+          employeeId: null,
+          provider: "facebook",
+          externalId: page.pageId,
+          displayName: page.name,
+          avatarUrl: null,
+          accessToken: page.pageAccessToken,
+          refreshToken: null,
+          // A page access token derived from a long-lived user token does not expire.
+          expiresAt: null,
+          scopes: facebookScopes(),
+        });
+      } else {
+        // The linked Instagram business account, keyed by ITS OWN id — the inbound
+        // parser resolves an IG delivery by entry.id, which is the IG account id,
+        // not the Page id. Same page token: Instagram messaging is addressed through
+        // the Page it is linked to.
         await saveConnection({
           organizationId: state.organizationId,
           employeeId: null,
           provider: "instagram",
-          externalId: page.instagram.id,
-          displayName: page.instagram.username ? `@${page.instagram.username}` : page.name,
+          externalId: page.instagram!.id,
+          displayName: page.instagram!.username ? `@${page.instagram!.username}` : page.name,
           avatarUrl: null,
           accessToken: page.pageAccessToken,
           refreshToken: null,
           expiresAt: null,
-          scopes: facebookScopes(),
+          scopes: instagramScopes(),
         });
       }
     });
 
     // Without a webhook subscription Meta accepts the connection and delivers
-    // nothing. Best-effort: a stored connection can still SEND, so a failed
-    // subscription is logged, not fatal — the person is told it may need a retry.
+    // nothing — the same page subscription carries both Messenger and Instagram.
+    // Best-effort: a stored connection can still SEND, so a failed subscription is
+    // logged, not fatal — the person is told it may need a retry.
     let subscribed = true;
     try {
       await subscribePageToWebhook(page.pageId, page.pageAccessToken);
     } catch (err) {
       subscribed = false;
-      logger.error({ err, pageId: page.pageId }, "Page connected but webhook subscription failed");
+      logger.error({ err, pageId: page.pageId, target }, "Connected but webhook subscription failed");
     }
 
+    const label =
+      target === "instagram"
+        ? `Instagram${page.instagram!.username ? ` (@${page.instagram!.username})` : ""}`
+        : page.name;
     logger.info(
-      { organizationId: state.organizationId, pageId: page.pageId, instagram: Boolean(page.instagram), subscribed },
-      "Facebook Page connected"
+      { organizationId: state.organizationId, pageId: page.pageId, target, subscribed },
+      target === "instagram" ? "Instagram connected" : "Facebook Page connected"
     );
-    const igNote = page.instagram
-      ? ` and Instagram${page.instagram.username ? ` (@${page.instagram.username})` : ""}`
-      : "";
     return back(
       subscribed
-        ? `Connected ${page.name}${igNote}. Messages will now appear in the inbox.`
-        : `Connected ${page.name}${igNote}, but message delivery could not be switched on — try reconnecting.`
+        ? `Connected ${label}. Messages will now appear in the inbox.`
+        : `Connected ${label}, but message delivery could not be switched on — try reconnecting.`
     );
   } catch (err) {
-    logger.error({ err }, "Facebook connection failed");
+    logger.error({ err }, "Facebook/Instagram connection failed");
     return back(
-      `Facebook could not be connected: ${err instanceof Error ? err.message.slice(0, 140) : "unknown error"}`
+      `That account could not be connected: ${err instanceof Error ? err.message.slice(0, 140) : "unknown error"}`
     );
   }
 });

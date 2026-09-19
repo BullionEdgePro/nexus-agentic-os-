@@ -5,6 +5,7 @@ import {
   getConnections,
   startGmailConnect,
   startFacebookConnect,
+  startInstagramConnect,
   getClientMail,
   sendClientEmail,
   disconnectGmail,
@@ -75,10 +76,11 @@ export function ConnectionsPanel() {
   const gmail = providers.find((p) => p.id === "gmail");
   const whatsapp = providers.find((p) => p.id === "whatsapp");
   const facebook = providers.find((p) => p.id === "facebook");
+  const instagram = providers.find((p) => p.id === "instagram");
   const mailbox = connections?.find((c) => c.provider === "gmail") ?? null;
   const whatsappConn = connections?.find((c) => c.provider === "whatsapp") ?? null;
 
-  if (connections === null || (!gmail && !whatsapp && !facebook)) return null;
+  if (connections === null || (!gmail && !whatsapp && !facebook && !instagram)) return null;
 
   return (
     <section className="cnx">
@@ -193,43 +195,89 @@ export function ConnectionsPanel() {
         />
       ) : null}
 
+      {/* Facebook and Instagram are separate connects — each rides its own
+          Facebook-Login flow and asks only for its channel's permissions. */}
       {facebook ? (
-        <div className="cnx-card">
-          <div className="cnx-head">
-            <div>
-              <strong>Facebook Page &amp; Instagram</strong>
-            </div>
-            {facebook.configured ? (
-              <button
-                type="button"
-                className="cnx-go"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setError(null);
-                  try {
-                    const { url } = await startFacebookConnect();
-                    window.location.href = url;
-                  } catch (err) {
-                    setError(readableError(err, "Could not start the Facebook sign-in."));
-                    setBusy(false);
-                  }
-                }}
-              >
-                Connect Page
-              </button>
-            ) : null}
-          </div>
+        <MetaConnectCard
+          provider={facebook}
+          buttonLabel="Connect Page"
+          busy={busy}
+          onConnect={startFacebookConnect}
+          onBusy={setBusy}
+          onError={setError}
+        />
+      ) : null}
 
-          <p className="cnx-offers">{facebook.offers}</p>
-          <p className="cnx-cannot">{facebook.cannot}</p>
-          {/* Honest about the Meta gate: the connect works for the app's own
-              admins to test and demo, but answering the public needs App Review.
-              `needs` carries that whether or not the server is configured. */}
-          {facebook.needs ? <p className="cnx-needs">{facebook.needs}</p> : null}
-        </div>
+      {instagram ? (
+        <MetaConnectCard
+          provider={instagram}
+          buttonLabel="Connect Instagram"
+          busy={busy}
+          onConnect={startInstagramConnect}
+          onBusy={setBusy}
+          onError={setError}
+        />
       ) : null}
     </section>
+  );
+}
+
+/**
+ * One Meta channel's connect card — Facebook Page or Instagram.
+ *
+ * The two are deliberately separate: connecting the Page must not make a person
+ * grant Instagram access, and vice versa. The button only shows when the server
+ * reports the shared Meta app configured; `needs` states the Meta App Review gate
+ * either way. The redirect leaves the page, so a failure to even START is the only
+ * thing shown here — the outcome is reported on the /deck/channels page it returns to.
+ */
+function MetaConnectCard({
+  provider,
+  buttonLabel,
+  busy,
+  onConnect,
+  onBusy,
+  onError,
+}: {
+  provider: ConnectionProvider;
+  buttonLabel: string;
+  busy: boolean;
+  onConnect: () => Promise<{ url: string }>;
+  onBusy: (b: boolean) => void;
+  onError: (m: string | null) => void;
+}) {
+  return (
+    <div className="cnx-card">
+      <div className="cnx-head">
+        <div>
+          <strong>{provider.name}</strong>
+        </div>
+        {provider.configured ? (
+          <button
+            type="button"
+            className="cnx-go"
+            disabled={busy}
+            onClick={async () => {
+              onBusy(true);
+              onError(null);
+              try {
+                const { url } = await onConnect();
+                window.location.href = url;
+              } catch (err) {
+                onError(readableError(err, `Could not start the ${provider.name} sign-in.`));
+                onBusy(false);
+              }
+            }}
+          >
+            {buttonLabel}
+          </button>
+        ) : null}
+      </div>
+
+      <p className="cnx-offers">{provider.offers}</p>
+      <p className="cnx-cannot">{provider.cannot}</p>
+      {provider.needs ? <p className="cnx-needs">{provider.needs}</p> : null}
+    </div>
   );
 }
 

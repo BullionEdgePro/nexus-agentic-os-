@@ -45,28 +45,54 @@ const DIALOG = "https://www.facebook.com";
  *   pages_manage_metadata    — subscribe the Page to our webhook.
  *   pages_messaging          — receive and send Messenger messages as the Page.
  *   business_management      — resolve Pages owned through a Business.
+ *   pages_read_engagement    — read the Page's linked Instagram business account.
  *   instagram_basic          — see the Instagram account linked to the Page.
  *   instagram_manage_messages— receive and send Instagram DMs for that account.
  *
- * Configurable (FACEBOOK_SCOPES) like the TikTok integration, because an
- * installation that has cleared only some permissions in review should ask for
- * only those — an authorize URL asking for an ungranted scope is a worse failure
- * than one that asks for less.
+ * SPLIT PER CHANNEL, on purpose. Facebook (Messenger) and Instagram are two
+ * separate connects in the inbox, so each asks for only what it needs: connecting
+ * the Page must not make a person grant Instagram access they did not ask for, and
+ * vice versa. Both still ride Facebook Login (an Instagram professional account is
+ * reached through the Page it is linked to), so the Instagram set carries the page
+ * permissions needed to find that link, subscribe the webhook, and hold the page
+ * token every Instagram send uses.
+ *
+ * Each set is env-overridable (FACEBOOK_SCOPES / INSTAGRAM_SCOPES) like the TikTok
+ * integration, because an installation that has cleared only some permissions in
+ * review should ask for only those — an authorize URL asking for an ungranted
+ * scope fails the whole sign-in.
  */
-const ALL_SCOPES = [
+const FACEBOOK_PAGE_SCOPES = [
   "pages_show_list",
   "pages_manage_metadata",
   "pages_messaging",
+  "business_management",
+] as const;
+
+const INSTAGRAM_SCOPES = [
+  "pages_show_list",
+  "pages_manage_metadata",
+  "pages_read_engagement",
   "business_management",
   "instagram_basic",
   "instagram_manage_messages",
 ] as const;
 
-export function facebookScopes(): string[] {
-  const configured = process.env.FACEBOOK_SCOPES?.trim();
-  if (!configured) return [...ALL_SCOPES];
+function scopesFrom(envValue: string | undefined, fallback: readonly string[]): string[] {
+  const configured = envValue?.trim();
+  if (!configured) return [...fallback];
   const scopes = configured.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
-  return scopes.length > 0 ? scopes : [...ALL_SCOPES];
+  return scopes.length > 0 ? scopes : [...fallback];
+}
+
+/** What the Facebook Page (Messenger) connect asks for. */
+export function facebookScopes(): string[] {
+  return scopesFrom(process.env.FACEBOOK_SCOPES, FACEBOOK_PAGE_SCOPES);
+}
+
+/** What the Instagram connect asks for — the IG permissions plus the page access it rides on. */
+export function instagramScopes(): string[] {
+  return scopesFrom(process.env.INSTAGRAM_SCOPES, INSTAGRAM_SCOPES);
 }
 
 /** Off until the shared Meta app's id and secret are both present. */
@@ -79,13 +105,13 @@ export function facebookRedirectUri(): string {
   return process.env.FACEBOOK_REDIRECT_URI || `${apiBaseUrl()}/api/connections/facebook/callback`;
 }
 
-export function facebookAuthorizeUrl(state: string): string {
+export function facebookAuthorizeUrl(state: string, scopes: string[]): string {
   const url = new URL(`/${env.metaGraphApiVersion}/dialog/oauth`, DIALOG);
   url.searchParams.set("client_id", env.metaAppId);
   url.searchParams.set("redirect_uri", facebookRedirectUri());
   url.searchParams.set("state", state);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", facebookScopes().join(","));
+  url.searchParams.set("scope", scopes.join(","));
   return url.toString();
 }
 
