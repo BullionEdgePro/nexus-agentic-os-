@@ -9,6 +9,7 @@ import { KNOWLEDGE_REINDEX_QUEUE } from "./reindex-queue.js";
 import { TEMPLATE_SYNC_QUEUE } from "./template-sync-queue.js";
 import { CALENDAR_SYNC_QUEUE } from "./calendar-sync-queue.js";
 import { SCHEDULED_MESSAGES_QUEUE } from "./scheduled-messages-queue.js";
+import { SOCIAL_INBOUND_QUEUE } from "./social-inbound-queue.js";
 
 /**
  * What is stuck or lost in the queues — the half of the background system that
@@ -49,6 +50,7 @@ import { SCHEDULED_MESSAGES_QUEUE } from "./scheduled-messages-queue.js";
 /** Every queue this platform runs, so a new one cannot be silently unwatched. */
 const QUEUES = [
   INBOUND_WEBHOOK_QUEUE,
+  SOCIAL_INBOUND_QUEUE,
   BROADCAST_SEND_QUEUE,
   OPERATORS_QUEUE,
   QUALITY_ROLLUP_QUEUE,

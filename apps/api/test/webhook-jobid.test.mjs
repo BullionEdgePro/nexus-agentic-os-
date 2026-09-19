@@ -14,6 +14,7 @@ import { createHmac } from "node:crypto";
 
 const TEST_SECRET = "test-app-secret";
 const calls = { add: [] };
+const socialCalls = { add: [] };
 
 mock.module(new URL("../src/config/env.ts", import.meta.url), {
   exports: {
@@ -35,6 +36,20 @@ mock.module(new URL("../src/queue/queue.ts", import.meta.url), {
     getInboundWebhookQueue: () => ({
       add: async (name, data, opts) => {
         calls.add.push({ name, data, opts });
+        return {};
+      },
+    }),
+  },
+});
+
+// The FB/IG branch of the same handler enqueues onto a different queue; mock it
+// here too, because this is the one file that imports the real POST handler (two
+// files mocking it in the shared test process would collide via the ESM cache).
+mock.module(new URL("../src/queue/social-inbound-queue.ts", import.meta.url), {
+  exports: {
+    getSocialInboundQueue: () => ({
+      add: async (name, data, opts) => {
+        socialCalls.add.push({ name, data, opts });
         return {};
       },
     }),
@@ -88,4 +103,90 @@ test("inbound webhook jobId never contains ':' (BullMQ rejects custom ids with a
   assert.ok(!jobId.includes(":"), `jobId must not contain ':' (BullMQ rejects it) — got "${jobId}"`);
   assert.equal(jobId, "entry-1-wamid.TEST123");
   console.log("PASS: webhook jobId is BullMQ-safe (no colon) —", jobId);
+});
+
+// ONE APP, ONE WEBHOOK, THREE OBJECTS.
+//
+// The same URL and app secret deliver WhatsApp, Facebook Page ("page") and
+// Instagram ("instagram") messages. A Page delivery carries `entry[].messaging`,
+// not `entry[].changes`, so the WhatsApp router reads no phone_number_id and
+// would silently drop it. These prove the handler branches: Page/IG go to the
+// social queue with a BullMQ-safe jobId, WhatsApp stays on its own queue.
+function signedPost(payload) {
+  const rawBody = JSON.stringify(payload);
+  const signature = "sha256=" + createHmac("sha256", TEST_SECRET).update(rawBody, "utf8").digest("hex");
+  return whatsappWebhook.request("/", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-hub-signature-256": signature },
+    body: rawBody,
+  });
+}
+
+test("a Facebook Page delivery is enqueued on the social queue, not the WhatsApp one", async () => {
+  calls.add.length = 0;
+  socialCalls.add.length = 0;
+  const res = await signedPost({
+    object: "page",
+    entry: [
+      { id: "PAGE_42", messaging: [{ sender: { id: "PSID_1" }, recipient: { id: "PAGE_42" }, message: { mid: "m_xyz", text: "hi" } }] },
+    ],
+  });
+  assert.equal(res.status, 200, "must ack Meta with 200");
+  assert.equal(socialCalls.add.length, 1, "should enqueue exactly one social job");
+  assert.equal(calls.add.length, 0, "must NOT touch the WhatsApp queue");
+  const jobId = socialCalls.add[0].opts.jobId;
+  assert.ok(!jobId.includes(":"), `jobId must be BullMQ-safe — got "${jobId}"`);
+  assert.equal(jobId, "PAGE_42-m_xyz");
+  assert.equal(socialCalls.add[0].data.payload.object, "page", "the raw payload is carried for the processor to re-parse");
+});
+
+test("an Instagram delivery routes to the social queue the same way", async () => {
+  calls.add.length = 0;
+  socialCalls.add.length = 0;
+  const res = await signedPost({
+    object: "instagram",
+    entry: [{ id: "IG_9", messaging: [{ sender: { id: "IGSID_1" }, recipient: { id: "IG_9" }, message: { mid: "ig_m", text: "yo" } }] }],
+  });
+  assert.equal(res.status, 200);
+  assert.equal(socialCalls.add.length, 1);
+  assert.equal(calls.add.length, 0);
+});
+
+test("a WhatsApp delivery is unaffected by the social branch", async () => {
+  calls.add.length = 0;
+  socialCalls.add.length = 0;
+  const res = await signedPost({
+    object: "whatsapp_business_account",
+    entry: [
+      {
+        id: "entry-1",
+        changes: [
+          {
+            field: "messages",
+            value: {
+              messaging_product: "whatsapp",
+              metadata: { display_phone_number: "1555", phone_number_id: "PNID_1" },
+              contacts: [{ profile: { name: "T" }, wa_id: "971500000000" }],
+              messages: [{ from: "971500000000", id: "wamid.B", timestamp: "1700000000", type: "text", text: { body: "hi" } }],
+            },
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(res.status, 200);
+  assert.equal(calls.add.length, 1, "WhatsApp still routes to its own queue");
+  assert.equal(socialCalls.add.length, 0, "the social branch must not swallow WhatsApp");
+});
+
+test("an unsigned social delivery is refused before any queue", async () => {
+  calls.add.length = 0;
+  socialCalls.add.length = 0;
+  const res = await whatsappWebhook.request("/", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=deadbeef" },
+    body: JSON.stringify({ object: "page", entry: [] }),
+  });
+  assert.equal(res.status, 401, "a bad signature must be refused");
+  assert.equal(socialCalls.add.length, 0);
 });

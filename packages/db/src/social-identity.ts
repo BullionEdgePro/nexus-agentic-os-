@@ -77,3 +77,78 @@ export async function findOrCreateContactByExternalId(
     return { contactId: contact.rows[0].id, created: contact.rows[0].inserted };
   });
 }
+
+/**
+ * The one conversation for a contact on a given channel, created if new.
+ *
+ * One per contact per channel, the same rule findOrCreateEmailConversation
+ * follows: a person is a single relationship in the inbox, and their Messenger
+ * thread is one conversation however many separate messages arrive. Runs inside
+ * the caller's tenant context (the processor's withTenant), so RLS scopes it.
+ */
+export async function findOrCreateSocialConversation(
+  organizationId: string,
+  contactId: string,
+  channel: Extract<ConversationChannel, "facebook" | "instagram">
+): Promise<string> {
+  const db = getPool();
+  const existing = await db.query<{ id: string }>(
+    `select id from conversations
+      where organization_id = $1 and contact_id = $2 and channel = $3
+        and status in ('open', 'pending')
+      order by opened_at desc
+      limit 1`,
+    [organizationId, contactId, channel]
+  );
+  if (existing.rows[0]) return existing.rows[0].id;
+
+  const inserted = await db.query<{ id: string }>(
+    `insert into conversations (organization_id, contact_id, channel, status)
+     values ($1, $2, $3, 'open')
+     returning id`,
+    [organizationId, contactId, channel]
+  );
+  return inserted.rows[0].id;
+}
+
+export interface InboundSocialMessageInput {
+  organizationId: string;
+  conversationId: string;
+  contactId: string;
+  body: string;
+  /** Meta's message id (the mid) — the dedup key, unique per message. */
+  socialMessageId: string;
+  /** Milliseconds since epoch from Meta's timestamp, or null to use now(). */
+  receivedAtMs: number | null;
+}
+
+/**
+ * Store one inbound Messenger/Instagram message, or do nothing if already stored.
+ *
+ * Dedup is the whole point, exactly as on the email channel: Meta redelivers, and
+ * the mid (unique via idx_messages_social_message_id) is what stops a message
+ * being appended twice. Returns the new message id ONLY when a row was actually
+ * inserted, so the caller publishes an inbox event once and never on a redelivery.
+ */
+export async function insertInboundSocialMessage(
+  input: InboundSocialMessageInput
+): Promise<{ messageId: string | null }> {
+  const receivedAt = input.receivedAtMs && input.receivedAtMs > 0 ? new Date(input.receivedAtMs) : null;
+  const { rows } = await getPool().query<{ id: string }>(
+    `insert into messages
+       (organization_id, conversation_id, contact_id, direction, sender_type,
+        message_type, body, status, social_message_id, created_at)
+     values ($1, $2, $3, 'inbound', 'contact', 'text', $4, 'delivered', $5, coalesce($6::timestamptz, now()))
+     on conflict (social_message_id) where social_message_id is not null do nothing
+     returning id`,
+    [
+      input.organizationId,
+      input.conversationId,
+      input.contactId,
+      input.body,
+      input.socialMessageId,
+      receivedAt,
+    ]
+  );
+  return { messageId: rows[0]?.id ?? null };
+}

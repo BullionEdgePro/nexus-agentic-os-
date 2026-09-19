@@ -3,6 +3,7 @@ import type { WhatsAppWebhookPayload } from "@nexus/shared";
 import { env } from "../config/env.js";
 import { verifyMetaSignature } from "../lib/signature.js";
 import { getInboundWebhookQueue } from "../queue/queue.js";
+import { getSocialInboundQueue } from "../queue/social-inbound-queue.js";
 import { logger } from "../lib/logger.js";
 
 export const whatsappWebhook = new Hono();
@@ -36,6 +37,33 @@ whatsappWebhook.post("/", async (c) => {
     payload = JSON.parse(rawBody);
   } catch {
     return c.text("Invalid JSON", 400);
+  }
+
+  // ONE APP, ONE WEBHOOK, THREE OBJECTS.
+  //
+  // The same Meta app that delivers WhatsApp here also delivers Facebook Page
+  // ("page") and Instagram ("instagram") messages to this very URL, signed with
+  // the same app secret (already verified above). They carry `entry[].messaging`,
+  // not `entry[].changes`, so the WhatsApp routing below cannot read them — they
+  // go to their own queue and processor. Dormant until a Page is connected: the
+  // processor drops any delivery for a Page no business has connected yet.
+  if (payload.object === "page" || payload.object === "instagram") {
+    const entry = payload.entry?.[0] as { id?: string; messaging?: Array<{ message?: { mid?: string } }> } | undefined;
+    // BullMQ rejects ":" in a jobId — join with "-". The mid is stable across
+    // Meta's retries; the DB dedup on social_message_id is the real backstop, so
+    // a Date.now() fallback here only affects a delivery that carried no mid.
+    const mid = entry?.messaging?.[0]?.message?.mid;
+    const jobKey = mid ?? Date.now();
+    logger.info(
+      { object: payload.object, pageId: entry?.id, events: entry?.messaging?.length ?? 0 },
+      "Inbound social webhook accepted"
+    );
+    await getSocialInboundQueue().add(
+      "social-inbound",
+      { receivedAt: new Date().toISOString(), payload },
+      { jobId: (entry?.id ?? "social") + "-" + jobKey }
+    );
+    return c.text("OK", 200);
   }
 
   const phoneNumberId = payload.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;

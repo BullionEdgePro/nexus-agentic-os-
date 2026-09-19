@@ -99,6 +99,9 @@ create table messages (
 create index idx_messages_conversation on messages(conversation_id, created_at);
 create index idx_messages_org_created on messages(organization_id, created_at desc);
 create unique index idx_messages_wa_message_id on messages(wa_message_id) where wa_message_id is not null;
+-- NOTE: the email (086) and Facebook/Instagram (089) channels add their own
+-- message-id columns + partial unique indexes in those migrations, not here —
+-- schema.sql is the base and is applied before migrations.
 
 -- ============================================================
 -- Agent configuration (the Domain Agent swarm)

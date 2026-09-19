@@ -218,6 +218,35 @@ export async function whatsappSendTokenForNumber(phoneNumberId: string): Promise
   );
 }
 
+/**
+ * Which business owns a connected Facebook Page or Instagram account.
+ *
+ * The inbound social processor knows only a Meta page id from the delivery — an
+ * opaque routing key, not tenant data — and must find the business that connected
+ * that Page whichever tenant it belongs to. Same cross-tenant shape, and same
+ * stated reason, as whatsappSendTokenForNumber: wrapped in withAllTenants so the
+ * step out of RLS is deliberate and shows in the logs.
+ *
+ * Returns null when no business has connected this Page — which is EVERY Page
+ * today, because the connect flow (a later slice) is what writes these rows. So
+ * this resolves nothing yet and the processor drops the delivery, exactly the
+ * dormant-until-connected state the whole channel is in.
+ */
+export async function organizationForConnectedPage(pageId: string): Promise<string | null> {
+  return withAllTenants(
+    "inbound social: resolve the business that connected this Page",
+    async () => {
+      const { rows } = await getPool().query<{ organization_id: string }>(
+        `select organization_id from social_connections
+          where provider in ('facebook', 'instagram') and external_id = $1
+          limit 1`,
+        [pageId]
+      );
+      return rows[0]?.organization_id ?? null;
+    }
+  );
+}
+
 /** Forget a connection entirely, token included. */
 export async function removeConnection(
   organizationId: string,

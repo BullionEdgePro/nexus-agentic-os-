@@ -26,6 +26,9 @@ import {
   scheduleScheduledMessageSweep,
 } from "./queue/scheduled-messages-queue.js";
 import { processScheduledMessageSweep } from "./queue/scheduled-messages-processor.js";
+import { SOCIAL_INBOUND_QUEUE, getSocialInboundQueue } from "./queue/social-inbound-queue.js";
+import { processSocialInboundJob } from "./queue/social-processor.js";
+import type { SocialInboundJob } from "@nexus/shared";
 import { preflightModels } from "@nexus/agents";
 import { logger } from "./lib/logger.js";
 
@@ -33,6 +36,19 @@ const inboundWorker = new Worker<InboundWebhookJob>(INBOUND_WEBHOOK_QUEUE, proce
   connection: getRedisConnection(),
   concurrency: 10,
 });
+
+// The Facebook Page / Instagram inbound worker. Its own worker off its own queue,
+// so a spike or a stall on the social channels never touches the WhatsApp reply
+// path. Dormant until a Page is connected — see social-processor.ts. Referencing
+// getSocialInboundQueue keeps the queue instantiated for health monitoring.
+getSocialInboundQueue();
+const socialInboundWorker = new Worker<SocialInboundJob>(SOCIAL_INBOUND_QUEUE, processSocialInboundJob, {
+  connection: getRedisConnection(),
+  concurrency: 5,
+});
+socialInboundWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Social inbound job failed")
+);
 
 // Meta enforces per-tier messaging throughput limits; 20/sec is a
 // conservative default for template sends — tune to your business's

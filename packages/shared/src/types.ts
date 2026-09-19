@@ -86,6 +86,20 @@ export interface InboundWebhookJob {
   payload: WhatsAppWebhookPayload;
 }
 
+/**
+ * A Messenger/Instagram webhook delivery, queued for the social processor.
+ *
+ * The same Meta app webhook receives WhatsApp, Page and Instagram objects; the
+ * route branches on `payload.object` and pushes the page/instagram ones here.
+ * `payload` is the raw delivery, re-parsed by `parseMessagingWebhook` in the
+ * processor — kept as `unknown` so the queue contract does not depend on the
+ * platform-edge parser's private shape.
+ */
+export interface SocialInboundJob {
+  receivedAt: string;
+  payload: unknown;
+}
+
 /** Normalized unit of work handed from the queue worker to the agent switchboard. */
 export interface InboundMessageEvent {
   organizationId: string;
