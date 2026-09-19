@@ -2153,6 +2153,8 @@ export interface Me {
   whatsappNumber: string | null;
   avatarUrl: string | null;
   jobTitle: string | null;
+  /** The zone this person's working hours and presence are read in. */
+  timezone?: string | null;
   /**
    * Your own last sign-in, and what from.
    *
@@ -2174,6 +2176,7 @@ export function updateMe(input: {
   fullName?: string;
   whatsappNumber?: string | null;
   avatarUrl?: string | null;
+  jobTitle?: string | null;
 }): Promise<{ ok: true }> {
   return request("/api/me", { method: "PATCH", body: JSON.stringify(input) });
 }

@@ -138,6 +138,20 @@ export const NAV: NavItem[] = [
     staffOnly: true,
   },
   {
+    href: "/deck/my-settings",
+    label: "Settings",
+    // Your own account — name, photo, WhatsApp number and the socials your link
+    // points to. Staff-only for the same reason My clients is: it edits the
+    // person's own employee row, which an operator does not have.
+    staffOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <circle cx="12" cy="12" r="3.2" />
+        <path d="M12 2.5v2.4M12 19.1v2.4M4.2 7l2.1 1.2M17.7 15.8l2.1 1.2M4.2 17l2.1-1.2M17.7 8.2l2.1-1.2" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/customers",
     label: "Customers",
     // ONE person, where Team is two. The distinction the icons carry is the one
@@ -320,7 +334,7 @@ export const NAV: NavItem[] = [
 // not an item, so it must not answer to that same property name.
 export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
   { title: "Work", hrefs: ["/", "/inbox", "/deck/operators", "/deck/board", "/deck/tasks", "/deck/bookings"] },
-  { title: "My book", hrefs: ["/deck/my-clients", "/deck/my-campaigns"] },
+  { title: "My book", hrefs: ["/deck/my-clients", "/deck/my-campaigns", "/deck/my-settings"] },
   { title: "Directory", hrefs: ["/deck/customers", "/deck/team"] },
   { title: "Setup", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue", "/deck/channels", "/deck/links"] },
   { title: "Reports", hrefs: ["/deck/forecast", "/deck/broadcasts", "/deck/activity", "/deck/quality"] },

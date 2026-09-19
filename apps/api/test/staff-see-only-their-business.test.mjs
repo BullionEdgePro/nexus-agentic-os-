@@ -63,6 +63,10 @@ const TAB_API = {
   // Campaigns to a staff member's own book. Staff-only like the book itself:
   // the audience is "contacts owned by me", which for an operator is nobody.
   "/deck/my-campaigns": "/api/my/campaigns",
+  // A staff member's own settings — name, photo, WhatsApp number, socials.
+  // Staff-only like the rest of the book: it edits the person's own employee
+  // row, and the socials endpoint under /api/my refuses an operator.
+  "/deck/my-settings": "/api/my/social-accounts",
   // Customers. Addressed per organization deliberately rather than through a
   // bare /api/contacts scoped in the handler: every row is a real person, so
   // the :slug puts requireTenantScope in front of the read rather than

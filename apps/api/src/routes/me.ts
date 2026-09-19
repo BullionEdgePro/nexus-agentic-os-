@@ -100,6 +100,9 @@ meRoute.get("/", async (c) => {
     whatsappNumber: employee.whatsappNumber,
     avatarUrl: employee.avatarUrl,
     jobTitle: employee.jobTitle,
+    // Shown on the Settings tab so a person can see the zone their working hours
+    // and presence are read in. Editing it lives with the rota, not here.
+    timezone: employee.timezone,
     editable: true,
   });
 });
@@ -128,6 +131,14 @@ meRoute.patch("/", async (c) => {
   const fullName = typeof body.fullName === "string" ? body.fullName.trim() : undefined;
   if (fullName !== undefined && !fullName) {
     return c.json({ error: "A name cannot be empty." }, 400);
+  }
+
+  // A free-text role a person gives themselves ("Sales", "Support lead"). Empty
+  // is allowed and clears it. Employees only — an operator has no job title.
+  let jobTitle: string | null | undefined;
+  if ("jobTitle" in body) {
+    const raw = typeof body.jobTitle === "string" ? body.jobTitle.trim().slice(0, 80) : "";
+    jobTitle = raw || null;
   }
 
   // Stored as the customer would dial it. The direct-contact link is built from
@@ -232,6 +243,7 @@ meRoute.patch("/", async (c) => {
         set full_name       = coalesce($2, full_name),
             whatsapp_number = case when $3::boolean then $4 else whatsapp_number end,
             avatar_url      = case when $5::boolean then $6 else avatar_url end,
+            job_title       = case when $7::boolean then $8 else job_title end,
             updated_at      = now()
       where id = $1 and is_active = true
       returning id`,
@@ -242,6 +254,8 @@ meRoute.patch("/", async (c) => {
       whatsappNumber ?? null,
       avatarUrl !== undefined,
       avatarUrl ?? null,
+      jobTitle !== undefined,
+      jobTitle ?? null,
     ]
   );
 
