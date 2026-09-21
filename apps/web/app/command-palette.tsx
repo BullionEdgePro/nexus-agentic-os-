@@ -1,34 +1,98 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { NAV } from "@/lib/nav";
+import { getMyClients, type MyClient } from "@/lib/api";
 import "./command-palette.css";
 
 /**
- * Jump anywhere with ⌘K / Ctrl-K.
+ * One search for everything a person needs to reach — ⌘K, or the box in the rail.
  *
- * The rail is grouped now, but reaching a screen still means finding its row and
- * clicking. On thirteen-to-nineteen destinations a keyboard jump is faster than
- * any menu — type two letters of the name and press enter. It draws from the
- * same one nav list as the rail and hides the same doors the role cannot open,
- * so it can never offer a screen the API would refuse.
+ * ============================================================
+ * TWO THINGS IT FINDS, AND WHY BOTH
+ * ============================================================
  *
- * Deliberately keyboard-first and dependency-free: no backend, no search index,
- * just the screens a person already has. Mounted once in the shell, so every
- * signed-in page has it.
+ * It began as a keyboard jump between SCREENS, drawing from the one nav list the
+ * rail uses so it can never offer a door the role cannot open. That is still
+ * here, and still instant — no backend, the screens a person already has.
+ *
+ * But "find everything they need" is mostly PEOPLE for a staff member, not
+ * screens: the client who just wrote in, by name or number. So for staff the
+ * same box also searches their own client book (live, debounced), and a hit
+ * opens the book filtered to that person. It is gated to the employee role
+ * because `/api/my/clients` is a person's own book — an operator has none, and
+ * asking would 403 — so the operator's palette stays screens-only, unchanged.
+ *
+ * Opened two ways for one reason: discoverability. ⌘K is fast once you know it
+ * and invisible until you do, so the rail carries a visible box that dispatches
+ * `nexus:open-search`. One overlay, two triggers.
  */
+
+type ScreenHit = { kind: "screen"; href: string; label: string; icon: ReactNode };
+type ClientHit = { kind: "client"; href: string; label: string; sub: string | null };
+type Hit = ScreenHit | ClientHit;
+
+const clientHref = (c: MyClient) =>
+  `/deck/my-clients?q=${encodeURIComponent(c.displayName || c.waId)}`;
+
 export function CommandPalette({ role }: { role: "operator" | "employee" }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
+  const [clients, setClients] = useState<MyClient[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const items = useMemo(() => {
+  // Screens: the same list the rail draws from, hiding the same doors the role
+  // cannot open, filtered by the query as you type.
+  const screenHits = useMemo<ScreenHit[]>(() => {
     const visible =
       role === "operator" ? NAV.filter((i) => !i.staffOnly) : NAV.filter((i) => !i.operatorOnly);
     const query = q.trim().toLowerCase();
-    return query ? visible.filter((i) => i.label.toLowerCase().includes(query)) : visible;
+    const matches = query ? visible.filter((i) => i.label.toLowerCase().includes(query)) : visible;
+    return matches.map((i) => ({ kind: "screen", href: i.href, label: i.label, icon: i.icon }));
   }, [role, q]);
+
+  // Clients: staff only, and only once there is something to search for — an
+  // empty query would fetch the whole book into a jump list nobody asked for.
+  useEffect(() => {
+    if (!open || role !== "employee") return;
+    const query = q.trim();
+    if (!query) {
+      setClients([]);
+      return;
+    }
+    let cancelled = false;
+    // Debounced so a search does not fire a request per keystroke.
+    const timer = setTimeout(() => {
+      getMyClients(query)
+        .then((res) => {
+          if (!cancelled) setClients(res.clients.slice(0, 8));
+        })
+        // Swallowed: a search that cannot reach the book still finds screens, and
+        // an error thrown here would take the whole palette down with it.
+        .catch(() => {
+          if (!cancelled) setClients([]);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, role, q]);
+
+  const clientHits = useMemo<ClientHit[]>(
+    () =>
+      clients.map((c) => ({
+        kind: "client",
+        href: clientHref(c),
+        label: c.displayName || c.waId,
+        sub: c.company || (c.displayName ? `+${c.waId}` : null),
+      })),
+    [clients]
+  );
+
+  // One flat list so the arrow keys move through screens and people alike.
+  const items = useMemo<Hit[]>(() => [...screenHits, ...clientHits], [screenHits, clientHits]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -39,13 +103,22 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
         setOpen(false);
       }
     }
+    // The visible box in the rail opens the same overlay — one search, two ways in.
+    function onOpen() {
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("nexus:open-search", onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("nexus:open-search", onOpen);
+    };
   }, []);
 
   useEffect(() => {
     if (!open) return;
     setQ("");
+    setClients([]);
     setActive(0);
     // A frame later, so the element exists to receive focus.
     const id = requestAnimationFrame(() => inputRef.current?.focus());
@@ -74,11 +147,11 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
         if (e.target === e.currentTarget) setOpen(false);
       }}
     >
-      <div className="cmdp" role="dialog" aria-label="Jump to a screen">
+      <div className="cmdp" role="dialog" aria-label="Search">
         <input
           ref={inputRef}
           className="cmdp-input"
-          placeholder="Jump to a screen…"
+          placeholder={role === "employee" ? "Search clients and screens…" : "Search screens…"}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -97,21 +170,46 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
         />
         <ul className="cmdp-list">
           {items.length === 0 ? (
-            <li className="cmdp-empty">No screen matches “{q}”.</li>
+            <li className="cmdp-empty">Nothing matches “{q}”.</li>
           ) : (
-            items.map((item, i) => (
-              <li key={item.href}>
-                <button
-                  type="button"
-                  className={`cmdp-item${i === active ? " on" : ""}`}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => go(item.href)}
-                >
-                  <span className="cmdp-ic">{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              </li>
-            ))
+            items.map((item, i) => {
+              // A quiet section label when the kind changes, so screens and
+              // people read as two answers rather than one mixed pile.
+              const heading =
+                i === 0 || items[i - 1].kind !== item.kind ? (item.kind === "client" ? "Clients" : "Screens") : null;
+              return (
+                <li key={`${item.kind}:${item.href}`}>
+                  {heading ? (
+                    <span className="cmdp-group" aria-hidden="true">
+                      {heading}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={`cmdp-item${i === active ? " on" : ""}`}
+                    onMouseEnter={() => setActive(i)}
+                    onClick={() => go(item.href)}
+                  >
+                    <span className="cmdp-ic">
+                      {item.kind === "screen" ? (
+                        item.icon
+                      ) : (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="8" r="3.4" />
+                          <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="cmdp-text">
+                      <span className="cmdp-label">{item.label}</span>
+                      {item.kind === "client" && item.sub ? (
+                        <span className="cmdp-sub">{item.sub}</span>
+                      ) : null}
+                    </span>
+                  </button>
+                </li>
+              );
+            })
           )}
         </ul>
         <div className="cmdp-foot">

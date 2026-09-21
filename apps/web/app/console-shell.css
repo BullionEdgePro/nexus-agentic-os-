@@ -177,6 +177,42 @@
 /* The first heading sits right under the brand rule — no extra air above it. */
 .deck-root.shell .rail-brand + .rail-group { padding-top: 2px; }
 
+/* The search box at the head of the rail. Styled as a FIELD rather than a link,
+   because it is the one control here that opens something instead of navigating
+   — the cursor and the border say "type", the destinations below say "go". It
+   opens the same palette ⌘K does; the shortcut hint on the right teaches the
+   faster way without hiding the slower one. */
+.deck-root.shell .rail-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 2px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--slate);
+  font-family: var(--sans);
+  font-size: 13px;
+  cursor: text;
+  transition: border-color 0.16s, color 0.16s;
+}
+.deck-root.shell .rail-search:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.deck-root.shell .rail-search-ic { width: 16px; height: 16px; flex: 0 0 16px; display: block; }
+.deck-root.shell .rail-search-label { flex: 1; text-align: left; }
+.deck-root.shell .rail-search-kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 4px;
+  color: var(--mist);
+}
+
 /* --- narrow: back to a compact bar, labels dropped rather than truncated ---
    Nine names do not fit across a phone. Below this width the bar scrolls
    horizontally as icons, which is the one arrangement that keeps every
@@ -184,6 +220,17 @@
 @media (max-width: 860px) {
   .deck-root.shell .rail-brand { display: none; }
   .deck-root.shell .rail-label { display: none; }
+  /* On the icon bar the search collapses to its glyph, like every other item —
+     a full field would not fit and would read as a text input nobody can type
+     into here. */
+  .deck-root.shell .rail-search {
+    width: auto;
+    margin: 0;
+    padding: 9px 11px;
+    border-color: var(--hairline);
+  }
+  .deck-root.shell .rail-search-label,
+  .deck-root.shell .rail-search-kbd { display: none; }
   /* Headings are wordless landmarks; on the icon-only bar they would be blank
      gaps that scroll, so they go entirely. */
   .deck-root.shell .rail-group { display: none; }

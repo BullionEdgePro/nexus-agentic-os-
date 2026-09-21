@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   addMyClient,
   getMyChannel,
@@ -44,7 +45,11 @@ export default function MyClientsPage() {
   const [channel, setChannel] = useState<MyChannel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notAStaffMember, setNotAStaffMember] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  // Pre-filled when arrived at from the header search — a client hit lands here
+  // filtered to that person rather than on the whole book. Read once as the
+  // initial value; typing in the box takes over from there.
+  const initialQuery = useSearchParams().get("q") ?? "";
+  const [search, setSearch] = useState(initialQuery);
   const [adding, setAdding] = useState(false);
 
   const load = useCallback(async (term: string) => {

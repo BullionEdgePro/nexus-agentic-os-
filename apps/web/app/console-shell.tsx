@@ -147,6 +147,23 @@ export function ConsoleShell({
           </svg>
           <span className="rail-wordmark">Nexus</span>
         </a>
+        {/* A visible way in to the search that ⌘K already opened — the shortcut
+            is fast once known and invisible until then, so the box makes it
+            findable. It dispatches the same event the palette listens for, so
+            there is one search with two triggers, not two searches. */}
+        <button
+          type="button"
+          className="rail-search"
+          onClick={() => window.dispatchEvent(new CustomEvent("nexus:open-search"))}
+          title="Search (⌘K)"
+        >
+          <svg className="rail-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.2-3.2" />
+          </svg>
+          <span className="rail-search-label">Search</span>
+          <kbd className="rail-search-kbd" aria-hidden="true">⌘K</kbd>
+        </button>
         <RailLinks role={role} />
       </nav>
       <main className="shell-main">
