@@ -286,6 +286,39 @@ export async function pageConnectionForOutbound(
   );
 }
 
+/**
+ * Every connected staff mailbox due a background sync.
+ *
+ * The email sweep needs the (org, employee) pairs whose Gmail is connected, so
+ * it can pull each one's client mail into the inbox on a schedule rather than
+ * only when that person happens to open it. Names only the routing keys — no
+ * token — for the same reason listConnections does: a function that never
+ * selects the ciphertext cannot leak it. The sweep resolves each token through
+ * `connectionSecret` per tenant, one at a time.
+ *
+ * Cross-tenant by nature: it reads every business's staff connections in one
+ * pass. The caller states that reason via `withAllTenants`, the same shape as
+ * the calendar sync's `listCalendarsForSync`, so the step out of RLS is
+ * deliberate and shows in the logs instead of silently returning nothing under
+ * DB_TENANT_ASSERT=strict.
+ *
+ * `employee_id is not null` because a mailbox is always a person's: the connect
+ * flow refuses a business-level Gmail. `access_token_enc is not null` skips a
+ * row whose credential has been cleared, which nothing can sync anyway.
+ */
+export async function listGmailConnectionsForSync(): Promise<
+  Array<{ organizationId: string; employeeId: string }>
+> {
+  const { rows } = await getPool().query<{ organization_id: string; employee_id: string }>(
+    `select organization_id, employee_id
+       from social_connections
+      where provider = 'gmail'
+        and employee_id is not null
+        and access_token_enc is not null`
+  );
+  return rows.map((r) => ({ organizationId: r.organization_id, employeeId: r.employee_id }));
+}
+
 /** Forget a connection entirely, token included. */
 export async function removeConnection(
   organizationId: string,

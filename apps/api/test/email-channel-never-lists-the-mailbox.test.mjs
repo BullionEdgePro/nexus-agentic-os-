@@ -25,7 +25,10 @@ const root = join(here, "..", "..", "..");
 const read = (...p) => readFileSync(join(root, ...p), "utf8");
 
 const GMAIL = read("apps", "api", "src", "lib", "gmail.ts");
-const CONNECTIONS = read("apps", "api", "src", "routes", "connections.ts");
+// runEmailSync moved out of the route into the service, so the background sweep
+// and the manual "sync now" share one definition — the privacy guard travelled
+// with it, and this is where it now lives.
+const EMAIL_SYNC_SERVICE = read("apps", "api", "src", "services", "email-sync.ts");
 const EMAIL_SYNC = read("packages", "db", "src", "email-sync.ts");
 const MIGRATION = read("packages", "db", "migrations", "086-email-in-the-inbox.sql");
 
@@ -52,7 +55,7 @@ test("the full fetch queries by client address, exactly like the metadata one", 
 });
 
 test("the sync only ever hands the fetch the client book, never a mailbox list", () => {
-  const fn = CONNECTIONS.slice(CONNECTIONS.indexOf("async function runEmailSync"));
+  const fn = EMAIL_SYNC_SERVICE.slice(EMAIL_SYNC_SERVICE.indexOf("async function runEmailSync"));
   assert.match(
     fn,
     /fetchClientMailFull\(\s*accessToken,\s*clients\.map/,

@@ -8,12 +8,7 @@ import {
   removeConnection,
   connectionSecret,
   recordSync,
-  connectionExpiry,
-  refreshStoredAccessToken,
   clientEmailAddresses,
-  clientContactsWithEmail,
-  findOrCreateEmailConversation,
-  insertSyncedEmailMessage,
   assignEmployeeWhatsAppNumber,
   withTenant,
 } from "@nexus/db";
@@ -40,10 +35,8 @@ import {
   gmailRedirectUri,
   gmailAuthorizeUrl,
   exchangeGoogleCode,
-  refreshGoogleToken,
   fetchGmailProfile,
   fetchClientMail,
-  fetchClientMailFull,
   sendGmail,
 } from "../lib/gmail.js";
 import {
@@ -56,6 +49,10 @@ import {
   fetchFacebookPages,
   subscribePageToWebhook,
 } from "../lib/facebook-onboarding.js";
+// gmailToken and runEmailSync live in the service so the background sweep and
+// this route's manual "sync now" share one definition of "resolve a token,
+// then read a person's client mail into the inbox" — see services/email-sync.ts.
+import { gmailToken, runEmailSync } from "../services/email-sync.js";
 import type { SessionScope } from "../lib/session.js";
 import { env } from "../config/env.js";
 import { clientKey, loginBlocked, recordLoginFailure, clearLoginFailures } from "../lib/login-throttle.js";
@@ -657,73 +654,6 @@ connectionsRoute.delete("/tiktok", async (c) => {
 // Gmail
 // ============================================================
 
-/**
- * A usable Gmail access token, refreshed if it has expired.
- *
- * Google's access tokens last an hour, so refreshing is the ordinary path
- * rather than the exception, and it happens HERE — once, in front of every
- * Gmail call — instead of being remembered at each call site.
- *
- * The refresh writes back only the access token. A Google refresh response does
- * not include a new refresh token, and round-tripping through `saveConnection`
- * would write null over the working one, leaving a connection that dies an hour
- * later with nothing to renew it.
- */
-async function gmailToken(
-  owner: { organizationId: string; employeeId: string | null }
-): Promise<{ accessToken: string; scopes: string[] } | { error: string; status: 404 | 401 }> {
-  const stored = await withTenant(owner.organizationId, () =>
-    connectionSecret(owner.organizationId, owner.employeeId, "gmail")
-  );
-  if (!stored) {
-    return {
-      error: "Gmail is not connected, or the stored sign-in can no longer be read. Connect it again.",
-      status: 404,
-    };
-  }
-
-  const fresh = await withTenant(owner.organizationId, () =>
-    connectionExpiry(owner.organizationId, owner.employeeId, "gmail")
-  );
-  // A minute of slack: a token that expires while the request is in flight
-  // fails in a way that looks like a revoked connection.
-  const stillGood = fresh && fresh.getTime() - Date.now() > 60_000;
-  if (stillGood) return { accessToken: stored.accessToken, scopes: stored.scopes };
-
-  if (!stored.refreshToken) {
-    return {
-      error:
-        "This Gmail sign-in has expired and carries nothing to renew it — that happens when consent was given without offline access. Connect it again.",
-      status: 401,
-    };
-  }
-
-  try {
-    const renewed = await refreshGoogleToken(stored.refreshToken);
-    await withTenant(owner.organizationId, () =>
-      refreshStoredAccessToken(
-        owner.organizationId,
-        owner.employeeId,
-        "gmail",
-        renewed.accessToken,
-        renewed.expiresAt
-      )
-    );
-    return { accessToken: renewed.accessToken, scopes: stored.scopes };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await withTenant(owner.organizationId, () =>
-      recordSync(owner.organizationId, owner.employeeId, "gmail", message.slice(0, 200))
-    );
-    return {
-      error: message.startsWith("GMAIL_RECONNECT")
-        ? "Google has signed this connection out — access was revoked or the password changed. Connect it again."
-        : "Could not renew the Gmail sign-in just now. Try again shortly.",
-      status: 401,
-    };
-  }
-}
-
 connectionsRoute.get("/gmail/start", async (c) => {
   const scope = scopeOf(c);
   const owner = ownerOf(scope);
@@ -926,78 +856,6 @@ connectionsRoute.post("/gmail/send", async (c) => {
     return c.json({ error: `It did not send: ${message}` }, 502);
   }
 });
-
-/** Every email address in a header value ("Ada <a@x.com>, b@y.com"), lowercased. */
-const emailsIn = (headerValue: string | null): string[] => {
-  if (!headerValue) return [];
-  const found = headerValue.match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/gi) ?? [];
-  return found.map((e) => e.toLowerCase());
-};
-
-/**
- * Pull the mail between a staff member and their clients into email
- * conversations, so it reads in the inbox beside their WhatsApp threads.
- *
- * The privacy boundary is unchanged from the read-only view: fetchClientMailFull
- * queries ONLY addresses in this person's client book, so a mailbox is never
- * listed and nothing outside those threads is touched. What is new is that the
- * body is read (the owner chose this) and stored — for those already-scoped
- * messages only.
- *
- * Direction is decided by the sender: a message from the connected mailbox is
- * outbound, anything else inbound. Dedup on the Gmail message id means running
- * this every inbox open is safe and cheap — a message already stored inserts
- * nothing. The Gmail fetch (slow, network) is kept OUTSIDE the write transaction
- * so a database connection is never held open across it.
- */
-async function runEmailSync(
-  owner: { organizationId: string; employeeId: string | null },
-  accessToken: string
-): Promise<{ newMessages: number; threads: number }> {
-  const profile = await fetchGmailProfile(accessToken);
-  const ownerAddress = profile.emailAddress.trim().toLowerCase();
-
-  const clients = await withTenant(owner.organizationId, () =>
-    clientContactsWithEmail(owner.organizationId, owner.employeeId as string)
-  );
-  if (clients.length === 0) return { newMessages: 0, threads: 0 };
-
-  const byAddress = new Map(clients.map((client) => [client.email, client.contactId]));
-  const messages = await fetchClientMailFull(
-    accessToken,
-    clients.map((client) => client.email),
-    40
-  );
-  if (messages.length === 0) return { newMessages: 0, threads: 0 };
-
-  return withTenant(owner.organizationId, async () => {
-    let newMessages = 0;
-    const touched = new Set<string>();
-    for (const m of messages) {
-      const fromEmail = emailsIn(m.from)[0] ?? "";
-      const involved = [...emailsIn(m.from), ...emailsIn(m.to)];
-      // The client this message is with: an involved address that is in the book
-      // and is not the staff member's own mailbox.
-      const clientEmail = involved.find((a) => a !== ownerAddress && byAddress.has(a));
-      if (!clientEmail) continue;
-      const contactId = byAddress.get(clientEmail)!;
-      const conversationId = await findOrCreateEmailConversation(owner.organizationId, contactId);
-      touched.add(conversationId);
-      const inserted = await insertSyncedEmailMessage({
-        organizationId: owner.organizationId,
-        conversationId,
-        contactId,
-        direction: fromEmail === ownerAddress ? "outbound" : "inbound",
-        body: (m.body || m.snippet || "").slice(0, 20_000),
-        emailMessageId: m.id,
-        emailThreadId: m.threadId || null,
-        receivedAt: m.receivedAt,
-      });
-      if (inserted) newMessages += 1;
-    }
-    return { newMessages, threads: touched.size };
-  });
-}
 
 /**
  * Sync this staff member's client email into the inbox, on demand.

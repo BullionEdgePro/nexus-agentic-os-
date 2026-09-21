@@ -22,6 +22,7 @@ export const SCHEDULED_JOBS = [
   "procedure-inference",
   "forecast-cycle",
   "calendar-sync",
+  "email-sync",
   "scheduled-messages",
 ] as const;
 
@@ -50,6 +51,13 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
   // free as they were the last time it ran, and the agent goes on promising
   // them to customers. Three intervals plus room for a deploy.
   "calendar-sync": 60 * MINUTE,
+  // Three of its fifteen-minute intervals plus room for a deploy, and above the
+  // operators sweep, which must stay the tightest alarm on the platform. A
+  // silent email sync does not look like an outage from any screen: inbound
+  // customer mail simply stops appearing in the inbox, and the threads already
+  // there go on standing. This is the number that says the sweep itself has
+  // died — an individual mailbox's failure is recorded on its own connection row.
+  "email-sync": 60 * MINUTE,
   // The sweep runs every minute, but its heartbeat tolerance is deliberately
   // loose — above the operators sweep, which must stay the tightest alarm on the
   // platform. This number is about noticing a DEAD sweep, not the lateness of one

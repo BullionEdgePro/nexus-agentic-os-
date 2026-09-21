@@ -10,6 +10,8 @@ import { TEMPLATE_SYNC_QUEUE, scheduleTemplateSync } from "./queue/template-sync
 import { processTemplateSyncJob } from "./queue/template-sync-processor.js";
 import { CALENDAR_SYNC_QUEUE, scheduleCalendarSync } from "./queue/calendar-sync-queue.js";
 import { processCalendarSyncJob } from "./queue/calendar-sync-processor.js";
+import { EMAIL_SYNC_QUEUE, scheduleEmailSync } from "./queue/email-sync-queue.js";
+import { processEmailSyncJob } from "./queue/email-sync-processor.js";
 import { QUALITY_ROLLUP_QUEUE, scheduleQualityRollup } from "./queue/quality-queue.js";
 import { processQualityRollupJob } from "./queue/quality-processor.js";
 import { OPERATORS_QUEUE, scheduleOperators } from "./queue/operators-queue.js";
@@ -80,6 +82,14 @@ const calendarSyncWorker = new Worker(CALENDAR_SYNC_QUEUE, processCalendarSyncJo
 });
 calendarSyncWorker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err }, "Calendar sync job failed")
+);
+
+const emailSyncWorker = new Worker(EMAIL_SYNC_QUEUE, processEmailSyncJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+emailSyncWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Email sync job failed")
 );
 
 const qualityWorker = new Worker(QUALITY_ROLLUP_QUEUE, processQualityRollupJob, {
@@ -174,6 +184,12 @@ scheduleCalendarSync()
   .then(() => logger.info("Calendar sync scheduled (every 15m)"))
   .catch((err) => logger.warn({ err }, "Could not schedule calendar sync"));
 
+// A customer's email must reach the inbox without anybody remembering to open
+// their mailbox. This is the floor under the manual sync the inbox fires on open.
+scheduleEmailSync()
+  .then(() => logger.info("Email sync scheduled (every 15m)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule email sync"));
+
 // Hourly rather than nightly: the day an owner most wants to look at is the one
 // happening now, and each run recomputes rather than accumulates, so running it
 // often costs correctness nothing.
@@ -232,6 +248,8 @@ async function shutdown() {
     broadcastWorker.close(),
     reindexWorker.close(),
     templateSyncWorker.close(),
+    calendarSyncWorker.close(),
+    emailSyncWorker.close(),
     qualityWorker.close(),
     // operatorsWorker was missing from this list — noticed while adding the one
     // below it. A worker left out is not closed on SIGTERM, so its in-flight job

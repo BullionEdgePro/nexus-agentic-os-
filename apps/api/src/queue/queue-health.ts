@@ -8,6 +8,7 @@ import { QUALITY_ROLLUP_QUEUE } from "./quality-queue.js";
 import { KNOWLEDGE_REINDEX_QUEUE } from "./reindex-queue.js";
 import { TEMPLATE_SYNC_QUEUE } from "./template-sync-queue.js";
 import { CALENDAR_SYNC_QUEUE } from "./calendar-sync-queue.js";
+import { EMAIL_SYNC_QUEUE } from "./email-sync-queue.js";
 import { SCHEDULED_MESSAGES_QUEUE } from "./scheduled-messages-queue.js";
 import { SOCIAL_INBOUND_QUEUE } from "./social-inbound-queue.js";
 
@@ -59,6 +60,7 @@ const QUEUES = [
   PROCEDURE_INFERENCE_QUEUE,
   FORECAST_QUEUE,
   CALENDAR_SYNC_QUEUE,
+  EMAIL_SYNC_QUEUE,
   SCHEDULED_MESSAGES_QUEUE,
 ] as const;
 
