@@ -180,8 +180,20 @@ connectionsRoute.get("/", async (c) => {
     listConnections(owner.organizationId, owner.employeeId)
   );
 
+  // Facebook and Instagram are connected at the BUSINESS level (employee_id null),
+  // so a staff member's own list above never contains them — which is why the
+  // panel could not show whether the Page/IG was connected. Fetch the business's
+  // own connections too and surface just those two, so each card can display
+  // "Connected — <account>" the same way Gmail and WhatsApp already do.
+  const businessConnections = await withTenant(owner.organizationId, () =>
+    listConnections(owner.organizationId, null)
+  );
+  const pageConnections = businessConnections.filter(
+    (conn) => conn.provider === "facebook" || conn.provider === "instagram"
+  );
+
   return c.json({
-    connections,
+    connections: [...connections, ...pageConnections],
     providers: [
       {
         id: "tiktok",

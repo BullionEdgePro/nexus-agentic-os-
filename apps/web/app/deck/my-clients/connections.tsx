@@ -79,6 +79,9 @@ export function ConnectionsPanel() {
   const instagram = providers.find((p) => p.id === "instagram");
   const mailbox = connections?.find((c) => c.provider === "gmail") ?? null;
   const whatsappConn = connections?.find((c) => c.provider === "whatsapp") ?? null;
+  // Business-level (the API folds these in), so each Meta card can show it is connected.
+  const facebookConn = connections?.find((c) => c.provider === "facebook") ?? null;
+  const instagramConn = connections?.find((c) => c.provider === "instagram") ?? null;
 
   if (connections === null || (!gmail && !whatsapp && !facebook && !instagram)) return null;
 
@@ -200,6 +203,7 @@ export function ConnectionsPanel() {
       {facebook ? (
         <MetaConnectCard
           provider={facebook}
+          connection={facebookConn}
           buttonLabel="Connect Page"
           busy={busy}
           onConnect={startFacebookConnect}
@@ -211,6 +215,7 @@ export function ConnectionsPanel() {
       {instagram ? (
         <MetaConnectCard
           provider={instagram}
+          connection={instagramConn}
           buttonLabel="Connect Instagram"
           busy={busy}
           onConnect={startInstagramConnect}
@@ -233,6 +238,7 @@ export function ConnectionsPanel() {
  */
 function MetaConnectCard({
   provider,
+  connection,
   buttonLabel,
   busy,
   onConnect,
@@ -240,6 +246,7 @@ function MetaConnectCard({
   onError,
 }: {
   provider: ConnectionProvider;
+  connection: SocialConnection | null;
   buttonLabel: string;
   busy: boolean;
   onConnect: () => Promise<{ url: string }>;
@@ -251,6 +258,11 @@ function MetaConnectCard({
       <div className="cnx-head">
         <div>
           <strong>{provider.name}</strong>
+          {/* Connected state, the same chip Gmail and WhatsApp show, so a staff
+              member can see at a glance the Page/IG is wired up. */}
+          {connection ? (
+            <span className="cnx-on">{connection.displayName ?? "connected"}</span>
+          ) : null}
         </div>
         {provider.configured ? (
           <button
@@ -269,13 +281,18 @@ function MetaConnectCard({
               }
             }}
           >
-            {buttonLabel}
+            {connection ? "Reconnect" : buttonLabel}
           </button>
         ) : null}
       </div>
 
       <p className="cnx-offers">{provider.offers}</p>
       <p className="cnx-cannot">{provider.cannot}</p>
+      {/* A stored token that can no longer be read means the connection is stale —
+          say so, since the card otherwise reads as healthy. */}
+      {connection && !connection.usable ? (
+        <p className="cnx-needs">The stored sign-in can no longer be read — reconnect it.</p>
+      ) : null}
       {provider.needs ? <p className="cnx-needs">{provider.needs}</p> : null}
     </div>
   );
