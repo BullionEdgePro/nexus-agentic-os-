@@ -439,8 +439,12 @@ connectionsRoute.get("/instagram/start", (c) => startFacebookLogin(c, "instagram
 
 connectionsRoute.get("/facebook/callback", async (c) => {
   const app = appBaseUrl();
+  // Back to the connections panel, NOT the Channels screen. Facebook/Instagram are
+  // connected by a STAFF member from /deck/my-clients, and /deck/channels is
+  // operator-only — sending staff there dropped them on "You don't have access to
+  // that business" instead of the success message. The panel reads ?connected=.
   const back = (message: string) =>
-    c.redirect(`${app}/deck/channels?connected=${encodeURIComponent(message)}`, 302);
+    c.redirect(`${app}/deck/my-clients?connected=${encodeURIComponent(message)}`, 302);
 
   const refused = c.req.query("error");
   if (refused) {
