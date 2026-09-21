@@ -34,14 +34,25 @@ test("a WhatsApp reply still goes out via WhatsApp", () => {
 });
 
 test("an unsupported channel is refused, never silently sent on WhatsApp", () => {
-  // email/sms/phone have no send path; the dispatcher must throw rather than fall
-  // through to the WhatsApp branch.
+  // sms/phone have no send path; the dispatcher must throw rather than fall
+  // through to the WhatsApp branch. (email now has its own door — see below.)
   assert.match(DISPATCH, /is not available yet/);
   // The WhatsApp send is guarded by an explicit channel check, so it cannot be
   // the default arm of the function.
   const waAt = DISPATCH.indexOf('target.channel === "whatsapp"');
   const throwAt = DISPATCH.indexOf("is not available yet");
   assert.ok(waAt !== -1 && throwAt > waAt, "the unsupported-channel throw must come after the whatsapp branch, not before");
+});
+
+test("an email reply leaves by the owner's mailbox, threaded onto the conversation", () => {
+  // Email is no longer a refused channel: it sends through the owner's Gmail, and
+  // the service resolves who and where from the conversation id.
+  assert.match(DISPATCH, /target\.channel === "email"/);
+  assert.match(DISPATCH, /sendEmailReply\(target\.conversationId, text\)/);
+  assert.match(DISPATCH, /emailMessageId: sent\.gmailMessageId/, "the Gmail id comes back so the send can be stored and later deduped");
+  // The target carries the conversation id, which is all email needs to resolve
+  // its mailbox and thread.
+  assert.match(DISPATCH, /conversationId: string/);
 });
 
 test("dormant until connected: a social reply with no connected Page fails honestly", () => {
@@ -74,11 +85,24 @@ test("the scheduled sweep sends on the conversation's channel too", () => {
 });
 
 test("an outbound social message is stored with its mid, and status stays keyed on the wamid", () => {
-  // social_message_id is written, but the 'queued' vs 'sent' status still keys on
-  // wa_message_id alone — FB/IG has no delivery-receipt webhook wired, so a social
-  // reply is 'sent' (accepted), never parked at 'queued' forever.
+  // social_message_id is written, but only a wa_message_id parks a row at
+  // 'queued' to await a receipt — FB/IG has no delivery-receipt webhook wired, so
+  // a social reply is 'sent' (accepted), never parked at 'queued' forever.
   assert.match(MESSAGES, /social_message_id/);
-  assert.match(MESSAGES, /case when \$4::text is null then 'sent' else 'queued' end/);
+  // The status CASE keys 'queued' on the wamid alone; everything else is 'sent',
+  // except an email reply, which is 'delivered' because a 200 from Gmail IS
+  // delivery (there is no later receipt to wait on).
+  assert.match(MESSAGES, /case when \$4::text is not null then 'queued'/);
+  assert.match(MESSAGES, /when \$10::text is not null then 'delivered'/);
+  assert.match(MESSAGES, /else 'sent' end/);
+});
+
+test("an outbound email reply is stored as email, with the Gmail id the sync dedups on", () => {
+  // message_type 'email' so it reads with the synced thread rather than as a text
+  // bubble, and email_message_id stored so the inbound sweep skips this very send
+  // when it sees it in the mailbox instead of appending a second copy.
+  assert.match(MESSAGES, /when \$10::text is not null then 'email' else 'text' end/);
+  assert.match(MESSAGES, /email_message_id, email_thread_id/);
 });
 
 test("the conversation lookup carries the channel and the social recipient a reply needs", () => {

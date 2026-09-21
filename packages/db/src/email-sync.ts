@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants } from "./client.js";
 import { contactServedBy } from "./contacts.js";
 import { contactOwnedBy } from "./client-book.js";
 
@@ -41,6 +41,85 @@ export async function clientContactsWithEmail(
     [organizationId, employeeId]
   );
   return rows.map((r) => ({ contactId: r.contact_id, email: r.email }));
+}
+
+/**
+ * Everything an outbound email reply needs, resolved from a conversation id.
+ *
+ * A reply to an email thread has to leave from the RIGHT mailbox — the staff
+ * member who owns the client, sending as themselves — to the RIGHT address, and
+ * thread onto the conversation it answers rather than starting a new one. That
+ * is four facts spread across three tables:
+ *
+ *   - the owning employee (whose Gmail token sends it), from the contact;
+ *   - the client's email address (the recipient), from the contact attributes;
+ *   - the Gmail thread to continue and the most recent message in it to reply to,
+ *     from the messages already synced into this conversation.
+ *
+ * CROSS-TENANT, and named so, for the same reason `findConversationById` is: a
+ * conversation id is globally unique and the caller has only the id, so this
+ * resolves the tenant rather than running inside one. The reply route enforces
+ * access before it ever calls here.
+ *
+ * The message fields are null on a conversation that is on the email channel but
+ * has no synced mail yet — the reply then goes out as a fresh thread, which the
+ * caller handles. `toEmail`/`ownerEmployeeId` null means the reply cannot be
+ * sent at all (no address on file, or a contact owned by nobody), and the caller
+ * refuses with an honest reason rather than sending into the void.
+ */
+export interface EmailReplyContext {
+  organizationId: string;
+  ownerEmployeeId: string | null;
+  toEmail: string | null;
+  /** The Gmail thread to continue; null when nothing is synced yet. */
+  threadId: string | null;
+  /** The most recent synced message's Gmail id, to reply to for threading. */
+  replyToGmailMessageId: string | null;
+}
+
+export async function emailReplyContext(conversationId: string): Promise<EmailReplyContext | null> {
+  return withAllTenants(
+    "resolve an email conversation to the mailbox and thread a reply must use — the caller has only the id",
+    async () => {
+      const { rows } = await getPool().query<{
+        organization_id: string;
+        owner_employee_id: string | null;
+        to_email: string | null;
+        email_thread_id: string | null;
+        email_message_id: string | null;
+      }>(
+        // The latest synced email in this conversation (either direction) is the
+        // one a reply threads onto — its thread id continues the thread, its
+        // Gmail id is what the reply is In-Reply-To. A lateral limit-1 rather
+        // than an aggregate so both columns come from the SAME message.
+        `select c.organization_id,
+                ct.owner_employee_id,
+                lower(ct.attributes->>'email') as to_email,
+                m.email_thread_id,
+                m.email_message_id
+           from conversations c
+           join contacts ct on ct.id = c.contact_id
+           left join lateral (
+             select email_thread_id, email_message_id
+               from messages
+              where conversation_id = c.id and email_message_id is not null
+              order by created_at desc
+              limit 1
+           ) m on true
+          where c.id = $1`,
+        [conversationId]
+      );
+      const row = rows[0];
+      if (!row) return null;
+      return {
+        organizationId: row.organization_id,
+        ownerEmployeeId: row.owner_employee_id,
+        toEmail: row.to_email && row.to_email.trim() ? row.to_email.trim() : null,
+        threadId: row.email_thread_id,
+        replyToGmailMessageId: row.email_message_id,
+      };
+    }
+  );
 }
 
 /**

@@ -399,33 +399,96 @@ export async function fetchClientMailFull(
 }
 
 /**
+ * The two headers a reply needs to thread, read from the message it answers.
+ *
+ * Gmail's own `threadId` groups a reply in the SENDER's mailbox, but the
+ * RECIPIENT's mail client threads on RFC headers — In-Reply-To / References
+ * pointing at the original's `Message-ID`, and a matching subject. Those live in
+ * the message's raw headers, which the sync does not store, so they are fetched
+ * on demand at reply time from the one message being replied to. Metadata format
+ * only: the body is not needed and not requested.
+ *
+ * Returns nulls rather than throwing when the message cannot be read — a reply
+ * that loses its threading is worse than a reply that fails, so the caller sends
+ * it anyway, threaded by Gmail's threadId alone.
+ */
+export async function fetchMessageThreadingHeaders(
+  accessToken: string,
+  gmailMessageId: string
+): Promise<{ messageId: string | null; subject: string | null }> {
+  try {
+    const message = await gmailGet(
+      `/messages/${gmailMessageId}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=Subject`,
+      accessToken
+    );
+    const payload = (message.payload ?? {}) as Record<string, unknown>;
+    const headers = Array.isArray(payload.headers)
+      ? (payload.headers as Array<Record<string, unknown>>)
+      : [];
+    return {
+      messageId: header(headers, "message-id") || null,
+      subject: header(headers, "subject") || null,
+    };
+  } catch {
+    return { messageId: null, subject: null };
+  }
+}
+
+/**
  * Send one, as the connected account.
  *
  * RFC 2822 assembled here rather than by a library: the message is a subject, a
- * recipient and a body, and a dependency for three headers is a dependency to
+ * recipient and a body, and a dependency for these headers is a dependency to
  * keep updated for as long as this exists.
+ *
+ * A reply carries three more things than a fresh mail: Gmail's `threadId` (so it
+ * groups in the sender's mailbox), and the In-Reply-To / References headers (so
+ * it threads in the recipient's client). All optional — omitted, this sends a
+ * new thread exactly as before.
  */
 export async function sendGmail(
   accessToken: string,
-  input: { to: string; subject: string; body: string }
+  input: {
+    to: string;
+    subject: string;
+    body: string;
+    threadId?: string | null;
+    inReplyTo?: string | null;
+    references?: string | null;
+  }
 ): Promise<string> {
   // Folded per RFC 2047 so a non-ASCII subject is not mangled. Bodies are
   // base64 anyway, so only the subject needs it.
   const subject = `=?UTF-8?B?${Buffer.from(input.subject, "utf8").toString("base64")}?=`;
-  const mime = [
+  const lines = [
     `To: ${input.to}`,
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",
+  ];
+  // In-Reply-To names the single message being answered; References is the whole
+  // chain a strict client walks. With only one id to hand, both carry it — which
+  // is valid and is what threads the reply for the recipient.
+  if (input.inReplyTo) {
+    lines.push(`In-Reply-To: ${input.inReplyTo}`);
+    lines.push(`References: ${input.references || input.inReplyTo}`);
+  }
+  const mime = [
+    ...lines,
     "",
     Buffer.from(input.body, "utf8").toString("base64"),
   ].join("\r\n");
 
+  const body: Record<string, unknown> = { raw: Buffer.from(mime, "utf8").toString("base64url") };
+  // Gmail rejects a threadId whose subject does not match the thread, so the
+  // caller sets a matching "Re: …" subject when it passes one.
+  if (input.threadId) body.threadId = input.threadId;
+
   const response = await fetch(`${API}/messages/send`, {
     method: "POST",
     headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-    body: JSON.stringify({ raw: Buffer.from(mime, "utf8").toString("base64url") }),
+    body: JSON.stringify(body),
   });
 
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;

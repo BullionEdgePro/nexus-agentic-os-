@@ -48,13 +48,16 @@ test("the send returns Meta's receipt instead of throwing it away", () => {
 });
 
 test("'sent' stops being a claim the insert makes on Meta's behalf", () => {
-  // The literal is gone. With a receipt to follow the honest state is 'queued'
-  // — accepted, not yet confirmed — and the webhook moves it from there.
+  // The unconditional literal is gone. With a receipt to follow (a wamid) the
+  // honest state is 'queued' — accepted, not yet confirmed — and the webhook
+  // moves it from there. An email reply is 'delivered' (a 200 from Gmail IS
+  // delivery, no receipt to await); everything else is 'sent'.
   assert.match(
     MESSAGES,
-    /case when \$4::text is null then 'sent' else 'queued' end/,
+    /case when \$4::text is not null then 'queued'/,
     "outbound status must depend on whether a receipt exists to follow"
   );
+  assert.match(MESSAGES, /when \$10::text is not null then 'delivered'\s*\n?\s*else 'sent' end/);
 
   // Without a wamid there will never be a receipt. Parking those at 'queued'
   // forever would have the operator report a permanent backlog of messages

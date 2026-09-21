@@ -85,7 +85,12 @@ conversationsRoute.post("/:id/messages", async (c) => {
   // Instagram — not always WhatsApp. The dispatcher returns the provider's id in
   // the field that belongs to that channel; both null when it accepted without
   // one, which is rare and not a failure.
-  let dispatched: { waMessageId: string | null; socialMessageId: string | null };
+  let dispatched: {
+    waMessageId: string | null;
+    socialMessageId: string | null;
+    emailMessageId: string | null;
+    emailThreadId: string | null;
+  };
   try {
     dispatched = await sendReplyOnChannel(
       {
@@ -94,6 +99,7 @@ conversationsRoute.post("/:id/messages", async (c) => {
         phoneNumberId: conversation.phoneNumberId,
         contactWaId: conversation.contactWaId,
         contactExternalId: conversation.contactExternalId,
+        conversationId,
       },
       body.text
     );
@@ -113,6 +119,9 @@ conversationsRoute.post("/:id/messages", async (c) => {
     // to know whether it arrived, it is this rather than an agent's reply.
     waMessageId: dispatched.waMessageId ?? undefined,
     socialMessageId: dispatched.socialMessageId ?? undefined,
+    // An email reply stores its Gmail id (so the sweep dedups it) and thread.
+    emailMessageId: dispatched.emailMessageId ?? undefined,
+    emailThreadId: dispatched.emailThreadId ?? undefined,
   });
 
   await Promise.all([

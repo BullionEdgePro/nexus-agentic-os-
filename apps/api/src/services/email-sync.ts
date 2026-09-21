@@ -26,6 +26,7 @@ import {
   clientContactsWithEmail,
   connectionExpiry,
   connectionSecret,
+  emailReplyContext,
   findOrCreateEmailConversation,
   insertSyncedEmailMessage,
   listGmailConnectionsForSync,
@@ -34,7 +35,13 @@ import {
   withAllTenants,
   withTenant,
 } from "@nexus/db";
-import { fetchClientMailFull, fetchGmailProfile, refreshGoogleToken } from "../lib/gmail.js";
+import {
+  fetchClientMailFull,
+  fetchGmailProfile,
+  fetchMessageThreadingHeaders,
+  refreshGoogleToken,
+  sendGmail,
+} from "../lib/gmail.js";
 import { logger } from "../lib/logger.js";
 
 /** Whose mailbox — an (org, employee) pair. Gmail is always a person's here. */
@@ -255,4 +262,89 @@ export async function syncAllMailboxes(): Promise<EmailSyncResult> {
 
   logger.info(result, "Mailboxes synced");
   return result;
+}
+
+/** Add "Re: " unless the subject already carries one (any case, once). */
+function replySubject(subject: string | null): string {
+  const base = (subject ?? "").trim();
+  if (!base) return "Re: (no subject)";
+  return /^re:/i.test(base) ? base : `Re: ${base}`;
+}
+
+export interface SentEmailReply {
+  /** The Gmail id of the message just sent — stored so the next sync dedups it. */
+  gmailMessageId: string;
+  /** The thread it went out on, for the stored row. */
+  threadId: string | null;
+}
+
+/**
+ * Reply to an email conversation, as the staff member who owns the client.
+ *
+ * The other half of "email is a real channel": inbound arrives on its own (the
+ * sweep), and this sends the answer back from the inbox, on the same thread, so
+ * the customer sees a reply rather than a new mail out of nowhere.
+ *
+ * It leaves from the OWNER's mailbox — a reply to a client is from the person
+ * whose client they are, sent as themselves — resolved through the same
+ * `gmailToken` the sweep uses. The reply threads three ways: Gmail's threadId
+ * groups it in the sender's mailbox, and In-Reply-To/References onto the last
+ * message's Message-ID thread it in the recipient's client, under a matching
+ * "Re: …" subject.
+ *
+ * Refuses honestly rather than sending wrong: no address on file, a contact
+ * owned by nobody, or a mailbox that will not authorise each throw a message the
+ * inbox can show. A missing thread (an email conversation with nothing synced
+ * yet) is not a refusal — it sends a fresh thread.
+ *
+ * The Gmail id it returns is stored on the outbound row as email_message_id, so
+ * when the sweep later sees this very message in the mailbox its dedup skips it
+ * rather than appending a second copy.
+ */
+export async function sendEmailReply(conversationId: string, text: string): Promise<SentEmailReply> {
+  const ctx = await emailReplyContext(conversationId);
+  if (!ctx) {
+    throw new Error("This conversation could not be found to reply to.");
+  }
+  if (!ctx.toEmail) {
+    throw new Error(
+      "This client has no email address on file, so there is nowhere to send the reply. Add one to their client record first."
+    );
+  }
+  if (!ctx.ownerEmployeeId) {
+    throw new Error(
+      "This client is not owned by a staff member, so there is no mailbox to reply from."
+    );
+  }
+
+  const token = await gmailToken({
+    organizationId: ctx.organizationId,
+    employeeId: ctx.ownerEmployeeId,
+  });
+  if ("error" in token) throw new Error(token.error);
+
+  // Threading headers come from the message being replied to, fetched on demand
+  // because the sync does not store them. Best-effort: if it cannot be read, the
+  // reply still sends, threaded by Gmail's threadId alone.
+  let inReplyTo: string | null = null;
+  let subjectSource: string | null = null;
+  if (ctx.replyToGmailMessageId) {
+    const headers = await fetchMessageThreadingHeaders(token.accessToken, ctx.replyToGmailMessageId);
+    inReplyTo = headers.messageId;
+    subjectSource = headers.subject;
+  }
+
+  const gmailMessageId = await sendGmail(token.accessToken, {
+    to: ctx.toEmail,
+    subject: replySubject(subjectSource),
+    body: text,
+    threadId: ctx.threadId,
+    inReplyTo,
+  });
+
+  logger.info(
+    { conversationId, employeeId: ctx.ownerEmployeeId, gmailMessageId },
+    "Email reply sent from the inbox"
+  );
+  return { gmailMessageId, threadId: ctx.threadId };
 }

@@ -133,6 +133,11 @@ export interface InsertOutboundMessageInput {
   waMessageId?: string;
   /** Meta's Messenger/Instagram message id (the mid), for a reply sent on those channels. */
   socialMessageId?: string;
+  /** Gmail id of an email reply. Its presence makes this an 'email' message, and
+   *  it is the dedup key the sync uses to skip this very send when it sees it. */
+  emailMessageId?: string;
+  /** The Gmail thread an email reply went out on. */
+  emailThreadId?: string;
   /** Employee this reply is attributed to (their twin authored it). */
   employeeId?: string | null;
 }
@@ -165,10 +170,20 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
     // wired here, so a social reply parks at 'sent' (accepted), exactly as a
     // WhatsApp send with no wamid does — only a wa_message_id means "await a
     // receipt", so the status CASE stays keyed on it alone.
+    //
+    // An email reply (email_message_id present) is its own shape: message_type
+    // 'email' so it reads with the synced thread rather than as a text bubble,
+    // and status 'delivered' because a 200 from Gmail IS delivery — there is no
+    // later receipt to wait on, unlike a wamid. The email id also stores as the
+    // dedup key so the inbound sweep skips this send when it sees it in the box.
     `insert into messages
-       (organization_id, conversation_id, contact_id, wa_message_id, social_message_id, direction, sender_type, sender_id, message_type, body, status, employee_id)
-     values ($1, $2, $3, $4, $9, 'outbound', $5, $6, 'text', $7,
-             case when $4::text is null then 'sent' else 'queued' end, $8)
+       (organization_id, conversation_id, contact_id, wa_message_id, social_message_id, direction, sender_type, sender_id, message_type, body, status, employee_id, email_message_id, email_thread_id)
+     values ($1, $2, $3, $4, $9, 'outbound', $5, $6,
+             case when $10::text is not null then 'email' else 'text' end, $7,
+             case when $4::text is not null then 'queued'
+                  when $10::text is not null then 'delivered'
+                  else 'sent' end,
+             $8, $10, $11)
      returning id, conversation_id, direction, sender_type, body, status, created_at`,
     [
       input.organizationId,
@@ -180,6 +195,8 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
       input.body,
       input.employeeId ?? null,
       input.socialMessageId ?? null,
+      input.emailMessageId ?? null,
+      input.emailThreadId ?? null,
     ]
   );
   const row = rows[0];

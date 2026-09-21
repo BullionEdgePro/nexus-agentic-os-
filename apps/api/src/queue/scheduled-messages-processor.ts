@@ -42,7 +42,12 @@ export async function processScheduledMessageSweep(_job: Job): Promise<void> {
           continue;
         }
 
-        let dispatched: { waMessageId: string | null; socialMessageId: string | null };
+        let dispatched: {
+          waMessageId: string | null;
+          socialMessageId: string | null;
+          emailMessageId: string | null;
+          emailThreadId: string | null;
+        };
         try {
           // Sent on the conversation's own channel, like a live reply. A
           // scheduled reply on a channel that is not connected (or unsupported)
@@ -54,6 +59,7 @@ export async function processScheduledMessageSweep(_job: Job): Promise<void> {
               phoneNumberId: convo.phoneNumberId,
               contactWaId: convo.contactWaId,
               contactExternalId: convo.contactExternalId,
+              conversationId: convo.id,
             },
             m.body
           );
@@ -75,6 +81,8 @@ export async function processScheduledMessageSweep(_job: Job): Promise<void> {
           body: m.body,
           waMessageId: waMessageId ?? undefined,
           socialMessageId: dispatched.socialMessageId ?? undefined,
+          emailMessageId: dispatched.emailMessageId ?? undefined,
+          emailThreadId: dispatched.emailThreadId ?? undefined,
         });
 
         // A person's message took this conversation, just on a delay: pause the
