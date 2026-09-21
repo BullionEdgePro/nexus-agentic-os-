@@ -138,6 +138,21 @@ export const NAV: NavItem[] = [
     staffOnly: true,
   },
   {
+    href: "/deck/connections",
+    label: "Connections",
+    // A staff member's own channels in one place — the mailbox, the WhatsApp
+    // Business number, the Facebook Page and the Instagram account they answer
+    // from. Staff-only like the rest of the book: /api/connections is a person's
+    // own accounts, which an operator has none of.
+    staffOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M10 13a4 4 0 0 0 5.7.4l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.3 1.3" />
+        <path d="M14 11a4 4 0 0 0-5.7-.4L6 12.9a4 4 0 0 0 5.7 5.7l1.3-1.3" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/my-settings",
     label: "Settings",
     // Your own account — name, photo, WhatsApp number and the socials your link
@@ -334,7 +349,7 @@ export const NAV: NavItem[] = [
 // not an item, so it must not answer to that same property name.
 export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
   { title: "Work", hrefs: ["/", "/inbox", "/deck/operators", "/deck/board", "/deck/tasks", "/deck/bookings"] },
-  { title: "My book", hrefs: ["/deck/my-clients", "/deck/my-campaigns", "/deck/my-settings"] },
+  { title: "My book", hrefs: ["/deck/my-clients", "/deck/my-campaigns", "/deck/connections", "/deck/my-settings"] },
   { title: "Directory", hrefs: ["/deck/customers", "/deck/team"] },
   { title: "Setup", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue", "/deck/channels", "/deck/links"] },
   { title: "Reports", hrefs: ["/deck/forecast", "/deck/broadcasts", "/deck/activity", "/deck/quality"] },

@@ -11,7 +11,6 @@ import {
   type MyClient,
 } from "@/lib/api";
 import { MyLinkPanel } from "./my-link";
-import { ConnectionsPanel } from "./connections";
 import { WorkingHoursPanel } from "./working-hours";
 import { SocialAccountsPanel } from "./social-accounts";
 import { fontVariables } from "@/lib/fonts";
@@ -99,11 +98,9 @@ export default function MyClientsPage() {
 
       <MyLinkPanel />
 
-      {/* Directly under the link, because that is the relationship: the link
-          lives in the TikTok bio, and this is whether the bio is reaching
-          anybody. Apart, they are two facts; together they are a ratio. */}
-      <ConnectionsPanel />
-
+      {/* The connect cards moved to their own "Connections" tab, so a staff
+          member managing their channels is not doing it buried under the client
+          book. This page keeps the link, the number they send from, and the book. */}
       <ChannelPanel channel={channel} />
 
       <WorkingHoursPanel />

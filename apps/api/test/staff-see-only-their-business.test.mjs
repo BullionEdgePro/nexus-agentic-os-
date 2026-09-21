@@ -63,6 +63,10 @@ const TAB_API = {
   // Campaigns to a staff member's own book. Staff-only like the book itself:
   // the audience is "contacts owned by me", which for an operator is nobody.
   "/deck/my-campaigns": "/api/my/campaigns",
+  // A staff member's own channels — mailbox, WhatsApp Business, Facebook,
+  // Instagram. Staff-only: /api/connections is a person's own accounts, which
+  // an operator has none of (ownerOf returns null → 403).
+  "/deck/connections": "/api/connections",
   // A staff member's own settings — name, photo, WhatsApp number, socials.
   // Staff-only like the rest of the book: it edits the person's own employee
   // row, and the socials endpoint under /api/my refuses an operator.

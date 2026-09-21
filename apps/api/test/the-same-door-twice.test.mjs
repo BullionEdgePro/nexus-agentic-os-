@@ -96,6 +96,7 @@ const TAB_API = {
   "/deck/bookings": "/api/bookings",
   "/deck/my-clients": "/api/my/clients",
   "/deck/my-campaigns": "/api/my/campaigns",
+  "/deck/connections": "/api/connections",
   "/deck/my-settings": "/api/my/social-accounts",
   "/deck/customers": "/api/organizations",
   "/deck/team": "/api/organizations",
