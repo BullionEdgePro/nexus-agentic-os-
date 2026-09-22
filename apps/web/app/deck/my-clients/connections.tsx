@@ -437,9 +437,10 @@ function loadFacebookSdk(appId: string, version: string): Promise<FacebookSdk> {
  *
  * The `code` comes from the login callback; the WABA and phone-number ids arrive
  * separately as a window message from Meta's popup, so both are captured and only
- * a run that produced all three is treated as a success. `featureType` selects
- * the coexistence variant (onboarding a WhatsApp Business app user); the config
- * id decides the rest of the flow at Meta's end.
+ * a run that produced all three is treated as a success. No `featureType` is
+ * passed, so this is STANDARD onboarding (a dedicated Cloud API number) rather
+ * than the coexistence variant, which Meta has not enabled for this business; the
+ * config id decides the rest of the flow at Meta's end.
  */
 async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
   code: string;
@@ -484,7 +485,14 @@ async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
         config_id: provider.configId,
         response_type: "code",
         override_default_response_type: true,
-        extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
+        // STANDARD onboarding, not coexistence. The coexistence variant
+        // (featureType "whatsapp_business_app_onboarding") is a limited-rollout
+        // Meta program, and for this business it dead-ends at "can't onboard
+        // customers at the moment" — the account is not enabled for it. Standard
+        // Embedded Signup (no featureType) is what App Review + active billing
+        // actually unlock, and it onboards a dedicated number to the Cloud API,
+        // which is the platform's own model (a dedicated WABA number per staff).
+        extras: { setup: {}, sessionInfoVersion: "3" },
       }
     );
   });

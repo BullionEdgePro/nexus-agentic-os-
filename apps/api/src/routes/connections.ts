@@ -223,12 +223,14 @@ connectionsRoute.get("/", async (c) => {
       {
         id: "whatsapp",
         name: "WhatsApp Business",
-        // The one connection that is genuinely two-way. Said plainly because it
-        // is the thing people did not believe was possible.
+        // A dedicated WhatsApp number on the Cloud API (standard Embedded Signup).
+        // NOT the phone-app coexistence flow — that one dead-ends at Meta's "can't
+        // onboard customers at the moment" for this business, so the connect uses
+        // standard onboarding, which is what App Review and billing actually unlock.
         offers:
-          "Your own WhatsApp Business number, kept on your phone AND connected here — a client who messages it appears in your conversations, and you reply from either place.",
+          "A dedicated WhatsApp Business number connected here — a client who messages it appears in your conversations, and you reply from Nexus.",
         cannot:
-          "It is the WhatsApp BUSINESS app only (version 2.24.17+), never the personal WhatsApp. Group chats do not sync, and messages are capped at 20 per second.",
+          "It needs a number you can verify by text or call, not one already active on the WhatsApp or WhatsApp Business app. Group chats do not sync, and messages are capped at 20 per second.",
         needs: whatsappCoexistenceConfigured()
           ? null
           : "Not enabled on this server yet. It needs the WhatsApp app's Embedded Signup configuration (set META_APP_ID and META_WHATSAPP_ESU_CONFIG_ID), and — for staff beyond the app's own testers — Meta App Review of whatsapp_business_messaging.",
