@@ -69,6 +69,13 @@ function channelMeta(channel: string): { glyph: string; label: string } {
   return CHANNEL_META[channel as ConversationChannel] ?? { glyph: "💬", label: channel };
 }
 
+// The channels a staff member answers, as always-present tabs. Shown even when a
+// channel has nothing in it yet, so a person can switch to Email or Instagram
+// and see for themselves rather than wondering whether the tab is missing or the
+// channel is. Any OTHER channel that has conversations (sms, phone) is appended
+// so nothing is ever hidden behind "All".
+const CHANNEL_TABS: ConversationChannel[] = ["whatsapp", "email", "facebook", "instagram"];
+
 function isWaitingTooLong(c: ConversationSummary): boolean {
   if (c.lastMessageDirection !== "inbound" || !c.lastMessageAt) return false;
   return Date.now() - new Date(c.lastMessageAt).getTime() > WAITING_HOURS * 3600_000;
@@ -281,24 +288,31 @@ export default function InboxPage() {
     );
   }, [conversations]);
 
-  // The channels actually in use. Kept in a fixed order (WhatsApp first) so the
-  // strip is stable, and only surfaced as a filter once a business has more than
-  // one — a single-channel business gets no redundant "WhatsApp only" control.
-  const allChannels = useMemo(() => {
-    const present = new Set<string>();
-    for (const c of conversations) present.add(c.channel);
-    const order = ["whatsapp", "email", "sms", "instagram", "phone"];
-    return order
-      .filter((ch) => present.has(ch))
-      .concat([...present].filter((ch) => !order.includes(ch)).sort((a, b) => a.localeCompare(b)));
+  // The channel tabs: the four a staff member always has (WhatsApp, Email,
+  // Facebook, Instagram), plus any OTHER channel that actually has conversations,
+  // so an sms or phone thread is never hidden behind "All".
+  const channelTabs = useMemo(() => {
+    const tabs = [...CHANNEL_TABS] as string[];
+    const present = new Set(conversations.map((c) => c.channel));
+    for (const ch of present) if (!tabs.includes(ch)) tabs.push(ch);
+    return tabs;
   }, [conversations]);
 
-  const visibleConversations = conversations.filter(
+  // Everything the OTHER filters (folder, label, stage) keep — the pool the
+  // channel tabs count against and slice. Splitting the channel filter out means
+  // each tab's badge shows exactly how many threads clicking it would reveal.
+  const folderFiltered = conversations.filter(
     (c) =>
       matchesFolder(c, folder, myEmployeeId) &&
       (!tagFilter || c.tags.includes(tagFilter)) &&
-      (!stageFilter || c.leadStage === stageFilter) &&
-      (!channelFilter || c.channel === channelFilter)
+      (!stageFilter || c.leadStage === stageFilter)
+  );
+  const channelCounts = folderFiltered.reduce<Record<string, number>>((acc, c) => {
+    acc[c.channel] = (acc[c.channel] ?? 0) + 1;
+    return acc;
+  }, {});
+  const visibleConversations = folderFiltered.filter(
+    (c) => !channelFilter || c.channel === channelFilter
   );
 
   async function handleSend() {
@@ -385,6 +399,37 @@ export default function InboxPage() {
 
       <section className="ibx-col ibx-convos">
         <h2 className="ibx-head">Conversations</h2>
+        {/* Channel tabs — the primary axis. A staff member picks the channel they
+            want to work (their WhatsApp, Email, the Facebook Page, Instagram),
+            and the folders below narrow WITHIN it. Always shown so every channel
+            is one click away, with a live count of what each holds under the
+            current folder. "All" is the mixed view it opens on. */}
+        <div className="ibx-chantabs" role="tablist" aria-label="Channel">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={channelFilter === null}
+            className={`ibx-chantab${channelFilter === null ? " on" : ""}`}
+            onClick={() => setChannelFilter(null)}
+          >
+            <span className="ibx-chantab-label">All</span>
+            <span className="ibx-chantab-n">{folderFiltered.length}</span>
+          </button>
+          {channelTabs.map((ch) => (
+            <button
+              key={ch}
+              type="button"
+              role="tab"
+              aria-selected={channelFilter === ch}
+              className={`ibx-chantab${channelFilter === ch ? " on" : ""}`}
+              onClick={() => setChannelFilter(ch)}
+            >
+              <span className="ibx-chantab-ic" aria-hidden="true">{channelMeta(ch).glyph}</span>
+              <span className="ibx-chantab-label">{channelMeta(ch).label}</span>
+              <span className="ibx-chantab-n">{channelCounts[ch] ?? 0}</span>
+            </button>
+          ))}
+        </div>
         {/* The folders. Nothing until the role is known, so a staff member never
             sees "Mine" flash for an operator or vice versa. */}
         {known ? (
@@ -441,23 +486,6 @@ export default function InboxPage() {
             ))}
           </div>
         ) : null}
-        {/* Narrow to one channel — only shown once a business actually has more
-            than one, so it never sits there as a lone "WhatsApp" chip. */}
-        {allChannels.length > 1 ? (
-          <div className="ibx-chanfilter" aria-label="Filter by channel">
-            {allChannels.map((ch) => (
-              <button
-                key={ch}
-                type="button"
-                className={`ibx-chanchip${channelFilter === ch ? " on" : ""}`}
-                aria-pressed={channelFilter === ch}
-                onClick={() => setChannelFilter((cur) => (cur === ch ? null : ch))}
-              >
-                <span aria-hidden="true">{channelMeta(ch).glyph}</span> {channelMeta(ch).label}
-              </button>
-            ))}
-          </div>
-        ) : null}
         {isLoadingConversations ? (
           <p className="ibx-empty">Loading…</p>
         ) : loadError ? (
@@ -482,13 +510,15 @@ export default function InboxPage() {
           <p className="ibx-empty">
             {conversations.length === 0
               ? "No conversations yet for this business."
-              : folder === "mine"
-                ? "None of this business's conversations are yours yet. A customer who opens a chat through your link, or one handed to you, will appear here."
-                : folder === "waiting"
-                  ? "Nobody has been left waiting — every customer who spoke last has had a reply."
-                  : folder === "followup"
-                    ? "No follow-ups are overdue. Add one from a conversation's Follow-ups panel."
-                    : "Nothing in this folder right now."}
+              : channelFilter
+                ? `No ${channelMeta(channelFilter).label} conversations here yet — try another channel tab, or “All”.`
+                : folder === "mine"
+                  ? "None of this business's conversations are yours yet. A customer who opens a chat through your link, or one handed to you, will appear here."
+                  : folder === "waiting"
+                    ? "Nobody has been left waiting — every customer who spoke last has had a reply."
+                    : folder === "followup"
+                      ? "No follow-ups are overdue. Add one from a conversation's Follow-ups panel."
+                      : "Nothing in this folder right now."}
           </p>
         ) : (
           <ul className="ibx-list">

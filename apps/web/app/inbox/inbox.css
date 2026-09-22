@@ -816,20 +816,47 @@
    as a small glyph on the row and offers a filter once a business has more than
    one. WhatsApp is the only live channel today — the rest badge correctly the
    moment their adapter is connected. */
-.ibx-chanfilter { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
-.ibx-chanchip {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  padding: 4px 9px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 999px;
+/* The channel tabs — the primary axis, styled as an underline tab bar so they
+   read as tabs (a channel you are IN) rather than as another pill filter. The
+   folders below stay pills, which keeps the two axes visually distinct: which
+   channel, then which folder within it. */
+.ibx-chantabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.ibx-chantab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
   background: transparent;
   color: var(--slate);
   cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
 }
-.ibx-chanchip:hover { color: var(--ink); border-color: var(--ink); }
-.ibx-chanchip.on { background: var(--ink); color: var(--marble); border-color: var(--ink); }
+.ibx-chantab:hover { color: var(--ink); }
+.ibx-chantab.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.ibx-chantab-ic { font-size: 13px; line-height: 1; }
+.ibx-chantab-label { white-space: nowrap; }
+.ibx-chantab-n {
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  min-width: 15px;
+  text-align: center;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--slate);
+}
+.ibx-chantab.on .ibx-chantab-n { background: var(--ink); color: var(--marble); }
 .ibx-convo-chan { font-size: 12px; line-height: 1; margin-right: 2px; }
 .ibx-thread-chan {
   font-family: var(--mono);
