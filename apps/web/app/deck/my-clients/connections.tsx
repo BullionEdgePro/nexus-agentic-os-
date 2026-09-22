@@ -9,6 +9,8 @@ import {
   getClientMail,
   sendClientEmail,
   disconnectGmail,
+  connectBusinessEmail,
+  disconnectBusinessEmail,
   connectWhatsAppCoexistence,
   disconnectWhatsApp,
   type ClientMail,
@@ -74,16 +76,18 @@ export function ConnectionsPanel() {
   }, []);
 
   const gmail = providers.find((p) => p.id === "gmail");
+  const imap = providers.find((p) => p.id === "imap");
   const whatsapp = providers.find((p) => p.id === "whatsapp");
   const facebook = providers.find((p) => p.id === "facebook");
   const instagram = providers.find((p) => p.id === "instagram");
   const mailbox = connections?.find((c) => c.provider === "gmail") ?? null;
+  const imapConn = connections?.find((c) => c.provider === "imap") ?? null;
   const whatsappConn = connections?.find((c) => c.provider === "whatsapp") ?? null;
   // Business-level (the API folds these in), so each Meta card can show it is connected.
   const facebookConn = connections?.find((c) => c.provider === "facebook") ?? null;
   const instagramConn = connections?.find((c) => c.provider === "instagram") ?? null;
 
-  if (connections === null || (!gmail && !whatsapp && !facebook && !instagram)) return null;
+  if (connections === null || (!gmail && !imap && !whatsapp && !facebook && !instagram)) return null;
 
   return (
     <section className="cnx">
@@ -184,6 +188,16 @@ export function ConnectionsPanel() {
             <p className="cnx-note">Nothing recent to or from your clients.</p>
           ) : null}
         </div>
+      ) : null}
+
+      {imap ? (
+        <BusinessEmailCard
+          provider={imap}
+          connection={imapConn}
+          onChange={load}
+          onError={setError}
+          onNotice={setNotice}
+        />
       ) : null}
 
       {whatsapp ? (
@@ -496,6 +510,122 @@ async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
       }
     );
   });
+}
+
+/**
+ * A business mailbox connected by address + password (Hostinger / any IMAP).
+ *
+ * Unlike Gmail, which redirects out to Google, this is a small form: the server
+ * verifies the login before it stores anything, so a wrong password comes back
+ * HERE rather than as a connection that silently never syncs. The password is a
+ * real password field and is dropped from state the moment it is accepted.
+ */
+function BusinessEmailCard({
+  provider,
+  connection,
+  onChange,
+  onError,
+  onNotice,
+}: {
+  provider: ConnectionProvider;
+  connection: SocialConnection | null;
+  onChange: () => Promise<void> | void;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="cnx-card">
+      <div className="cnx-head">
+        <div>
+          <strong>Business email</strong>
+          {connection ? (
+            <span className="cnx-on">{connection.displayName ?? "connected"}</span>
+          ) : null}
+        </div>
+        {connection ? (
+          <button
+            type="button"
+            className="cnx-off"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await disconnectBusinessEmail().catch(() => undefined);
+              await onChange();
+              setBusy(false);
+            }}
+          >
+            Disconnect
+          </button>
+        ) : null}
+      </div>
+
+      <p className="cnx-offers">{provider.offers}</p>
+      <p className="cnx-cannot">{provider.cannot}</p>
+      {connection && !connection.usable ? (
+        <p className="cnx-needs">The stored sign-in can no longer be read — connect it again.</p>
+      ) : null}
+      {connection?.lastError ? (
+        <p className="cnx-needs">Last sync failed: {connection.lastError}</p>
+      ) : null}
+
+      {!connection ? (
+        <form
+          className="cnx-imap-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!email.trim() || !password) return;
+            setBusy(true);
+            onError("");
+            try {
+              const { email: connected } = await connectBusinessEmail({
+                email: email.trim(),
+                password,
+              });
+              setPassword("");
+              onNotice(
+                `Business email connected — ${connected}. Client mail now appears in your conversations.`
+              );
+              await onChange();
+            } catch (err) {
+              onError(readableError(err, "That mailbox could not be connected."));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <label>
+            <span>Email address</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="marketing@yourdomain.com"
+              autoComplete="email"
+              required
+            />
+          </label>
+          <label>
+            <span>Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="mailbox or app password"
+              autoComplete="off"
+              required
+            />
+          </label>
+          <button type="submit" className="cnx-go" disabled={busy || !email.trim() || !password}>
+            {busy ? "Connecting…" : "Connect email"}
+          </button>
+        </form>
+      ) : null}
+    </div>
+  );
 }
 
 /**

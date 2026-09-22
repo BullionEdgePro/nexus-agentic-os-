@@ -2657,3 +2657,23 @@ export function connectWhatsAppCoexistence(input: {
 export function disconnectWhatsApp(): Promise<{ ok: boolean }> {
   return request("/api/connections/whatsapp", { method: "DELETE" });
 }
+
+/**
+ * Connect a business mailbox (Hostinger / any IMAP) by address + password.
+ *
+ * The server verifies the login before storing, so a wrong password comes back
+ * as an error here rather than as a connection that silently never syncs.
+ */
+export function connectBusinessEmail(input: {
+  email: string;
+  password: string;
+}): Promise<{ ok: true; email: string }> {
+  return request("/api/connections/imap/connect", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function disconnectBusinessEmail(): Promise<{ ok: boolean }> {
+  return request("/api/connections/imap", { method: "DELETE" });
+}

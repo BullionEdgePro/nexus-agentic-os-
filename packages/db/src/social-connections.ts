@@ -319,6 +319,35 @@ export async function listGmailConnectionsForSync(): Promise<
   return rows.map((r) => ({ organizationId: r.organization_id, employeeId: r.employee_id }));
 }
 
+/**
+ * Every connected business mailbox (IMAP) due a background sync.
+ *
+ * The IMAP twin of `listGmailConnectionsForSync`. It also returns the address
+ * (`external_id`), because unlike Gmail — where the address comes from the token's
+ * profile — an IMAP connection IS its address, and the sweep needs it to log in.
+ * The password itself is fetched per row through `connectionSecret`, never here.
+ */
+export async function listImapConnectionsForSync(): Promise<
+  Array<{ organizationId: string; employeeId: string; email: string }>
+> {
+  const { rows } = await getPool().query<{
+    organization_id: string;
+    employee_id: string;
+    external_id: string;
+  }>(
+    `select organization_id, employee_id, external_id
+       from social_connections
+      where provider = 'imap'
+        and employee_id is not null
+        and access_token_enc is not null`
+  );
+  return rows.map((r) => ({
+    organizationId: r.organization_id,
+    employeeId: r.employee_id,
+    email: r.external_id,
+  }));
+}
+
 /** Forget a connection entirely, token included. */
 export async function removeConnection(
   organizationId: string,

@@ -29,7 +29,9 @@ import {
   emailReplyContext,
   findOrCreateEmailConversation,
   insertSyncedEmailMessage,
+  listConnections,
   listGmailConnectionsForSync,
+  listImapConnectionsForSync,
   recordSync,
   refreshStoredAccessToken,
   withAllTenants,
@@ -42,6 +44,7 @@ import {
   refreshGoogleToken,
   sendGmail,
 } from "../lib/gmail.js";
+import { fetchClientMailImap, sendEmailImap } from "../lib/imap-email.js";
 import { logger } from "../lib/logger.js";
 
 /** Whose mailbox — an (org, employee) pair. Gmail is always a person's here. */
@@ -140,25 +143,34 @@ const emailsIn = (headerValue: string | null): string[] => {
  * nothing. The Gmail fetch (slow, network) is kept OUTSIDE the write transaction
  * so a database connection is never held open across it.
  */
-export async function runEmailSync(
+/** One fetched message, in the shape the insert loop below needs — the common
+ *  ground between a Gmail message and an IMAP one, which differ only in transport. */
+interface FetchedMail {
+  id: string;
+  from: string | null;
+  to: string | null;
+  body: string;
+  snippet?: string | null;
+  threadId?: string | null;
+  receivedAt: string | null;
+}
+
+/**
+ * File already-fetched client mail into the inbox — the shared half of both
+ * transports, so the privacy rule (only mail with a client-book address, and
+ * never the owner's own mailbox listing) and the dedup live in ONE place.
+ *
+ * Direction is decided by the sender; dedup is on the message id, so a re-sync,
+ * or the same mail seen by two transports, stores nothing twice.
+ */
+async function storeClientMail(
   owner: MailboxOwner,
-  accessToken: string
+  ownerAddress: string,
+  clients: Array<{ contactId: string; email: string }>,
+  messages: FetchedMail[]
 ): Promise<{ newMessages: number; threads: number }> {
-  const profile = await fetchGmailProfile(accessToken);
-  const ownerAddress = profile.emailAddress.trim().toLowerCase();
-
-  const clients = await withTenant(owner.organizationId, () =>
-    clientContactsWithEmail(owner.organizationId, owner.employeeId as string)
-  );
-  if (clients.length === 0) return { newMessages: 0, threads: 0 };
-
-  const byAddress = new Map(clients.map((client) => [client.email, client.contactId]));
-  const messages = await fetchClientMailFull(
-    accessToken,
-    clients.map((client) => client.email),
-    40
-  );
   if (messages.length === 0) return { newMessages: 0, threads: 0 };
+  const byAddress = new Map(clients.map((client) => [client.email, client.contactId]));
 
   return withTenant(owner.organizationId, async () => {
     let newMessages = 0;
@@ -187,6 +199,52 @@ export async function runEmailSync(
     }
     return { newMessages, threads: touched.size };
   });
+}
+
+export async function runEmailSync(
+  owner: MailboxOwner,
+  accessToken: string
+): Promise<{ newMessages: number; threads: number }> {
+  const profile = await fetchGmailProfile(accessToken);
+  const ownerAddress = profile.emailAddress.trim().toLowerCase();
+
+  const clients = await withTenant(owner.organizationId, () =>
+    clientContactsWithEmail(owner.organizationId, owner.employeeId as string)
+  );
+  if (clients.length === 0) return { newMessages: 0, threads: 0 };
+
+  const messages = await fetchClientMailFull(
+    accessToken,
+    clients.map((client) => client.email),
+    40
+  );
+  return storeClientMail(owner, ownerAddress, clients, messages);
+}
+
+/**
+ * The IMAP twin of runEmailSync: read a business mailbox's client mail into the
+ * inbox over IMAP instead of the Gmail API. Same clients, same insert, same
+ * dedup — only the fetch is different, and the owner's address is simply the
+ * mailbox address (there is no profile to ask, unlike Gmail).
+ */
+export async function runImapEmailSync(
+  owner: MailboxOwner,
+  credential: { email: string; password: string }
+): Promise<{ newMessages: number; threads: number }> {
+  const ownerAddress = credential.email.trim().toLowerCase();
+
+  const clients = await withTenant(owner.organizationId, () =>
+    clientContactsWithEmail(owner.organizationId, owner.employeeId as string)
+  );
+  if (clients.length === 0) return { newMessages: 0, threads: 0 };
+
+  const messages = await fetchClientMailImap(
+    credential.email,
+    credential.password,
+    clients.map((client) => client.email),
+    40
+  );
+  return storeClientMail(owner, ownerAddress, clients, messages);
 }
 
 export interface EmailSyncResult {
@@ -260,6 +318,43 @@ export async function syncAllMailboxes(): Promise<EmailSyncResult> {
     }
   }
 
+  // The IMAP mailboxes, in the same pass and with the same per-mailbox isolation.
+  // A Hostinger blip or a changed password fails only its own row.
+  const imapOwners = await withAllTenants(
+    "email sync reads every connected business (IMAP) mailbox in one pass",
+    () => listImapConnectionsForSync()
+  );
+  for (const owner of imapOwners) {
+    try {
+      const secret = await withTenant(owner.organizationId, () =>
+        connectionSecret(owner.organizationId, owner.employeeId, "imap")
+      );
+      if (!secret) {
+        result.failed++;
+        continue;
+      }
+      const { newMessages } = await runImapEmailSync(
+        { organizationId: owner.organizationId, employeeId: owner.employeeId },
+        { email: owner.email, password: secret.accessToken }
+      );
+      await withTenant(owner.organizationId, () =>
+        recordSync(owner.organizationId, owner.employeeId, "imap", null)
+      );
+      result.synced++;
+      result.newMessages += newMessages;
+    } catch (err) {
+      result.failed++;
+      const message = err instanceof Error ? err.message.slice(0, 200) : String(err);
+      await withTenant(owner.organizationId, () =>
+        recordSync(owner.organizationId, owner.employeeId, "imap", message)
+      ).catch(() => undefined);
+      logger.warn(
+        { organizationId: owner.organizationId, employeeId: owner.employeeId, message },
+        "A business mailbox could not be synced — its last state still stands"
+      );
+    }
+  }
+
   logger.info(result, "Mailboxes synced");
   return result;
 }
@@ -317,10 +412,38 @@ export async function sendEmailReply(conversationId: string, text: string): Prom
     );
   }
 
-  const token = await gmailToken({
-    organizationId: ctx.organizationId,
-    employeeId: ctx.ownerEmployeeId,
-  });
+  const owner = { organizationId: ctx.organizationId, employeeId: ctx.ownerEmployeeId };
+
+  // A business (IMAP) mailbox wins if this staff member has one connected: the
+  // reply leaves from it over SMTP. For IMAP-synced mail the stored message id IS
+  // the RFC-822 Message-ID, so In-Reply-To threads it directly with no header
+  // fetch. The subject is not stored, so a plain "Re:" carries it — the
+  // In-Reply-To is what actually threads it in the recipient's client.
+  const conns = await withTenant(owner.organizationId, () =>
+    listConnections(owner.organizationId, owner.employeeId)
+  );
+  const imapConn = conns.find((conn) => conn.provider === "imap" && conn.usable);
+  if (imapConn) {
+    const secret = await withTenant(owner.organizationId, () =>
+      connectionSecret(owner.organizationId, owner.employeeId, "imap")
+    );
+    if (!secret) {
+      throw new Error("The business mailbox sign-in can no longer be read — connect it again.");
+    }
+    const messageId = await sendEmailImap(imapConn.externalId, secret.accessToken, {
+      to: ctx.toEmail,
+      subject: "Re: your message",
+      body: text,
+      inReplyTo: ctx.replyToGmailMessageId,
+    });
+    logger.info(
+      { conversationId, employeeId: ctx.ownerEmployeeId, messageId },
+      "Email reply sent from the business mailbox"
+    );
+    return { gmailMessageId: messageId, threadId: ctx.threadId };
+  }
+
+  const token = await gmailToken(owner);
   if ("error" in token) throw new Error(token.error);
 
   // Threading headers come from the message being replied to, fetched on demand

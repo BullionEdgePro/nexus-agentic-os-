@@ -53,6 +53,7 @@ import {
 // this route's manual "sync now" share one definition of "resolve a token,
 // then read a person's client mail into the inbox" — see services/email-sync.ts.
 import { gmailToken, runEmailSync } from "../services/email-sync.js";
+import { imapConfigured, verifyImapLogin } from "../lib/imap-email.js";
 import type { SessionScope } from "../lib/session.js";
 import { env } from "../config/env.js";
 import { clientKey, loginBlocked, recordLoginFailure, clearLoginFailures } from "../lib/login-throttle.js";
@@ -219,6 +220,18 @@ connectionsRoute.get("/", async (c) => {
           ? null
           : `Create a Google Cloud OAuth client, set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server, and add ${gmailRedirectUri()} as an authorised redirect URI. Use an INTERNAL consent screen on your own Workspace — that skips Google's verification entirely.`,
         scopes: gmailScopes(),
+      },
+      {
+        id: "imap",
+        name: "Business email",
+        configured: imapConfigured(),
+        offers:
+          "Your Hostinger (or any IMAP) business mailbox — mail with the people in YOUR client book appears in your conversations, and you reply from it.",
+        cannot:
+          "It reads INBOX only, and only for addresses already in your client book — never your whole mailbox. It signs in with your email password, sealed at rest; use a dedicated app password if your host offers one.",
+        // Always available: the host defaults to Hostinger, no server setup.
+        needs: null,
+        scopes: [],
       },
       {
         id: "whatsapp",
@@ -896,6 +909,80 @@ connectionsRoute.delete("/gmail", async (c) => {
 
   const removed = await withTenant(owner.organizationId, () =>
     removeConnection(owner.organizationId, owner.employeeId, "gmail")
+  );
+  return c.json({ ok: removed });
+});
+
+// ============================================================
+// Business email (IMAP/SMTP)
+// ============================================================
+
+/**
+ * Connect a business mailbox by address + password (Hostinger and any IMAP host).
+ *
+ * NOT an OAuth redirect like Gmail — an IMAP mailbox has no OAuth, so the staff
+ * member hands over the address and password directly. The password is PROVEN
+ * against the IMAP server before anything is stored, so a typo is refused at the
+ * door rather than saved as a connection that silently never syncs. It is then
+ * sealed at rest by saveConnection like every other credential; the plaintext is
+ * never persisted and never logged.
+ */
+connectionsRoute.post("/imap/connect", async (c) => {
+  const owner = ownerOf(scopeOf(c));
+  if (!owner || !owner.employeeId) {
+    return c.json({ error: "Only a staff member can connect their own mailbox." }, 403);
+  }
+
+  const body = await c.req.json<{ email?: string; password?: string }>().catch(() => null);
+  const email = body?.email?.trim().toLowerCase();
+  const password = body?.password;
+  if (!email || !password) {
+    return c.json({ error: "An email address and password are both needed." }, 400);
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return c.json({ error: "That does not look like an email address." }, 400);
+  }
+
+  try {
+    await verifyImapLogin(email, password);
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 140) : "unknown error";
+    // The commonest cause is a wrong password or a host that wants an app
+    // password — say so rather than leaking the raw IMAP error.
+    logger.warn({ err, employeeId: owner.employeeId }, "IMAP verify failed");
+    return c.json(
+      {
+        error: `That mailbox did not sign in (${message}). Check the password — some hosts require a dedicated app password.`,
+      },
+      401
+    );
+  }
+
+  await withTenant(owner.organizationId, () =>
+    saveConnection({
+      organizationId: owner.organizationId,
+      employeeId: owner.employeeId,
+      provider: "imap",
+      externalId: email,
+      displayName: email,
+      avatarUrl: null,
+      accessToken: password,
+      refreshToken: null,
+      expiresAt: null,
+      scopes: [],
+    })
+  );
+
+  logger.info({ employeeId: owner.employeeId, email }, "Business mailbox connected (IMAP)");
+  return c.json({ ok: true, email });
+});
+
+connectionsRoute.delete("/imap", async (c) => {
+  const owner = ownerOf(scopeOf(c));
+  if (!owner) return c.json({ error: "Only a staff member can disconnect their own mailbox." }, 403);
+
+  const removed = await withTenant(owner.organizationId, () =>
+    removeConnection(owner.organizationId, owner.employeeId, "imap")
   );
   return c.json({ ok: removed });
 });
