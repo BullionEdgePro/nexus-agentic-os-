@@ -117,6 +117,102 @@ export async function subscribeAppToWaba(wabaId: string, businessToken: string):
 }
 
 /**
+ * Find the WABA and phone number a business token was granted, from the token.
+ *
+ * ============================================================
+ * WHY THIS EXISTS — the "Continue with previous settings" trap
+ * ============================================================
+ *
+ * Embedded Signup is *supposed* to hand the browser the new WABA and
+ * phone-number ids in a `WA_EMBEDDED_SIGNUP` window message. But when a staff
+ * member has linked before, Meta's popup offers "Continue with your previous
+ * settings", and that path returns the `code` and fires NO such message — so the
+ * browser has nothing to post, and the old flow dead-ended at "did not return a
+ * number" even though the account was perfectly connectable.
+ *
+ * The token itself already knows. `debug_token` reports the granular scopes and,
+ * with them, the WABA ids the token can manage; each WABA lists its phone
+ * numbers. So the server derives what the popup withheld, and the connect no
+ * longer depends on a fragile client-side message at all — the message, when it
+ * comes, is now only a hint that saves a round-trip.
+ *
+ * Throws a message written for the person reading it when the token grants no
+ * WABA, or a WABA with no number yet (the commonest real case: they have not
+ * added a number in the popup).
+ */
+export async function discoverWabaAndNumber(businessToken: string): Promise<{
+  wabaId: string;
+  phoneNumberId: string;
+  displayNumber: string | null;
+  verifiedName: string | null;
+}> {
+  // debug_token is read with an APP access token (app_id|app_secret), not the
+  // business token being inspected.
+  const appToken = `${env.metaAppId}|${env.metaAppSecret}`;
+  const dbg = await fetch(
+    `${graph()}/debug_token?input_token=${encodeURIComponent(businessToken)}` +
+      `&access_token=${encodeURIComponent(appToken)}`
+  );
+  const dbgData = (await dbg.json().catch(() => ({}))) as {
+    data?: {
+      granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>;
+      error?: { message?: string };
+    };
+    error?: { message?: string };
+  };
+  if (!dbg.ok) {
+    throw new Error(
+      `Could not read what the WhatsApp sign-in granted: ${
+        dbgData.error?.message ?? `HTTP ${dbg.status}`
+      }`
+    );
+  }
+
+  // Collect WABA ids from the whatsapp scopes, in order, de-duplicated.
+  const wabaIds: string[] = [];
+  for (const scope of dbgData.data?.granular_scopes ?? []) {
+    if (
+      scope.scope === "whatsapp_business_management" ||
+      scope.scope === "whatsapp_business_messaging"
+    ) {
+      for (const id of scope.target_ids ?? []) {
+        if (id && !wabaIds.includes(id)) wabaIds.push(id);
+      }
+    }
+  }
+  if (wabaIds.length === 0) {
+    throw new Error(
+      "That WhatsApp sign-in did not grant a Business account. In the Meta popup choose 'Edit settings' (not 'Continue'), pick or create your WhatsApp Business account, and finish."
+    );
+  }
+
+  // Take the first WABA that actually has a phone number on it.
+  for (const wabaId of wabaIds) {
+    const res = await fetch(
+      `${graph()}/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name`,
+      { headers: { Authorization: `Bearer ${businessToken}` } }
+    );
+    if (!res.ok) continue;
+    const list = (await res.json().catch(() => ({}))) as {
+      data?: Array<{ id?: string; display_phone_number?: string; verified_name?: string }>;
+    };
+    const number = list.data?.find((n) => n.id);
+    if (number?.id) {
+      return {
+        wabaId,
+        phoneNumberId: number.id,
+        displayNumber: number.display_phone_number ?? null,
+        verifiedName: number.verified_name ?? null,
+      };
+    }
+  }
+
+  throw new Error(
+    "Your WhatsApp Business account has no number ready yet. In the Meta popup choose 'Edit settings', add and verify a phone number, then connect again."
+  );
+}
+
+/**
  * The dialable number and verified name behind a phone_number_id.
  *
  * Read so the connection shows the staff member the number they just linked, in

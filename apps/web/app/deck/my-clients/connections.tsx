@@ -458,8 +458,8 @@ function loadFacebookSdk(appId: string, version: string): Promise<FacebookSdk> {
  */
 async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
   code: string;
-  wabaId: string;
-  phoneNumberId: string;
+  wabaId?: string;
+  phoneNumberId?: string;
 }> {
   if (!provider.appId || !provider.configId) {
     throw new Error("WhatsApp connecting is not enabled on this server yet.");
@@ -489,10 +489,10 @@ async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
           reject(new Error("WhatsApp sign-in was cancelled."));
           return;
         }
-        if (!captured.wabaId || !captured.phoneNumberId) {
-          reject(new Error("WhatsApp sign-in did not return a number — please try again."));
-          return;
-        }
+        // The waba/phone ids are a fast path, not a requirement. Meta only sends
+        // them (as the window message above) on the full flow; the "Continue with
+        // previous settings" path returns just the code. Either way the server
+        // derives the number from the token, so pass through whatever we captured.
         resolve({ code, wabaId: captured.wabaId, phoneNumberId: captured.phoneNumberId });
       },
       {

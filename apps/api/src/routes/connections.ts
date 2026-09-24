@@ -18,6 +18,7 @@ import {
   exchangeEmbeddedSignupCode,
   subscribeAppToWaba,
   fetchCoexistenceNumber,
+  discoverWabaAndNumber,
 } from "../lib/whatsapp-onboarding.js";
 import {
   tiktokConfigured,
@@ -1021,17 +1022,38 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
 
   const body = await c.req.json<{ code?: string; wabaId?: string; phoneNumberId?: string }>().catch(() => null);
   const code = body?.code?.trim();
-  const wabaId = body?.wabaId?.trim();
-  const phoneNumberId = body?.phoneNumberId?.trim();
-  if (!code || !wabaId || !phoneNumberId) {
+  // The ids are OPTIONAL now. Meta's popup sends them in a window message on the
+  // full flow, but the "Continue with previous settings" path returns only the
+  // code and fires no message — so the browser has nothing to post. The code
+  // alone is enough: the server derives the WABA and number from the token it
+  // exchanges (see discoverWabaAndNumber). When the popup did send them, they are
+  // used as-is and save a round-trip.
+  let wabaId = body?.wabaId?.trim();
+  let phoneNumberId = body?.phoneNumberId?.trim();
+  if (!code) {
     return c.json({ error: "That WhatsApp sign-in did not complete — please try again." }, 400);
   }
 
   const employeeId = owner.employeeId;
   try {
     const businessToken = await exchangeEmbeddedSignupCode(code);
-    await subscribeAppToWaba(wabaId, businessToken);
-    const details = await fetchCoexistenceNumber(phoneNumberId, businessToken);
+    if (!wabaId || !phoneNumberId) {
+      const found = await discoverWabaAndNumber(businessToken);
+      wabaId = wabaId || found.wabaId;
+      phoneNumberId = phoneNumberId || found.phoneNumberId;
+    }
+    // discoverWabaAndNumber throws when it finds nothing, so both are set by here;
+    // this satisfies the type-checker and guards against an empty string slipping
+    // through from the request body.
+    if (!wabaId || !phoneNumberId) {
+      return c.json({ error: "That WhatsApp sign-in did not return a usable number." }, 502);
+    }
+    // Bind to consts: narrowing of the `let`s above does not survive into the
+    // withTenant closure below, where TS must still see them as plain strings.
+    const connectedWabaId = wabaId;
+    const connectedPhoneNumberId = phoneNumberId;
+    await subscribeAppToWaba(connectedWabaId, businessToken);
+    const details = await fetchCoexistenceNumber(connectedPhoneNumberId, businessToken);
 
     await withTenant(owner.organizationId, async () => {
       // The credential, encrypted at rest like every other connection. external_id
@@ -1041,8 +1063,8 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
         organizationId: owner.organizationId,
         employeeId,
         provider: "whatsapp",
-        externalId: phoneNumberId,
-        displayName: details.displayNumber ?? details.verifiedName ?? phoneNumberId,
+        externalId: connectedPhoneNumberId,
+        displayName: details.displayNumber ?? details.verifiedName ?? connectedPhoneNumberId,
         avatarUrl: null,
         accessToken: businessToken,
         refreshToken: null,
@@ -1058,13 +1080,16 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
       // message on this number to this person (handleStaffNumberMessage). A
       // number belongs to one person, and assigning frees it from anyone else.
       await assignEmployeeWhatsAppNumber(employeeId, {
-        phoneNumberId,
+        phoneNumberId: connectedPhoneNumberId,
         displayNumber: details.displayNumber,
         verifiedName: details.verifiedName,
       });
     });
 
-    logger.info({ employeeId, phoneNumberId, wabaId }, "WhatsApp Business number connected via coexistence");
+    logger.info(
+      { employeeId, phoneNumberId: connectedPhoneNumberId, wabaId: connectedWabaId },
+      "WhatsApp Business number connected via coexistence"
+    );
     return c.json({
       ok: true,
       number: details.displayNumber ?? details.verifiedName ?? "connected",

@@ -2645,8 +2645,8 @@ export function syncGmailInbox(): Promise<{ newMessages: number; threads: number
  */
 export function connectWhatsAppCoexistence(input: {
   code: string;
-  wabaId: string;
-  phoneNumberId: string;
+  wabaId?: string;
+  phoneNumberId?: string;
 }): Promise<{ ok: true; number: string }> {
   return request("/api/connections/whatsapp/connect", {
     method: "POST",
