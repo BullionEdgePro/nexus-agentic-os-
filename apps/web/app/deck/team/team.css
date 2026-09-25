@@ -48,7 +48,11 @@
 /* ---------- roster ---------- */
 
 .team-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-.team-list li { display: flex; align-items: stretch; gap: 6px; }
+.team-list li { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+/* The open person's panels (hours, calendar, socials, WhatsApp number) sit
+   BELOW their row at full width. Without the wrap they were squeezed into the
+   same row as the name and buttons, a few pixels wide each. */
+.team-list li > :not(.team-member):not(.team-remove) { flex: 1 1 100%; min-width: 0; }
 
 .team-member {
   flex: 1; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px;
