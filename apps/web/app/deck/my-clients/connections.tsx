@@ -451,10 +451,10 @@ function loadFacebookSdk(appId: string, version: string): Promise<FacebookSdk> {
  *
  * The `code` comes from the login callback; the WABA and phone-number ids arrive
  * separately as a window message from Meta's popup, so both are captured and only
- * a run that produced all three is treated as a success. No `featureType` is
- * passed, so this is STANDARD onboarding (a dedicated Cloud API number) rather
- * than the coexistence variant, which Meta has not enabled for this business; the
- * config id decides the rest of the flow at Meta's end.
+ * a run that produced all three is treated as a success. `featureType` is the
+ * coexistence variant: the number stays on the staff member's WhatsApp Business
+ * app and is ALSO connected here. The config id decides the rest of the flow at
+ * Meta's end.
  */
 async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
   code: string;
@@ -499,14 +499,17 @@ async function launchWhatsAppSignup(provider: ConnectionProvider): Promise<{
         config_id: provider.configId,
         response_type: "code",
         override_default_response_type: true,
-        // STANDARD onboarding, not coexistence. The coexistence variant
-        // (featureType "whatsapp_business_app_onboarding") is a limited-rollout
-        // Meta program, and for this business it dead-ends at "can't onboard
-        // customers at the moment" — the account is not enabled for it. Standard
-        // Embedded Signup (no featureType) is what App Review + active billing
-        // actually unlock, and it onboards a dedicated number to the Cloud API,
-        // which is the platform's own model (a dedicated WABA number per staff).
-        extras: { setup: {}, sessionInfoVersion: "3" },
+        // COEXISTENCE: the staff member keeps the number on the WhatsApp Business
+        // app on their phone AND it joins the Cloud API, so chats show in both.
+        // (2026-09-25) Dedicated new numbers moved to the Team screen, which
+        // registers them on the business's own account without Embedded Signup,
+        // so this button is only for bringing an EXISTING Business-app number.
+        // The 2026-09-22 switch to standard onboarding was based on a wrong
+        // diagnosis: both modes hit "can't onboard customers at the moment",
+        // because the app's Tech Provider terms can't be saved (Meta server error
+        // 1675030 on xfb_accept_whatsapp_business_partner_terms_of_service, ticket
+        // 2073119380011659). Until Meta fixes that, this still shows that message.
+        extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
       }
     );
   });

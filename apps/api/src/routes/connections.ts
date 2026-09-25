@@ -237,14 +237,13 @@ connectionsRoute.get("/", async (c) => {
       {
         id: "whatsapp",
         name: "WhatsApp Business",
-        // A dedicated WhatsApp number on the Cloud API (standard Embedded Signup).
-        // NOT the phone-app coexistence flow — that one dead-ends at Meta's "can't
-        // onboard customers at the moment" for this business, so the connect uses
-        // standard onboarding, which is what App Review and billing actually unlock.
+        // Coexistence: the staff member's EXISTING WhatsApp Business app number,
+        // kept on their phone and connected here too. (Brand-new dedicated numbers
+        // are registered by the owner on the Team screen instead.)
         offers:
-          "A dedicated WhatsApp Business number connected here — a client who messages it appears in your conversations, and you reply from Nexus.",
+          "Your WhatsApp Business app number, connected here as well — keep using the app on your phone, and the same chats appear in your conversations so you can reply from either.",
         cannot:
-          "It needs a number you can verify by text or call, not one already active on the WhatsApp or WhatsApp Business app. Group chats do not sync, and messages are capped at 20 per second.",
+          "It must be the green WhatsApp Business app (not personal WhatsApp), and you need to open the app at least every 13 days. Linked devices like WhatsApp Web are disconnected, group chats do not sync, and past chats are copied once, within 24 hours of connecting.",
         needs: whatsappCoexistenceConfigured()
           ? null
           : "Not enabled on this server yet. It needs the WhatsApp app's Embedded Signup configuration (set META_APP_ID and META_WHATSAPP_ESU_CONFIG_ID), and — for staff beyond the app's own testers — Meta App Review of whatsapp_business_messaging.",
