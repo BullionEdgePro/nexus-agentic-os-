@@ -76,7 +76,9 @@ export function WhatsAppNumberPicker({
       {notice && !error ? <p className="team-msg ok">{notice}</p> : null}
 
       {numbers === null ? (
-        <p className="wn-loading">Reading the account&hellip;</p>
+        // A refused read (e.g. a staff login — this is owner-only) says why above
+        // rather than sitting on "Reading…" forever.
+        error ? null : <p className="wn-loading">Reading the account&hellip;</p>
       ) : (
         <select
           value={current}
