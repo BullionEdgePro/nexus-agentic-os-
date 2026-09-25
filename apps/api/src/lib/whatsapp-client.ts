@@ -286,6 +286,12 @@ export interface WabaNumber {
   displayPhoneNumber: string;
   verifiedName: string;
   qualityRating: string | null;
+  /**
+   * Meta's registration state: "CONNECTED" once the number can send, otherwise
+   * e.g. "PENDING" for one added but not yet code-verified and registered.
+   * Optional so older callers that build rows by hand still type-check.
+   */
+  status?: string | null;
 }
 
 /**
@@ -311,7 +317,7 @@ export interface WabaNumber {
 export async function listWabaNumbers(wabaId: string): Promise<WabaNumber[]> {
   const url =
     `https://graph.facebook.com/${env.metaGraphApiVersion}/${wabaId}/phone_numbers` +
-    `?fields=id,display_phone_number,verified_name,quality_rating&limit=100` +
+    `?fields=id,display_phone_number,verified_name,quality_rating,status&limit=100` +
     `&access_token=${encodeURIComponent(env.metaAccessToken)}`;
 
   const response = await fetch(url);
@@ -324,7 +330,88 @@ export async function listWabaNumbers(wabaId: string): Promise<WabaNumber[]> {
     displayPhoneNumber: String(row.display_phone_number ?? ""),
     verifiedName: String(row.verified_name ?? ""),
     qualityRating: row.quality_rating ? String(row.quality_rating) : null,
+    status: row.status ? String(row.status) : null,
   }));
+}
+
+// ============================================================
+// REGISTERING A DEDICATED NUMBER ON THE COMPANY ACCOUNT
+// ============================================================
+//
+// Four Graph calls take a spare phone line to a number that can send:
+// add it to the WABA, have Meta send a code to that phone, check the code, and
+// register it for the Cloud API. All four run on the shared system-user token,
+// which already manages this WABA — so this path needs NO Tech Provider
+// registration and NO Embedded Signup. Those exist to onboard *other*
+// businesses' accounts; a number on the platform's own account is just an
+// account admin adding a line.
+
+/** The sentence Meta wrote about a failed Graph call, for an owner to act on. */
+async function graphFailure(response: Response): Promise<string> {
+  const data = (await response.json().catch(() => ({}))) as {
+    error?: { message?: string; error_user_msg?: string; error_user_title?: string };
+  };
+  return (
+    data.error?.error_user_msg ||
+    data.error?.message ||
+    `Meta answered HTTP ${response.status}`
+  );
+}
+
+async function graphPost(path: string, body: Record<string, unknown>): Promise<unknown> {
+  const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.metaAccessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await graphFailure(response));
+  return response.json().catch(() => ({}));
+}
+
+/**
+ * Add a phone line to the WABA. Returns its new phone_number_id.
+ *
+ * `verifiedName` is the display name customers see; reusing the business's
+ * already-approved name keeps Meta's name review trivial.
+ */
+export async function addWabaNumber(
+  wabaId: string,
+  input: { countryCode: string; phoneNumber: string; verifiedName: string }
+): Promise<string> {
+  const data = (await graphPost(`${wabaId}/phone_numbers`, {
+    cc: input.countryCode,
+    phone_number: input.phoneNumber,
+    verified_name: input.verifiedName,
+  })) as { id?: string };
+  if (!data.id) throw new Error("Meta added the number but did not return its id.");
+  return String(data.id);
+}
+
+/** Have Meta send a 6-digit code to the phone itself, by SMS or voice call. */
+export async function requestNumberCode(
+  phoneNumberId: string,
+  method: "SMS" | "VOICE"
+): Promise<void> {
+  await graphPost(`${phoneNumberId}/request_code`, { code_method: method, language: "en_US" });
+}
+
+/** Check the code the owner read off the phone. */
+export async function verifyNumberCode(phoneNumberId: string, code: string): Promise<void> {
+  await graphPost(`${phoneNumberId}/verify_code`, { code });
+}
+
+/**
+ * Register the verified number for the Cloud API so it can send and receive.
+ *
+ * `pin` becomes the number's two-step verification PIN. It is not a secret the
+ * platform needs later: the system-user token can set a new one at any time
+ * (POST /{phone_number_id} { pin }), so the caller generates it and discards it.
+ */
+export async function registerNumber(phoneNumberId: string, pin: string): Promise<void> {
+  await graphPost(`${phoneNumberId}/register`, { messaging_product: "whatsapp", pin });
 }
 
 export interface AccountStanding {

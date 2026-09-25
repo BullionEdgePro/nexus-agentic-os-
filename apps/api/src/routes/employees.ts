@@ -19,7 +19,14 @@ import {
   connectCalendar,
   disconnectCalendar,
 } from "@nexus/db";
-import { listWabaNumbers } from "../lib/whatsapp-client.js";
+import { randomInt } from "node:crypto";
+import {
+  listWabaNumbers,
+  addWabaNumber,
+  requestNumberCode,
+  verifyNumberCode,
+  registerNumber,
+} from "../lib/whatsapp-client.js";
 import {
   buildDirectContact,
   normalizeWhatsAppNumber,
@@ -371,6 +378,9 @@ employeesRoute.get("/:slug/whatsapp-numbers", async (c) => {
       displayPhoneNumber: n.displayPhoneNumber,
       verifiedName: n.verifiedName,
       qualityRating: n.qualityRating,
+      // Registered and able to send. A number added but not yet code-verified is
+      // listed (so an interrupted registration can be finished) but not offered.
+      ready: n.status === "CONNECTED",
       // The shared company line, which every business answers on. Not assignable.
       isShared: n.phoneNumberId === organization.whatsappPhoneNumberId,
       assignedTo: byNumber.get(n.phoneNumberId) ?? null,
@@ -421,6 +431,12 @@ employeesRoute.patch("/:slug/employees/:employeeId/whatsapp-number", async (c) =
         422
       );
     }
+    if (match.status && match.status !== "CONNECTED") {
+      return c.json(
+        { error: "That number has not finished registering — enter the code Meta sent to it first." },
+        422
+      );
+    }
     const updated = await assignEmployeeWhatsAppNumber(employee.id, {
       phoneNumberId,
       displayNumber: match.displayPhoneNumber,
@@ -440,6 +456,192 @@ employeesRoute.patch("/:slug/employees/:employeeId/whatsapp-number", async (c) =
   });
   logger.info({ employeeId: employee.id, organization: organization.slug }, "Cleared a staff member's WhatsApp number");
   return c.json({ employee: { ...updated, digitalSignature: undefined } });
+});
+
+// ============================================================
+// REGISTER A NEW DEDICATED NUMBER, FROM THE TEAM SCREEN
+// ============================================================
+//
+// Until 2026-09-25 the picker above could only hand out numbers somebody had
+// already registered with Meta by hand — and nobody could, because the Meta
+// dashboard's Tech Provider onboarding page is broken (error 1007, confirmed by
+// Meta Support, no fix date). That page only matters for onboarding OTHER
+// businesses' accounts. A number on this business's own account needs nothing
+// but the system-user token that already manages it, so the owner does it here:
+//
+//   1. POST   /:slug/whatsapp-numbers                      add + send the code
+//   2. POST   /:slug/whatsapp-numbers/:id/code             send it again
+//   3. POST   /:slug/whatsapp-numbers/:id/verify           check it, register,
+//                                                          and (optionally) assign
+//
+// The OWNER types the code they received — the platform never sees the phone.
+
+/** Digits only. */
+function digits(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+employeesRoute.post("/:slug/whatsapp-numbers", async (c) => {
+  const scope = c.get("scope");
+  if (scope?.role !== "operator") {
+    return c.json({ error: "Only the owner can add a WhatsApp number." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  if (!organization.whatsappBusinessAccountId) {
+    return c.json({ error: "This business has no WhatsApp account to add a number to." }, 422);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    countryCode?: unknown;
+    number?: unknown;
+    displayName?: unknown;
+    method?: unknown;
+  } | null;
+  const countryCode = digits(body?.countryCode);
+  // A local number is often typed with its trunk 0 (UAE: 050…); Meta wants it without.
+  const national = digits(body?.number).replace(/^0+/, "");
+  const method = body?.method === "VOICE" ? "VOICE" : "SMS";
+  if (!/^\d{1,3}$/.test(countryCode) || !/^\d{4,14}$/.test(national)) {
+    return c.json(
+      { error: "Enter the country code and the number separately, digits only — for example 971 and 501234567." },
+      400
+    );
+  }
+
+  let live;
+  try {
+    live = await listWabaNumbers(organization.whatsappBusinessAccountId);
+  } catch (err) {
+    logger.warn({ err, organization: organization.slug }, "Could not read the WABA before adding a number");
+    return c.json({ error: "Could not reach Meta to check the account. Try again in a moment." }, 502);
+  }
+
+  const full = countryCode + national;
+  const existing = live.find((n) => digits(n.displayPhoneNumber) === full);
+  if (existing?.phoneNumberId === organization.whatsappPhoneNumberId) {
+    return c.json({ error: "That is the shared company number — it is already on the account." }, 422);
+  }
+  if (existing?.status === "CONNECTED") {
+    return c.json(
+      { error: "That number is already registered on the account. Pick it in the list to assign it." },
+      409
+    );
+  }
+
+  const shared = live.find((n) => n.phoneNumberId === organization.whatsappPhoneNumberId);
+  const typedName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
+  // The business's already-approved display name, so Meta's name review is a formality.
+  const verifiedName = typedName || shared?.verifiedName || organization.name;
+
+  try {
+    // An earlier attempt that never got its code checked is resumed, not duplicated.
+    const phoneNumberId =
+      existing?.phoneNumberId ??
+      (await addWabaNumber(organization.whatsappBusinessAccountId, {
+        countryCode,
+        phoneNumber: national,
+        verifiedName,
+      }));
+    await requestNumberCode(phoneNumberId, method);
+    logger.info(
+      { organization: organization.slug, phoneNumberId, method, resumed: Boolean(existing) },
+      "Dedicated WhatsApp number added; verification code requested"
+    );
+    return c.json({ phoneNumberId, displayPhoneNumber: `+${countryCode} ${national}`, method });
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 240) : "unknown error";
+    logger.warn({ err, organization: organization.slug }, "Adding a dedicated WhatsApp number failed");
+    return c.json({ error: `Meta did not accept that number: ${message}` }, 502);
+  }
+});
+
+/** A number on this business's own account that is not the shared line, or a reason it is not. */
+async function ownDedicatedNumber(
+  organization: { whatsappBusinessAccountId: string; whatsappPhoneNumberId: string },
+  phoneNumberId: string
+) {
+  if (phoneNumberId === organization.whatsappPhoneNumberId) {
+    return { error: "That is the shared company number." } as const;
+  }
+  const live = await listWabaNumbers(organization.whatsappBusinessAccountId);
+  const match = live.find((n) => n.phoneNumberId === phoneNumberId);
+  if (!match) return { error: "That number is not on this WhatsApp account." } as const;
+  return { match } as const;
+}
+
+employeesRoute.post("/:slug/whatsapp-numbers/:phoneNumberId/code", async (c) => {
+  const scope = c.get("scope");
+  if (scope?.role !== "operator") {
+    return c.json({ error: "Only the owner can add a WhatsApp number." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const body = (await c.req.json().catch(() => null)) as { method?: unknown } | null;
+  const method = body?.method === "VOICE" ? "VOICE" : "SMS";
+  try {
+    const found = await ownDedicatedNumber(organization, c.req.param("phoneNumberId"));
+    if ("error" in found) return c.json({ error: found.error }, 422);
+    await requestNumberCode(found.match.phoneNumberId, method);
+    return c.json({ ok: true, method });
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 240) : "unknown error";
+    return c.json({ error: `Meta did not send a new code: ${message}` }, 502);
+  }
+});
+
+employeesRoute.post("/:slug/whatsapp-numbers/:phoneNumberId/verify", async (c) => {
+  const scope = c.get("scope");
+  if (scope?.role !== "operator") {
+    return c.json({ error: "Only the owner can add a WhatsApp number." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const body = (await c.req.json().catch(() => null)) as { code?: unknown; employeeId?: unknown } | null;
+  const code = digits(body?.code);
+  if (!/^\d{6}$/.test(code)) {
+    return c.json({ error: "The code is the 6 digits Meta sent to that phone." }, 400);
+  }
+
+  // Resolve the person first, so a bad id fails before anything changes at Meta.
+  const employeeId = typeof body?.employeeId === "string" ? body.employeeId : null;
+  const employee = employeeId ? await findEmployeeById(employeeId) : null;
+  if (employeeId && (!employee || employee.organizationId !== organization.id)) {
+    return c.json({ error: "Employee not found" }, 404);
+  }
+
+  try {
+    const found = await ownDedicatedNumber(organization, c.req.param("phoneNumberId"));
+    if ("error" in found) return c.json({ error: found.error }, 422);
+    const { match } = found;
+
+    await verifyNumberCode(match.phoneNumberId, code);
+    // Two-step PIN: generated and discarded — the system token can reset it any time.
+    await registerNumber(match.phoneNumberId, String(randomInt(0, 1_000_000)).padStart(6, "0"));
+    logger.info(
+      { organization: organization.slug, phoneNumberId: match.phoneNumberId },
+      "Dedicated WhatsApp number verified and registered"
+    );
+
+    if (!employee) return c.json({ ok: true, phoneNumberId: match.phoneNumberId });
+
+    const updated = await assignEmployeeWhatsAppNumber(employee.id, {
+      phoneNumberId: match.phoneNumberId,
+      displayNumber: match.displayPhoneNumber,
+      verifiedName: match.verifiedName,
+    });
+    logger.info(
+      { employeeId: employee.id, organization: organization.slug, phoneNumberId: match.phoneNumberId },
+      "Assigned a newly registered WhatsApp number to a staff member"
+    );
+    return c.json({ ok: true, phoneNumberId: match.phoneNumberId, employee: { ...updated, digitalSignature: undefined } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 240) : "unknown error";
+    logger.warn({ err, organization: organization.slug }, "Verifying a dedicated WhatsApp number failed");
+    return c.json({ error: `Meta did not accept that code: ${message}` }, 502);
+  }
 });
 
 employeesRoute.post("/:slug/employees/:employeeId/access-code", async (c) => {

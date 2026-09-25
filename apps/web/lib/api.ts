@@ -373,8 +373,49 @@ export interface WabaNumberRow {
   displayPhoneNumber: string;
   verifiedName: string;
   qualityRating: string | null;
+  /** Registered and able to send; false for one added but not yet code-verified. */
+  ready: boolean;
   isShared: boolean;
   assignedTo: { id: string; name: string } | null;
+}
+
+/**
+ * Add a spare phone line to the business's WhatsApp account; Meta then sends a
+ * 6-digit code to that phone (owner-only). Finish with verifyWhatsAppNumber.
+ */
+export function addWhatsAppNumber(
+  slug: BusinessSlug,
+  input: { countryCode: string; number: string; displayName?: string; method: "SMS" | "VOICE" }
+): Promise<{ phoneNumberId: string; displayPhoneNumber: string; method: "SMS" | "VOICE" }> {
+  return request(`/api/organizations/${slug}/whatsapp-numbers`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Ask Meta to send the code again, by SMS or voice call. */
+export function resendWhatsAppNumberCode(
+  slug: BusinessSlug,
+  phoneNumberId: string,
+  method: "SMS" | "VOICE"
+): Promise<{ ok: true; method: "SMS" | "VOICE" }> {
+  return request(`/api/organizations/${slug}/whatsapp-numbers/${phoneNumberId}/code`, {
+    method: "POST",
+    body: JSON.stringify({ method }),
+  });
+}
+
+/** Check the code, register the number, and (with employeeId) hand it to that person. */
+export function verifyWhatsAppNumber(
+  slug: BusinessSlug,
+  phoneNumberId: string,
+  code: string,
+  employeeId?: string
+): Promise<{ ok: true; phoneNumberId: string; employee?: TeamMember }> {
+  return request(`/api/organizations/${slug}/whatsapp-numbers/${phoneNumberId}/verify`, {
+    method: "POST",
+    body: JSON.stringify({ code, employeeId }),
+  });
 }
 
 /** The numbers on a business's WhatsApp account, and whose each one is (owner-only). */
