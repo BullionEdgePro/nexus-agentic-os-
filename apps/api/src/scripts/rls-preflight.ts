@@ -48,6 +48,7 @@ import {
   withAllTenants,
   getEmployeeActivity,
   getRecentActivity,
+  getStaffResponseTimes,
   getQualityTrend,
   getEscalationHotspots,
   listBroadcastTemplates,
@@ -92,8 +93,10 @@ const PATHS: Path[] = [
 
   { name: "employee activity (all)", crossTenant: true, run: () => getEmployeeActivity(null) },
   { name: "recent activity (all)", crossTenant: true, run: () => getRecentActivity(5) },
+  { name: "response times (all)", crossTenant: true, run: () => getStaffResponseTimes(null, 30, 180) },
 
   { name: "employee activity (one)", run: (id) => getEmployeeActivity(id) },
+  { name: "response times (one)", run: (id) => getStaffResponseTimes(id, 30, 180) },
   { name: "quality trend", run: (id) => getQualityTrend(id, 7) },
   { name: "escalation hotspots", run: (id) => getEscalationHotspots(id, 7) },
   { name: "broadcast templates", run: (id) => listBroadcastTemplates(id) },

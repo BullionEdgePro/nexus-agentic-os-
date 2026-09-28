@@ -11,6 +11,7 @@ export * from "./calendars.js";
 export * from "./routing.js";
 export * from "./admins.js";
 export * from "./activity.js";
+export * from "./response-times.js";
 export * from "./tenant-context.js";
 export * from "./quality.js";
 export * from "./shared-brain.js";

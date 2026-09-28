@@ -6,6 +6,7 @@ import type { BusinessSlug } from "@nexus/shared";
 import { getActivity, type EmployeeActivity, type ActivityEvent, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
+import { ResponseTimes } from "./response-times";
 import "../deck.css";
 import "./activity.css";
 
@@ -142,6 +143,9 @@ export default function ActivityPage() {
             </table>
           </div>
         )}
+
+        {/* Its own load and failure — see ResponseTimes. */}
+        <ResponseTimes business={business} />
 
         <h2 className="act-sub-head">Recent activity</h2>
         {events.length === 0 ? (

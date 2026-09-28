@@ -1560,3 +1560,6 @@
   .dp-summary-list li,
   .ibx-fu-read { animation: none; }
 }
+
+/* The floating Ask button sits over the panel foot — leave room to scroll past it. */
+.ibx-details { padding-bottom: 92px; }

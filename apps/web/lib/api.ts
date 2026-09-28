@@ -912,6 +912,28 @@ export function getActivity(
   return request(`/api/activity${orgSlug ? `?business=${orgSlug}` : ""}`);
 }
 
+/** How fast each person answers a waiting customer. See packages/db/src/response-times.ts. */
+export interface StaffResponseTime {
+  staffId: string | null;
+  name: string;
+  organizationName: string | null;
+  repliesSent: number;
+  responses: number;
+  medianSeconds: number | null;
+  averageSeconds: number | null;
+  withinTarget: number;
+  slowestSeconds: number | null;
+}
+
+export function getResponseTimes(
+  days: 7 | 30 | 90,
+  orgSlug?: BusinessSlug
+): Promise<{ staff: StaffResponseTime[]; days: number; targetMinutes: number }> {
+  const qs = new URLSearchParams({ days: String(days) });
+  if (orgSlug) qs.set("business", orgSlug);
+  return request(`/api/activity/response-times?${qs.toString()}`);
+}
+
 /**
  * `attribution` is decided by the server, never by reading the name here.
  *
