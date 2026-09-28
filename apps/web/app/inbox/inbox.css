@@ -461,6 +461,10 @@
 .ibx-thread {
   grid-area: thread;
   position: relative;
+  /* The header compacts against the THREAD's width, not the window's — the
+     thread is what gets squeezed when the rail, list and panel are all open. */
+  container-type: inline-size;
+  container-name: thread;
   min-height: 0;
   min-width: 0;
   display: flex;
@@ -510,7 +514,7 @@
   border-bottom: 1px solid var(--hairline);
 }
 .ibx-back { display: none; }
-.ibx-who-block { flex: 1; min-width: 0; }
+.ibx-who-block { flex: 1 1 140px; min-width: 110px; }
 .ibx-who {
   font-family: var(--display);
   font-size: 16px;
@@ -1358,7 +1362,25 @@
   50% { opacity: 1; }
 }
 
+/* ---------- the thread header, when the thread is narrow ---------- */
+@container thread (max-width: 720px) {
+  .ibx-assignee-name,
+  .ibx-resolve span,
+  .ibx-handoff-label { display: none; }
+  .ibx-assignee { padding-right: 6px; }
+  .ibx-resolve { padding: 6px 8px; }
+  .ibx-handoff { padding-right: 5px; }
+}
+@container thread (max-width: 520px) {
+  .ibx-head-actions .ibx-iconbtn:not(.ibx-back) { width: 28px; }
+  .ibx-thread-head { gap: 8px; padding: 8px 10px; }
+}
+
 /* ---------- narrower screens ---------- */
+@media (max-width: 1600px) {
+  .ibx { grid-template-columns: 212px 300px minmax(0, 1fr) 290px; }
+  .ibx.no-details { grid-template-columns: 212px 300px minmax(0, 1fr) 0; }
+}
 @media (max-width: 1320px) {
   .ibx { grid-template-columns: 210px 300px minmax(0, 1fr) 292px; }
   .ibx.no-details { grid-template-columns: 210px 300px minmax(0, 1fr) 0; }

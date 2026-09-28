@@ -186,10 +186,10 @@ const STATUS_FOLDERS: { key: FolderKey; label: string }[] = [
 ];
 
 /** The folders beside it — who the thread is waiting on. */
-function queueFolders(slaMinutes: number): { key: FolderKey; label: string; icon: IconName }[] {
+function queueFolders(slaMinutes: number): { key: FolderKey; label: string; icon: IconName; hint?: string }[] {
   return [
     { key: "mine", label: "My chats", icon: "person" },
-    { key: "late", label: `SLA breached (>${slaLabel(slaMinutes)})`, icon: "timer" },
+    { key: "late", label: "SLA breached", icon: "timer", hint: `Waiting longer than the ${slaLabel(slaMinutes)} reply-time target` },
     { key: "followup", label: "Follow-up due", icon: "bell" },
     { key: "unassigned", label: "Unassigned", icon: "nobody" },
     { key: "human", label: "Human-held", icon: "hand" },
@@ -685,6 +685,7 @@ export default function InboxPage() {
                   (f.key === "late" || f.key === "followup") && counts[f.key] > 0 ? " urgent" : ""
                 }`}
                 onClick={() => setFolder(f.key)}
+                title={f.hint}
               >
                 <Icon name={f.icon} />
                 <span className="ibx-folder-label">{f.label}</span>
