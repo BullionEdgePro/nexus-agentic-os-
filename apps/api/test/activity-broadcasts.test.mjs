@@ -726,7 +726,9 @@ test("every header control has a destination or an action", () => {
   // around it. Verified at deck-console.tsx:309-311 rather than assumed --
   // its first run flagged it, and "add it to the list" would have been the
   // wrong reflex if it had been floating loose in the header.
-  const KNOWN = new Set(["HeaderSearch", "WorkMenu", "NotificationsMenu", "AccountMenu", "BrandMark"]);
+  // ThemeToggle (2026-09-28) answers itself: pressing it switches the console
+  // between light and dark and remembers the choice (app/theme-toggle.tsx).
+  const KNOWN = new Set(["HeaderSearch", "WorkMenu", "NotificationsMenu", "AccountMenu", "BrandMark", "ThemeToggle"]);
   const rendered = new Set();
   for (const m of topbar.matchAll(/<([A-Z][A-Za-z0-9]*)/g)) rendered.add(m[1]);
   assert.ok(rendered.size >= 4, `only ${rendered.size} components found in the topbar — the slice is wrong`);

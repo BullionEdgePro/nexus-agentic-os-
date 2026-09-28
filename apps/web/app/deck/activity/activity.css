@@ -226,7 +226,7 @@
   display: grid;
   place-items: center;
   background: var(--btn-grad);
-  color: var(--paper);
+  color: var(--on-accent);
   font-weight: 800;
 }
 .rt-card.muted .rt-av { background: var(--pebble); color: var(--slate); }

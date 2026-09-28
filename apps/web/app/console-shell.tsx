@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "./theme-toggle";
 import { Fragment } from "react";
 import { usePathname } from "next/navigation";
 import { ViewAsStaff } from "./view-as-staff";
@@ -139,14 +140,18 @@ export function ConsoleShell({
             hover each square to find out what it was — the label IS the
             navigation, the glyph is only there to make a familiar one findable
             at a glance. */}
-        <a className="rail-brand" href="/" title="Nexus Agentic OS">
-          <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="currentColor" strokeWidth="1.3" />
-            <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" stroke="var(--signal)" strokeWidth="1.2" />
-            <circle cx="16" cy="16" r="2" fill="var(--signal)" />
-          </svg>
-          <span className="rail-wordmark">Nexus</span>
-        </a>
+        <div className="rail-brand-row">
+          <a className="rail-brand" href="/" title="Nexus Agentic OS">
+            <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" stroke="var(--signal)" strokeWidth="1.2" />
+              <circle cx="16" cy="16" r="2" fill="var(--signal)" />
+            </svg>
+            <span className="rail-wordmark">Nexus</span>
+          </a>
+          {/* Light or dark, at the head of every signed-in screen. */}
+          <ThemeToggle compact />
+        </div>
         {/* A visible way in to the search that ⌘K already opened — the shortcut
             is fast once known and invisible until then, so the box makes it
             findable. It dispatches the same event the palette listens for, so

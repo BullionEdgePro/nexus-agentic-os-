@@ -165,7 +165,7 @@
   place-items: center;
   border-radius: 11px;
   background: var(--btn-grad);
-  color: var(--paper);
+  color: var(--on-accent);
   box-shadow: 0 8px 16px -8px var(--sky-glow);
   transition: transform .25s var(--ease-spring);
 }
@@ -232,7 +232,7 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.day-count-hot { background: var(--btn-grad); color: var(--paper); }
+.day-count-hot { background: var(--btn-grad); color: var(--on-accent); }
 .day-count-bad { background: var(--crit-soft); color: var(--crit); }
 .day-more { margin-left: auto; font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--signal-text); }
 

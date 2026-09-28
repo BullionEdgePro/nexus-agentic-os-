@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "./theme-toggle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OverviewMetrics } from "@nexus/shared";
 import { initDeckFx } from "@/lib/deck-fx";
@@ -406,6 +407,8 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
           <HeaderSearch />
 
           <div className="top-right">
+            {/* Light or dark — the same switch as the rail's, in the header. */}
+            <ThemeToggle />
             <WorkMenu />
             <NotificationsMenu />
             <AccountMenu signedInAs={who} />

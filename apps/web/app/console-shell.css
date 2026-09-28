@@ -272,12 +272,12 @@
   padding: 5px;
   border-radius: 9px;
   background: var(--sky-grad);
-  color: var(--paper);
+  color: var(--on-accent);
   box-shadow: 0 6px 16px -6px var(--sky-glow);
 }
 .deck-root.shell .rail-brand svg path:nth-of-type(2),
-.deck-root.shell .rail-brand svg circle { stroke: var(--paper); fill: none; }
-.deck-root.shell .rail-brand svg circle { fill: var(--paper); transform-origin: 16px 16px; animation: nx-pulse-dot 2.8s ease-in-out infinite; }
+.deck-root.shell .rail-brand svg circle { stroke: var(--on-accent); fill: none; }
+.deck-root.shell .rail-brand svg circle { fill: var(--on-accent); transform-origin: 16px 16px; animation: nx-pulse-dot 2.8s ease-in-out infinite; }
 @keyframes nx-pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: .55; transform: scale(1.5); }
