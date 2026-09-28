@@ -1,131 +1,319 @@
-/* A staff member's day.
+/* A staff member's day — Clear Sky.
    Every colour is a deck.css token — a literal here is a colour that works in
-   one theme and not the other. */
+   one theme and not the other. The band, the quick actions and the cards are
+   one page with its own gutter: this sits directly in the shell's main column
+   (above the workspace), which has none of its own, so without the padding the
+   greeting sat flush against the rail. */
 
-.day { margin-bottom: 30px; }
+.day {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 26px 32px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
 
 /* Nothing at all until the data is in. The alternative is a greeting with a
    blank name in it, which reads as a bug for as long as it is on screen. */
-.day-waiting { min-height: 220px; }
+.day-waiting { min-height: 260px; }
 
-.day-head { margin-bottom: 18px; }
-.day-eyebrow {
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  color: var(--slate);
-  margin: 0 0 6px;
+/* ---------- the welcome band ---------- */
+.day-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 26px 28px;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(60% 120% at 100% 0%, rgba(94, 196, 255, .35), transparent 70%),
+    radial-gradient(40% 90% at 0% 100%, rgba(124, 214, 255, .22), transparent 70%),
+    var(--paper);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--lift-sm);
+  overflow: hidden;
+  isolation: isolate;
 }
-.day-head h1 {
-  font-size: 27px;
-  line-height: 1.15;
-  color: var(--ink);
+/* A slow light crossing the band — the one ambient motion on the page. */
+.day-hero::after {
+  content: "";
+  position: absolute;
+  inset: -40% -10%;
+  z-index: -1;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, .55) 50%, transparent 60%);
+  animation: day-sweep 9s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes day-sweep {
+  0%, 20%  { transform: translateX(-60%); }
+  60%, 100% { transform: translateX(60%); }
+}
+.day-hero-copy { min-width: 0; }
+.day-eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--signal-text);
+}
+.day-date {
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  color: var(--slate);
+  letter-spacing: .04em;
+  text-transform: none;
+  font-family: var(--sans);
+  font-size: 11.5px;
+}
+.day-hero h1 {
   margin: 0 0 6px;
+  font-family: var(--display);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -.025em;
+  color: var(--ink);
   text-wrap: balance;
 }
-.day-lede { font-size: 14px; color: var(--slate); margin: 0; max-width: 62ch; }
+.day-lede { margin: 0; max-width: 58ch; font-size: 15px; color: var(--slate); }
 
-/* --- the nudges ------------------------------------------- */
+.day-focus { display: flex; gap: 10px; }
+.day-focus-tile {
+  min-width: 118px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .8);
+  border: 1px solid var(--hairline);
+  color: var(--slate);
+  text-decoration: none;
+  backdrop-filter: blur(6px);
+  transition: transform .2s var(--ease-out), box-shadow .2s, border-color .2s;
+}
+.day-focus-tile:hover { transform: translateY(-3px); box-shadow: var(--lift); border-color: var(--sky); }
+.day-focus-tile b {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.day-focus-tile span { font-size: 12px; font-weight: 600; }
+.day-focus-tile.hot { border-color: var(--sky); background: var(--sky-soft); }
+.day-focus-tile.hot b { color: var(--signal-deep); }
+.day-focus-tile.late { border-color: rgba(196, 52, 42, .35); background: var(--crit-soft); }
+.day-focus-tile.late b { color: var(--crit); }
 
-.day-nudges { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 8px; }
+.day-clear {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 380px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .85);
+  border: 1px solid var(--good-soft);
+  color: var(--good);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.day-clear p { margin: 0; }
+.day-clear-mark { width: 44px; height: 44px; flex: 0 0 auto; }
+.day-clear-mark circle { fill: var(--good-soft); stroke: var(--good); stroke-width: 2.5; stroke-dasharray: 150; stroke-dashoffset: 150; animation: day-draw .7s var(--ease-out) forwards; }
+.day-clear-mark path { fill: none; stroke: var(--good); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: day-draw .45s .55s var(--ease-out) forwards; }
+@keyframes day-draw { to { stroke-dashoffset: 0; } }
+
+/* ---------- quick actions ---------- */
+.day-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.day-action {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  color: var(--ink);
+  text-decoration: none;
+  transition: transform .2s var(--ease-out), box-shadow .2s, border-color .2s;
+  animation: nx-pop .45s var(--ease-out) both;
+}
+.day-action:nth-child(2) { animation-delay: .04s; }
+.day-action:nth-child(3) { animation-delay: .08s; }
+.day-action:nth-child(4) { animation-delay: .12s; }
+.day-action:nth-child(5) { animation-delay: .16s; }
+.day-action:hover { transform: translateY(-3px); box-shadow: var(--lift); border-color: var(--sky); }
+.day-action:hover .day-action-ic { transform: rotate(-8deg) scale(1.08); }
+.day-action-ic {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--btn-grad);
+  color: var(--paper);
+  box-shadow: 0 8px 16px -8px var(--sky-glow);
+  transition: transform .25s var(--ease-spring);
+}
+.day-action-ic svg { width: 19px; height: 19px; }
+.day-action span { display: flex; flex-direction: column; min-width: 0; }
+.day-action b { font-size: 13.5px; font-weight: 700; }
+.day-action small { font-size: 11.5px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- the nudges ---------- */
+.day-nudges { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .day-nudge {
   display: flex;
   gap: 12px;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  font-size: 13px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-left: 4px solid var(--sky);
+  font-size: 13.5px;
   color: var(--ink);
-  padding: 10px 13px;
-  border-radius: 6px;
-  background: var(--pebble);
-  border-left: 3px solid var(--hairline);
 }
 .day-nudge span { flex: 1 1 320px; }
-.day-nudge a { font-size: 12.5px; color: var(--signal-text); white-space: nowrap; }
-.day-urgent { border-left-color: var(--crit); }
-.day-warn { border-left-color: var(--warn); }
-.day-info { border-left-color: var(--signal-text); }
+.day-nudge a { font-size: 13px; font-weight: 700; color: var(--signal-text); white-space: nowrap; }
+.day-urgent { border-left-color: var(--crit); background: var(--crit-soft); }
+.day-warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.day-info { border-left-color: var(--sky); }
 
-.day-clear {
-  font-size: 14px;
-  color: var(--good);
-  margin: 0 0 24px;
-  padding: 14px 16px;
-  border-radius: 8px;
-  background: var(--good-soft);
-  max-width: 68ch;
+/* ---------- the grid of cards ---------- */
+.day-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.day-main,
+.day-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.day-card {
+  padding: 18px 18px 10px;
+  border-radius: var(--r);
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--lift-sm);
+  scroll-margin-top: 20px;
 }
-
-/* --- the blocks ------------------------------------------- */
-
-.day-block { margin-bottom: 24px; }
-.day-block h2 {
+.day-card h2 {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--slate);
-  margin: 0 0 9px;
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--ink);
 }
+/* The queue at the top carries a lit edge, so the eye finds it before reading
+   a word. Nothing else on the page does. */
+.day-first { border-color: var(--sky); box-shadow: 0 0 0 3px var(--sky-wash), var(--lift-sm); }
 .day-count {
-  font-size: 11px;
-  letter-spacing: 0;
-  text-transform: none;
-  padding: 1px 8px;
-  border-radius: 999px;
+  padding: 1px 9px;
+  border-radius: var(--r-pill);
   background: var(--pebble);
   color: var(--slate);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.day-count-hot { background: var(--btn-grad); color: var(--paper); }
 .day-count-bad { background: var(--crit-soft); color: var(--crit); }
+.day-more { margin-left: auto; font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--signal-text); }
 
 .day-list { list-style: none; margin: 0; padding: 0; }
-.day-list li { border-bottom: 1px solid var(--hairline); }
-.day-list li:last-child { border-bottom: 0; }
+.day-list li + li { border-top: 1px solid var(--hairline); }
 .day-list a {
   display: flex;
-  gap: 14px;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  padding: 10px 2px;
-  text-decoration: none;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 6px;
+  margin: 0 -6px;
+  border-radius: 10px;
   color: inherit;
+  text-decoration: none;
+  transition: background .16s;
 }
 .day-list a:hover { background: var(--marble); }
-.day-list strong { font-size: 13.5px; font-weight: 600; color: var(--ink); }
-.day-list span { font-size: 12.5px; color: var(--slate); font-variant-numeric: tabular-nums; }
-.day-late { color: var(--crit); font-weight: 600; }
-
-/* The queue at the top carries a rule down its left edge, so the eye finds it
-   before reading a word. Nothing else on the page does. */
-.day-first { border-left: 3px solid var(--signal-text); padding-left: 14px; }
-
-/* --- the three numbers ------------------------------------ */
-
-.day-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 28px;
-  margin: 26px 0 0;
-  padding-top: 18px;
-  border-top: 1px solid var(--hairline);
+.day-list strong { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-av {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--sky-soft);
+  color: var(--signal-deep);
+  font-size: 13px;
+  font-weight: 800;
 }
-.day-stats dt {
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  color: var(--slate);
-  margin-bottom: 3px;
+.day-wait,
+.day-due { font-size: 12.5px; color: var(--slate); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.day-late { color: var(--crit); font-weight: 700; }
+.day-go { font-size: 12.5px; font-weight: 700; color: var(--signal-text); opacity: 0; transform: translateX(-4px); transition: opacity .16s, transform .16s; }
+.day-list a:hover .day-go,
+.day-list a:focus-visible .day-go { opacity: 1; transform: none; }
+.day-tick { width: 16px; height: 16px; flex: 0 0 auto; border-radius: 5px; border: 2px solid var(--hairline-strong); }
+.day-tick.late { border-color: var(--crit); background: var(--crit-soft); }
+
+/* the diary, as a timeline */
+.day-agenda { list-style: none; margin: 0; padding: 4px 0 6px; position: relative; }
+.day-agenda::before { content: ""; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 2px; border-radius: 2px; background: linear-gradient(var(--sky), var(--hairline)); }
+.day-agenda li { position: relative; padding-left: 24px; }
+.day-agenda li::before { content: ""; position: absolute; left: 1px; top: 15px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); border: 3px solid var(--sky-deep); }
+.day-agenda a { display: flex; flex-direction: column; gap: 1px; padding: 9px 8px; border-radius: 10px; color: inherit; text-decoration: none; }
+.day-agenda a:hover { background: var(--marble); }
+.day-agenda time { font-size: 11.5px; font-weight: 700; color: var(--signal-text); font-variant-numeric: tabular-nums; }
+.day-agenda strong { font-size: 13.5px; color: var(--ink); }
+.day-agenda span { font-size: 12px; color: var(--slate); }
+
+/* the client book */
+.day-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 8px; }
+.day-stats > div { padding: 12px; border-radius: 12px; background: var(--marble); }
+.day-stats dt { margin-bottom: 4px; font-size: 11.5px; font-weight: 600; color: var(--slate); }
+.day-stats dd { margin: 0; font-family: var(--display); font-size: 24px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.day-stats dd.day-attn { color: var(--warn); }
+.day-book.wide .day-stats { grid-template-columns: repeat(3, minmax(0, 220px)); }
+
+.day-error { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--crit-soft); font-size: 13px; color: var(--crit); }
+
+/* ---------- narrower ---------- */
+@media (max-width: 1180px) {
+  .day-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-.day-stats dd {
-  margin: 0;
-  font-size: 22px;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
+@media (max-width: 980px) {
+  .day-hero { grid-template-columns: minmax(0, 1fr); }
+  .day-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .day { padding: 18px 16px 4px; }
+  .day-hero { padding: 20px; }
+  .day-focus { flex-wrap: wrap; }
+  .day-focus-tile { flex: 1 1 90px; min-width: 0; }
+  .day-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .day-stats,
+  .day-book.wide .day-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-.day-error { font-size: 13px; color: var(--crit); }
+@media (prefers-reduced-motion: reduce) {
+  .day-hero::after,
+  .day-action { animation: none; }
+  .day-clear-mark circle,
+  .day-clear-mark path { animation: none; stroke-dashoffset: 0; }
+}

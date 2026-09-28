@@ -311,9 +311,13 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
               : "Customers assigned to you, and anything you win on your own WhatsApp. Messaging someone from your phone stops the AI replying to them here, so nobody gets answered twice."}
           </p>
         </div>
-        <a className="team-back" href="/">
-          Back to deck
-        </a>
+        {/* Staff see this section ON the home page, where "back" pointed at
+            the page they were already on. */}
+        {isOperator ? (
+          <a className="team-back" href="/">
+            Back to deck
+          </a>
+        ) : null}
       </header>
 
       {isOperator && (
@@ -661,7 +665,7 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
           )}
 
           {selected && (
-            <form className="lead-form" onSubmit={onCaptureLead}>
+            <form className="lead-form" id="log-lead" onSubmit={onCaptureLead}>
               <h3>
                 {isOperator
                   ? `Log a lead from ${selected.fullName}'s WhatsApp`

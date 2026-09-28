@@ -347,12 +347,28 @@ export const NAV: NavItem[] = [
 // The group field is `title`, not the nav-item field name — a source test counts
 // each nav item's own label property to check every item has one, and a group is
 // not an item, so it must not answer to that same property name.
+//
+// THE SECTIONS FOLLOW THE JOB, IN THE WORDS OF THE TEAM INBOXES WE ARE MEASURED
+// AGAINST (2026-09-28). The owner benchmarks Nexus against DoubleTick, which
+// sells itself as Manage / Reach / Automate / Analyse / Govern; the rail now
+// reads the same way, so a person who has used one finds their way in the
+// other. Each role sees the same headings with its own doors under them — an
+// empty heading never renders:
+//   Manage     the day's work: home, the inbox, what needs attention, tasks, diary
+//   Customers  the people: my book, the customer directory, the team
+//   Reach      starting conversations: my campaigns, broadcasts, links & QR codes
+//   Automate   what shapes the AI's replies: the agent, knowledge, playbooks, packs
+//   Analyse    how it is going: forecast, team activity, agent quality
+//   Settings   the pipes: channels, my connections, my settings
+// Labels are deliberately unchanged: findings name screens by their headings
+// ("on the How we answer screen"), and a renamed door would break that promise.
 export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
-  { title: "Work", hrefs: ["/", "/inbox", "/deck/operators", "/deck/board", "/deck/tasks", "/deck/bookings"] },
-  { title: "My book", hrefs: ["/deck/my-clients", "/deck/my-campaigns", "/deck/connections", "/deck/my-settings"] },
-  { title: "Directory", hrefs: ["/deck/customers", "/deck/team"] },
-  { title: "Setup", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue", "/deck/channels", "/deck/links"] },
-  { title: "Reports", hrefs: ["/deck/forecast", "/deck/broadcasts", "/deck/activity", "/deck/quality"] },
+  { title: "Manage", hrefs: ["/", "/inbox", "/deck/operators", "/deck/board", "/deck/tasks", "/deck/bookings"] },
+  { title: "Customers", hrefs: ["/deck/my-clients", "/deck/customers", "/deck/team"] },
+  { title: "Reach", hrefs: ["/deck/my-campaigns", "/deck/broadcasts", "/deck/links"] },
+  { title: "Automate", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue"] },
+  { title: "Analyse", hrefs: ["/deck/forecast", "/deck/activity", "/deck/quality"] },
+  { title: "Settings", hrefs: ["/deck/channels", "/deck/connections", "/deck/my-settings"] },
 ];
 
 /**
