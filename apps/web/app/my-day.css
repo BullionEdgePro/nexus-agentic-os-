@@ -289,7 +289,7 @@
 .day-stats dt { margin-bottom: 4px; font-size: 11.5px; font-weight: 600; color: var(--slate); }
 .day-stats dd { margin: 0; font-family: var(--display); font-size: 24px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 .day-stats dd.day-attn { color: var(--warn); }
-.day-book.wide .day-stats { grid-template-columns: repeat(3, minmax(0, 220px)); }
+.day-book.wide .day-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .day-error { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--crit-soft); font-size: 13px; color: var(--crit); }
 

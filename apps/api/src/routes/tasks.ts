@@ -9,10 +9,15 @@ import {
   assignTask,
   rescheduleTask,
   findOrganizationBySlug,
+  findOrganizationById,
+  findConversationById,
+  getConversationRouting,
   type TaskStatus,
 } from "@nexus/db";
+import { completeText } from "@nexus/agents";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
+import { describeNow, localStamp, zonedLocalToUtc } from "../lib/zoned-time.js";
 
 /**
  * Follow-ups — the work a conversation leaves behind.
@@ -235,6 +240,66 @@ export const conversationTasksRoute = new Hono();
 conversationTasksRoute.get("/:id/tasks", async (c) => {
   const tasks = await listTasksForConversation(c.req.param("id"));
   return c.json({ tasks });
+});
+
+/**
+ * A follow-up said the way a person says it — "call him back Thursday 3pm about
+ * the quote" — read into a title and a due time. DoubleTick calls this AI
+ * Reminders.
+ *
+ * READS, NEVER WRITES. It returns what it understood and the pane shows it back
+ * ("Call back about the quote · Thu 1 Oct, 15:00"); the follow-up is created by
+ * the ordinary POST below only when the person confirms. An assistant that
+ * guessed a date and filed it would put a wrong promise on the board with
+ * nobody having read it.
+ *
+ * The time is the SERVING business's wall clock (zonedLocalToUtc), not the
+ * server's UTC: "3pm" on a Dubai team's phone is 11:00 UTC, and a bare string
+ * would have made every reminder four hours late.
+ */
+conversationTasksRoute.post("/:id/tasks/understand", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "Say what needs doing, and when." }, 400);
+  if (text.length > 300) return c.json({ error: "Keep it to a sentence or two." }, 413);
+
+  const conversationId = c.req.param("id");
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+  const routing = await getConversationRouting(conversationId).catch(() => null);
+  const serving = await findOrganizationById(routing?.routedOrganizationId ?? conversation.organizationId);
+  const timeZone = serving?.timezone || "Asia/Dubai";
+
+  const now = new Date();
+  const answer = await completeText({
+    system:
+      'You turn a support agent\'s note into a follow-up task. Reply with ONLY a JSON object: {"title": string, "due": string|null}. "title" is a short imperative task (max 80 chars) in the note\'s language, without the date or time in it. "due" is the local date-time "YYYY-MM-DDTHH:MM" the note asks for, resolved against the current local time you are given; if a day is given without a time use 09:00; if no time or day is mentioned use null. Never invent a date the note does not imply.',
+    prompt: `Current local time: ${describeNow(now, timeZone)} (${localStamp(now, timeZone)}).\nNote: ${text}`,
+    maxTokens: 120,
+  });
+  if (!answer) {
+    return c.json({ error: "The assistant is not available right now — add it by hand below." }, 503);
+  }
+
+  // The model's JSON, checked field by field rather than trusted: a title it
+  // could not produce falls back to the note itself, and a due time that is not
+  // the exact shape, not a real date, or already past is dropped to "no date"
+  // rather than filed wrong.
+  let parsed: { title?: unknown; due?: unknown } = {};
+  try {
+    parsed = JSON.parse(answer.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+  } catch {
+    parsed = {};
+  }
+  const title =
+    typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim().slice(0, 200) : text.slice(0, 200);
+  const dueDate = typeof parsed.due === "string" ? zonedLocalToUtc(parsed.due, timeZone) : null;
+  const dueAt = dueDate && dueDate.getTime() > now.getTime() - 60_000 ? dueDate.toISOString() : null;
+
+  // dateDropped: the note implied a time that could not be used (malformed or
+  // already past) — said out loud so the pane can ask for one, not silently
+  // filed as "no date".
+  return c.json({ title, dueAt, timeZone, dateDropped: typeof parsed.due === "string" && !dueAt });
 });
 
 conversationTasksRoute.post("/:id/tasks", async (c) => {

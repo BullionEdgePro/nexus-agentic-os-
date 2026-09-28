@@ -774,6 +774,13 @@ export function polishText(conversationId: string, text: string): Promise<{ text
   });
 }
 
+/** The thread in five bullet lines, for whoever picks it up next. Never stored. */
+export function summarizeConversation(
+  conversationId: string
+): Promise<{ summary: string; messageCount: number }> {
+  return request(`/api/conversations/${conversationId}/summary`, { method: "POST" });
+}
+
 /** A reply written now to send later. */
 export interface ScheduledMessage {
   id: string;
@@ -2053,6 +2060,21 @@ export function createConversationTask(
   return request(`/api/conversations/${conversationId}/tasks`, {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+/**
+ * "Call him back Thursday 3pm about the quote" → a title and a due time, read
+ * in the serving business's timezone. Reads only: the follow-up is created by
+ * createConversationTask once the person has seen what was understood.
+ */
+export function understandFollowUp(
+  conversationId: string,
+  text: string
+): Promise<{ title: string; dueAt: string | null; timeZone: string; dateDropped: boolean }> {
+  return request(`/api/conversations/${conversationId}/tasks/understand`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
   });
 }
 

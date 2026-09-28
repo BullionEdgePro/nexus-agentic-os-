@@ -539,6 +539,54 @@ conversationsRoute.post("/:id/polish", async (c) => {
 });
 
 /**
+ * The whole thread in five lines — AI chat summary.
+ *
+ * For the colleague picking a conversation up cold: who this is, what they
+ * want, what has been answered or promised, what is still open, and the next
+ * step. Read from the thread's latest 60 messages and nothing else; the model
+ * is told to leave out anything the thread does not say, because a summary that
+ * invents a promise is worse than no summary — the reader acts on it without
+ * scrolling up to check.
+ *
+ * Nothing is stored: a summary is only as current as the thread, and a saved
+ * one would go stale the moment the customer wrote again.
+ */
+conversationsRoute.post("/:id/summary", async (c) => {
+  const conversationId = c.req.param("id");
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  const messages = await getMessagesForConversation(conversationId, 60);
+  const transcript = messages
+    .filter((m) => m.body)
+    .map((m) => {
+      const who =
+        m.direction === "inbound"
+          ? "Customer"
+          : m.senderType === "ai_agent"
+            ? "AI agent"
+            : m.senderType === "system"
+              ? "System"
+              : (m.senderName ?? "Staff");
+      return `${who}: ${m.body}`;
+    })
+    .join("\n")
+    .slice(-12_000);
+  if (!transcript) return c.json({ error: "There is nothing in this conversation to summarise yet." }, 400);
+
+  const summary = await completeText({
+    system:
+      "You summarise a customer conversation for a colleague who is about to take it over. Write at most five short bullet lines, each starting with '• ', covering only what the conversation actually says: who the customer is and what they want; what has been answered; anything promised (with dates or amounts exactly as stated); what is still open; and the sensible next step. Never add facts, prices, dates or promises the conversation does not contain. If the thread is spam or a sales pitch to the business, say so in one line. Return only the bullets.",
+    prompt: transcript,
+    maxTokens: 350,
+  });
+  if (!summary) {
+    return c.json({ error: "The assistant is not available right now — read the thread instead." }, 503);
+  }
+  return c.json({ summary, messageCount: messages.length });
+});
+
+/**
  * The contact/details panel for one conversation, in a single read.
  *
  * Also carries the two things the Collaborators control needs: who is already on

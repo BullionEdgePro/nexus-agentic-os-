@@ -1463,3 +1463,100 @@
   .ibx-magic.busy .ibx-ic,
   .ibx-offline-dot { animation: none; }
 }
+
+/* ---------- AI summary (customer panel) ---------- */
+.dp-summary .dp-h { justify-content: space-between; }
+.dp-summary-btn {
+  padding: 4px 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--signal-text);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition: border-color .16s, background .16s;
+}
+.dp-summary-btn:hover:not(:disabled) { border-color: var(--sky); background: var(--sky-soft); }
+.dp-summary-btn:disabled { opacity: .6; cursor: default; }
+.dp-summary.has {
+  padding: 12px;
+  margin: 0 -4px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--sky-soft), var(--paper) 120%);
+  border: 1px solid rgba(63, 178, 255, .35);
+}
+.dp-summary .dp-loading { padding: 4px 0; }
+.dp-summary-list { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dp-summary-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  animation: nx-rise .35s var(--ease-out) both;
+}
+.dp-summary-list li:nth-child(2) { animation-delay: .05s; }
+.dp-summary-list li:nth-child(3) { animation-delay: .1s; }
+.dp-summary-list li:nth-child(4) { animation-delay: .15s; }
+.dp-summary-list li:nth-child(5) { animation-delay: .2s; }
+.dp-summary-list li::before { content: ""; position: absolute; left: 2px; top: .6em; width: 6px; height: 6px; border-radius: 50%; background: var(--sky-deep); }
+
+/* ---------- plain-language reminders (follow-ups) ---------- */
+.ibx-fu-say {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 3px 3px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--marble);
+  transition: border-color .16s, box-shadow .16s, background .16s;
+}
+.ibx-fu-say:focus-within { border-color: var(--sky-deep); background: var(--paper); box-shadow: 0 0 0 3px var(--sky-wash); }
+.ibx-fu-say-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  outline: none;
+}
+.deck-root .ibx-fu-say-input:focus-visible { box-shadow: none; }
+.ibx-fu-say-input::placeholder { color: var(--mist); }
+.ibx-fu-say-go {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: var(--btn-grad);
+  color: var(--paper);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ibx-fu-say-go:disabled { opacity: .45; cursor: default; }
+.ibx-fu-read {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--sky-soft);
+  border: 1px solid rgba(63, 178, 255, .4);
+  animation: nx-pop .25s var(--ease-out) both;
+}
+.ibx-fu-read-title { margin: 0; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.ibx-fu-read-when { margin: 0; font-size: 12px; font-weight: 600; color: var(--signal-deep); }
+.ibx-fu-read-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-summary-list li,
+  .ibx-fu-read { animation: none; }
+}

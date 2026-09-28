@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getConversationTasks,
   createConversationTask,
+  understandFollowUp,
   updateTask,
   type TaskRecord, readableError } from "@/lib/api";
 
@@ -36,6 +37,10 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
+  // Said the way a person says it, read back before anything is saved.
+  const [spoken, setSpoken] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [understood, setUnderstood] = useState<{ title: string; dueAt: string | null; dateDropped: boolean } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,8 +66,63 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
     setTitle("");
     setDue("");
     setError("");
+    setSpoken("");
+    setUnderstood(null);
     void load();
   }, [load]);
+
+  /*
+   * "Call him back Thursday 3pm about the quote" → a title and a time, shown
+   * back for a yes. Nothing is filed until the person confirms what was read:
+   * a reminder the assistant guessed and saved unseen is a wrong promise on the
+   * board that nobody agreed to.
+   */
+  async function understand(event: React.FormEvent) {
+    event.preventDefault();
+    if (!spoken.trim()) return;
+    setThinking(true);
+    setError("");
+    try {
+      const res = await understandFollowUp(conversationId, spoken.trim());
+      setUnderstood({ title: res.title, dueAt: res.dueAt, dateDropped: res.dateDropped });
+    } catch (err) {
+      setError(readableError(err, "Could not read that — add it by hand below."));
+    } finally {
+      setThinking(false);
+    }
+  }
+
+  async function confirmUnderstood() {
+    if (!understood) return;
+    setBusy(true);
+    setError("");
+    try {
+      await createConversationTask(conversationId, { title: understood.title, dueAt: understood.dueAt });
+      setUnderstood(null);
+      setSpoken("");
+      await load();
+    } catch (err) {
+      setError(readableError(err, "Could not save that follow-up."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Hand the reading to the manual form to adjust — the datetime-local box
+  // wants the reader's own wall clock, which is what new Date() formats into.
+  function editUnderstood() {
+    if (!understood) return;
+    setTitle(understood.title);
+    if (understood.dueAt) {
+      const d = new Date(understood.dueAt);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setDue(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    } else {
+      setDue("");
+    }
+    setUnderstood(null);
+    setOpen(true);
+  }
 
   const outstanding = tasks.filter((task) => task.status === "open");
 
@@ -111,6 +171,50 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
         </button>
       </div>
 
+      <form className="ibx-fu-say" onSubmit={understand}>
+        <input
+          value={spoken}
+          onChange={(e) => setSpoken(e.target.value)}
+          placeholder="Just say it — “call back Thursday 3pm about the quote”"
+          maxLength={300}
+          aria-label="Describe a follow-up in your own words"
+          className="ibx-fu-say-input"
+        />
+        <button type="submit" className="ibx-fu-say-go" disabled={thinking || !spoken.trim()} title="Read it">
+          {thinking ? "…" : "✨"}
+        </button>
+      </form>
+
+      {understood ? (
+        <div className="ibx-fu-read" role="status">
+          <p className="ibx-fu-read-title">{understood.title}</p>
+          <p className="ibx-fu-read-when">
+            {understood.dueAt
+              ? new Date(understood.dueAt).toLocaleString(undefined, {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : understood.dateDropped
+                ? "That time has passed or could not be read — add a date, or save it undated."
+                : "No date"}
+          </p>
+          <div className="ibx-fu-read-actions">
+            <button type="button" className="ibx-fu-save" onClick={() => void confirmUnderstood()} disabled={busy}>
+              {busy ? "Saving…" : "Add follow-up"}
+            </button>
+            <button type="button" className="ibx-fu-toggle" onClick={editUnderstood}>
+              Edit
+            </button>
+            <button type="button" className="ibx-fu-toggle" onClick={() => setUnderstood(null)}>
+              Discard
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {outstanding.length > 0 ? (
         <ul className="ibx-fu-list">
           {outstanding.map((task) => (
@@ -139,8 +243,8 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
             </li>
           ))}
         </ul>
-      ) : !open ? (
-        <p className="dp-collab-none">Nothing promised yet. Add what needs doing after this chat.</p>
+      ) : !open && !understood ? (
+        <p className="dp-collab-none">Nothing promised yet. Say it above, or add it by hand.</p>
       ) : null}
 
       {open ? (

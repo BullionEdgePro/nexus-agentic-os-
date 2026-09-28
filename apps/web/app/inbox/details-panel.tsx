@@ -9,6 +9,7 @@ import {
   getConversationNotes,
   addConversationNote,
   deleteConversationNote,
+  summarizeConversation,
   readableError,
   type ConversationDetails,
   type ConversationNote,
@@ -233,6 +234,8 @@ export function DetailsPanel({
             </p>
           </section>
 
+          <SummaryBlock conversationId={conversationId} />
+
           <section className="dp-block">
             <h4 className="dp-h">Assigned to</h4>
             {/* Who owns this thread — the one control that puts it in a person's
@@ -384,6 +387,62 @@ export function DetailsPanel({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The thread in five lines, on request — for the colleague picking it up cold.
+ *
+ * Asked for, never automatic: every summary is a model call, and most threads
+ * are read by someone who has just scrolled them. Not stored either, so it is
+ * always about the thread as it is now; "Refresh" re-reads after new messages.
+ */
+function SummaryBlock({ conversationId }: { conversationId: string }) {
+  const [summary, setSummary] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await summarizeConversation(conversationId);
+      setSummary(res.summary);
+    } catch (err) {
+      setError(readableError(err, "Could not summarise this conversation."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className={`dp-block dp-summary${summary ? " has" : ""}`}>
+      <h4 className="dp-h">
+        AI summary
+        <button type="button" className="dp-summary-btn" onClick={() => void run()} disabled={busy}>
+          {busy ? "Reading…" : summary ? "Refresh" : "✨ Summarise this chat"}
+        </button>
+      </h4>
+      {busy && !summary ? (
+        <div className="dp-loading" aria-label="Summarising">
+          <span className="nx-skel" style={{ width: "92%" }} />
+          <span className="nx-skel" style={{ width: "78%" }} />
+          <span className="nx-skel" style={{ width: "85%" }} />
+        </div>
+      ) : null}
+      {summary ? (
+        <ul className="dp-summary-list">
+          {summary
+            .split("\n")
+            .map((line) => line.replace(/^\s*[•\-*]\s*/, "").trim())
+            .filter(Boolean)
+            .map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+        </ul>
+      ) : null}
+      {error ? <p className="dp-error">{error}</p> : null}
+    </section>
   );
 }
 
