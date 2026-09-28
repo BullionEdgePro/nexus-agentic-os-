@@ -79,7 +79,7 @@
   padding: 10px 16px;
   border-radius: var(--r-sm);
   border: 1px solid var(--ink);
-  background: var(--ink);
+  background: var(--signal);
   color: var(--marble);
   cursor: pointer;
   text-decoration: none;

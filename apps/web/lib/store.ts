@@ -59,6 +59,8 @@ interface InboxState {
 
   setSelectedOrg: (org: BusinessSlug) => void;
   selectConversation: (conversationId: string) => void;
+  /** Leave the open thread — the phone layout's way back to the list. */
+  closeConversation: () => void;
   loadConversations: () => Promise<void>;
   loadInboxSettings: () => Promise<void>;
   setInboxSettings: (settings: InboxSettings) => void;
@@ -121,6 +123,8 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     get().loadMessages(conversationId);
     void api.markConversationRead(conversationId).catch(() => {});
   },
+
+  closeConversation: () => set({ selectedConversationId: null, sendError: "" }),
 
   loadConversations: async () => {
     set({ isLoadingConversations: true, loadError: "" });

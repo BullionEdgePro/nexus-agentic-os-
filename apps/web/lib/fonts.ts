@@ -1,4 +1,4 @@
-import { Manrope, IBM_Plex_Mono } from "next/font/google";
+import { Manrope, IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
 
 /**
  * Two faces, not three.
@@ -46,4 +46,19 @@ export const fontMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-export const fontVariables = `${fontDisplay.variable} ${fontBody.variable} ${fontMono.variable}`;
+/**
+ * Instrument Serif: the landing page's headlines only.
+ *
+ * Added with the "Clear Sky" theme. The public front page is the one screen
+ * that IS marketing, and the team inboxes it is measured against set their
+ * headlines in an editorial serif over a technical mono. Inside the console it
+ * is never used: there, a serif would be decoration rather than hierarchy.
+ */
+export const fontSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  weight: ["400"],
+  style: ["normal", "italic"],
+});
+
+export const fontVariables = `${fontDisplay.variable} ${fontBody.variable} ${fontMono.variable} ${fontSerif.variable}`;

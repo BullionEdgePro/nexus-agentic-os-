@@ -64,7 +64,7 @@
   font-size: 13.5px;
   cursor: pointer;
 }
-.cmdp-item.on { background: var(--ink); color: var(--marble); }
+.cmdp-item.on { background: var(--signal); color: var(--marble); }
 .cmdp-ic { display: grid; place-items: center; flex: 0 0 18px; }
 .cmdp-ic svg { width: 17px; height: 17px; display: block; }
 

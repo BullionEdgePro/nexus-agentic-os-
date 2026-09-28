@@ -43,7 +43,7 @@
   cursor: pointer;
 }
 .act-tabs button[aria-pressed="true"] {
-  background: var(--ink);
+  background: var(--signal);
   border-color: var(--ink);
   color: var(--marble);
 }

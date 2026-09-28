@@ -237,3 +237,104 @@
   .deck-root.shell .shell-rail { align-items: center; padding: 8px 10px; }
   .deck-root.shell .shell-rail a { padding: 9px 11px; }
 }
+
+/* ============================================================
+   CLEAR SKY — the rail
+   ============================================================
+   White glass over the ice ground, a soft aurora breathing behind the
+   brand, and the current page marked by a sky pill with a lit edge —
+   the way a team inbox marks the folder you are in. */
+
+.deck-root.shell .shell-rail {
+  background: var(--paper);
+  border-right: 1px solid var(--hairline);
+  overflow: hidden auto;
+  scrollbar-width: thin;
+}
+/* The aurora: two soft blooms that drift slowly behind the top of the rail. */
+.deck-root.shell .shell-rail::before {
+  content: "";
+  position: absolute;
+  inset: -40px -60px auto -60px;
+  height: 260px;
+  background: var(--aurora);
+  filter: blur(6px);
+  animation: nx-drift 14s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.deck-root.shell .shell-rail > * { position: relative; z-index: 1; }
+
+.deck-root.shell .rail-brand { border-bottom-color: var(--hairline); }
+.deck-root.shell .rail-brand svg {
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  border-radius: 9px;
+  background: var(--sky-grad);
+  color: var(--paper);
+  box-shadow: 0 6px 16px -6px var(--sky-glow);
+}
+.deck-root.shell .rail-brand svg path:nth-of-type(2),
+.deck-root.shell .rail-brand svg circle { stroke: var(--paper); fill: none; }
+.deck-root.shell .rail-brand svg circle { fill: var(--paper); transform-origin: 16px 16px; animation: nx-pulse-dot 2.8s ease-in-out infinite; }
+@keyframes nx-pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .55; transform: scale(1.5); }
+}
+.deck-root.shell .rail-wordmark {
+  font-weight: 800;
+  background: linear-gradient(90deg, var(--ink), var(--signal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.deck-root.shell .rail-search { background: var(--pebble); border-color: transparent; }
+.deck-root.shell .rail-search:hover { border-color: var(--sky); color: var(--signal-text); background: var(--paper); }
+
+.deck-root.shell .shell-rail a {
+  color: var(--slate);
+  transition: background .18s, color .18s, transform .18s var(--ease-out);
+}
+.deck-root.shell .shell-rail a:not(.rail-brand):hover {
+  background: var(--pebble);
+  color: var(--ink);
+  transform: translateX(2px);
+}
+.deck-root.shell .shell-rail a.on {
+  position: relative;
+  background: var(--sky-soft);
+  color: var(--signal-deep);
+  font-weight: 600;
+}
+.deck-root.shell .shell-rail a.on::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--sky-grad);
+  box-shadow: 0 0 10px var(--sky-glow);
+}
+.deck-root.shell .shell-rail a.on .rail-icon { color: var(--sky-deep); }
+.deck-root.shell .rail-group { color: var(--mist); }
+
+.deck-root.shell .shell-main {
+  background:
+    radial-gradient(70% 40% at 100% 0%, rgba(94, 196, 255, 0.10), transparent 70%),
+    var(--marble);
+}
+
+@media (max-width: 860px) {
+  .deck-root.shell .shell-rail { overflow: auto hidden; }
+  .deck-root.shell .shell-rail a.on::before { left: 8px; right: 8px; top: auto; bottom: 2px; width: auto; height: 3px; border-radius: 3px; }
+  .deck-root.shell .shell-rail a:not(.rail-brand):hover { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-root.shell .shell-rail::before,
+  .deck-root.shell .rail-brand svg circle { animation: none; }
+}

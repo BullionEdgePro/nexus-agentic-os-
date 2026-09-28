@@ -156,7 +156,7 @@
   padding: 11px 20px;
   border-radius: 100px;
   border: 1px solid var(--ink);
-  background: var(--ink);
+  background: var(--signal);
   color: var(--marble);
   cursor: pointer;
 }

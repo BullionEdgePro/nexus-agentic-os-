@@ -1,119 +1,115 @@
 /* ============================================================
-   NEXUS AGENTIC OS — "Instrument Face" theme
+   NEXUS AGENTIC OS — "Clear Sky" theme
    ============================================================
 
-   Navy engraving on cool marble, with exactly one live blue.
+   A console lit like a clear morning: an ice-blue ground, white cards,
+   deep-ocean ink, and one luminous sky blue that carries the brand.
 
-   WHAT THIS REPLACED, and why the change is more than a repaint.
-   The previous theme was a draughtsman's routing plate: warm vellum
-   paper, near-black ink, blueprint blue. It was coherent, and it was
-   built for a page you read once. This console is read under pressure,
-   at speed, to find out what is wrong -- so the ground went cool and
-   quiet, the ink went navy, and the contrast budget was re-spent on the
-   things that actually need to be seen.
+   WHAT THIS REPLACED. "Instrument Face" — navy engraving on cool
+   marble with a single cobalt. It read as a precise instrument and
+   as a cold one. The owner asked for the console to feel like the
+   team inboxes it is measured against (DoubleTick): light, airy,
+   conversational, in light blue. The contrast budget and the rules
+   below are kept; the temperature changed.
 
-   THE ONE RULE THIS SYSTEM HAS THAT ITS REFERENCE DOES NOT.
-   The reference reserves its saturated blue for primary actions. Here,
-   severity outranks action: this screen's entire job is telling somebody
-   what needs attention, so an urgent finding must be the most saturated
-   thing in the frame, always. Signal blue is for navigation, links and
-   the primary action -- and it must never out-shout a crit. If you ever
-   find yourself wanting a louder blue, the answer is a quieter
-   everything-else.
+   TWO BLUES, TWO JOBS.
+   --sky is the light, luminous brand blue: gradients, glows, the
+   selected row, our own chat bubbles, the moving graphics. It is
+   never used for small text — it cannot carry it on white.
+   --signal is the deeper working blue for buttons, links and focus,
+   measured to carry white text and to read as text on the ground.
 
-   NEVER PURE BLACK, and never a neutral-black shadow. Text is Ink Navy;
-   elevation is a three-layer blue-tinted stack. Both rules exist for the
-   same reason: a warm-neutral black on a cool ground reads as dirt, and
-   one grey shadow undoes the whole palette.
+   SEVERITY STILL OUTRANKS BOTH. An urgent finding must be the most
+   saturated thing in the frame. If a blue ever out-shouts a crit, the
+   fix is a quieter blue, never a louder red.
 
-   MONO IS KEPT ON PURPOSE. The reference is a landing-page system --
-   80px display type, decorative blobs, product-card collage. Applied
-   literally to an operations console it would be fancy dress. The
-   geometric humanist sans is adopted; the mono spec-labels are not
-   given up, because they are what make this an instrument face rather
-   than a marketing page.
+   NEVER PURE BLACK, and never a neutral-black shadow. Ink is deep
+   ocean navy; elevation is a sky-tinted stack.
 
    Scoped under .deck-root so it cannot leak elsewhere in the app.
    ============================================================ */
 
 .deck-root {
   /* --- ground and surfaces -------------------------------- */
-  --marble: #f8f9fb;          /* canvas */
+  --marble: #f3f8fd;          /* canvas — pale ice */
   --paper: #ffffff;           /* cards and elevated panels */
-  --pebble: #f0f3f8;          /* inset fills, badges, hover washes */
-  --charcoal: #0b3558;        /* inverse surfaces — navy, not black */
-  --charcoal-card: #12406a;
+  --pebble: #e8f2fc;          /* inset fills, badges, hover washes */
+  --charcoal: #0a2f55;        /* inverse surfaces — deep ocean, not black */
+  --charcoal-card: #113f6e;
 
   /* --- ink ------------------------------------------------ */
-  /* Named for what the reference calls it. Pure #000 is banned: on a
-     cool ground it reads as a hole rather than as text. */
-  --ink: #0b3558;
-  --ink-soft: rgba(11, 53, 88, 0.78);
-  --slate: #476788;           /* secondary copy, helper text */
-  --mist: #55708d;            /* tertiary copy — 4.62:1 on pebble, the worst ground */
-  --faint: #a6bbd1;           /* genuinely disabled/inactive ONLY — never content */
-  --muted: var(--slate);      /* was --mist: too faint to read as body copy */
+  --ink: #0b2a4a;
+  --ink-soft: rgba(11, 42, 74, 0.78);
+  --slate: #44678a;           /* secondary copy, helper text */
+  --mist: #51708f;            /* tertiary copy — 4.6:1 on pebble, the worst ground */
+  --faint: #a8c3dc;           /* genuinely disabled/inactive ONLY — never content */
+  --muted: var(--slate);
 
   /* --- lines ---------------------------------------------- */
-  /* Solid rather than an alpha of the ink. A translucent border over a
-     card and over the canvas resolves to two different colours, which is
-     what made the old hairlines look inconsistent between surfaces. */
-  --hairline: #d4e0ed;
-  --hairline-strong: #b9cde1;
-  --hairline-on-dark: rgba(248, 249, 251, 0.22);
+  --hairline: #d6e7f6;
+  --hairline-strong: #b4d2ee;
+  --hairline-on-dark: rgba(243, 248, 253, 0.2);
 
-  /* --- the one working accent ----------------------------- */
-  --signal: #006bff;
-  --signal-soft: rgba(0, 107, 255, 0.09);
-  --signal-deep: #004eba;     /* informational text on pebble fills */
-  /* #006bff measures 4.38 on marble: correct as a FILL behind white text, half
-     a point short as small text on the canvas. Links and inline accents take
-     the deep cobalt instead, which is the same decision the reference makes
-     when it puts #004eba on badge text and keeps #006bff for the button. */
-  --signal-text: #004eba;
+  /* --- the sky: the brand's light blue --------------------- */
+  --sky: #3fb2ff;             /* luminous — fills, glows, graphics; never small text */
+  --sky-deep: #1a8fe3;
+  --sky-soft: #e1f1ff;        /* our own chat bubbles, the selected row */
+  --sky-wash: rgba(63, 178, 255, 0.12);
+  --sky-glow: rgba(63, 178, 255, 0.35);
+  --sky-grad: linear-gradient(135deg, #5ec4ff 0%, #2b9cf0 55%, #1673d4 100%);
+  /* The same sky, deep enough to carry white text (4.2-6:1 across the ramp).
+     --sky-grad is for glow and decoration only; anything with words on it
+     takes this one. */
+  --btn-grad: linear-gradient(135deg, #1486e0 0%, #0873c9 55%, #065fa8 100%);
+  --aurora: radial-gradient(60% 50% at 15% 0%, rgba(94, 196, 255, 0.28), transparent 70%),
+            radial-gradient(50% 45% at 100% 20%, rgba(124, 214, 255, 0.22), transparent 70%),
+            radial-gradient(70% 60% at 50% 110%, rgba(43, 156, 240, 0.12), transparent 70%);
 
-  /* --- text on the inverse (navy) surfaces ---------------- */
-  /* The band is #0b3558. Everything below is measured against it. */
-  --ink-on-dark: #f8f9fb;     /* primary — the marble, inverted */
-  --mist-on-dark: #a6bbd1;    /* secondary — 7.4:1 on the band */
-  --signal-on-dark: #86baff;  /* the accent, lifted to clear the LIGHTER navy card */
+  /* --- the working accent ---------------------------------- */
+  --signal: #0873c9;          /* 4.96:1 behind white text */
+  --signal-soft: rgba(8, 115, 201, 0.09);
+  --signal-deep: #05589c;     /* informational text on pebble fills */
+  --signal-text: #065fa8;     /* links and inline accents — 6:1 on the ground */
+
+  /* --- text on the inverse (ocean) surfaces ---------------- */
+  --ink-on-dark: #f3f8fd;
+  --mist-on-dark: #a8c9e8;
+  --signal-on-dark: #8fd3ff;
 
   /* --- severity, which outranks the accent ---------------- */
-  /* Retuned off the old earth tones. Brick and ochre were mixed for a
-     warm vellum ground; on cool marble they go muddy and stop reading as
-     urgent. These keep the warmth that separates them from the blue
-     while carrying enough saturation to win against it. */
   --good: #0f7a56;
   --warn: #9c5d0f;
   --crit: #c4342a;
-  /* Severity tints, for the surface behind a severity, never for its text.
-     Each is its own hue at low alpha rather than a grey, so a warn row reads
-     as warm and a crit row as hot even before the label is read. */
   --good-soft: rgba(15, 122, 86, 0.08);
   --warn-soft: rgba(156, 93, 15, 0.09);
   --crit-soft: rgba(196, 52, 42, 0.08);
 
   /* --- shape ---------------------------------------------- */
   --r: 16px;                  /* cards */
-  --r-sm: 8px;                /* buttons, inputs — sharp-but-soft */
+  --r-sm: 10px;               /* buttons, inputs */
   --r-lg: 24px;               /* feature panels */
-  --r-xs: 4px;
+  --r-xs: 5px;
   --r-pill: 9999px;
 
   /* --- elevation ------------------------------------------ */
-  /* Three layers, all tinted with the slate blue rather than black. A
-     neutral shadow on this palette greys the card it is lifting. */
-  --lift: rgba(71, 103, 136, 0.04) 0 4px 5px 0,
-          rgba(71, 103, 136, 0.03) 0 8px 15px 0,
-          rgba(71, 103, 136, 0.08) 0 30px 50px 0;
-  --lift-sm: rgba(71, 103, 136, 0.04) 0 4px 5px 0,
-             rgba(71, 103, 136, 0.03) 0 4px 10px 0,
-             rgba(71, 103, 136, 0.05) 0 10px 20px 0;
+  /* Sky-tinted, never grey: a neutral shadow on this palette reads as dirt. */
+  --lift: rgba(30, 110, 180, 0.05) 0 4px 6px 0,
+          rgba(30, 110, 180, 0.04) 0 10px 18px 0,
+          rgba(30, 110, 180, 0.09) 0 28px 48px 0;
+  --lift-sm: rgba(30, 110, 180, 0.05) 0 2px 4px 0,
+             rgba(30, 110, 180, 0.04) 0 6px 12px 0,
+             rgba(30, 110, 180, 0.06) 0 12px 22px 0;
+
+  /* --- motion --------------------------------------------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* --- type ----------------------------------------------- */
   --display: var(--font-display), "Manrope", var(--sans);
   --mono: var(--font-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --sans: var(--font-body), "Manrope", system-ui, -apple-system, sans-serif;
+  /* The landing page's headlines only — see lib/fonts.ts. */
+  --serif: var(--font-serif), "Instrument Serif", Georgia, "Times New Roman", serif;
 
   position: relative;
   min-height: 100dvh;
@@ -194,13 +190,13 @@
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
   font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
   padding: 13px 22px; border-radius: var(--r-sm); border: 1px solid var(--ink); color: var(--marble);
-  background: var(--ink); transition: transform .12s ease, background .16s ease, color .16s ease;
+  background: var(--signal); transition: transform .12s ease, background .16s ease, color .16s ease;
 }
 .deck-root .btn:hover { background: var(--signal); border-color: var(--signal); }
 .deck-root .btn:active { transform: translateY(1px); }
 .deck-root .btn:disabled { opacity: .55; }
 .deck-root .btn.ghost { background: transparent; color: var(--ink); }
-.deck-root .btn.ghost:hover { background: var(--ink); color: var(--marble); }
+.deck-root .btn.ghost:hover { background: var(--signal); color: var(--marble); }
 .deck-root .btn:focus-visible, .deck-root a:focus-visible, .deck-root input:focus-visible {
   outline: 2px solid var(--signal); outline-offset: 2px;
 }
@@ -340,7 +336,7 @@
 .deck-root .rowline label { display: flex; align-items: center; gap: 8px; color: var(--slate); font-family: var(--mono); cursor: pointer; }
 .deck-root .rowline a { color: var(--signal-text); font-family: var(--mono); }
 .deck-root .chk { width: 15px; height: 15px; border: 1px solid var(--hairline-strong); border-radius: 3px; display: grid; place-items: center; background: var(--marble); }
-.deck-root .chk.on { background: var(--ink); border-color: var(--ink); }
+.deck-root .chk.on { background: var(--signal); border-color: var(--ink); }
 .deck-root .chk svg { width: 10px; height: 10px; color: var(--marble); opacity: 0; } .deck-root .chk.on svg { opacity: 1; }
 .deck-root .auth-card .btn { width: 100%; margin-top: 22px; }
 .deck-root .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 4px; color: var(--mist); font-family: var(--mono); font-size: 10px; letter-spacing: .16em; }
@@ -371,15 +367,15 @@
 .deck-root .icon-btn:hover { border-color: var(--signal); background: var(--signal-soft); }
 .deck-root .icon-btn svg { width: 15px; height: 15px; color: var(--ink-soft); }
 .deck-root .icon-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--crit); color: var(--marble); font-family: var(--mono); font-size: 9px; display: grid; place-items: center; }
-.deck-root .avatar { width: 33px; height: 33px; border-radius: var(--r-sm); display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--marble); background: var(--ink); }
+.deck-root .avatar { width: 33px; height: 33px; border-radius: var(--r-sm); display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--marble); background: var(--signal); }
 
 .deck-root .rail { grid-row: 2 / 3; border-right: 1px solid var(--hairline); background: var(--marble); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0; }
 .deck-root .rail a { width: 40px; height: 40px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--mist); position: relative; transition: color .16s, background .16s; border: none; background: transparent; }
 .deck-root .rail a svg { width: 17px; height: 17px; }
 .deck-root .rail a:hover { color: var(--ink); background: var(--paper); }
-.deck-root .rail a.on { color: var(--marble); background: var(--ink); }
+.deck-root .rail a.on { color: var(--marble); background: var(--signal); }
 .deck-root .rail .sep { flex: 1; }
-.deck-root .rail a .tip { position: absolute; left: 48px; white-space: nowrap; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; background: var(--ink); color: var(--marble); padding: 5px 9px; border-radius: 5px; opacity: 0; transform: translateX(-4px); transition: .15s; pointer-events: none; z-index: 5; }
+.deck-root .rail a .tip { position: absolute; left: 48px; white-space: nowrap; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; background: var(--signal); color: var(--marble); padding: 5px 9px; border-radius: 5px; opacity: 0; transform: translateX(-4px); transition: .15s; pointer-events: none; z-index: 5; }
 .deck-root .rail a:hover .tip { opacity: 1; transform: none; }
 
 .deck-root .main { grid-row: 2 / 3; overflow: auto; padding: 22px 26px 40px; }
@@ -736,3 +732,148 @@
 }
 .deck-root .vas-pick button:hover { border-color: var(--signal-text); color: var(--signal-text); }
 .deck-root .vas-pick .vas-cancel { background: none; border-color: transparent; color: var(--slate); }
+
+/* ============================================================
+   CLEAR SKY — chrome and motion
+   ============================================================
+   Appended last on purpose: it restyles the shared parts every screen
+   already uses (buttons, cards, labels, headings) without touching the
+   screens themselves, so the whole console changes together.
+
+   MOTION HAS THREE JOBS AND NO OTHERS.
+   1. Arrival — a page and its cards rise into place once, so a click
+      feels answered rather than swapped.
+   2. Liveness — the few things that are genuinely live (the live feed,
+      a waiting customer, the AI at work) move; nothing idle does.
+   3. Response — a control lifts, glows or presses under the pointer.
+   Everything stops under prefers-reduced-motion (the kill switch above
+   already clamps durations; the decorative loops are removed below). */
+
+@keyframes nx-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes nx-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nx-pop {
+  0%   { opacity: 0; transform: translateY(6px) scale(.97); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes nx-shimmer {
+  from { background-position: -240px 0; }
+  to   { background-position: 240px 0; }
+}
+@keyframes nx-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(3%, 4%, 0) scale(1.06); }
+}
+@keyframes nx-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 var(--sky-glow); }
+  70%  { box-shadow: 0 0 0 7px rgba(63, 178, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(63, 178, 255, 0); }
+}
+@keyframes nx-spin { to { transform: rotate(360deg); } }
+@keyframes nx-sheen {
+  from { transform: translateX(-120%) skewX(-18deg); }
+  to   { transform: translateX(220%) skewX(-18deg); }
+}
+
+/* --- buttons: sky gradient, a sheen that crosses on hover ---------- */
+.deck-root .btn {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  text-transform: none;
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  background: var(--btn-grad);
+  color: var(--paper);
+  box-shadow: 0 6px 18px -6px var(--sky-glow);
+  overflow: hidden;
+  transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), filter .18s;
+}
+.deck-root .btn::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .35), transparent);
+  transform: translateX(-120%) skewX(-18deg);
+  pointer-events: none;
+}
+.deck-root .btn:hover {
+  background: var(--btn-grad);
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -8px var(--sky-glow);
+  filter: saturate(1.08);
+}
+.deck-root .btn:hover::after { animation: nx-sheen .7s var(--ease-out); }
+.deck-root .btn:active { transform: translateY(0); }
+.deck-root .btn.ghost {
+  background: var(--paper);
+  color: var(--signal-text);
+  border-color: var(--hairline-strong);
+  box-shadow: none;
+}
+.deck-root .btn.ghost:hover { background: var(--sky-soft); color: var(--signal-deep); border-color: var(--sky); }
+
+/* --- labels and headings ------------------------------------------ */
+.deck-root .eyebrow { color: var(--signal-text); }
+.deck-root .pill { background: var(--paper); border-color: var(--hairline-strong); }
+.deck-root .dot.live { background: var(--sky-deep); animation: nx-pulse-ring 2.4s ease-out infinite; }
+.deck-root .page-head h1 { letter-spacing: -.025em; }
+
+/* --- cards: white on ice, a sky edge on hover ---------------------- */
+.deck-root .card,
+.deck-root .stat {
+  border-color: var(--hairline);
+  transition: border-color .2s, box-shadow .2s var(--ease-out), transform .2s var(--ease-out);
+}
+.deck-root .card:hover,
+.deck-root .stat:hover { border-color: var(--hairline-strong); }
+.deck-root .stat.hi { border-color: var(--sky); box-shadow: 0 0 0 3px var(--sky-wash); }
+.deck-root .card-h h3 .ic { background: var(--sky-soft); border-color: transparent; }
+
+/* --- form fields get the sky focus ring ---------------------------- */
+.deck-root input:focus-visible,
+.deck-root textarea:focus-visible,
+.deck-root select:focus-visible {
+  outline: none;
+  border-color: var(--sky-deep);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+}
+
+/* --- the graph-paper backdrop, in sky ------------------------------ */
+.deck-root .grid-overlay { opacity: .5; }
+.deck-root .vignette { background: var(--aurora); }
+
+/* --- arrival: the page and its first cards rise in once ------------ */
+.deck-root.shell .shell-main > * { animation: nx-rise .5s var(--ease-out) both; }
+.deck-root.shell .shell-main .card,
+.deck-root.shell .shell-main .stat { animation: nx-pop .45s var(--ease-out) both; }
+.deck-root.shell .shell-main .card:nth-child(2),
+.deck-root.shell .shell-main .stat:nth-child(2) { animation-delay: .05s; }
+.deck-root.shell .shell-main .card:nth-child(3),
+.deck-root.shell .shell-main .stat:nth-child(3) { animation-delay: .1s; }
+.deck-root.shell .shell-main .card:nth-child(4),
+.deck-root.shell .shell-main .stat:nth-child(4) { animation-delay: .15s; }
+
+/* --- a loading line that shimmers instead of saying "Loading…" still */
+.deck-root .nx-skel {
+  display: block;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--pebble) 0%, var(--paper) 50%, var(--pebble) 100%);
+  background-size: 480px 100%;
+  animation: nx-shimmer 1.3s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-root .btn:hover::after,
+  .deck-root .dot.live,
+  .deck-root .nx-skel { animation: none; }
+  .deck-root.shell .shell-main > *,
+  .deck-root.shell .shell-main .card,
+  .deck-root.shell .shell-main .stat { animation: none; }
+}

@@ -116,3 +116,70 @@
   align-self: flex-start;
 }
 .admin-back:hover { color: var(--signal-text); }
+
+/* ============================================================
+   CLEAR SKY — the back door, at night
+   ============================================================
+   The staff page is daylight; this one is the same sky after dark —
+   deep ocean, a slow aurora, a faint grid. The contrast is the point:
+   nobody should mistake the administrator's door for the team's. */
+
+.admin-root {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 50% at 20% 10%, rgba(94, 196, 255, .28), transparent 70%),
+    radial-gradient(50% 40% at 90% 90%, rgba(43, 156, 240, .22), transparent 70%),
+    var(--charcoal);
+}
+.admin-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--hairline-on-dark) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hairline-on-dark) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: .35;
+  mask-image: radial-gradient(70% 60% at 50% 50%, #fff, transparent);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 50%, #fff, transparent);
+  pointer-events: none;
+}
+.admin-root::after {
+  content: "";
+  position: absolute;
+  width: 700px;
+  height: 700px;
+  left: 50%;
+  top: 50%;
+  margin: -350px 0 0 -350px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent, rgba(63, 178, 255, .22), transparent 40%);
+  filter: blur(40px);
+  animation: nx-spin 26s linear infinite;
+  pointer-events: none;
+}
+.admin-card {
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(143, 211, 255, .35);
+  border-radius: 22px;
+  box-shadow: 0 40px 80px -30px rgba(3, 20, 40, .7), 0 0 0 6px rgba(63, 178, 255, .08);
+  animation: nx-rise .6s var(--ease-out) both;
+}
+.admin-card h1 { letter-spacing: -.02em; }
+.admin-card input {
+  border-radius: 12px !important;
+  background: var(--marble) !important;
+  transition: border-color .16s, box-shadow .16s, background .16s;
+}
+.admin-card input:focus { background: var(--paper) !important; }
+.admin-card .btn { justify-content: center; margin-top: 4px; }
+.admin-back { color: var(--signal-text); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-root::after,
+  .admin-card { animation: none; }
+}
+.admin-root .btn { background: var(--btn-grad); border-color: transparent; color: var(--paper); }
+.admin-root .btn:hover:not(:disabled) { background: var(--btn-grad); border-color: transparent; filter: saturate(1.1); }

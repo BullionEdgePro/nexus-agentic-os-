@@ -17,7 +17,8 @@ import {
 import { useInboxStore } from "@/lib/store";
 import { CallLogPanel } from "./call-log";
 
-type Tab = "details" | "calls" | "notes";
+export type PanelTab = "details" | "calls" | "notes";
+type Tab = PanelTab;
 
 /** How the customer is reached, labelled for the channel they are on. */
 function contactLine(d: ConversationDetails): { label: string; value: string } {
@@ -48,8 +49,19 @@ function when(iso: string | null): string {
  * changes them. Every save adopts the server's normalised result, so what is on
  * screen is always what was stored.
  */
-export function DetailsPanel({ conversationId }: { conversationId: string }) {
-  const [tab, setTab] = useState<Tab>("details");
+export function DetailsPanel({
+  conversationId,
+  tab: controlledTab,
+  onTabChange,
+}: {
+  conversationId: string;
+  /** The inbox opens a tab from its header (the call button, the assignee chip). */
+  tab?: PanelTab;
+  onTabChange?: (tab: PanelTab) => void;
+}) {
+  const [ownTab, setOwnTab] = useState<Tab>("details");
+  const tab = controlledTab ?? ownTab;
+  const setTab = (t: Tab) => (onTabChange ? onTabChange(t) : setOwnTab(t));
   const [details, setDetails] = useState<ConversationDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<{ key: string; value: string }[]>([]);
@@ -140,7 +152,17 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
     void save({ customFields: map });
   };
 
-  if (!details) return <p className="dp-empty">{error ?? "Loading…"}</p>;
+  if (!details) {
+    return error ? (
+      <p className="dp-error">{error}</p>
+    ) : (
+      <div className="dp-loading" aria-label="Loading">
+        <span className="nx-skel" style={{ width: "60%" }} />
+        <span className="nx-skel" style={{ width: "90%" }} />
+        <span className="nx-skel" style={{ width: "75%" }} />
+      </div>
+    );
+  }
 
   const reach = contactLine(details);
   // A stage set before the business customised its list stays visible and
@@ -178,8 +200,13 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
         <NotesTab conversationId={conversationId} details={details} onSaveLegacy={(v) => save({ notes: v })} />
       ) : (
         <>
-          <section className="dp-block">
-            <h3 className="dp-name">{details.contactName ?? (details.contactWaId ? `+${details.contactWaId}` : "Customer")}</h3>
+          <section className="dp-block dp-who">
+            <div className="dp-who-head">
+              <span className="dp-avatar" aria-hidden="true">
+                {(details.contactName ?? "#").trim().charAt(0).toUpperCase() || "#"}
+              </span>
+              <h3 className="dp-name">{details.contactName ?? (details.contactWaId ? `+${details.contactWaId}` : "Customer")}</h3>
+            </div>
             <dl className="dp-facts">
               <div>
                 <dt>{reach.label}</dt>
@@ -197,13 +224,13 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
                 <dt>Last from us</dt>
                 <dd>{when(details.lastOutboundAt)}</dd>
               </div>
-              <div>
-                <dt>Marketing</dt>
-                <dd className={details.optedOut ? "dp-out" : "dp-in"}>
-                  {details.optedOut ? "Opted out" : "Opted in"}
-                </dd>
-              </div>
             </dl>
+            <p className={`dp-optin${details.optedOut ? " out" : ""}`}>
+              <span>Opt-in</span>
+              <span className="dp-optin-box" aria-label={details.optedOut ? "Opted out of marketing" : "Opted in to marketing"}>
+                {details.optedOut ? "Opted out" : "✓"}
+              </span>
+            </p>
           </section>
 
           <section className="dp-block">
@@ -212,6 +239,7 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
                 "Mine". The options are the serving business's staff (the set the
                 API accepts); "Unassigned" hands it back to no one in particular. */}
             <select
+              id="dp-assign"
               className="dp-assign"
               value={details.assignedEmployeeId ?? ""}
               onChange={(e) => void assign(e.target.value || null)}
@@ -282,18 +310,19 @@ export function DetailsPanel({ conversationId }: { conversationId: string }) {
 
           <section className="dp-block">
             <h4 className="dp-h">Lead status</h4>
-            <div className="dp-stages">
+            <select
+              className="dp-assign"
+              value={details.leadStage ?? ""}
+              onChange={(e) => save({ leadStage: e.target.value || null })}
+              aria-label="Lead status"
+            >
+              <option value="">Select</option>
               {stageChoices.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={`dp-stage${details.leadStage === s ? " on" : ""}`}
-                  onClick={() => save({ leadStage: details.leadStage === s ? null : s })}
-                >
+                <option key={s} value={s}>
                   {s}
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
             {details.leadPriority || details.leadScore != null ? (
               <p className="dp-ai">
                 AI read: {details.leadPriority ?? "—"}

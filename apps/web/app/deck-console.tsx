@@ -663,8 +663,8 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
                     <stop offset="1" stopColor="var(--signal)" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <path d="M0 75 H320" stroke="rgba(22,22,15,.1)" />
-                <path d="M0 120 H320" stroke="rgba(22,22,15,.07)" />
+                <path d="M0 75 H320" stroke="rgba(11,42,74,.1)" />
+                <path d="M0 120 H320" stroke="rgba(11,42,74,.07)" />
                 {area ? (
                   <>
                     <path d={area.fill} fill="url(#ag)" />

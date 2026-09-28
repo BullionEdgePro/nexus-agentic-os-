@@ -108,7 +108,7 @@ export function initDeckFx(root: HTMLElement): () => void {
             Math.sin(x * 0.0011 - t * r.sp * 600) * r.a * 0.5;
           x === -40 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = "rgba(22,22,15,.05)";
+        ctx.strokeStyle = "rgba(8,115,201,.07)";
         ctx.lineWidth = 1;
         ctx.stroke();
       });
@@ -119,7 +119,7 @@ export function initDeckFx(root: HTMLElement): () => void {
         const px = pt.x * W,
           py = pt.y * H + Math.sin(t * 0.5 + pt.y * 10) * 8,
           sz = pt.z * 2.2;
-        ctx.strokeStyle = `rgba(29,63,191,${pt.z * 0.22})`;
+        ctx.strokeStyle = `rgba(63,178,255,${pt.z * 0.4})`;
         ctx.lineWidth = 1;
         ctx.strokeRect(px - sz / 2, py - sz / 2, sz, sz);
       });

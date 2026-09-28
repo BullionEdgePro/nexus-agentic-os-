@@ -33,7 +33,7 @@ const web = join(here, "..", "..", "web");
  * Listed explicitly rather than pattern-matched on `--font-`, so a typo'd font
  * variable still fails.
  */
-const RUNTIME = new Set(["--font-display", "--font-body", "--font-mono"]);
+const RUNTIME = new Set(["--font-display", "--font-body", "--font-mono", "--font-serif"]);
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

@@ -100,39 +100,27 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
   }
 
   return (
-    <div className="mb-3 border-b border-neutral-800 pb-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+    <div className="ibx-card ibx-fu">
+      <div className="ibx-fu-head">
+        <h4 className="dp-h">
           Follow-ups
-          {outstanding.length > 0 ? (
-            <span className="ml-2 rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-300">
-              {outstanding.length}
-            </span>
-          ) : null}
-        </h2>
-        <button
-          onClick={() => setOpen((was) => !was)}
-          className="text-xs text-neutral-400 hover:text-white"
-        >
+          {outstanding.length > 0 ? <span className="ibx-fu-n">{outstanding.length}</span> : null}
+        </h4>
+        <button type="button" onClick={() => setOpen((was) => !was)} className="ibx-fu-toggle">
           {open ? "Cancel" : "+ Add"}
         </button>
       </div>
 
       {outstanding.length > 0 ? (
-        <ul className="mt-2 space-y-1">
+        <ul className="ibx-fu-list">
           {outstanding.map((task) => (
-            <li
-              key={task.id}
-              className={`flex items-start justify-between gap-3 rounded px-2 py-1.5 text-sm ${
-                task.isOverdue ? "bg-red-500/10" : "bg-neutral-900"
-              }`}
-            >
-              <div className="min-w-0">
-                <p className="truncate">{task.title}</p>
-                <p className="text-[11px] text-neutral-500">
+            <li key={task.id} className={`ibx-fu-item${task.isOverdue ? " late" : ""}`}>
+              <div className="ibx-fu-main">
+                <p className="ibx-fu-title">{task.title}</p>
+                <p className="ibx-fu-meta">
                   {task.employeeName ?? "nobody's job"}
                   {task.dueAt ? (
-                    <span className={task.isOverdue ? "ml-2 text-red-400" : "ml-2"}>
+                    <span className={task.isOverdue ? "ibx-fu-due late" : "ibx-fu-due"}>
                       {/* Lateness comes from the server, never from this clock. */}
                       {task.isOverdue ? "was due " : "due "}
                       {new Date(task.dueAt).toLocaleString(undefined, {
@@ -145,44 +133,40 @@ export function ConversationTasks({ conversationId }: { conversationId: string }
                   ) : null}
                 </p>
               </div>
-              <button
-                onClick={() => complete(task)}
-                className="shrink-0 rounded border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-800"
-              >
+              <button type="button" onClick={() => complete(task)} className="ibx-fu-done">
                 Done
               </button>
             </li>
           ))}
         </ul>
+      ) : !open ? (
+        <p className="dp-collab-none">Nothing promised yet. Add what needs doing after this chat.</p>
       ) : null}
 
       {open ? (
-        <form onSubmit={add} className="mt-2 flex flex-wrap gap-2">
+        <form onSubmit={add} className="ibx-fu-form">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="What needs doing after this conversation?"
             maxLength={200}
             autoFocus
-            className="min-w-0 flex-1 rounded bg-neutral-900 px-3 py-2 text-sm outline-none placeholder:text-neutral-600"
+            className="ibx-fu-input"
           />
           <input
             type="datetime-local"
             value={due}
             onChange={(e) => setDue(e.target.value)}
-            className="rounded bg-neutral-900 px-2 py-2 text-sm text-neutral-300 outline-none"
+            className="ibx-fu-input"
+            aria-label="Due"
           />
-          <button
-            type="submit"
-            disabled={busy || !title.trim()}
-            className="rounded bg-blue-600 px-3 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {busy ? "Saving…" : "Add"}
+          <button type="submit" disabled={busy || !title.trim()} className="ibx-fu-save">
+            {busy ? "Saving…" : "Add follow-up"}
           </button>
         </form>
       ) : null}
 
-      {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+      {error ? <p className="dp-error">{error}</p> : null}
     </div>
   );
 }

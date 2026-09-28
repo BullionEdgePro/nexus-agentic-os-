@@ -220,7 +220,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--ink);
+  background: var(--signal);
   color: var(--marble);
   font-family: var(--mono);
   font-size: 13px;
@@ -327,7 +327,7 @@
 }
 
 .deck-root .acct-preview.empty {
-  background: var(--ink);
+  background: var(--signal);
   color: var(--marble);
   font-family: var(--mono);
   font-size: 15px;
@@ -386,7 +386,7 @@
   padding: 8px 14px;
   border-radius: 100px;
   border: 1px solid var(--ink);
-  background: var(--ink);
+  background: var(--signal);
   color: var(--marble);
   cursor: pointer;
 }

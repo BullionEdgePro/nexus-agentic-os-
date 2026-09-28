@@ -43,7 +43,7 @@
   cursor: pointer;
 }
 .kn-modes button[aria-pressed="true"] {
-  background: var(--ink);
+  background: var(--signal);
   border-color: var(--ink);
   color: var(--marble);
 }
@@ -94,7 +94,7 @@
   padding: 12px 22px;
   border-radius: 100px;
   border: 1px solid var(--ink);
-  background: var(--ink);
+  background: var(--signal);
   color: var(--marble);
   cursor: pointer;
 }

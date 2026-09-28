@@ -61,7 +61,7 @@
   padding: 0 18px;
   border-radius: var(--r-sm);
   border: 1px solid var(--ink);
-  background: var(--ink);
+  background: var(--signal);
   color: var(--marble);
   cursor: pointer;
 }

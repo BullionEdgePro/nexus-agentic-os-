@@ -4,14 +4,14 @@
    the deck rather than a child of it. */
 
 :root {
-  --as-ink: #101828;
-  --as-slate: #5b6b82;
+  --as-ink: #0b2a4a;
+  --as-slate: #44678a;
   --as-paper: #ffffff;
-  --as-marble: #f8f9fb;
-  --as-pebble: #f0f3f8;
-  --as-hairline: #dde3ec;
-  --as-signal: #004eba;
-  --as-navy: #0b3558;
+  --as-marble: #f3f8fd;
+  --as-pebble: #e8f2fc;
+  --as-hairline: #d6e7f6;
+  --as-signal: #065fa8;
+  --as-navy: #0873c9;
   --as-crit: #c4342a;
 }
 
