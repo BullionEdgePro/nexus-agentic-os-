@@ -42,7 +42,14 @@ function formatDuration(seconds: number | null): string {
   return m ? `${m}m ${s}s` : `${s}s`;
 }
 
-export function CallLogPanel({ conversationId }: { conversationId: string }) {
+export function CallLogPanel({
+  conversationId,
+  onChange,
+}: {
+  conversationId: string;
+  /** Told after a call is logged or removed, so the thread timeline can refresh. */
+  onChange?: () => void;
+}) {
   const [calls, setCalls] = useState<CallLog[]>([]);
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<CallDirection>("outbound");
@@ -93,6 +100,7 @@ export function CallLogPanel({ conversationId }: { conversationId: string }) {
       setMinutes("");
       setNotes("");
       await load();
+      onChange?.();
     } catch (err) {
       setError(readableError(err, "Could not log that call."));
     } finally {
@@ -104,6 +112,7 @@ export function CallLogPanel({ conversationId }: { conversationId: string }) {
     try {
       await deleteCallLog(conversationId, id);
       await load();
+      onChange?.();
     } catch (err) {
       setError(readableError(err, "Could not remove that call log."));
     }

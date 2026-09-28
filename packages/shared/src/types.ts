@@ -177,6 +177,63 @@ export interface ConversationSummary {
    * filter by where a conversation came from.
    */
   channel: ConversationChannel;
+  /**
+   * The assigned staff member's name, for the row label — null when unassigned
+   * (or when the list was built by a reader that does not resolve names).
+   */
+  assignedEmployeeName?: string | null;
+  /**
+   * Customer messages the CURRENT viewer has not seen (migration 090). Counted
+   * from the viewer's last read of the thread; for a thread they have never
+   * opened, from our last reply — so a historic conversation does not arrive
+   * claiming 40 unread.
+   */
+  unreadCount?: number;
+}
+
+/** Something that happened to a thread, as opposed to something said in it. */
+export type ConversationEventKind = "assigned" | "unassigned" | "resolved" | "reopened";
+
+export interface ConversationEvent {
+  id: string;
+  kind: ConversationEventKind;
+  /** Who did it, as a name resolved when it happened. */
+  actorName: string | null;
+  /** For "assigned": who it went to. */
+  subjectName: string | null;
+  createdAt: string;
+}
+
+/**
+ * One non-message line in a thread's timeline — an assignment, a resolve, a
+ * handoff to or from the AI, a logged call. The server writes the sentence so
+ * every client says the same thing.
+ */
+export interface TimelineItem {
+  id: string;
+  kind: "event" | "custody" | "call";
+  at: string;
+  text: string;
+  tone: "neutral" | "good" | "warn";
+}
+
+/** An internal note on a conversation — never sent to the customer. */
+export interface ConversationNote {
+  id: string;
+  author: string | null;
+  authorName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+/** A business's own inbox settings (migration 090). */
+export interface InboxSettings {
+  /** The pipeline stages, in pipeline order. */
+  stages: string[];
+  /** Minutes a customer may wait on a reply before the thread counts as late. */
+  slaMinutes: number;
+  /** True when neither has been customised. */
+  isDefault: boolean;
 }
 
 /** The channels a conversation can arrive on. See {@link ConversationSummary.channel}. */
@@ -190,16 +247,20 @@ export interface MessageDto {
   body: string | null;
   status: MessageStatus;
   createdAt: string;
+  /** The staff member who wrote a human reply, when known. */
+  senderName?: string | null;
 }
 
 /** Broadcast over the WebSocket channel to connected Unified Inbox clients. */
 export interface InboxSocketEvent {
-  type: "message" | "handoff_changed";
+  type: "message" | "handoff_changed" | "status_changed";
   organizationId: string;
   organizationSlug: BusinessSlug;
   conversationId: string;
   message?: MessageDto;
   isHumanHandoff?: boolean;
+  /** For "status_changed": the conversation's new status. */
+  status?: ConversationSummary["status"];
 }
 
 export type HallucinationRisk = "low" | "medium" | "high";

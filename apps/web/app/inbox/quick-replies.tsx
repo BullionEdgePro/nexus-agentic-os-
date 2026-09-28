@@ -21,15 +21,23 @@ import {
  *
  * Picking never sends: it fills the draft, for a person to read and send — the
  * same discipline the AI suggest button keeps.
+ *
+ * SLASH COMMANDS: when the reply box starts with "/", the composer passes what
+ * follows as `slashQuery`; the picker opens by itself, filtered to replies whose
+ * name or text contains it, and a pick REPLACES the "/…" rather than appending.
  */
 export function QuickReplies({
   orgSlug,
   draft,
   onInsert,
+  slashQuery = null,
+  onReplace,
 }: {
   orgSlug: BusinessSlug;
   draft: string;
   onInsert: (body: string) => void;
+  slashQuery?: string | null;
+  onReplace?: (body: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<QuickReply[]>([]);
@@ -83,30 +91,47 @@ export function QuickReplies({
     }
   }
 
+  const slashOpen = slashQuery !== null;
+  const needle = (slashQuery ?? "").trim().toLowerCase();
+  const shown = slashOpen && needle
+    ? items.filter((q) => `${q.title} ${q.body}`.toLowerCase().includes(needle))
+    : items;
+  const isOpen = open || slashOpen;
+
+  function pick(body: string) {
+    if (slashOpen && onReplace) onReplace(body);
+    else onInsert(body);
+    setOpen(false);
+  }
+
   return (
     <div className="ibx-qr">
-      <button type="button" className="ibx-ai-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      <button type="button" className="ibx-ai-btn" onClick={() => setOpen((o) => !o)} aria-expanded={isOpen}>
         💬 Quick replies{items.length ? ` (${items.length})` : ""}
       </button>
 
-      {open ? (
+      {isOpen ? (
         <div className="ibx-qr-panel" role="menu">
-          {items.length === 0 ? (
+          {slashOpen ? (
+            <p className="ibx-qr-hint">
+              Quick replies matching <strong>/{slashQuery}</strong> — click one to use it.
+            </p>
+          ) : null}
+          {shown.length === 0 ? (
             <p className="ibx-qr-empty">
-              No saved replies yet. Type a message below, then save it as one.
+              {items.length === 0
+                ? "No saved replies yet. Type a message below, then save it as one."
+                : "No quick reply matches that — keep typing, or delete the “/”."}
             </p>
           ) : (
             <ul className="ibx-qr-list">
-              {items.map((q) => (
+              {shown.map((q) => (
                 <li key={q.id} className="ibx-qr-item">
                   <button
                     type="button"
                     className="ibx-qr-pick"
                     title={q.body}
-                    onClick={() => {
-                      onInsert(q.body);
-                      setOpen(false);
-                    }}
+                    onClick={() => pick(q.body)}
                   >
                     <strong>{q.title}</strong>
                     <span>{q.body}</span>
@@ -123,14 +148,16 @@ export function QuickReplies({
               ))}
             </ul>
           )}
-          <button
-            type="button"
-            className="ibx-qr-save"
-            disabled={!draft.trim() || saving}
-            onClick={saveCurrent}
-          >
-            {saving ? "Saving…" : "+ Save what's in the box as a quick reply"}
-          </button>
+          {slashOpen ? null : (
+            <button
+              type="button"
+              className="ibx-qr-save"
+              disabled={!draft.trim() || saving}
+              onClick={saveCurrent}
+            >
+              {saving ? "Saving…" : "+ Save what's in the box as a quick reply"}
+            </button>
+          )}
           {error ? <p className="ibx-ai-error">{error}</p> : null}
         </div>
       ) : null}

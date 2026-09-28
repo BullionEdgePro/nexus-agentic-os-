@@ -13,6 +13,7 @@ export function useInboxSocket(): void {
   const selectedOrg = useInboxStore((s) => s.selectedOrg);
   const appendMessage = useInboxStore((s) => s.appendMessage);
   const applyHandoffChange = useInboxStore((s) => s.applyHandoffChange);
+  const applyStatusChange = useInboxStore((s) => s.applyStatusChange);
   const setSocketStatus = useInboxStore((s) => s.setSocketStatus);
 
   useEffect(() => {
@@ -47,6 +48,9 @@ export function useInboxSocket(): void {
             appendMessage(parsed.conversationId, parsed.message);
           } else if (parsed.type === "handoff_changed" && typeof parsed.isHumanHandoff === "boolean") {
             applyHandoffChange(parsed.conversationId, parsed.isHumanHandoff);
+          } else if (parsed.type === "status_changed" && parsed.status) {
+            // A colleague resolved or reopened a thread — move it between folders.
+            applyStatusChange(parsed.conversationId, parsed.status);
           }
         } catch {
           // Ignore malformed frames.
@@ -69,5 +73,5 @@ export function useInboxSocket(): void {
       if (retryTimer) clearTimeout(retryTimer);
       socket?.close();
     };
-  }, [selectedOrg, appendMessage, applyHandoffChange, setSocketStatus]);
+  }, [selectedOrg, appendMessage, applyHandoffChange, applyStatusChange, setSocketStatus]);
 }

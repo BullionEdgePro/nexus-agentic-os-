@@ -42,3 +42,4 @@ export * from "./scheduled-messages.js";
 export * from "./quick-replies.js";
 export * from "./call-logs.js";
 export * from "./email-sync.js";
+export * from "./inbox.js";

@@ -54,7 +54,7 @@ export async function recordInboundMessage(
 
     const conversationResult = await db.query<{ id: string; is_human_handoff: boolean }>(
       `select id, is_human_handoff from conversations
-       where organization_id = $1 and contact_id = $2 and status in ('open', 'pending')
+       where organization_id = $1 and contact_id = $2 and status in ('open', 'pending', 'resolved')
        order by opened_at desc limit 1`,
       [input.organizationId, contactId]
     );
@@ -254,7 +254,7 @@ export async function recordOutboundEcho(
 
     const existing = await db.query<{ id: string }>(
       `select id from conversations
-        where organization_id = $1 and contact_id = $2 and status in ('open', 'pending')
+        where organization_id = $1 and contact_id = $2 and status in ('open', 'pending', 'resolved')
         order by opened_at desc limit 1`,
       [input.organizationId, contactId]
     );
@@ -310,6 +310,10 @@ export async function getMessagesForConversation(
   conversationId: string,
   limit = 50
 ): Promise<MessageDto[]> {
+  // THE LATEST `limit`, shown oldest-first. This was `order by created_at asc
+  // limit N` — the OLDEST N — so a thread past fifty messages stopped showing
+  // anything new, and AI "Suggest reply" drafted from the start of the chat
+  // instead of its end.
   const { rows } = await getPool().query<{
     id: string;
     conversation_id: string;
@@ -318,12 +322,20 @@ export async function getMessagesForConversation(
     body: string | null;
     status: string;
     created_at: string;
+    sender_name: string | null;
   }>(
-    `select id, conversation_id, direction, sender_type, body, status, created_at
-     from messages
-     where conversation_id = $1
-     order by created_at asc
-     limit $2`,
+    `select * from (
+       select m.id, m.conversation_id, m.direction, m.sender_type, m.body, m.status, m.created_at,
+              case when m.sender_type = 'human_agent'
+                   then coalesce(e.full_name, a.full_name) end as sender_name
+         from messages m
+         left join employees e on m.sender_type = 'human_agent' and e.id::text = m.sender_id
+         left join admins a on m.sender_type = 'human_agent' and a.id::text = m.sender_id
+        where m.conversation_id = $1
+        order by m.created_at desc
+        limit $2
+     ) latest
+     order by created_at asc`,
     [conversationId, limit]
   );
   return rows.map((row) => ({
@@ -334,6 +346,7 @@ export async function getMessagesForConversation(
     body: row.body,
     status: row.status as MessageDto["status"],
     createdAt: row.created_at,
+    senderName: row.sender_name,
   }));
 }
 

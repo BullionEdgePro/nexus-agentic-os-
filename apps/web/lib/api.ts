@@ -1,11 +1,16 @@
 import type {
   BusinessSlug,
+  ConversationNote,
   ConversationSummary,
+  InboxSettings,
   MessageDto,
   Organization,
   OverviewMetrics,
   ScheduledMessageStatus,
+  TimelineItem,
 } from "@nexus/shared";
+
+export type { ConversationNote, InboxSettings, TimelineItem } from "@nexus/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -216,8 +221,62 @@ export function getChannels(): Promise<{ channels: ChannelStatus[] }> {
   return request(`/api/channels`);
 }
 
-export function getMessages(conversationId: string): Promise<{ messages: MessageDto[] }> {
+/**
+ * A thread: its latest messages, plus what HAPPENED to it (assignments,
+ * resolves, handoffs, logged calls) as one-line timeline items to merge in by time.
+ */
+export function getMessages(
+  conversationId: string
+): Promise<{ messages: MessageDto[]; timeline?: TimelineItem[] }> {
   return request(`/api/conversations/${conversationId}/messages`);
+}
+
+/** "I have seen this thread" — clears its unread count for the current person. */
+export function markConversationRead(conversationId: string): Promise<{ ok: true }> {
+  return request(`/api/conversations/${conversationId}/read`, { method: "POST" });
+}
+
+/** Resolve a conversation, or open it again. */
+export function setConversationStatus(
+  conversationId: string,
+  status: "resolved" | "open"
+): Promise<{ status: "resolved" | "open" }> {
+  return request(`/api/conversations/${conversationId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** The internal notes on a conversation, newest first. Never sent to the customer. */
+export function getConversationNotes(conversationId: string): Promise<{ notes: ConversationNote[] }> {
+  return request(`/api/conversations/${conversationId}/notes`);
+}
+
+export function addConversationNote(conversationId: string, body: string): Promise<{ note: ConversationNote }> {
+  return request(`/api/conversations/${conversationId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function deleteConversationNote(conversationId: string, noteId: string): Promise<{ ok: true }> {
+  return request(`/api/conversations/${conversationId}/notes/${noteId}`, { method: "DELETE" });
+}
+
+/** A business's pipeline stages and reply-time target. */
+export function getInboxSettings(orgSlug: BusinessSlug): Promise<{ settings: InboxSettings }> {
+  return request(`/api/organizations/${orgSlug}/inbox-settings`);
+}
+
+/** Owner only. null resets a setting to its default. */
+export function updateInboxSettings(
+  orgSlug: BusinessSlug,
+  patch: { stages?: string[] | null; slaMinutes?: number | null }
+): Promise<{ settings: InboxSettings }> {
+  return request(`/api/organizations/${orgSlug}/inbox-settings`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
 
 /** How a conversation has changed hands between the agent and a person. */
@@ -654,7 +713,8 @@ export interface ConversationDetails {
   conversationId: string;
   contactId: string;
   contactName: string | null;
-  contactWaId: string;
+  /** Null for a contact reached on a channel with no phone (Messenger, Instagram, email). */
+  contactWaId: string | null;
   firstSeenAt: string | null;
   assignedEmployeeId: string | null;
   assignedEmployeeName: string | null;
@@ -664,6 +724,11 @@ export interface ConversationDetails {
   leadScore: number | null;
   notes: string | null;
   customFields: Record<string, string>;
+  leadSource: string | null;
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  channel: string;
+  status: "open" | "pending" | "resolved" | "closed";
 }
 
 /** A staff member referenced by the panel — id plus a display name. */
@@ -794,7 +859,12 @@ export function deleteCallLog(
 
 export function updateConversationDetails(
   conversationId: string,
-  patch: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> }
+  patch: {
+    leadStage?: string | null;
+    notes?: string | null;
+    customFields?: Record<string, string>;
+    leadSource?: string | null;
+  }
 ): Promise<{ details: ConversationDetails }> {
   return request(`/api/conversations/${conversationId}/details`, {
     method: "PATCH",

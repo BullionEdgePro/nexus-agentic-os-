@@ -915,3 +915,232 @@
 }
 .ibx-call-mins { width: 70px; }
 .ibx-call-note-input { width: 100%; }
+
+/* ============================================================
+   Team inbox, round 2 (migration 090): search, stage tabs with counts,
+   owner/date filters, row time + unread + owner, resolve, the merged
+   message/event timeline, delivery ticks, the SLA banner, a real textarea.
+   ============================================================ */
+
+.ibx-search {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  padding: 7px 10px;
+  margin: 0 0 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline-strong);
+  background: var(--paper);
+  color: var(--ink);
+}
+.ibx-search::placeholder { color: var(--mist); }
+.ibx-search:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+
+.ibx-stagetabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+  scrollbar-width: thin;
+}
+.ibx-stagetab {
+  flex: 0 0 auto;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ibx-stagetab:hover { color: var(--ink); border-color: var(--hairline-strong); }
+.ibx-stagetab.on { background: var(--signal-soft); color: var(--signal-text); border-color: var(--signal-text); }
+.ibx-stagetab.zero:not(.on) { opacity: 0.6; }
+.ibx-stagetab-n { font-variant-numeric: tabular-nums; font-weight: 600; margin-left: 2px; }
+
+.ibx-filters { display: flex; gap: 6px; margin: 6px 0; }
+.ibx-filter-sel {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  padding: 5px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.ibx-convo.unread .ibx-convo-name { font-weight: 700; }
+.ibx-convo.unread .ibx-preview { color: var(--ink); }
+.ibx-convo-top .ibx-convo-name { flex: 1; min-width: 0; }
+.ibx-convo-time {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mist);
+  font-variant-numeric: tabular-nums;
+}
+.ibx-convo.unread .ibx-convo-time { color: var(--signal-text); font-weight: 600; }
+.ibx-convo-mid { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ibx-convo-mid .ibx-preview { flex: 1; min-width: 0; }
+.ibx-unread {
+  flex: 0 0 auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--signal);
+  color: var(--marble);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ibx-convo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ibx-convo-meta:empty { display: none; }
+.ibx-row-owner { font-size: 10.5px; color: var(--slate); margin-right: 2px; }
+.ibx-flag-done {
+  color: var(--good);
+  border-color: var(--good);
+  background: var(--good-soft);
+}
+
+.ibx-handoff-block { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ibx-resolve {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--good);
+  background: var(--good-soft);
+  color: var(--good);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ibx-resolve:hover { background: var(--good); color: var(--marble); }
+.ibx-resolve.reopen { border-color: var(--hairline-strong); background: transparent; color: var(--slate); }
+.ibx-resolve.reopen:hover { color: var(--ink); border-color: var(--ink); background: transparent; }
+.ibx-resolve:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+/* The timeline: day separators and one-line "what happened" rows, centred
+   between the bubbles so they read as the thread's history, not a message. */
+.ibx-day {
+  align-self: center;
+  margin: 6px 0 2px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+.ibx-day span { padding: 2px 10px; border-radius: var(--r-pill); background: var(--paper); border: 1px solid var(--hairline); }
+.ibx-event {
+  align-self: center;
+  max-width: 90%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--slate);
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--hairline-strong);
+  background: transparent;
+  text-align: center;
+}
+.ibx-event time { font-family: var(--mono); font-size: 9.5px; color: var(--mist); }
+.ibx-event.good { color: var(--good); border-color: var(--good); background: var(--good-soft); }
+.ibx-event.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+
+.ibx-bubble { display: flex; flex-direction: column; gap: 3px; }
+.ibx-bubble-body { white-space: pre-wrap; }
+.ibx-bubble-who { font-size: 10.5px; opacity: 0.8; }
+.ibx-ai-badge,
+.ibx-sys-badge {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid currentColor;
+}
+.ibx-bubble.out.ai { background: var(--ink-soft); }
+.ibx-bubble-meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.ibx-tick { letter-spacing: -0.15em; }
+.ibx-tick.read { color: var(--signal-on-dark); opacity: 1; }
+.ibx-tick.failed { letter-spacing: 0; color: var(--crit); opacity: 1; }
+
+/* The customer is waiting: neutral until the business's target, then urgent. */
+.ibx-sla {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--slate);
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+}
+.ibx-sla.late { color: var(--crit); background: var(--crit-soft); border-color: var(--crit); font-weight: 600; }
+
+/* The composer is a textarea now: keep it one line until more is typed. */
+textarea.ibx-input { resize: none; line-height: 1.45; max-height: 9.5em; }
+.ibx-compose { align-items: flex-end; }
+
+.ibx-qr-hint { margin: 0 0 6px; font-size: 11.5px; color: var(--slate); }
+
+/* --- the Customer panel: Details / Calls / Notes --- */
+.dp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hairline); margin-bottom: 4px; }
+.dp-tab {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 7px 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+.dp-tab:hover { color: var(--ink); }
+.dp-tab.on { color: var(--ink); border-bottom-color: var(--signal-text); }
+.dp-tab:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+.dp-error { margin: 0; font-size: 12px; color: var(--crit); }
+.dp-hint { margin: 0; font-size: 11.5px; color: var(--slate); }
+.dp-h-gap { margin-top: 10px; }
+.dp-source {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
+}
+.dp-source:focus { outline: none; border-color: var(--signal-text); }
+.dp-notelist { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.dp-note { padding: 8px 10px; border-radius: var(--r-sm); background: var(--paper); border: 1px solid var(--hairline); }
+.dp-note-meta { display: flex; align-items: baseline; gap: 6px; font-size: 11px; color: var(--slate); }
+.dp-note-meta strong { color: var(--ink); font-weight: 600; }
+.dp-note-meta span { flex: 1; font-family: var(--mono); font-size: 9.5px; }
+.dp-note-body { margin: 4px 0 0; font-size: 12.5px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }

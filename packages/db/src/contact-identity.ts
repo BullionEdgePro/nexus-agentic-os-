@@ -121,7 +121,7 @@ export async function ensureContactForServingBusiness(
         where organization_id = $1
           and contact_id = $2
           and coalesce(routed_organization_id, organization_id) = $3
-          and status in ('open', 'pending')
+          and status in ('open', 'pending', 'resolved')
         order by opened_at desc
         limit 1`,
       [owner.id, contactId, serving.id]

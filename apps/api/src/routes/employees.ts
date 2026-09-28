@@ -18,6 +18,7 @@ import {
   listCalendars,
   connectCalendar,
   disconnectCalendar,
+  recordAssignmentEvent,
 } from "@nexus/db";
 import { randomInt } from "node:crypto";
 import {
@@ -49,6 +50,7 @@ import { buildHandoverBrief } from "@nexus/agents";
 import { assertPublicUrl } from "@nexus/knowledge";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
+import { actorOf } from "../lib/actor.js";
 
 /** Who is asking. An unattributed calendar connection is one nobody owns. */
 function scopeOf(c: { get: (k: string) => unknown }): SessionScope {
@@ -877,6 +879,7 @@ conversationAssignmentRoute.post("/:conversationId/assign", async (c) => {
   }
 
   const employeeId = typeof body.employeeId === "string" ? body.employeeId : null;
+  let assigneeName: string | null = null;
 
   if (employeeId) {
     const employee = await findEmployeeById(employeeId);
@@ -895,10 +898,19 @@ conversationAssignmentRoute.post("/:conversationId/assign", async (c) => {
         400
       );
     }
+    assigneeName = employee.fullName;
   }
 
   await assignConversationToEmployee(conversationId, employeeId);
   logger.info({ conversationId, employeeId }, "Conversation assignment changed");
+
+  // "Priya assigned this chat to Kavya" — on the thread's own timeline, so the
+  // next person to open it sees who picked it up. Best-effort: the assignment
+  // stands even if the note of it fails.
+  const actor = await actorOf(c);
+  await recordAssignmentEvent(conversationId, assigneeName, actor.id, actor.name).catch((err) =>
+    logger.warn({ err, conversationId }, "Could not record the assignment on the timeline")
+  );
 
   return c.json({ conversationId, employeeId });
 });

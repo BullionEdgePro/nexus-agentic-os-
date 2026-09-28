@@ -95,7 +95,7 @@ export async function findOrCreateSocialConversation(
   const existing = await db.query<{ id: string }>(
     `select id from conversations
       where organization_id = $1 and contact_id = $2 and channel = $3
-        and status in ('open', 'pending')
+        and status in ('open', 'pending', 'resolved')
       order by opened_at desc
       limit 1`,
     [organizationId, contactId, channel]

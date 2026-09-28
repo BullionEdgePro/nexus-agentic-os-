@@ -16,6 +16,8 @@ interface ConversationSummaryRow {
   has_overdue_followup: boolean | null;
   lead_stage: string | null;
   channel: string | null;
+  assigned_employee_name: string | null;
+  unread_count: number | null;
 }
 
 function toSummary(row: ConversationSummaryRow): ConversationSummary {
@@ -34,12 +36,22 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     hasOverdueFollowup: Boolean(row.has_overdue_followup),
     leadStage: row.lead_stage,
     channel: (row.channel ?? "whatsapp") as ConversationChannel,
+    assignedEmployeeName: row.assigned_employee_name,
+    unreadCount: row.unread_count ?? 0,
   };
 }
 
+/**
+ * The business's conversations, newest activity first.
+ *
+ * `reader` is who is looking ('e:<employee id>' or 'o:<admin id>'); it decides
+ * each row's unread count (migration 090). Without one, every row reads 0 unread
+ * rather than guessing whose "unread" was meant.
+ */
 export async function getConversationsForOrganization(
   organizationId: string,
-  limit = 50
+  limit = 50,
+  reader: string | null = null
 ): Promise<ConversationSummary[]> {
   const { rows } = await getPool().query<ConversationSummaryRow>(
     `select
@@ -50,12 +62,26 @@ export async function getConversationsForOrganization(
        c.status,
        c.is_human_handoff,
        c.employee_id as assigned_employee_id,
+       e.full_name as assigned_employee_name,
        lm.body as last_message_body,
        lm.created_at as last_message_at,
        lm.direction as last_message_direction,
        c.tags,
        ct.lead_stage,
        c.channel,
+       -- UNREAD FOR THIS READER: customer messages after their last look. A
+       -- thread they have never opened counts from our last reply instead, so
+       -- old history does not arrive as 40 unread.
+       case when $3::text is null then 0 else (
+         select count(*)::int from messages mu
+          where mu.conversation_id = c.id
+            and mu.direction = 'inbound'
+            and mu.created_at > coalesce(
+                  rd.last_read_at,
+                  (select max(mo.created_at) from messages mo
+                    where mo.conversation_id = c.id and mo.direction = 'outbound'),
+                  '-infinity'::timestamptz)
+       ) end as unread_count,
        exists (
          select 1 from tasks t
           where t.conversation_id = c.id
@@ -65,6 +91,8 @@ export async function getConversationsForOrganization(
        ) as has_overdue_followup
      from conversations c
      join contacts ct on ct.id = c.contact_id
+     left join employees e on e.id = c.employee_id
+     left join conversation_reads rd on rd.conversation_id = c.id and rd.reader = $3
      left join lateral (
        select body, created_at, direction from messages
        where conversation_id = c.id
@@ -80,7 +108,7 @@ export async function getConversationsForOrganization(
      where coalesce(c.routed_organization_id, c.organization_id) = $1
      order by coalesce(lm.created_at, c.opened_at) desc
      limit $2`,
-    [organizationId, limit]
+    [organizationId, limit, reader]
   );
   return rows.map(toSummary);
 }
@@ -262,7 +290,8 @@ export interface ConversationDetails {
   organizationId: string;
   contactId: string;
   contactName: string | null;
-  contactWaId: string;
+  /** Null for a contact reached on a channel with no phone (Messenger, Instagram, email). */
+  contactWaId: string | null;
   firstSeenAt: string | null;
   assignedEmployeeId: string | null;
   /** Extra staff pulled onto this thread, by id — names resolved by the caller. */
@@ -278,6 +307,14 @@ export interface ConversationDetails {
   leadScore: number | null;
   notes: string | null;
   customFields: Record<string, string>;
+  /** Where the lead came from (a campaign, a referral, walk-in) — set by hand. */
+  leadSource: string | null;
+  /** When the customer last wrote, and when we last wrote to them. */
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  /** The thread's channel and status, so the panel labels the contact honestly. */
+  channel: ConversationChannel;
+  status: ConversationSummary["status"];
 }
 
 /**
@@ -295,7 +332,7 @@ export async function getConversationDetails(conversationId: string): Promise<Co
     employee_id: string | null;
     collaborator_ids: string[] | null;
     contact_id: string;
-    wa_id: string;
+    wa_id: string | null;
     display_name: string | null;
     first_seen_at: string | null;
     reengagement_opted_out: boolean | null;
@@ -305,12 +342,22 @@ export async function getConversationDetails(conversationId: string): Promise<Co
     notes: string | null;
     custom_fields: Record<string, string> | null;
     employee_name: string | null;
+    lead_source: string | null;
+    last_inbound_at: string | null;
+    last_outbound_at: string | null;
+    channel: ConversationChannel | null;
+    status: ConversationSummary["status"];
   }>(
     `select c.id as conversation_id, c.organization_id, c.employee_id, c.collaborator_ids,
             ct.id as contact_id, ct.wa_id, ct.display_name,
             ct.created_at as first_seen_at, ct.reengagement_opted_out,
             ct.lead_stage, ct.lead_priority, ct.lead_score, ct.notes, ct.custom_fields,
-            e.full_name as employee_name
+            ct.lead_source, c.channel, c.status,
+            e.full_name as employee_name,
+            (select max(created_at) from messages m
+              where m.conversation_id = c.id and m.direction = 'inbound') as last_inbound_at,
+            (select max(created_at) from messages m
+              where m.conversation_id = c.id and m.direction = 'outbound') as last_outbound_at
        from conversations c
        join contacts ct on ct.id = c.contact_id
        left join employees e on e.id = c.employee_id
@@ -335,6 +382,11 @@ export async function getConversationDetails(conversationId: string): Promise<Co
     leadScore: r.lead_score,
     notes: r.notes,
     customFields: r.custom_fields ?? {},
+    leadSource: r.lead_source,
+    lastInboundAt: r.last_inbound_at,
+    lastOutboundAt: r.last_outbound_at,
+    channel: (r.channel ?? "whatsapp") as ConversationChannel,
+    status: r.status,
   };
 }
 
@@ -349,13 +401,19 @@ export async function getConversationDetails(conversationId: string): Promise<Co
  */
 export async function updateContactDetails(
   contactId: string,
-  input: { leadStage?: string | null; notes?: string | null; customFields?: Record<string, string> }
+  input: {
+    leadStage?: string | null;
+    notes?: string | null;
+    customFields?: Record<string, string>;
+    leadSource?: string | null;
+  }
 ): Promise<void> {
   await getPool().query(
     `update contacts set
        lead_stage    = case when $2::boolean then $3 else lead_stage end,
        notes         = case when $4::boolean then $5 else notes end,
        custom_fields = case when $6::boolean then $7::jsonb else custom_fields end,
+       lead_source   = case when $8::boolean then $9 else lead_source end,
        updated_at    = now()
      where id = $1`,
     [
@@ -366,6 +424,8 @@ export async function updateContactDetails(
       input.notes ?? null,
       input.customFields !== undefined,
       JSON.stringify(input.customFields ?? {}),
+      input.leadSource !== undefined,
+      input.leadSource ?? null,
     ]
   );
 }
