@@ -7,6 +7,11 @@ import {
   updateOrganizationSocialAccounts,
   getInboxSettings,
   updateInboxSettings,
+  listSegments,
+  previewSegment,
+  createSegment,
+  deleteSegment,
+  normaliseSegmentFilter,
 } from "@nexus/db";
 import { parseSocialAccounts } from "@nexus/employees";
 import { readerOf } from "../lib/actor.js";
@@ -153,4 +158,58 @@ organizationsRoute.patch("/:slug/inbox-settings", async (c) => {
 
   const settings = await updateInboxSettings(organization.id, patch);
   return c.json({ settings });
+});
+
+// ============================================================
+// Customer lists (migration 093) — saved filters, evaluated fresh
+// ============================================================
+//
+// Owner-only, like the broadcasts they feed: a list is a statement about who
+// the business will message, and staff reach customers through their own
+// client book (My campaigns), never through the business's whole base.
+
+function ownerOnly(c: { get: (k: string) => unknown }): boolean {
+  return (c.get("scope") as SessionScope | undefined)?.role === "operator";
+}
+
+organizationsRoute.get("/:slug/segments", async (c) => {
+  if (!ownerOnly(c)) return c.json({ error: "Only the owner manages customer lists." }, 403);
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  const segments = await listSegments(organization.id);
+  // Each with who it reaches RIGHT NOW — the number is the point of a list.
+  const counted = await Promise.all(
+    segments.map(async (segment) => ({ ...segment, count: (await previewSegment(organization.id, segment.filter)).count }))
+  );
+  return c.json({ segments: counted });
+});
+
+organizationsRoute.post("/:slug/segments/preview", async (c) => {
+  if (!ownerOnly(c)) return c.json({ error: "Only the owner manages customer lists." }, 403);
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  const body = await c.req.json<{ filter?: unknown }>().catch(() => null);
+  const preview = await previewSegment(organization.id, normaliseSegmentFilter(body?.filter));
+  return c.json(preview);
+});
+
+organizationsRoute.post("/:slug/segments", async (c) => {
+  if (!ownerOnly(c)) return c.json({ error: "Only the owner manages customer lists." }, 403);
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  const body = await c.req.json<{ name?: unknown; filter?: unknown }>().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim().slice(0, 80) : "";
+  if (!name) return c.json({ error: "Give the list a name." }, 400);
+  const scope = c.get("scope") as SessionScope | undefined;
+  const segment = await createSegment(organization.id, name, normaliseSegmentFilter(body?.filter), scope?.sub ?? null);
+  return c.json({ segment }, 201);
+});
+
+organizationsRoute.delete("/:slug/segments/:segmentId", async (c) => {
+  if (!ownerOnly(c)) return c.json({ error: "Only the owner manages customer lists." }, 403);
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  const ok = await deleteSegment(organization.id, c.req.param("segmentId"));
+  if (!ok) return c.json({ error: "That list is already gone." }, 404);
+  return c.json({ ok: true });
 });

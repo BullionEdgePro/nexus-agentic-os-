@@ -113,8 +113,18 @@ export async function getContactsForAudience(
     // `contactServedBy` is the predicate this repository already defined once
     // for exactly this question, with a comment saying it exists so it is not
     // "written out a fourth time". This path wrote it out a fourth time.
+    //
+    // AND NEVER SOMEBODY WHO SAID STOP, OR WHO HAS NO NUMBER (2026-09-28). The
+    // staff campaign path and re-engagement both filtered opt-outs; this one did
+    // not, so an operator broadcast would have messaged exactly the people who
+    // asked not to be. And since migration 088 a contact can exist with no
+    // wa_id (email, Instagram, Messenger) — those were queued with a null
+    // recipient and failed one by one. Both are now the audience's own rules,
+    // the same base clause customer lists apply (segments.ts).
     `select ct.id, ct.wa_id, ct.display_name from contacts ct
-      where ${contactServedBy("$1")} and ct.attributes @> $2::jsonb`,
+      where ${contactServedBy("$1")} and ct.attributes @> $2::jsonb
+        and ct.reengagement_opted_out = false
+        and coalesce(ct.wa_id, '') <> ''`,
     [organizationId, JSON.stringify(audienceFilter ?? {})]
   );
   return rows.map((row) => ({ id: row.id, waId: row.wa_id, displayName: row.display_name }));

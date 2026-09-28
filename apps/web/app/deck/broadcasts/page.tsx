@@ -8,6 +8,8 @@ import {
   createBroadcast,
   sendBroadcast,
   syncTemplates,
+  listCustomerLists,
+  type CustomerList,
   type BroadcastTemplate,
   type BroadcastSummary, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
@@ -15,6 +17,7 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./broadcasts.css";
+import { CustomerLists, describe } from "./customer-lists";
 
 /**
  * Bulk WhatsApp messaging.
@@ -38,6 +41,9 @@ export default function BroadcastsPage() {
   const [reachable, setReachable] = useState(0);
   const [canSend, setCanSend] = useState(false);
   const [templateId, setTemplateId] = useState("");
+  // The audience: everyone reachable ("") or one saved customer list.
+  const [lists, setLists] = useState<CustomerList[]>([]);
+  const [listId, setListId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   /**
@@ -79,13 +85,33 @@ export default function BroadcastsPage() {
     void load(business);
   }, [business, load]);
 
+  // Customer lists load on their own: a failure here must not blank the gate,
+  // the templates or the history above — the audience simply stays "everyone".
+  const loadLists = useCallback(async (slug: BusinessSlug) => {
+    try {
+      const data = await listCustomerLists(slug);
+      setLists(data.segments);
+    } catch {
+      setLists([]);
+    }
+  }, []);
+  useEffect(() => {
+    setListId("");
+    void loadLists(business);
+  }, [business, loadLists]);
+  const chosenList = lists.find((list) => list.id === listId) ?? null;
+
   async function handleSend() {
     if (!templateId) return;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const { broadcast } = await createBroadcast({ organizationSlug: business, templateId });
+      const { broadcast } = await createBroadcast({
+        organizationSlug: business,
+        templateId,
+        ...(chosenList ? { segmentId: chosenList.id } : {}),
+      });
       const { enqueued } = await sendBroadcast(broadcast.id);
       setNotice(`Queued for ${enqueued} ${enqueued === 1 ? "contact" : "contacts"}.`);
       await load(business);
@@ -232,19 +258,32 @@ export default function BroadcastsPage() {
                     ))}
                   </select>
                 </label>
+                <label>
+                  <span>Audience</span>
+                  <select value={listId} onChange={(event) => setListId(event.target.value)}>
+                    <option value="">Everyone reachable</option>
+                    {lists.map((list) => (
+                      <option key={list.id} value={list.id}>
+                        {list.name} · {list.count}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="bc-audience">
-                  <span className="act-sub">Audience</span>
+                  <span className="act-sub">Reaches</span>
                   <strong>
-                    {reachable} {reachable === 1 ? "contact" : "contacts"}
+                    {chosenList ? chosenList.count : reachable}{" "}
+                    {(chosenList ? chosenList.count : reachable) === 1 ? "contact" : "contacts"}
                   </strong>
                 </div>
                 <button className="bc-send" onClick={handleSend} disabled={!canSend || !templateId || busy}>
-                  {busy ? "Sending…" : "Send to all"}
+                  {busy ? "Sending…" : chosenList ? "Send to list" : "Send to all"}
                 </button>
               </div>
               <p className="bc-warn">
-                This goes to every contact of {label(business)} at once and cannot be recalled once
-                queued.
+                {chosenList
+                  ? `This goes to everyone on “${chosenList.name}” (${describe(chosenList.filter)}) at the moment you send — worked out fresh, so it may differ from the number shown if customers changed since — and cannot be recalled once queued.`
+                  : `This goes to every contact of ${label(business)} at once and cannot be recalled once queued.`}
               </p>
             </section>
 
@@ -252,6 +291,8 @@ export default function BroadcastsPage() {
                 remains here is the notice from an ACTION on this page — a send
                 that was queued — which belongs beside the thing it acted on. */}
             {notice ? <p className="bc-ok">{notice}</p> : null}
+
+            <CustomerLists business={business} lists={lists} onChanged={() => void loadLists(business)} />
 
             <h2 className="act-sub-head">Templates</h2>
             {templates.length === 0 ? (

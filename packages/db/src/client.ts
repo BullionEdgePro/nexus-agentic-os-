@@ -96,6 +96,9 @@ export const TENANT_SCOPED_TABLES = [
   "employee_presence_events",
   "organization_users",
   "twin_handbacks",
+  // Added 2026-09-28 with customer lists (migration 093). A business's saved
+  // audiences are its own; read under its tenant, or across all on purpose.
+  "contact_segments",
 ];
 // Not on the list, and each for a reason worth stating:
 //

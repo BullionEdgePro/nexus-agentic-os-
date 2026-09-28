@@ -11,6 +11,8 @@ import {
   listBroadcasts,
   countReachableContacts,
   getBroadcast,
+  getSegment,
+  segmentContacts,
 } from "@nexus/db";
 import type { AudienceFilter } from "@nexus/shared";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
@@ -88,7 +90,13 @@ broadcastsRoute.post("/:slug/sync", async (c) => {
 // resolved audience count before committing to a bulk send.
 broadcastsRoute.post("/", async (c) => {
   const body = await c
-    .req.json<{ organizationSlug?: string; templateId?: string; audienceFilter?: AudienceFilter; scheduledAt?: string }>()
+    .req.json<{
+      organizationSlug?: string;
+      templateId?: string;
+      audienceFilter?: AudienceFilter;
+      scheduledAt?: string;
+      segmentId?: string;
+    }>()
     .catch(() => null);
   if (!body?.organizationSlug || !body.templateId) {
     return c.json({ error: "organizationSlug and templateId are required" }, 400);
@@ -125,10 +133,20 @@ broadcastsRoute.post("/", async (c) => {
     );
   }
 
+  // A CUSTOMER LIST, by reference (migration 093). Stored as {"$segment": id}
+  // so the list is evaluated at SEND time — whoever matches then, not whoever
+  // matched when the draft was made. Checked to be this business's own list.
+  let audienceFilter: AudienceFilter = body.audienceFilter ?? {};
+  if (typeof body.segmentId === "string" && body.segmentId) {
+    const segment = await getSegment(organization.id, body.segmentId);
+    if (!segment) return c.json({ error: "That customer list does not exist for this business." }, 404);
+    audienceFilter = { $segment: segment.id };
+  }
+
   const broadcast = await createBroadcast({
     organizationId: organization.id,
     templateId: body.templateId,
-    audienceFilter: body.audienceFilter ?? {},
+    audienceFilter,
     scheduledAt: body.scheduledAt,
   });
 
@@ -173,7 +191,22 @@ broadcastsRoute.post("/:id/send", async (c) => {
     );
   }
 
-  const contacts = await getContactsForAudience(broadcast.organizationId, body?.audienceFilter ?? broadcast.audienceFilter ?? {});
+  // Aimed at a customer list: evaluate it NOW, and refuse if it is gone — a
+  // campaign whose list was deleted must never fall back to everyone.
+  const segmentRef = (broadcast.audienceFilter as Record<string, unknown> | null)?.["$segment"];
+  let contacts: Array<{ id: string; waId: string; displayName: string | null }>;
+  if (typeof segmentRef === "string") {
+    const segment = await getSegment(broadcast.organizationId, segmentRef);
+    if (!segment) {
+      return c.json(
+        { error: "The customer list this campaign was aimed at has been deleted. Nothing was sent." },
+        422
+      );
+    }
+    contacts = await segmentContacts(broadcast.organizationId, segment.filter);
+  } else {
+    contacts = await getContactsForAudience(broadcast.organizationId, body?.audienceFilter ?? broadcast.audienceFilter ?? {});
+  }
   if (contacts.length === 0) {
     return c.json({ error: "Audience filter matched zero contacts" }, 422);
   }

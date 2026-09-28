@@ -1004,6 +1004,8 @@ export function createBroadcast(input: {
   organizationSlug: BusinessSlug;
   templateId: string;
   scheduledAt?: string;
+  /** Aim at a saved customer list — evaluated when it is sent, not now. */
+  segmentId?: string;
 }): Promise<{ broadcast: { id: string } }> {
   return request("/api/broadcasts", { method: "POST", body: JSON.stringify(input) });
 }
@@ -1013,6 +1015,59 @@ export function sendBroadcast(id: string): Promise<{ broadcastId: string; enqueu
   // the body carries only an optional audience filter. Sent as `{}` rather than
   // omitted because the route parses JSON from it.
   return request(`/api/broadcasts/${id}/send`, { method: "POST", body: "{}" });
+}
+
+// ============================================================
+// Customer lists — saved filters, evaluated fresh (migration 093)
+// ============================================================
+
+export interface SegmentFilter {
+  tags?: string[];
+  stages?: string[];
+  activeWithinDays?: number;
+  quietForDays?: number;
+  leadSource?: string;
+  field?: { key: string; value: string };
+  minScore?: number;
+}
+
+export interface CustomerList {
+  id: string;
+  name: string;
+  filter: SegmentFilter;
+  /** Who it reaches right now. */
+  count: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listCustomerLists(orgSlug: BusinessSlug): Promise<{ segments: CustomerList[] }> {
+  return request(`/api/organizations/${orgSlug}/segments`);
+}
+
+export function previewCustomerList(
+  orgSlug: BusinessSlug,
+  filter: SegmentFilter
+): Promise<{ count: number; sample: string[] }> {
+  return request(`/api/organizations/${orgSlug}/segments/preview`, {
+    method: "POST",
+    body: JSON.stringify({ filter }),
+  });
+}
+
+export function createCustomerList(
+  orgSlug: BusinessSlug,
+  name: string,
+  filter: SegmentFilter
+): Promise<{ segment: CustomerList }> {
+  return request(`/api/organizations/${orgSlug}/segments`, {
+    method: "POST",
+    body: JSON.stringify({ name, filter }),
+  });
+}
+
+export function deleteCustomerList(orgSlug: BusinessSlug, segmentId: string): Promise<{ ok: true }> {
+  return request(`/api/organizations/${orgSlug}/segments/${segmentId}`, { method: "DELETE" });
 }
 
 export interface QualityDay {
