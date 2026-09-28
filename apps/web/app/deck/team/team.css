@@ -720,3 +720,67 @@
 .deck-root .wn-reg-method { display: flex; flex-wrap: wrap; gap: 14px; }
 .deck-root .wn-reg-method label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
 .deck-root .wn-reg-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ============================================================
+   A ROSTER ROW THAT NEVER SQUEEZES THE NAME
+   ============================================================
+   The row was a three-column grid (dot, name, number) holding FIVE
+   items — "no hours set" and the last sign-in spilled into stray cells —
+   and it shared one line with the two buttons. In a panel ~500px wide
+   the name was left a sliver and "Ralph Ivan Simeon" broke over three
+   lines. Now: name and number on the first line, the facts under the
+   name, and the buttons drop below the row when the panel is narrow
+   rather than taking the name's room. Measured against the PANEL's width
+   (container query), because the panel is what gets narrow, not the
+   window. */
+
+.team-panel { container-type: inline-size; container-name: roster; }
+
+.team-list li { align-items: stretch; }
+
+.team-member {
+  flex: 1 1 300px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "dot who wa";
+  column-gap: 11px;
+  row-gap: 5px;
+  border-radius: 12px;
+  transition: border-color .16s, background .16s, box-shadow .16s;
+}
+.team-member:hover { border-color: var(--sky); background: var(--marble); }
+.team-member.on { border-color: var(--sky); background: var(--sky-soft); box-shadow: 0 6px 16px -10px var(--sky-glow); }
+.team-member .dot { grid-area: dot; }
+.team-member .who { grid-area: who; }
+.team-member .wa { grid-area: wa; justify-self: end; }
+/* The facts sit under the name, one per line, never in a stray cell. */
+.team-member .team-norota,
+.team-member .team-signin { grid-column: 2 / -1; justify-self: start; }
+.team-member .nm { font-size: 14.5px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+
+.team-list li > .team-remove {
+  flex: 0 0 auto;
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--slate);
+  background: var(--paper);
+}
+.team-list li > .team-remove.alt { color: var(--signal-text); }
+
+/* A narrow panel: the row takes the full width, the buttons go under it. */
+@container roster (max-width: 540px) {
+  .team-member { flex-basis: 100%; }
+  .team-list li > .team-remove.alt { margin-left: auto; }
+}
+/* Narrower still: the number moves under the name too. */
+@container roster (max-width: 380px) {
+  .team-member {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "dot who" ". wa";
+  }
+  .team-member .wa { justify-self: start; }
+}
