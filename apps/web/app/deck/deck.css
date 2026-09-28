@@ -882,6 +882,170 @@
 }
 
 /* ============================================================
+   THE OWNER'S OVERVIEW — fits the screen, scrolls in one place
+   ============================================================
+   It used to be wider than the window. Grid columns were written as
+   `1fr`, which may not shrink below its content, and the live feed's
+   messages were one unbreakable line each — so the longest customer
+   message set the page's width, the cards slid under the rail, and the
+   owner scrolled sideways to read it. Every column is now minmax(0, …)
+   and the feed wraps to two lines.
+
+   And it is an app, not a document: the header and the rail stay where
+   they are and only the middle scrolls, so nothing has to be slid back
+   into view to reach the menu. */
+
+.deck-root .app {
+  grid-template-columns: 212px minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+.deck-root .app > .topbar {
+  position: relative;
+  z-index: 4;
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+}
+.deck-root .app > .rail { min-height: 0; overflow-y: auto; scrollbar-width: thin; background: var(--paper); }
+.deck-root .app > .main {
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 24px 28px 28px;
+  scrollbar-width: thin;
+}
+.deck-root .app .main > * { max-width: 1480px; margin-left: auto; margin-right: auto; }
+
+.deck-root .stats { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+.deck-root .grid-2 { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+.deck-root .grid-3 { grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.25fr); align-items: stretch; }
+.deck-root .card,
+.deck-root .stat { min-width: 0; }
+
+/* The heading gets room to breathe; the status pills wrap under it on a narrow screen. */
+.deck-root .app .page-head { flex-wrap: wrap; margin-bottom: 14px; }
+.deck-root .app .page-head h1 { font-size: 28px; font-weight: 800; letter-spacing: -.025em; }
+.deck-root .app .page-head .meta { flex-wrap: wrap; }
+
+/* ---------- quick actions ---------- */
+.deck-root .adm-quick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+.deck-root .adm-quick-a {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--lift-sm);
+  transition: transform .2s var(--ease-out), box-shadow .2s, border-color .2s;
+  animation: nx-pop .45s var(--ease-out) both;
+}
+.deck-root .adm-quick-a:nth-child(2) { animation-delay: .04s; }
+.deck-root .adm-quick-a:nth-child(3) { animation-delay: .08s; }
+.deck-root .adm-quick-a:nth-child(4) { animation-delay: .12s; }
+.deck-root .adm-quick-a:nth-child(5) { animation-delay: .16s; }
+.deck-root .adm-quick-a:hover { transform: translateY(-3px); box-shadow: var(--lift); border-color: var(--sky); }
+.deck-root .adm-quick-ic {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--btn-grad);
+  color: var(--on-accent);
+  box-shadow: 0 8px 16px -8px var(--sky-glow);
+  transition: transform .25s var(--ease-spring);
+}
+.deck-root .adm-quick-a:hover .adm-quick-ic { transform: rotate(-8deg) scale(1.08); }
+.deck-root .adm-quick-ic svg { width: 18px; height: 18px; }
+.deck-root .adm-quick-a > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.deck-root .adm-quick-a b { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.deck-root .adm-quick-a small { font-size: 11.5px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- KPI tiles ---------- */
+.deck-root .app .stat { padding: 16px 16px 13px; border-radius: 16px; box-shadow: var(--lift-sm); }
+.deck-root .app .stat:hover { transform: translateY(-2px); box-shadow: var(--lift); }
+.deck-root .stat-ic {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--sky-soft);
+  color: var(--sky-deep);
+}
+.deck-root .stat-ic svg { width: 16px; height: 16px; }
+.deck-root .app .stat .k { padding-right: 38px; }
+.deck-root .app .stat .v { font-size: 28px; font-weight: 800; }
+.deck-root .app .stat.hi { border-color: var(--sky); background: linear-gradient(160deg, var(--sky-soft), var(--paper) 70%); }
+.deck-root .app .stat.hi .stat-ic { background: var(--btn-grad); color: var(--on-accent); }
+
+/* ---------- cards ---------- */
+.deck-root .app .card { border-radius: 18px; box-shadow: var(--lift-sm); }
+.deck-root .app .card-h h3 { font-size: 14.5px; font-weight: 700; }
+.deck-root .app .card-h h3 .ic { width: 28px; height: 28px; border-radius: 9px; background: var(--sky-soft); border-color: transparent; }
+.deck-root .app .card-h h3 .ic svg { width: 15px; height: 15px; color: var(--sky-deep); }
+.deck-root .app .switchboard { height: 330px; border-radius: 14px; background: radial-gradient(circle at 50% 50%, var(--sky-wash), transparent 65%), var(--marble); }
+.deck-root .app .core { border-color: var(--sky); box-shadow: 0 0 0 6px var(--sky-wash); }
+
+/* ---------- the live feed: wraps, and scrolls inside its own card ---------- */
+.deck-root .app .grid-3 > .card { display: flex; flex-direction: column; }
+.deck-root .app .feed {
+  flex: 1;
+  max-height: 340px;
+  overflow-y: auto;
+  margin-right: -6px;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  mask-image: linear-gradient(180deg, #fff 88%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, #fff 88%, transparent);
+}
+.deck-root .app .feed-item { animation: nx-rise .35s var(--ease-out) both; }
+.deck-root .app .feed-av { border-radius: 50%; border: 0; background: var(--sky-soft); color: var(--signal-deep); font-family: var(--sans); font-weight: 800; }
+.deck-root .feed-b .top { flex-wrap: wrap; row-gap: 2px; }
+.deck-root .feed-b p {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.45;
+}
+.deck-root .tag { border-radius: 999px; }
+.deck-root .tag.ai { background: var(--sky-soft); border-color: transparent; }
+.deck-root .tag.h { background: var(--warn-soft); border-color: transparent; }
+
+.deck-root .app .foot { padding-top: 14px; border-top: 1px solid var(--hairline); }
+
+@media (max-width: 1280px) {
+  .deck-root .adm-quick { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .deck-root .grid-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .deck-root .grid-3 > .card:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
+  .deck-root .grid-2,
+  .deck-root .grid-3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .deck-root .app { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 100dvh; }
+  .deck-root .app > .main { overflow: visible; padding: 18px 16px; }
+  .deck-root .adm-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck-root .adm-quick-a,
+  .deck-root .app .feed-item { animation: none; }
+}
+
+/* ============================================================
    NIGHT SKY — the dark theme
    ============================================================
    The same sky after sunset: a deep-navy ground, cards a shade lighter,

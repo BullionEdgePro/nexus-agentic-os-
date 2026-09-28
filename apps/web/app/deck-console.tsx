@@ -385,8 +385,6 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
       <canvas className="bg" />
       <div className="grid-overlay" />
       <div className="vignette" />
-      <div className="cur-ring" />
-      <div className="cur-dot" />
 
       {/* ⌘K here too — this front page is the one operator screen outside the
           shared shell, so it needs its own mount to match every other page. */}
@@ -445,11 +443,33 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
             </div>
           </div>
 
-          <div className="dither" />
+          {/* Where an owner goes from here — each a real screen. */}
+          <nav className="adm-quick" aria-label="Quick actions">
+            {QUICK.map((q) => (
+              <a key={q.href} href={q.href} className="adm-quick-a">
+                <span className="adm-quick-ic" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d={q.d} />
+                  </svg>
+                </span>
+                <span>
+                  <b>{q.label}</b>
+                  <small>{q.hint}</small>
+                </span>
+              </a>
+            ))}
+          </nav>
 
           <div className="stats">
             {displayStats.map((s) => (
               <div className={`stat glass${s.hi ? " hi" : ""}`} key={s.k}>
+                {STAT_ICON[s.k] ? (
+                  <span className="stat-ic" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={STAT_ICON[s.k]} />
+                    </svg>
+                  </span>
+                ) : null}
                 <div className="k">{s.k}</div>
                 <div className="v">
                   {s.v}
@@ -779,6 +799,25 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
     </div>
   );
 }
+
+/** The owner's next moves from the overview — every one a real screen. */
+const QUICK: { href: string; label: string; hint: string; d: string }[] = [
+  { href: "/inbox", label: "Conversations", hint: "Every chat, every channel", d: "M4 5h16v11H8l-4 4V5Z" },
+  { href: "/deck/operators", label: "Needs attention", hint: "What is wrong right now", d: "M12 3 2 20h20L12 3Zm0 6v5m0 3h.01" },
+  { href: "/deck/broadcasts", label: "Broadcast", hint: "A campaign or a customer list", d: "M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Zm13-3a5 5 0 0 1 0 8" },
+  { href: "/deck/team", label: "Team & inbox rules", hint: "People, rotas, auto-assign", d: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 10a7 7 0 0 1 14 0m1-10a3 3 0 1 0 0-6m5 16a5 5 0 0 0-4-4.9" },
+  { href: "/deck/activity", label: "Team activity", hint: "Response times per person", d: "M3 12h4l3 8 4-16 3 8h4" },
+];
+
+/** An icon for each KPI tile — by the label the tile already carries. */
+const STAT_ICON: Record<string, string> = {
+  "Active conversations": "M4 5h16v11H8l-4 4V5Z",
+  "AI resolution": "M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2m8-8 2-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z",
+  "Messages today": "M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z",
+  "Avg first response": "M12 8v5l3 2M12 22a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z",
+  "Governance holds": "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z",
+  "Tokens used": "M4 7h16M4 12h16M4 17h10",
+};
 
 function GovRow({
   label,
