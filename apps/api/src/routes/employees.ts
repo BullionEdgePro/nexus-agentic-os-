@@ -79,6 +79,28 @@ employeesRoute.get("/:slug/employees", async (c) => {
 
   const employees = await listEmployees(organization.id);
 
+  // A COLLEAGUE SEES A NAME, NOT A FILE (2026-09-28). Staff screens read this
+  // roster for their owner pickers (Workspace, Follow-ups, Appointments) and the
+  // team directory — name, title, whether they are on shift. It used to hand
+  // every staff member each colleague's email, phone number, rota, and the time
+  // and device of their last sign-in. The owner still gets everything.
+  if (scopeOf(c).role !== "operator") {
+    return c.json({
+      employees: employees.map((employee) => ({
+        id: employee.id,
+        employeeCode: employee.employeeCode,
+        fullName: employee.fullName,
+        jobTitle: employee.jobTitle ?? null,
+        isActive: employee.isActive,
+        twinEnabled: employee.twinEnabled,
+        timezone: employee.timezone,
+        presence: resolvePresence(employee),
+        whatsappReady: normalizeWhatsAppNumber(employee.whatsappNumber) !== null,
+        weeklyHours: weeklyHours(employee.workingHours),
+      })),
+    });
+  }
+
   // Presence is resolved here rather than stored, because it is a function of
   // the clock: a schedule that says "online until 18:00" is not a fact anyone
   // can write down once. Returning it alongside the profile means the deck
@@ -102,6 +124,12 @@ employeesRoute.get("/:slug/employees", async (c) => {
 });
 
 employeesRoute.post("/:slug/employees", async (c) => {
+  // OWNER ONLY (2026-09-28). requireTenantScope pins the :slug to the caller's
+  // business and nothing else — so any staff member could add people to their
+  // own business, each one a new sign-in waiting to be issued.
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can add staff." }, 403);
+  }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
@@ -161,6 +189,11 @@ employeesRoute.post("/:slug/employees", async (c) => {
 });
 
 employeesRoute.delete("/:slug/employees/:employeeId", async (c) => {
+  // OWNER ONLY (2026-09-28). Deactivating a person ends their sign-in; this
+  // was reachable by any colleague in the same business.
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can remove staff." }, 403);
+  }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
@@ -195,6 +228,14 @@ employeesRoute.delete("/:slug/employees/:employeeId", async (c) => {
  * is what stops one business editing another's rota.
  */
 employeesRoute.patch("/:slug/employees/:employeeId/schedule", async (c) => {
+  // THE OWNER'S EDITOR (2026-09-28). It takes anyone's id, so it must be the
+  // owner's alone: a staff member sets their OWN hours through the self-scoped
+  // PATCH /api/my/schedule (my-desk.ts), keyed off the session. Left open, a
+  // colleague could empty someone's rota and take them off every escalation
+  // and appointment with nothing to show it happened.
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Set your own hours under Settings — only the owner edits a colleague's." }, 403);
+  }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
@@ -289,6 +330,14 @@ employeesRoute.put("/:slug/employees/:employeeId/calendar", async (c) => {
     return c.json({ error: "Employee not found" }, 404);
   }
 
+  // The owner, or the person whose calendar it is (2026-09-28). A calendar
+  // decides when somebody counts as busy — linking a feed to a colleague could
+  // take them off every chat and appointment.
+  const caller = scopeOf(c);
+  if (caller.role !== "operator" && caller.employeeId !== employee.id) {
+    return c.json({ error: "You can link your own calendar, not a colleague's." }, 403);
+  }
+
   const body = (await c.req.json().catch(() => null)) as { icsUrl?: unknown } | null;
   const raw = typeof body?.icsUrl === "string" ? body.icsUrl.trim() : "";
   if (!raw) return c.json({ error: "Paste the secret iCal address of the calendar." }, 400);
@@ -327,6 +376,10 @@ employeesRoute.put("/:slug/employees/:employeeId/calendar", async (c) => {
 });
 
 employeesRoute.delete("/:slug/employees/:employeeId/calendar", async (c) => {
+  const caller = scopeOf(c);
+  if (caller.role !== "operator" && caller.employeeId !== c.req.param("employeeId")) {
+    return c.json({ error: "You can disconnect your own calendar, not a colleague's." }, 403);
+  }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 

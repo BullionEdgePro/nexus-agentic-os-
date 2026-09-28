@@ -847,3 +847,24 @@
 .rules-switch input:checked + .rules-knob::after { transform: translateX(16px); }
 .rules-switch input:focus-visible + .rules-knob { box-shadow: 0 0 0 3px var(--sky-wash); }
 @media (max-width: 760px) { .rules-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ============================================================
+   TEAM DIRECTORY — what a colleague sees (read-only)
+   ============================================================ */
+.dir-summary { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 6px 14px; border-radius: var(--r-pill); background: var(--sky-soft); color: var(--signal-deep); font-size: 13px; font-weight: 700; }
+.dir-live { width: 8px; height: 8px; border-radius: 50%; background: var(--good); animation: nx-pulse-ring 2.2s ease-out infinite; }
+.dir-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.dir-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--r); background: var(--paper); border: 1px solid var(--hairline); box-shadow: var(--lift-sm); animation: nx-pop .35s var(--ease-out) both; }
+.dir-card.me { border-color: var(--sky); box-shadow: 0 0 0 3px var(--sky-wash), var(--lift-sm); }
+.dir-av { position: relative; width: 42px; height: 42px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; background: var(--sky-soft); color: var(--signal-deep); font-weight: 800; font-size: 16px; }
+.dir-av::after { content: ""; position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--paper); background: var(--faint); }
+.dir-av.s-online::after { background: var(--good); }
+.dir-av.s-busy::after { background: var(--warn); }
+.dir-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dir-who b { font-size: 14.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dir-who em { font-style: normal; font-weight: 600; color: var(--signal-text); }
+.dir-who small { font-size: 12px; color: var(--slate); }
+.dir-status { flex: 0 0 auto; padding: 3px 10px; border-radius: var(--r-pill); background: var(--pebble); color: var(--slate); font-size: 11.5px; font-weight: 700; }
+.dir-status.s-online { background: var(--good-soft); color: var(--good); }
+.dir-status.s-busy { background: var(--warn-soft); color: var(--warn); }
+@media (prefers-reduced-motion: reduce) { .dir-live, .dir-card { animation: none; } }
