@@ -1,4 +1,5 @@
 import { runOperators } from "../services/operators.js";
+import { assignWaitingChats } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
 import { withJobHeartbeat } from "@nexus/db";
 
@@ -11,6 +12,14 @@ async function processOperatorsJobBody(): Promise<void> {
   const changed = summaries.filter((s) => s.standing > 0 || s.retracted > 0 || s.failed);
   if (changed.length > 0) {
     logger.info({ operators: changed }, "Operator sweep");
+  }
+
+  // The after-hours sweep rides on this 10-minute job: chats that arrived while
+  // nobody was on shift are handed out once somebody is. Best-effort and
+  // self-contained — it never throws, so it cannot fail the operator run.
+  const sweep = await assignWaitingChats();
+  if (sweep.assigned > 0) {
+    logger.info(sweep, "Assigned chats that were waiting for a shift to start");
   }
 }
 

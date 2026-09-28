@@ -323,7 +323,137 @@ export async function claimForAutoAssign(
   return rows.length > 0;
 }
 
+/**
+ * Chats still waiting for a person, in businesses that turned auto-assign on —
+ * for the after-hours sweep (services/availability.ts assignWaitingChats).
+ *
+ * WHY A SWEEP AT ALL: auto-assign fires when a customer message arrives. A chat
+ * that arrived at 2am found nobody on shift, stayed unassigned, and — if the
+ * customer said nothing more — was never looked at again when the shift
+ * started. This is the list of those chats.
+ *
+ * WhatsApp only: that is the channel the reply pipeline assigns on. Only chats
+ * whose customer wrote in the last 7 days — an unanswered month-old thread is
+ * not something to drop on whoever happens to be on shift. Oldest customer
+ * message first, so the longest wait is handed out first. Cross-tenant by
+ * nature: call it inside withAllTenants.
+ */
+export async function listChatsWaitingForAssignee(
+  limit = 200
+): Promise<Array<{ conversationId: string; servingOrganizationId: string }>> {
+  const { rows } = await getPool().query<{ id: string; serving_id: string }>(
+    `select c.id, coalesce(c.routed_organization_id, c.organization_id) as serving_id
+       from conversations c
+       join organizations o on o.id = coalesce(c.routed_organization_id, c.organization_id)
+       join lateral (
+         select max(m.created_at) as last_in
+           from messages m
+          where m.conversation_id = c.id and m.direction = 'inbound'
+       ) li on true
+      where o.auto_assign
+        and c.channel = 'whatsapp'
+        and c.employee_id is null
+        and not c.is_human_handoff
+        and c.status in ('open', 'pending')
+        and li.last_in > now() - interval '7 days'
+      order by li.last_in asc
+      limit $1`,
+    [limit]
+  );
+  return rows.map((r) => ({ conversationId: r.id, servingOrganizationId: r.serving_id }));
+}
+
 /** The "round" in round-robin — stamped in the SERVING business's scope. */
 export async function stampAutoAssigned(employeeId: string): Promise<void> {
   await getPool().query(`update employees set last_auto_assigned_at = now() where id = $1`, [employeeId]);
+}
+
+// ============================================================
+// Telling a person a chat is now theirs
+// ============================================================
+
+export interface AssignmentAlertContext {
+  stillTheirs: boolean;
+  employeeActive: boolean;
+  employeeName: string;
+  employeeWhatsApp: string | null;
+  contactName: string;
+  servingOrganizationId: string;
+  servingSlug: string;
+  servingName: string;
+  ownerOrganizationId: string;
+  ownerPhoneNumberId: string | null;
+}
+
+/**
+ * Everything the assignment alert needs, in one read: is the chat still with
+ * this person (it may have been reassigned in the second before the alert
+ * went), who the customer is, which business serves them, and which number the
+ * business speaks from. Spans the number's owner and the serving business, so
+ * it is read inside withAllTenants.
+ */
+export async function getAssignmentAlertContext(
+  conversationId: string,
+  employeeId: string
+): Promise<AssignmentAlertContext | null> {
+  const { rows } = await getPool().query<{
+    still_theirs: boolean;
+    is_active: boolean;
+    full_name: string;
+    whatsapp_number: string | null;
+    contact_name: string;
+    serving_id: string;
+    serving_slug: string;
+    serving_name: string;
+    owner_id: string;
+    phone_number_id: string | null;
+  }>(
+    `select (c.employee_id = e.id) as still_theirs,
+            e.is_active, e.full_name, e.whatsapp_number,
+            coalesce(nullif(trim(ct.display_name), ''), 'a customer') as contact_name,
+            srv.id as serving_id, srv.slug as serving_slug, srv.name as serving_name,
+            own.id as owner_id, own.whatsapp_phone_number_id as phone_number_id
+       from conversations c
+       join organizations own on own.id = c.organization_id
+       join organizations srv on srv.id = coalesce(c.routed_organization_id, c.organization_id)
+       join employees e on e.id = $2
+       left join contacts ct on ct.id = c.contact_id
+      where c.id = $1`,
+    [conversationId, employeeId]
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    stillTheirs: r.still_theirs,
+    employeeActive: r.is_active,
+    employeeName: r.full_name,
+    employeeWhatsApp: r.whatsapp_number,
+    contactName: r.contact_name,
+    servingOrganizationId: r.serving_id,
+    servingSlug: r.serving_slug,
+    servingName: r.serving_name,
+    ownerOrganizationId: r.owner_id,
+    ownerPhoneNumberId: r.phone_number_id,
+  };
+}
+
+/**
+ * An APPROVED template by name on this business's WhatsApp account, or null.
+ * Business-initiated WhatsApp messages must be a Meta-approved template; with
+ * none approved, the caller sends nothing rather than something Meta rejects.
+ */
+export async function findApprovedTemplateByName(
+  organizationId: string,
+  name: string
+): Promise<{ name: string; language: string; bodyParamCount: number } | null> {
+  const { rows } = await getPool().query<{ meta_template_name: string; language: string; body_param_count: number }>(
+    `select meta_template_name, language, body_param_count
+       from message_templates
+      where organization_id = $1 and meta_template_name = $2 and is_approved
+      order by synced_at desc nulls last
+      limit 1`,
+    [organizationId, name]
+  );
+  const r = rows[0];
+  return r ? { name: r.meta_template_name, language: r.language, bodyParamCount: r.body_param_count } : null;
 }

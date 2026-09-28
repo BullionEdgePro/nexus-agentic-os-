@@ -255,7 +255,7 @@ export interface MessageDto {
 
 /** Broadcast over the WebSocket channel to connected Unified Inbox clients. */
 export interface InboxSocketEvent {
-  type: "message" | "handoff_changed" | "status_changed";
+  type: "message" | "handoff_changed" | "status_changed" | "assigned";
   organizationId: string;
   organizationSlug: BusinessSlug;
   conversationId: string;
@@ -263,6 +263,11 @@ export interface InboxSocketEvent {
   isHumanHandoff?: boolean;
   /** For "status_changed": the conversation's new status. */
   status?: ConversationSummary["status"];
+  /** For "assigned": who the chat was given to, and to tell them about whom. */
+  employeeId?: string;
+  contactName?: string;
+  /** For "assigned": "Auto-assign" or the colleague who did it. */
+  assignedBy?: string;
 }
 
 export type HallucinationRisk = "low" | "medium" | "high";

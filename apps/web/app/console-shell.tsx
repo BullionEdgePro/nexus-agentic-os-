@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ViewAsStaff } from "./view-as-staff";
 import { Assistant } from "./assistant";
 import { CommandPalette } from "./command-palette";
+import { AssignmentAlerts } from "./assignment-alerts";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
@@ -129,9 +130,12 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
 export function ConsoleShell({
   children,
   role,
+  me,
 }: {
   children: React.ReactNode;
   role: "operator" | "employee";
+  /** A signed-in staff member — who "a chat is now yours" alerts are for. */
+  me?: { employeeId: string; organizationSlug: string } | null;
 }) {
   return (
     <div className={`deck-root shell ${fontVariables}`}>
@@ -184,6 +188,10 @@ export function ConsoleShell({
       <Assistant />
       {/* ⌘K / Ctrl-K from anywhere signed in. Role-filtered like the rail. */}
       <CommandPalette role={role} />
+      {/* "New chat for you" — wherever a staff member is in the product. */}
+      {role === "employee" && me ? (
+        <AssignmentAlerts employeeId={me.employeeId} organizationSlug={me.organizationSlug} />
+      ) : null}
     </div>
   );
 }

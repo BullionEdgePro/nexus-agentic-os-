@@ -51,6 +51,7 @@ import { assertPublicUrl } from "@nexus/knowledge";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 import { actorOf } from "../lib/actor.js";
+import { alertAssignee } from "../services/assignment-alert.js";
 
 /** Who is asking. An unattributed calendar connection is one nobody owns. */
 function scopeOf(c: { get: (k: string) => unknown }): SessionScope {
@@ -964,6 +965,12 @@ conversationAssignmentRoute.post("/:conversationId/assign", async (c) => {
   await recordAssignmentEvent(conversationId, assigneeName, actor.id, actor.name).catch((err) =>
     logger.warn({ err, conversationId }, "Could not record the assignment on the timeline")
   );
+
+  // Tell the person — unless they just took it themselves. Fire-and-forget,
+  // after the response; the assignment stands whether or not the alert lands.
+  if (employeeId && employeeId !== actor.id) {
+    alertAssignee({ conversationId, employeeId, assignedBy: actor.name ?? "A colleague" });
+  }
 
   return c.json({ conversationId, employeeId });
 });

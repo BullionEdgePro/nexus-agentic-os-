@@ -23,5 +23,16 @@ export default async function DeckLayout({ children }: { children: React.ReactNo
   // The middleware already redirects anyone without a session, so reaching here
   // unauthenticated is a wiring mistake rather than a request. Falling back to
   // "employee" is the safe reading: the narrower menu.
-  return <ConsoleShell role={session?.role ?? "employee"}>{children}</ConsoleShell>;
+  return (
+    <ConsoleShell
+      role={session?.role ?? "employee"}
+      me={
+        session?.role === "employee" && session.employeeId && session.organizationSlug
+          ? { employeeId: session.employeeId, organizationSlug: session.organizationSlug }
+          : null
+      }
+    >
+      {children}
+    </ConsoleShell>
+  );
 }

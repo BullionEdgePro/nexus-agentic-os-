@@ -4,12 +4,15 @@ import {
   claimForAutoAssign,
   conversationNeedsAssignee,
   getInboxSettings,
+  listChatsWaitingForAssignee,
   listEmployees,
   stampAutoAssigned,
+  withAllTenants,
   withServingTenant,
 } from "@nexus/db";
 import { resolvePresence } from "@nexus/employees";
 import { logger } from "../lib/logger.js";
+import { alertAssignee } from "./assignment-alert.js";
 
 /**
  * Is there actually somebody who could pick this conversation up right now?
@@ -177,9 +180,47 @@ export async function autoAssignIfEnabled(
     if (!claimed) return null;
     await withServingTenant(servingOrganizationId, () => stampAutoAssigned(pick.id)).catch(() => undefined);
     logger.info({ conversationId, employeeId: pick.id, servingOrganizationId }, "Chat auto-assigned");
+    // Tell them — in Nexus, and on their phone when the template is approved.
+    alertAssignee({ conversationId, employeeId: pick.id, assignedBy: "Auto-assign" });
     return { id: pick.id, fullName: pick.fullName };
   } catch (err) {
     logger.warn({ err, conversationId, servingOrganizationId }, "Auto-assign skipped — the chat stays unassigned");
     return null;
+  }
+}
+
+/**
+ * THE AFTER-HOURS SWEEP — hand out the chats that arrived while nobody was on.
+ *
+ * autoAssignIfEnabled fires when a customer message arrives. A chat that came
+ * in at 2am found nobody on shift and stayed unassigned; if the customer said
+ * nothing more, nothing ever looked at it again, and the morning shift started
+ * with it sitting in "Unassigned" for whoever happened to notice.
+ *
+ * So the 10-minute operators job calls this: every chat still waiting for a
+ * person, in every business with auto-assign on, is offered to the same picker
+ * the live path uses — same eligibility (on shift, twin on, not in a meeting),
+ * same round-robin, same "still unassigned" check inside the claim. Nobody on
+ * shift yet: the chat is simply offered again next run. A chat therefore lands
+ * with someone within about ten minutes of the next shift starting.
+ *
+ * Oldest wait first, so the longest-waiting customer is the first handed out
+ * and the least-loaded person gets them. Never throws — the operators job this
+ * rides on must run whatever happens here.
+ */
+export async function assignWaitingChats(): Promise<{ waiting: number; assigned: number }> {
+  try {
+    return await withAllTenants("after-hours sweep: assign chats that arrived while nobody was on shift", async () => {
+      const waiting = await listChatsWaitingForAssignee();
+      let assigned = 0;
+      for (const chat of waiting) {
+        const who = await autoAssignIfEnabled(chat.servingOrganizationId, chat.conversationId);
+        if (who) assigned += 1;
+      }
+      return { waiting: waiting.length, assigned };
+    });
+  } catch (err) {
+    logger.warn({ err }, "After-hours assignment sweep failed — it will try again next run");
+    return { waiting: 0, assigned: 0 };
   }
 }

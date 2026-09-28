@@ -14,5 +14,16 @@ export const dynamic = "force-dynamic";
 
 export default async function InboxLayout({ children }: { children: React.ReactNode }) {
   const session = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
-  return <ConsoleShell role={session?.role ?? "employee"}>{children}</ConsoleShell>;
+  return (
+    <ConsoleShell
+      role={session?.role ?? "employee"}
+      me={
+        session?.role === "employee" && session.employeeId && session.organizationSlug
+          ? { employeeId: session.employeeId, organizationSlug: session.organizationSlug }
+          : null
+      }
+    >
+      {children}
+    </ConsoleShell>
+  );
 }

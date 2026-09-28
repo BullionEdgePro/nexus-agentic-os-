@@ -44,7 +44,10 @@ export default async function Home() {
     // navigation at all — they could reach Follow-ups from the inbox but not
     // from the screen they land on.
     return (
-      <ConsoleShell role="employee">
+      <ConsoleShell
+        role="employee"
+        me={{ employeeId: session.employeeId, organizationSlug: session.organizationSlug }}
+      >
       {/* WHAT NEEDS THEM, BEFORE WHAT THEY CAN ENTER.
           The workspace below is a good screen and was the wrong first one: it
           opens with a form, and a form asks a person for work rather than
