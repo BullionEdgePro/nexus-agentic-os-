@@ -1025,6 +1025,10 @@
 .deck-root .tag.h { background: var(--warn-soft); border-color: transparent; }
 
 .deck-root .app .foot { padding-top: 14px; border-top: 1px solid var(--hairline); }
+/* The floating Ask button (assistant.css) sits over the bottom-right corner;
+   the session line ends clear of it rather than underneath it. */
+.deck-root .app .main > .foot { padding-right: 140px; }
+@media (max-width: 560px) { .deck-root .app .main > .foot { padding-right: 0; padding-bottom: 72px; } }
 
 @media (max-width: 1280px) {
   .deck-root .adm-quick { grid-template-columns: repeat(3, minmax(0, 1fr)); }
