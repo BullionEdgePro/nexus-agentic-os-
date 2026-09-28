@@ -14,6 +14,7 @@ export const DEFAULT_INBOX_SETTINGS: InboxSettings = {
   stages: ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"],
   slaMinutes: 180,
   isDefault: true,
+  autoAssign: false,
 };
 
 /** Newest activity first — the order the API serves and the list must keep. */

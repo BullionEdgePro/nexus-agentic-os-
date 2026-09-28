@@ -109,10 +109,16 @@ organizationsRoute.patch("/:slug/inbox-settings", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
-  const body = await c.req.json<{ stages?: unknown; slaMinutes?: unknown }>().catch(() => null);
+  const body = await c.req
+    .json<{ stages?: unknown; slaMinutes?: unknown; autoAssign?: unknown }>()
+    .catch(() => null);
   if (!body) return c.json({ error: "Nothing to change." }, 400);
 
-  const patch: { stages?: string[] | null; slaMinutes?: number | null } = {};
+  const patch: { stages?: string[] | null; slaMinutes?: number | null; autoAssign?: boolean } = {};
+  if ("autoAssign" in body) {
+    if (typeof body.autoAssign !== "boolean") return c.json({ error: "autoAssign must be true or false" }, 400);
+    patch.autoAssign = body.autoAssign;
+  }
   if ("stages" in body) {
     if (body.stages === null) {
       patch.stages = null;

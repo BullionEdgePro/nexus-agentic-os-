@@ -30,6 +30,8 @@ mock.module(new URL("../src/services/availability.ts", import.meta.url), {
     // for a business that HAS somebody available, and the escalation path
     // now asks a presence-aware question instead of a rota one.
     hasStaffOnShift: async () => true,
+    // Auto-assign is opt-in per business and off in these fixtures.
+    autoAssignIfEnabled: async () => null,
   },
 });
 

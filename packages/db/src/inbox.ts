@@ -212,8 +212,12 @@ export const DEFAULT_INBOX_STAGES = ["New", "Contacted", "Qualified", "Proposal"
 export const DEFAULT_SLA_MINUTES = 180;
 
 export async function getInboxSettings(organizationId: string): Promise<InboxSettings> {
-  const { rows } = await getPool().query<{ inbox_stages: string[] | null; sla_minutes: number | null }>(
-    `select inbox_stages, sla_minutes from organizations where id = $1`,
+  const { rows } = await getPool().query<{
+    inbox_stages: string[] | null;
+    sla_minutes: number | null;
+    auto_assign: boolean | null;
+  }>(
+    `select inbox_stages, sla_minutes, auto_assign from organizations where id = $1`,
     [organizationId]
   );
   const r = rows[0];
@@ -221,18 +225,20 @@ export async function getInboxSettings(organizationId: string): Promise<InboxSet
     stages: r?.inbox_stages?.length ? r.inbox_stages : DEFAULT_INBOX_STAGES,
     slaMinutes: r?.sla_minutes ?? DEFAULT_SLA_MINUTES,
     isDefault: !r?.inbox_stages?.length && r?.sla_minutes == null,
+    autoAssign: r?.auto_assign ?? false,
   };
 }
 
 /** Partial update; null resets a setting to its default. */
 export async function updateInboxSettings(
   organizationId: string,
-  input: { stages?: string[] | null; slaMinutes?: number | null }
+  input: { stages?: string[] | null; slaMinutes?: number | null; autoAssign?: boolean }
 ): Promise<InboxSettings> {
   await getPool().query(
     `update organizations set
        inbox_stages = case when $2::boolean then $3::text[] else inbox_stages end,
-       sla_minutes  = case when $4::boolean then $5::integer else sla_minutes end
+       sla_minutes  = case when $4::boolean then $5::integer else sla_minutes end,
+       auto_assign  = case when $6::boolean then $7::boolean else auto_assign end
      where id = $1`,
     [
       organizationId,
@@ -240,7 +246,84 @@ export async function updateInboxSettings(
       input.stages ?? null,
       input.slaMinutes !== undefined,
       input.slaMinutes ?? null,
+      input.autoAssign !== undefined,
+      input.autoAssign ?? false,
     ]
   );
   return getInboxSettings(organizationId);
+}
+
+// ============================================================
+// Round-robin auto-assign (migration 092)
+// ============================================================
+
+/**
+ * Is this chat waiting for a person to be given it? Unassigned, and not already
+ * held by a human (a held chat has somebody; auto-assign must not take it off
+ * them). Read in the caller's scope — the reply pipeline's, the number owner's.
+ */
+export async function conversationNeedsAssignee(conversationId: string): Promise<boolean> {
+  const { rows } = await getPool().query<{ needs: boolean }>(
+    `select (employee_id is null and not is_human_handoff) as needs from conversations where id = $1`,
+    [conversationId]
+  );
+  return rows[0]?.needs ?? false;
+}
+
+/**
+ * How loaded each candidate is: open chats they hold, and when they were last
+ * handed one automatically. Read in the SERVING business's scope — the
+ * candidates are its people.
+ */
+export async function autoAssignLoad(
+  employeeIds: string[]
+): Promise<Map<string, { open: number; lastAutoAt: string | null }>> {
+  const out = new Map<string, { open: number; lastAutoAt: string | null }>();
+  if (employeeIds.length === 0) return out;
+  const { rows } = await getPool().query<{ id: string; open: string; last_auto_at: string | null }>(
+    `select e.id,
+            (select count(*) from conversations c
+              where c.employee_id = e.id and c.status in ('open', 'pending'))::text as open,
+            e.last_auto_assigned_at as last_auto_at
+       from employees e
+      where e.id = any($1::uuid[])`,
+    [employeeIds]
+  );
+  for (const r of rows) out.set(r.id, { open: Number(r.open), lastAutoAt: r.last_auto_at });
+  return out;
+}
+
+/**
+ * Give the chat to this person — only if it is STILL unassigned and not held.
+ *
+ * The condition is in the UPDATE itself, so a colleague assigning it by hand in
+ * the same instant wins and this does nothing. Written in the caller's (owner's)
+ * scope: the conversations row belongs to the number's owner. The timeline line
+ * says who did it — "Auto-assign" — so nobody wonders how the chat got there.
+ */
+export async function claimForAutoAssign(
+  conversationId: string,
+  employeeId: string,
+  employeeName: string
+): Promise<boolean> {
+  const { rows } = await getPool().query<{ id: string }>(
+    `with claimed as (
+       update conversations
+          set employee_id = $2::uuid
+        where id = $1 and employee_id is null and not is_human_handoff
+        returning id, organization_id
+     ), noted as (
+       insert into conversation_events
+         (organization_id, conversation_id, kind, actor, actor_name, subject_name)
+       select organization_id, id, 'assigned', 'auto-assign', 'Auto-assign', $3 from claimed
+     )
+     select id from claimed`,
+    [conversationId, employeeId, employeeName]
+  );
+  return rows.length > 0;
+}
+
+/** The "round" in round-robin — stamped in the SERVING business's scope. */
+export async function stampAutoAssigned(employeeId: string): Promise<void> {
+  await getPool().query(`update employees set last_auto_assigned_at = now() where id = $1`, [employeeId]);
 }

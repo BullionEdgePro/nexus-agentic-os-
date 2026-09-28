@@ -234,6 +234,8 @@ export interface InboxSettings {
   slaMinutes: number;
   /** True when neither has been customised. */
   isDefault: boolean;
+  /** Round-robin auto-assign of new chats (migration 092). Off until the owner turns it on. */
+  autoAssign: boolean;
 }
 
 /** The channels a conversation can arrive on. See {@link ConversationSummary.channel}. */

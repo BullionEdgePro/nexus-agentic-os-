@@ -1,5 +1,6 @@
 "use client";
 
+import { InboxRules } from "./inbox-rules";
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { BusinessSocialsPanel } from "./business-socials";
@@ -336,6 +337,9 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
       )}
 
       {isOperator && <BusinessSocialsPanel slug={business} />}
+
+      {/* How this business's inbox behaves — auto-assign, reply target, stages. */}
+      {isOperator && <InboxRules slug={business} />}
 
       {error && <p className="team-msg bad">{error}</p>}
       {notice && !error && <p className="team-msg ok">{notice}</p>}

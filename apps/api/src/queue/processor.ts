@@ -63,7 +63,7 @@ import { scoreLead, recordLeadAssessment, countPriorInbound } from "@nexus/leads
 import { evaluateOutgoingMessage, shouldEscalateReply } from "@nexus/governance";
 import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
-import { hasStaffOnShift } from "../services/availability.js";
+import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
 import { withConversationLock } from "./conversation-lock.js";
 
@@ -866,7 +866,13 @@ async function answerOneMessage(
   // org-level path, and a failure looking employees up must degrade to that
   // same path rather than break a reply flow that worked before this layer
   // existed.
-  const employee = await resolveAssignedEmployee(conversationId);
+  // ROUND-ROBIN AUTO-ASSIGN, before the assignee is read — so a chat handed to
+  // somebody now is answered as that person's twin from this very message.
+  // Opt-in per business and eligibility-checked (on shift, twin on) inside;
+  // best-effort, never throws, never changes a chat that already has someone.
+  await autoAssignIfEnabled(serving.id, conversationId);
+
+  const employee = await resolveAssignedEmployee(conversationId, serving.id);
   const presence = employee ? resolvePresence(employee) : null;
 
   if (employee && presence && !presence.shouldTwinRespond) {
@@ -1813,9 +1819,18 @@ async function resolveReferrer(
   }
 }
 
-async function resolveAssignedEmployee(conversationId: string): Promise<Employee | null> {
+async function resolveAssignedEmployee(
+  conversationId: string,
+  servingOrganizationId: string
+): Promise<Employee | null> {
   try {
-    const employee = await findEmployeeForConversation(conversationId);
+    // In the SERVING business's scope. The pipeline runs as the number's owner,
+    // where RLS shows none of a routed business's employees — so for four of the
+    // five businesses an assigned person came back null and their twin never
+    // answered. Same trap as hasStaffOnShift, same fix.
+    const employee = await withServingTenant(servingOrganizationId, () =>
+      findEmployeeForConversation(conversationId)
+    );
     return employee?.isActive ? employee : null;
   } catch (err) {
     logger.error(

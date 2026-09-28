@@ -271,7 +271,7 @@ export function getInboxSettings(orgSlug: BusinessSlug): Promise<{ settings: Inb
 /** Owner only. null resets a setting to its default. */
 export function updateInboxSettings(
   orgSlug: BusinessSlug,
-  patch: { stages?: string[] | null; slaMinutes?: number | null }
+  patch: { stages?: string[] | null; slaMinutes?: number | null; autoAssign?: boolean }
 ): Promise<{ settings: InboxSettings }> {
   return request(`/api/organizations/${orgSlug}/inbox-settings`, {
     method: "PATCH",
