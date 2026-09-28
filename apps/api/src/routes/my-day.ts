@@ -209,7 +209,10 @@ async function waitingOnMe(organizationId: string, employeeId: string) {
          select direction, created_at
            from messages
           where conversation_id = c.id
-          order by created_at desc
+          -- Outbound first on a tie (a same-transaction reply shares the
+          -- inbound's timestamp) — see operators.ts for the full story.
+          order by created_at desc,
+                   case when direction = 'outbound' then 0 else 1 end
           limit 1
        ) m on true
       where c.employee_id = $2

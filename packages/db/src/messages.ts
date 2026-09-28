@@ -333,9 +333,11 @@ export async function getMessagesForConversation(
          left join admins a on m.sender_type = 'human_agent' and a.id::text = m.sender_id
         where m.conversation_id = $1
         order by m.created_at desc
+        , case when m.direction = 'outbound' then 0 else 1 end
         limit $2
      ) latest
-     order by created_at asc`,
+     order by created_at asc
+     , case when direction = 'inbound' then 0 else 1 end`,
     [conversationId, limit]
   );
   return rows.map((row) => ({

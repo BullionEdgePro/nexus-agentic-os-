@@ -96,7 +96,11 @@ export async function getConversationsForOrganization(
      left join lateral (
        select body, created_at, direction from messages
        where conversation_id = c.id
-       order by created_at desc
+       -- Outbound first on a tie: a reply written in the same transaction as
+       -- the message it answers shares its timestamp, and without this the
+       -- answered thread showed as "awaiting reply" and "SLA breached".
+       order by created_at desc,
+                case when direction = 'outbound' then 0 else 1 end
        limit 1
      ) lm on true
      -- THE BUSINESS THE CUSTOMER IS TALKING TO, not the one that owns the

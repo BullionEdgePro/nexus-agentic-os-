@@ -83,7 +83,9 @@ test("waiting means the customer spoke last, not that a row exists", () => {
   // question is whether the most recent message came FROM the customer.
   const fn = DAY_API.slice(DAY_API.indexOf("async function waitingOnMe"));
   assert.match(fn, /m\.direction = 'inbound'/);
-  assert.match(fn, /order by created_at desc\s*\n\s*limit 1/);
+  // …with outbound winning a timestamp tie, or a reply written in the same
+  // transaction as the message it answers leaves the customer "waiting".
+  assert.match(fn, /order by created_at desc,\s*case when direction = 'outbound' then 0 else 1 end\s*\n\s*limit 1/);
 });
 
 test("the queue is oldest first", () => {

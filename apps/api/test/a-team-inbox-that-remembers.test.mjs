@@ -58,7 +58,20 @@ test("resolving is recorded once, from the update's own output", () => {
 test("a thread shows its LATEST messages, oldest-first", () => {
   // It used to be `order by created_at asc limit N` — the OLDEST N — so a long
   // thread stopped showing anything new and Suggest-reply read the wrong end.
-  assert.match(MESSAGES_DB, /order by m\.created_at desc\s*\n\s*limit \$2\s*\n\s*\) latest\s*\n\s*order by created_at asc/);
+  assert.match(MESSAGES_DB, /order by m\.created_at desc\s*\n[^\n]*\n\s*limit \$2\s*\n\s*\) latest\s*\n\s*order by created_at asc/);
+});
+
+test("a reply sharing its question's timestamp counts as the later message", () => {
+  // Inbound and the reply to it are written in one transaction, so created_at
+  // ties. The list, the thread and My Day must all read outbound as last —
+  // production showed answered threads as "SLA breached" until they did.
+  assert.match(CONVERSATIONS_DB, /order by created_at desc,\s*case when direction = 'outbound' then 0 else 1 end/);
+  assert.match(MESSAGES_DB, /order by m\.created_at desc\s*,\s*case when m\.direction = 'outbound' then 0 else 1 end/);
+  assert.match(MESSAGES_DB, /order by created_at asc\s*,\s*case when direction = 'inbound' then 0 else 1 end/);
+  assert.match(
+    read("apps", "api", "src", "routes", "my-day.ts"),
+    /order by created_at desc,\s*case when direction = 'outbound' then 0 else 1 end/
+  );
 });
 
 test("a human reply is attributed from the session, never the request body", () => {
