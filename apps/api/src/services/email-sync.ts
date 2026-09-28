@@ -183,7 +183,13 @@ async function storeClientMail(
       const clientEmail = involved.find((a) => a !== ownerAddress && byAddress.has(a));
       if (!clientEmail) continue;
       const contactId = byAddress.get(clientEmail)!;
-      const conversationId = await findOrCreateEmailConversation(owner.organizationId, contactId);
+      // A new thread is assigned to the mailbox's owner — their client, their
+      // mail — so it lands in their "My chats" rather than Unassigned.
+      const conversationId = await findOrCreateEmailConversation(
+        owner.organizationId,
+        contactId,
+        owner.employeeId
+      );
       touched.add(conversationId);
       const inserted = await insertSyncedEmailMessage({
         organizationId: owner.organizationId,

@@ -131,7 +131,18 @@ export async function emailReplyContext(conversationId: string): Promise<EmailRe
  */
 export async function findOrCreateEmailConversation(
   organizationId: string,
-  contactId: string
+  contactId: string,
+  /**
+   * The staff member whose mailbox the mail came from. A NEW conversation is
+   * assigned to them, so their client's email lands in their own "My chats"
+   * instead of an Unassigned pile nobody looks at — the mail is already theirs
+   * (it was read from their mailbox, for a client in their book).
+   *
+   * Only on creation. An existing conversation's assignee is never touched: a
+   * colleague may have been handed it, or it may have been handed back on
+   * purpose, and a sync that ran every few minutes would silently undo either.
+   */
+  mailboxOwnerId: string | null = null
 ): Promise<string> {
   const existing = await getPool().query<{ id: string }>(
     `select id from conversations
@@ -141,11 +152,22 @@ export async function findOrCreateEmailConversation(
   );
   if (existing.rows[0]) return existing.rows[0].id;
 
+  // Created, assigned, and the assignment written on the thread's timeline in
+  // one statement, so there is never an assigned thread with no record of why.
   const inserted = await getPool().query<{ id: string }>(
-    `insert into conversations (organization_id, contact_id, channel, status)
-     values ($1, $2, 'email', 'open')
-     returning id`,
-    [organizationId, contactId]
+    `with created as (
+       insert into conversations (organization_id, contact_id, channel, status, employee_id)
+       values ($1, $2, 'email', 'open', $3::uuid)
+       returning id, organization_id
+     ), noted as (
+       insert into conversation_events
+         (organization_id, conversation_id, kind, actor, actor_name, subject_name)
+       select created.organization_id, created.id, 'assigned', 'email-sync', 'Email sync', e.full_name
+         from created
+         join employees e on e.id = $3::uuid
+     )
+     select id from created`,
+    [organizationId, contactId, mailboxOwnerId]
   );
   return inserted.rows[0].id;
 }
