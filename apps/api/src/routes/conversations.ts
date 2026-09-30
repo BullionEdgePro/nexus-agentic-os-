@@ -107,6 +107,17 @@ function callSentence(call: CallLog): string {
   return `📞 ${dir} · ${CALL_OUTCOME_WORDS[call.outcome]}${duration(call.durationSeconds)}${notes}`;
 }
 
+/**
+ * One timestamp format for the timeline. The database driver hands back a Date
+ * for a timestamptz column even where the type says string, and the sort below
+ * compared strings: a chat with two or more history items (an assignment and a
+ * handover, say) threw "a.at.localeCompare is not a function" and would not open.
+ */
+function iso(value: string | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : d.toISOString();
+}
+
 async function buildTimeline(conversationId: string): Promise<TimelineItem[]> {
   const [events, custody, calls] = await Promise.all([
     listConversationEvents(conversationId).catch(() => [] as ConversationEvent[]),
@@ -118,17 +129,17 @@ async function buildTimeline(conversationId: string): Promise<TimelineItem[]> {
   );
 
   const items: TimelineItem[] = [
-    ...events.map((e) => ({ id: `ev-${e.id}`, kind: "event" as const, at: e.createdAt, ...eventSentence(e) })),
+    ...events.map((e) => ({ id: `ev-${e.id}`, kind: "event" as const, at: iso(e.createdAt), ...eventSentence(e) })),
     ...custody.map((ev, i) => ({
       id: `cu-${ev.createdAt}-${i}`,
       kind: "custody" as const,
-      at: ev.createdAt,
+      at: iso(ev.createdAt),
       ...custodySentence(ev, ev.actor ? names.get(ev.actor) ?? null : null),
     })),
     ...calls.map((call) => ({
       id: `call-${call.id}`,
       kind: "call" as const,
-      at: call.occurredAt,
+      at: iso(call.occurredAt),
       text: callSentence(call),
       tone: (call.outcome === "answered" ? "good" : "neutral") as TimelineItem["tone"],
     })),
