@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { ConversationSummary, ConversationChannel, MessageDto, TimelineItem } from "@nexus/shared";
-import { suggestReply, polishText, syncGmailInbox, readableError } from "@/lib/api";
+import { suggestReply, polishText, syncGmailInbox, readableError, attachmentUrl } from "@/lib/api";
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
@@ -1094,6 +1094,7 @@ export default function InboxPage() {
                         )}
                       </div>
                     ) : null}
+                    {row.message.attachment ? <Attachment message={row.message} /> : null}
                     <div className="ibx-bubble-body">{row.message.body}</div>
                     <div className="ibx-bubble-meta">
                       <time>{clock(row.message.createdAt)}</time>
@@ -1448,5 +1449,44 @@ function EmptyArt() {
       <path d="M38 40h44l6 14v16H32V54l6-14Z" fill="var(--paper)" stroke="var(--hairline-strong)" />
       <path d="M32 54h16l4 6h16l4-6h16" fill="none" stroke="var(--sky-deep)" strokeWidth="2" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+/**
+ * The file a customer sent, inside their bubble: a photo or sticker shown, a
+ * voice note or video playable, a document one click away. The label above the
+ * text ("[Photo]", "[Voice note]") stays — it is what the AI and the chat list
+ * read — and this is the thing itself. WhatsApp keeps files for about 30 days;
+ * an older one fails to load and says so instead of showing a broken image.
+ */
+function Attachment({ message }: { message: MessageDto }) {
+  const [failed, setFailed] = useState(false);
+  const a = message.attachment;
+  if (!a) return null;
+  const src = attachmentUrl(message.conversationId, message.id);
+  if (failed) {
+    return <div className="ibx-att ibx-att-gone">This file has expired on WhatsApp (they keep files about 30 days).</div>;
+  }
+  if (a.kind === "image" || a.kind === "sticker") {
+    return (
+      <a className={`ibx-att ibx-att-img${a.kind === "sticker" ? " sticker" : ""}`} href={src} target="_blank" rel="noreferrer">
+        <img src={src} alt={a.kind === "sticker" ? "Sticker from the customer" : "Photo from the customer"} loading="lazy" onError={() => setFailed(true)} />
+      </a>
+    );
+  }
+  if (a.kind === "audio") {
+    return <audio className="ibx-att ibx-att-audio" controls preload="none" src={src} onError={() => setFailed(true)} />;
+  }
+  if (a.kind === "video") {
+    return <video className="ibx-att ibx-att-video" controls preload="metadata" src={src} onError={() => setFailed(true)} />;
+  }
+  return (
+    <a className="ibx-att ibx-att-doc" href={src} target="_blank" rel="noreferrer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+        <path d="M14 3v5h5" />
+      </svg>
+      <span>{a.filename ?? "Open document"}</span>
+    </a>
   );
 }

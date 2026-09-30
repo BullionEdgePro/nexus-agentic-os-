@@ -30,10 +30,12 @@ import {
   type CallOutcome,
   type CallLog,
   type CustodyEvent,
+  getInboundMediaRef,
 } from "@nexus/db";
 import type { ConversationEvent, TimelineItem } from "@nexus/shared";
 import { completeText } from "@nexus/agents";
 import { sendReplyOnChannel } from "../lib/reply-dispatch.js";
+import { downloadWhatsAppMedia } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
 import { actorOf } from "../lib/actor.js";
@@ -141,6 +143,38 @@ conversationsRoute.get("/:id/messages", async (c) => {
     buildTimeline(conversationId),
   ]);
   return c.json({ messages, timeline });
+});
+
+/**
+ * The file a customer sent — a photo, video, voice note, document or sticker.
+ *
+ * Fetched from Meta on demand rather than stored: the bytes stay on Meta's side
+ * (about 30 days) and Nexus keeps only the id. Behind the same conversation
+ * scope as the thread itself, and the message must belong to this conversation,
+ * so a guessed id from another chat returns 404.
+ */
+conversationsRoute.get("/:id/messages/:messageId/media", async (c) => {
+  const ref = await getInboundMediaRef(c.req.param("id"), c.req.param("messageId"));
+  if (!ref) return c.json({ error: "There is no file on that message." }, 404);
+  const file = await downloadWhatsAppMedia(ref.phoneNumberId, ref.mediaId).catch((err) => {
+    logger.warn({ err, messageId: c.req.param("messageId") }, "Attachment download failed");
+    return null;
+  });
+  if (!file) {
+    return c.json(
+      { error: "WhatsApp no longer has this file. Attachments expire about 30 days after they're sent." },
+      410
+    );
+  }
+  const safeName = (ref.filename ?? "attachment").replace(/[^\w.\- ]+/g, "_").slice(0, 120);
+  return new Response(file.bytes, {
+    headers: {
+      "Content-Type": ref.mimeType ?? file.mimeType,
+      "Content-Disposition": `inline; filename="${safeName}"`,
+      "Cache-Control": "private, max-age=3600",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 });
 
 /** "I have seen this thread" — per person, for the Unread folder and badges. */

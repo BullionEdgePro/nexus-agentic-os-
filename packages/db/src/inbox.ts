@@ -258,13 +258,19 @@ export async function updateInboxSettings(
 // ============================================================
 
 /**
- * Is this chat waiting for a person to be given it? Unassigned, and not already
- * held by a human (a held chat has somebody; auto-assign must not take it off
- * them). Read in the caller's scope — the reply pipeline's, the number owner's.
+ * Is this chat waiting for a person to be given it? Nobody owns it.
+ *
+ * It used to also require `not is_human_handoff`, on the theory that a
+ * handed-over chat "has somebody". It doesn't: the flag means the AI promised
+ * the customer a person, and nothing assigned one. On 2026-09-30 ten open chats
+ * were in exactly that state, skipped by auto-assign and by the overnight
+ * sweep. Giving one an owner never unmutes the AI — the handoff flag still
+ * holds it silent — so the only change is that somebody now has the promise.
+ * Read in the caller's scope — the reply pipeline's, the number owner's.
  */
 export async function conversationNeedsAssignee(conversationId: string): Promise<boolean> {
   const { rows } = await getPool().query<{ needs: boolean }>(
-    `select (employee_id is null and not is_human_handoff) as needs from conversations where id = $1`,
+    `select (employee_id is null) as needs from conversations where id = $1`,
     [conversationId]
   );
   return rows[0]?.needs ?? false;
@@ -294,7 +300,7 @@ export async function autoAssignLoad(
 }
 
 /**
- * Give the chat to this person — only if it is STILL unassigned and not held.
+ * Give the chat to this person — only if it is STILL unassigned.
  *
  * The condition is in the UPDATE itself, so a colleague assigning it by hand in
  * the same instant wins and this does nothing. Written in the caller's (owner's)
@@ -310,7 +316,7 @@ export async function claimForAutoAssign(
     `with claimed as (
        update conversations
           set employee_id = $2::uuid
-        where id = $1 and employee_id is null and not is_human_handoff
+        where id = $1 and employee_id is null
         returning id, organization_id
      ), noted as (
        insert into conversation_events
@@ -334,9 +340,11 @@ export async function claimForAutoAssign(
  *
  * WhatsApp only: that is the channel the reply pipeline assigns on. Only chats
  * whose customer wrote in the last 7 days — an unanswered month-old thread is
- * not something to drop on whoever happens to be on shift. Oldest customer
- * message first, so the longest wait is handed out first. Cross-tenant by
- * nature: call it inside withAllTenants.
+ * not something to drop on whoever happens to be on shift — except a chat the
+ * AI handed to a person, which stays eligible for 30 days: that customer was
+ * promised someone. Handed-over chats first, then oldest customer message
+ * first, so a broken promise and the longest wait are handed out before the
+ * rest. Cross-tenant by nature: call it inside withAllTenants.
  */
 export async function listChatsWaitingForAssignee(
   limit = 200
@@ -353,10 +361,10 @@ export async function listChatsWaitingForAssignee(
       where o.auto_assign
         and c.channel = 'whatsapp'
         and c.employee_id is null
-        and not c.is_human_handoff
         and c.status in ('open', 'pending')
-        and li.last_in > now() - interval '7 days'
-      order by li.last_in asc
+        and (li.last_in > now() - interval '7 days'
+             or (c.is_human_handoff and li.last_in > now() - interval '30 days'))
+      order by c.is_human_handoff desc, li.last_in asc
       limit $1`,
     [limit]
   );

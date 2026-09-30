@@ -66,6 +66,7 @@ import { publishInboxEvent } from "../lib/pubsub.js";
 import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
 import { withConversationLock } from "./conversation-lock.js";
+import { describeInboundMessage } from "../lib/inbound-media.js";
 
 /**
  * THE PLATFORM DEFAULT, now that a business may write its own (migration 045).
@@ -269,11 +270,18 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
     for (const change of entry.changes) {
       const messages = change.value.messages ?? [];
       for (const message of messages) {
-        if (message.type !== "text" || !message.text) continue;
+        // EVERY MESSAGE TYPE, NOT JUST TEXT. This line used to be
+        // `if (message.type !== "text") continue`, and a customer's photo,
+        // voice note, document or button tap was dropped before it was saved.
+        // Each is now described as a readable line and answered like text;
+        // the original stays in raw_payload so staff can open the file.
+        // Only a reaction to an earlier message comes back null.
+        const described = describeInboundMessage(message);
+        if (!described) continue;
         // Isolated per message: one bad message in a multi-message webhook
         // payload must not force BullMQ to retry the whole batch, re-doing
         // work for siblings that already succeeded.
-        await processSingleTextMessage(phoneNumberId, message, change);
+        await processSingleTextMessage(phoneNumberId, { ...message, text: { body: described.body } }, change);
       }
 
       // The half of this webhook nobody read until 2026-08-17.
@@ -508,6 +516,9 @@ async function handleStaffNumberMessage(
     waMessageId: message.id,
     body: text.body,
     rawPayload: message,
+    // The real WhatsApp type ("image", "audio", "button"...), so the inbox can
+    // offer the file and nothing downstream mistakes a photo for typed text.
+    messageType: message.type,
   });
 
   // Null messageId means the webhook retried a message already recorded — the
@@ -536,6 +547,7 @@ async function handleStaffNumberMessage(
       body: text.body,
       status: "delivered",
       createdAt: new Date().toISOString(),
+      attachment: attachmentFor(message),
     };
     await publishInboxEvent({
       type: "message",
@@ -607,6 +619,9 @@ async function answerOneMessage(
     waMessageId: message.id,
     body: text.body,
     rawPayload: message,
+    // The real WhatsApp type ("image", "audio", "button"...), so the inbox can
+    // offer the file and nothing downstream mistakes a photo for typed text.
+    messageType: message.type,
   });
   // `isHumanHandoff` is reassigned below when the flag turns out to be stale.
   const { conversationId, contactId, messageId, replayOf, aiPausedUntil } = inboundResult;
@@ -677,6 +692,7 @@ async function answerOneMessage(
     body: text.body,
     status: "delivered",
     createdAt: new Date().toISOString(),
+    attachment: attachmentFor(message),
   };
   await publishInboxEvent({
     type: "message",
@@ -752,6 +768,17 @@ async function answerOneMessage(
     }
   }
 
+  // A HANDOFF WITH NOBODY HOLDING IT. The customer was told a person would
+  // follow up, and the stood-down branch below returns before auto-assign ever
+  // runs — so the chats that most needed a person were the ones never given
+  // one. Give it to whoever is on shift now (if the business turned auto-assign
+  // on). The AI stays silent either way: assigning a person does not unmute it,
+  // and autoAssignIfEnabled never throws, so the branch below always runs.
+  if (isHumanHandoff) {
+    const answering = await businessAnsweringFor(conversationId, organization.id).catch(() => null);
+    if (answering) await autoAssignIfEnabled(answering, conversationId);
+  }
+
   if (isHumanHandoff || aiPaused) {
     // INFO, NOT DEBUG, AND A RECORDED OUTCOME.
     //
@@ -784,6 +811,7 @@ async function answerOneMessage(
       outputTokens: 0,
       replyOutcome: "skipped_handover" as const,
     });
+
     return;
   }
 
@@ -1092,7 +1120,10 @@ async function answerOneMessage(
         contactWaId: message.from,
         contactName,
         messageId: message.id,
-        text: text.body,
+        // An attachment reaches the model as its label plus a note it cannot
+        // see the file, so it never describes a photo it was never shown. The
+        // note is for the model only: the stored message is the label alone.
+        text: withAttachmentNote(message, text.body),
         timestamp: message.timestamp,
         // Carried so book_appointment can write a row naming an actual person.
         // A booking tool that had to resolve the customer itself would have to
@@ -1943,4 +1974,20 @@ async function flagHandoffBestEffort(organization: Organization, conversationId:
   } catch (err) {
     logger.error({ conversationId, err }, "Failed to flag conversation for human handoff after AI failure");
   }
+}
+
+/** The customer's words, plus a model-only note when they sent a file. */
+function withAttachmentNote(message: WhatsAppTextMessage, body: string): string {
+  const note = describeInboundMessage(message)?.aiNote;
+  return note ? `${body}
+
+(Note for you, not from the customer: ${note})` : body;
+}
+
+/** The file on a message, for the live inbox update; null for text-like ones. */
+function attachmentFor(message: WhatsAppTextMessage): MessageDto["attachment"] {
+  const kind = describeInboundMessage(message)?.attachment ?? null;
+  if (!kind) return null;
+  const doc = message.document as { filename?: unknown } | undefined;
+  return { kind, filename: kind === "document" && typeof doc?.filename === "string" ? doc.filename : null };
 }

@@ -41,9 +41,28 @@ test("fewest open chats first, then whoever waited longest for one", () => {
 
 test("a chat that has someone is never taken from them", () => {
   const claim = INBOX.slice(INBOX.indexOf("export async function claimForAutoAssign"));
-  assert.match(claim, /where id = \$1 and employee_id is null and not is_human_handoff/);
+  // The owner check lives in the UPDATE itself, so a hand-assign in the same
+  // instant wins.
+  assert.match(claim, /where id = \$1 and employee_id is null\s+returning/);
   assert.match(claim, /'assigned', 'auto-assign', 'Auto-assign'/);
-  assert.match(INBOX, /\(employee_id is null and not is_human_handoff\) as needs/);
+  assert.match(INBOX, /select \(employee_id is null\) as needs from conversations/);
+});
+
+test("a chat handed to a human but owned by nobody is still given someone", () => {
+  // is_human_handoff means "the AI promised a person", not "a person has it".
+  // Requiring it to be false skipped ten promised customers on 2026-09-30.
+  const needs = INBOX.slice(INBOX.indexOf("export async function conversationNeedsAssignee"));
+  assert.ok(!/not is_human_handoff/.test(needs.slice(0, needs.indexOf("return rows"))));
+  const claim = INBOX.slice(INBOX.indexOf("export async function claimForAutoAssign"));
+  assert.ok(!/not is_human_handoff/.test(claim.slice(0, claim.indexOf("return rows"))));
+  // And the pipeline's stood-down branch, which returned before auto-assign
+  // ran, now offers the chat first — without unmuting the AI.
+  const from = PROC.indexOf("// A HANDOFF WITH NOBODY HOLDING IT.");
+  const to = PROC.indexOf("if (isHumanHandoff || aiPaused) {");
+  assert.ok(from > -1 && to > from, "the handoff assign must sit just before the stood-down branch");
+  const branch = PROC.slice(from, to);
+  assert.match(branch, /if \(isHumanHandoff\) \{/);
+  assert.match(branch, /await autoAssignIfEnabled\(answering, conversationId\)/);
 });
 
 test("candidates are read as the serving business; the claim as the owner", () => {

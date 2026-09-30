@@ -1,5 +1,12 @@
 import { getPool, withTenant } from "./client.js";
-import type { MessageDirection, MessageDto, MessageStatus, SenderType } from "@nexus/shared";
+import type {
+  AttachmentKind,
+  MessageAttachment,
+  MessageDirection,
+  MessageDto,
+  MessageStatus,
+  SenderType,
+} from "@nexus/shared";
 import { DELIVERY_STATUS_LADDER } from "@nexus/shared";
 
 export interface RecordInboundMessageInput {
@@ -323,9 +330,12 @@ export async function getMessagesForConversation(
     status: string;
     created_at: string;
     sender_name: string | null;
+    message_type: string | null;
+    filename: string | null;
   }>(
     `select * from (
        select m.id, m.conversation_id, m.direction, m.sender_type, m.body, m.status, m.created_at,
+              m.message_type, m.raw_payload->'document'->>'filename' as filename,
               case when m.sender_type = 'human_agent'
                    then coalesce(e.full_name, a.full_name) end as sender_name
          from messages m
@@ -349,7 +359,51 @@ export async function getMessagesForConversation(
     status: row.status as MessageDto["status"],
     createdAt: row.created_at,
     senderName: row.sender_name,
+    attachment: attachmentOf(row.message_type, row.filename),
   }));
+}
+
+const ATTACHMENT_KINDS = new Set<AttachmentKind>(["image", "video", "audio", "document", "sticker"]);
+
+function attachmentOf(messageType: string | null, filename: string | null): MessageAttachment | null {
+  if (!messageType || !ATTACHMENT_KINDS.has(messageType as AttachmentKind)) return null;
+  return { kind: messageType as AttachmentKind, filename: messageType === "document" ? filename : null };
+}
+
+/**
+ * Where to fetch the file a customer sent: Meta's media id, and the number it
+ * arrived on (whose token may download it). Scoped to the conversation, so a
+ * message id from another chat returns nothing. Null for anything that is not
+ * an inbound attachment.
+ */
+export async function getInboundMediaRef(
+  conversationId: string,
+  messageId: string
+): Promise<{ mediaId: string; mimeType: string | null; filename: string | null; phoneNumberId: string } | null> {
+  const { rows } = await getPool().query<{
+    message_type: string;
+    media: { id?: string; mime_type?: string; filename?: string } | null;
+    phone_number_id: string | null;
+  }>(
+    `select m.message_type,
+            m.raw_payload -> m.message_type as media,
+            coalesce(c.phone_number_id, o.whatsapp_phone_number_id) as phone_number_id
+       from messages m
+       join conversations c on c.id = m.conversation_id
+       join organizations o on o.id = c.organization_id
+      where m.id = $2 and m.conversation_id = $1 and m.direction = 'inbound'`,
+    [conversationId, messageId]
+  );
+  const r = rows[0];
+  if (!r || !ATTACHMENT_KINDS.has(r.message_type as AttachmentKind)) return null;
+  const mediaId = r.media?.id;
+  if (!mediaId || !r.phone_number_id) return null;
+  return {
+    mediaId,
+    mimeType: r.media?.mime_type ?? null,
+    filename: r.media?.filename ?? null,
+    phoneNumberId: r.phone_number_id,
+  };
 }
 
 /**

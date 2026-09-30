@@ -251,6 +251,20 @@ export interface MessageDto {
   createdAt: string;
   /** The staff member who wrote a human reply, when known. */
   senderName?: string | null;
+  /**
+   * A file the customer sent (photo, video, voice note, document, sticker).
+   * The body carries its label and caption; the file itself is fetched on
+   * demand from GET /api/conversations/:id/messages/:messageId/media.
+   */
+  attachment?: MessageAttachment | null;
+}
+
+export type AttachmentKind = "image" | "video" | "audio" | "document" | "sticker";
+
+export interface MessageAttachment {
+  kind: AttachmentKind;
+  /** Documents only: the name the customer's phone gave the file. */
+  filename?: string | null;
 }
 
 /** Broadcast over the WebSocket channel to connected Unified Inbox clients. */

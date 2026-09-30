@@ -498,3 +498,36 @@ export async function readAccountStanding(wabaId: string): Promise<AccountStandi
     dailyCustomerLimit: tierToDailyLimit(tier),
   };
 }
+
+/**
+ * Download a file a customer sent, using the token of the number it came in on.
+ *
+ * Two hops, both authenticated: the media id resolves to a short-lived URL,
+ * and that URL only serves the bytes to a request carrying the same token. The
+ * id stays valid for about 30 days, after which Meta deletes the file, so an
+ * old attachment returns null rather than an error page.
+ */
+export async function downloadWhatsAppMedia(
+  phoneNumberId: string,
+  mediaId: string
+): Promise<{ bytes: ArrayBuffer; mimeType: string } | null> {
+  const token = await bearerFor(phoneNumberId);
+  const meta = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!meta.ok) {
+    logger.warn({ mediaId, status: meta.status }, "Could not resolve a customer's attachment on Meta");
+    return null;
+  }
+  const info = (await meta.json()) as { url?: string; mime_type?: string };
+  if (!info.url) return null;
+  const file = await fetch(info.url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!file.ok) {
+    logger.warn({ mediaId, status: file.status }, "Could not download a customer's attachment from Meta");
+    return null;
+  }
+  return {
+    bytes: await file.arrayBuffer(),
+    mimeType: info.mime_type ?? file.headers.get("content-type") ?? "application/octet-stream",
+  };
+}

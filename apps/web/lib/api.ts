@@ -47,6 +47,15 @@ export function setViewingAs(slug: string | null): void {
   }
 }
 
+/**
+ * Where the browser loads a file a customer sent. A plain URL, not a fetch: an
+ * <img> or <audio> element requests it itself and carries the session cookie,
+ * because the app and the API share a site.
+ */
+export function attachmentUrl(conversationId: string, messageId: string): string {
+  return API_URL + `/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/media`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const preview = viewingAs();
   const response = await fetch(`${API_URL}${path}`, {
