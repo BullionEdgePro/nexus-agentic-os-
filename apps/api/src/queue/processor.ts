@@ -570,7 +570,10 @@ async function answerOneMessage(
   change: WhatsAppWebhookEntry["changes"][number],
   text: NonNullable<WhatsAppTextMessage["text"]>
 ): Promise<void> {
-  const contactName = change.value.contacts?.find((c) => c.wa_id === message.from)?.profile.name;
+  // `?.profile?.name`, not `?.profile.name`: Meta sends a contact with NO
+  // profile for some messages (an "unsupported" one, error 131051, arrived like
+  // that on 2026-09-30), and the missing `?` crashed the job five times over.
+  const contactName = change.value.contacts?.find((c) => c.wa_id === message.from)?.profile?.name;
 
   // Resolved outside any tenant context, and correctly so: `organizations` is
   // the tenant registry, not tenant data. Scoping this lookup would be circular

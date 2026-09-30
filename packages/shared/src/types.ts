@@ -39,7 +39,8 @@ export interface WhatsAppWebhookEntry {
     value: {
       messaging_product: "whatsapp";
       metadata: { display_phone_number: string; phone_number_id: string };
-      contacts?: Array<{ profile: { name: string }; wa_id: string }>;
+      /** `profile` is missing on some messages (an "unsupported" one, for example). */
+      contacts?: Array<{ profile?: { name?: string }; wa_id: string }>;
       messages?: WhatsAppTextMessage[];
       /**
        * Coexistence only (field `smb_message_echoes`): messages the staff member

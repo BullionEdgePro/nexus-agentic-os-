@@ -93,3 +93,12 @@ test("staff can open the file, only through the chat it belongs to", () => {
   assert.match(ROUTE, /"X-Content-Type-Options": "nosniff"/);
   assert.match(INBOX, /\{row\.message\.attachment \? <Attachment message=\{row\.message\} \/> : null\}/);
 });
+
+test("a message with no sender profile is still processed, not crashed on", () => {
+  // Meta's "unsupported" messages (error 131051) arrive with a contact that has
+  // no profile; reading profile.name without the ? failed the job 5 times.
+  assert.match(PROC, /\?\.profile\?\.name;/);
+  assert.ok(!/\)\?\.profile\.name;/.test(PROC), "no code line reads profile.name unguarded");
+  const u = describeInboundMessage({ from: "971500000000", id: "w", timestamp: "1", type: "unsupported", errors: [{ code: 131051 }] });
+  assert.ok(u && u.body.startsWith("["), "an unsupported message is still recorded");
+});
