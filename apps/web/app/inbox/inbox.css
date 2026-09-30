@@ -1586,3 +1586,67 @@
 .deck-root .ibx-att-doc svg { width: 18px; height: 18px; flex: 0 0 auto; }
 .deck-root .ibx-att-doc span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deck-root .ibx-att-gone { font-size: 12.5px; color: var(--mist); font-style: italic; }
+
+/* ---------- calling the customer ---------- */
+.deck-root .ibx-call-dial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: var(--btn-grad);
+  color: var(--on-accent);
+  font-weight: 700;
+  font-size: 13.5px;
+  box-shadow: 0 8px 18px -10px var(--sky-glow);
+  transition: transform .15s var(--ease-out), filter .15s;
+}
+.deck-root .ibx-call-dial:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.deck-root .ibx-call-dial:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.deck-root .ibx-call-dial svg { width: 17px; height: 17px; }
+.deck-root .ibx-call-live {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--sky-soft);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.deck-root .ibx-call-pulse {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--good);
+  animation: ibx-call-pulse 1.6s var(--ease-out) infinite;
+}
+@keyframes ibx-call-pulse {
+  0% { box-shadow: 0 0 0 0 var(--good-soft); }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .deck-root .ibx-call-pulse { animation: none; } }
+
+.deck-root .ibx-callbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--btn-grad);
+  color: var(--on-accent);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 6px 14px -8px var(--sky-glow);
+}
+.deck-root .ibx-callbtn svg { width: 16px; height: 16px; }
+.deck-root .ibx-callbtn:hover { filter: brightness(1.06); }
+.deck-root .ibx-callbtn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+@container (max-width: 560px) { .deck-root .ibx-callbtn span { display: none; } }

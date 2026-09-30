@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getCallLogs,
   logCall,
@@ -14,10 +14,14 @@ import {
 /**
  * The calls logged on the open conversation, and the control to add one.
  *
- * The platform cannot place a call — that needs a telephony provider nobody has
- * wired in — so this panel is deliberately honest about what it is: a record of
- * a call that already happened, kept by hand. When a provider is added later it
- * writes the same rows automatically and this panel shows them unchanged.
+ * Nexus does not carry the call itself — that needs a telephony provider, or
+ * WhatsApp Calling once Meta lifts the number past 2,000 contacts a day. What it
+ * does now: the Call button dials the customer from the staff member's own
+ * phone (a tel: link — the dialer on a phone, Phone Link or similar on a
+ * computer), opens this form already set to Outbound, and times the call. When
+ * they come back to Nexus after hanging up, the length is filled in from that
+ * timer, so logging it is picking the outcome and pressing Save. When a
+ * provider is added later it writes the same rows and this panel is unchanged.
  *
  * A call is not a message, so it is not in the transcript: it has a direction,
  * an outcome and a length, not a body.
@@ -45,10 +49,16 @@ function formatDuration(seconds: number | null): string {
 export function CallLogPanel({
   conversationId,
   onChange,
+  phone,
+  startedAt,
 }: {
   conversationId: string;
   /** Told after a call is logged or removed, so the thread timeline can refresh. */
   onChange?: () => void;
+  /** The customer's number in international digits, when there is one to dial. */
+  phone?: string | null;
+  /** Set by the header's Call button: when that call was started (ms). */
+  startedAt?: number | null;
 }) {
   const [calls, setCalls] = useState<CallLog[]>([]);
   const [open, setOpen] = useState(false);
@@ -58,6 +68,11 @@ export function CallLogPanel({
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The call in progress, if this panel (or the header) started one.
+  const [callStart, setCallStart] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  // Once the person types a length themselves, the timer stops overwriting it.
+  const minutesTouched = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -77,8 +92,49 @@ export function CallLogPanel({
     setMinutes("");
     setNotes("");
     setError("");
+    setCallStart(null);
+    minutesTouched.current = false;
     void load();
   }, [load]);
+
+  // A call begun from the header opens the form here, already set up.
+  useEffect(() => {
+    if (startedAt) beginCall(startedAt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startedAt]);
+
+  function beginCall(at: number) {
+    setCallStart(at);
+    setNow(Date.now());
+    setOpen(true);
+    setDirection("outbound");
+    setOutcome("answered");
+    setMinutes("");
+    minutesTouched.current = false;
+    setError("");
+  }
+
+  // While a call is running: tick the timer, and when the person comes back to
+  // this tab (they were on the phone), fill in the length from it.
+  useEffect(() => {
+    if (!callStart) return;
+    const fill = () => {
+      const t = Date.now();
+      setNow(t);
+      if (!minutesTouched.current) setMinutes(String(Math.max(1, Math.round((t - callStart) / 60000))));
+    };
+    const tick = window.setInterval(() => setNow(Date.now()), 15000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fill();
+    };
+    window.addEventListener("focus", fill);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(tick);
+      window.removeEventListener("focus", fill);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [callStart]);
 
   async function submit() {
     setBusy(true);
@@ -99,6 +155,8 @@ export function CallLogPanel({
       setOpen(false);
       setMinutes("");
       setNotes("");
+      setCallStart(null);
+      minutesTouched.current = false;
       await load();
       onChange?.();
     } catch (err) {
@@ -158,8 +216,27 @@ export function CallLogPanel({
         </ul>
       ) : null}
 
+      {phone ? (
+        <a className="ibx-call-dial" href={`tel:+${phone}`} onClick={() => beginCall(Date.now())}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 4h3.5l1.5 4-2 1.5a11 11 0 0 0 6.5 6.5l1.5-2 4 1.5V19a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1Z" />
+          </svg>
+          <span>Call +{phone}</span>
+        </a>
+      ) : null}
+
       {open ? (
         <div className="ibx-call-form">
+          {callStart ? (
+            <p className="ibx-call-live" role="status">
+              <span className="ibx-call-pulse" aria-hidden="true" />
+              <span>
+                Call started {new Date(callStart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {now - callStart >= 60000 ? ` · ${Math.round((now - callStart) / 60000)} min ago` : ""}. When you hang
+                up, pick how it went and save.
+              </span>
+            </p>
+          ) : null}
           <div className="ibx-call-row">
             <select
               className="ibx-call-select"
@@ -189,7 +266,10 @@ export function CallLogPanel({
                 min="0"
                 inputMode="numeric"
                 value={minutes}
-                onChange={(e) => setMinutes(e.target.value)}
+                onChange={(e) => {
+                  minutesTouched.current = true;
+                  setMinutes(e.target.value);
+                }}
                 placeholder="min"
                 aria-label="Call length in minutes"
               />
@@ -206,7 +286,14 @@ export function CallLogPanel({
             <button type="button" className="ibx-ai-btn" disabled={busy} onClick={submit}>
               {busy ? "Saving…" : "Save call"}
             </button>
-            <button type="button" className="ibx-ai-btn" onClick={() => setOpen(false)}>
+            <button
+              type="button"
+              className="ibx-ai-btn"
+              onClick={() => {
+                setOpen(false);
+                setCallStart(null);
+              }}
+            >
               Cancel
             </button>
           </div>

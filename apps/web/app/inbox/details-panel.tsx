@@ -54,11 +54,14 @@ export function DetailsPanel({
   conversationId,
   tab: controlledTab,
   onTabChange,
+  callStartedAt,
 }: {
   conversationId: string;
   /** The inbox opens a tab from its header (the call button, the assignee chip). */
   tab?: PanelTab;
   onTabChange?: (tab: PanelTab) => void;
+  /** Set when the header's Call button dialled this customer. */
+  callStartedAt?: number | null;
 }) {
   const [ownTab, setOwnTab] = useState<Tab>("details");
   const tab = controlledTab ?? ownTab;
@@ -195,7 +198,12 @@ export function DetailsPanel({
           <p className="dp-hint">
             Calls logged here also appear in the conversation, in order, beside the messages.
           </p>
-          <CallLogPanel conversationId={conversationId} onChange={() => void refreshTimeline(conversationId)} />
+          <CallLogPanel
+            conversationId={conversationId}
+            onChange={() => void refreshTimeline(conversationId)}
+            phone={details.channel === "whatsapp" ? details.contactWaId : null}
+            startedAt={callStartedAt}
+          />
         </section>
       ) : tab === "notes" ? (
         <NotesTab conversationId={conversationId} details={details} onSaveLegacy={(v) => save({ notes: v })} />

@@ -303,6 +303,9 @@ export default function InboxPage() {
   // The customer panel folds away too, giving the thread the room.
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>("details");
+  // A call dialled from the header: which chat, and when, so the Calls tab can
+  // open the log already timing it. Keyed to the chat so switching drops it.
+  const [dialled, setDialled] = useState<{ conversationId: string; at: number } | null>(null);
   // Below 1100px the panel is a drawer over the thread — start it closed there,
   // or the first thing a tablet shows is the panel covering the conversation.
   useEffect(() => {
@@ -1001,15 +1004,34 @@ export default function InboxPage() {
                 >
                   <Icon name="panel" />
                 </button>
-                <button
-                  type="button"
-                  className="ibx-iconbtn"
-                  title="Log a call"
-                  aria-label="Log a call"
-                  onClick={() => openPanel("calls")}
-                >
-                  <Icon name="phone" />
-                </button>
+                {/* WhatsApp chats have a number to dial: the header dials it (the
+                    phone's dialer, or Phone Link on a computer) and opens the
+                    Calls tab already timing the call. Other channels log only. */}
+                {activeConversation.channel === "whatsapp" && activeConversation.contactWaId ? (
+                  <a
+                    className="ibx-callbtn"
+                    href={`tel:+${activeConversation.contactWaId}`}
+                    title={`Call +${activeConversation.contactWaId}`}
+                    aria-label={`Call +${activeConversation.contactWaId}`}
+                    onClick={() => {
+                      setDialled({ conversationId: activeConversation.id, at: Date.now() });
+                      openPanel("calls");
+                    }}
+                  >
+                    <Icon name="phone" />
+                    <span>Call</span>
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="ibx-iconbtn"
+                    title="Log a call"
+                    aria-label="Log a call"
+                    onClick={() => openPanel("calls")}
+                  >
+                    <Icon name="phone" />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="ibx-assignee"
@@ -1244,6 +1266,7 @@ export default function InboxPage() {
               conversationId={activeConversation.id}
               tab={panelTab}
               onTabChange={setPanelTab}
+              callStartedAt={dialled?.conversationId === activeConversation.id ? dialled.at : null}
             />
             {panelTab === "details" ? (
               <div className="ibx-side-cards">
