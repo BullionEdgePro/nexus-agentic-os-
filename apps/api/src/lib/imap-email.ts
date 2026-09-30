@@ -12,19 +12,23 @@
  * transport for the SAME channel: the DB layer, the dedup, the conversation and
  * the reply flow are shared; only the fetch and the send differ.
  *
- * THE SAME PRIVACY BOUNDARY STILL HOLDS. It never lists the mailbox. It searches
- * INBOX only for mail involving an address already in the staff member's client
- * book, exactly as the Gmail side does — an empty book fetches nothing.
+ * WHAT IT READS (changed 2026-09-30, the owner's decision): every recent email
+ * in INBOX from a person, not only mail from customers already on file. Only
+ * client-book mail was read before, no customer had an email saved, and so the
+ * business mailbox never put a single message in the inbox. Automated mail
+ * (lists, bulk, no-reply, auto-replies) is kept out by lib/mail-filter.ts.
  *
  * The password is more sensitive than a token (it is not scoped and cannot be
  * revoked per-app), which is why it is sealed at rest like every other
  * credential and why a dedicated app-password is the right thing to connect.
  *
- * Hosts default to Hostinger and are overridable by env for another provider.
+ * Hosts: Gmail addresses use Google's IMAP/SMTP (with a Google app password —
+ * no 7-day OAuth expiry); anything else defaults to Hostinger, overridable by env.
  */
 import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
 import { simpleParser } from "mailparser";
+import { isAutomatedMail, emailsIn } from "./mail-filter.js";
 
 /** imapflow types internalDate loosely (string | Date); mailparser gives a Date. */
 function toIso(value: string | Date | null | undefined): string | null {
@@ -33,9 +37,12 @@ function toIso(value: string | Date | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-const imapHost = () => process.env.IMAP_HOST || "imap.hostinger.com";
+/** A Google-hosted mailbox: a gmail.com address. (Workspace domains use the env hosts.) */
+const isGoogle = (email: string) => /@(gmail|googlemail)\.com$/i.test(email.trim());
+
+const imapHost = (email = "") => (isGoogle(email) ? "imap.gmail.com" : process.env.IMAP_HOST || "imap.hostinger.com");
 const imapPort = () => Number(process.env.IMAP_PORT || 993);
-const smtpHost = () => process.env.SMTP_HOST || "smtp.hostinger.com";
+const smtpHost = (email = "") => (isGoogle(email) ? "smtp.gmail.com" : process.env.SMTP_HOST || "smtp.hostinger.com");
 const smtpPort = () => Number(process.env.SMTP_PORT || 465);
 
 /** IMAP is always available — the host defaults to Hostinger, no server setup. */
@@ -45,7 +52,7 @@ export function imapConfigured(): boolean {
 
 function imapClient(email: string, password: string): ImapFlow {
   return new ImapFlow({
-    host: imapHost(),
+    host: imapHost(email),
     port: imapPort(),
     secure: true,
     auth: { user: email, pass: password },
@@ -126,7 +133,7 @@ export async function fetchClientMailImap(
             ? parsed.to.map((t) => t.text).join(", ")
             : parsed.to?.text ?? null;
           out.push({
-            id: parsed.messageId || `imap-${msg.uid}@${imapHost()}`,
+            id: parsed.messageId || `imap-${msg.uid}@${imapHost(email)}`,
             from: parsed.from?.text ?? null,
             to: toText,
             subject: parsed.subject ?? null,
@@ -158,7 +165,7 @@ export async function sendEmailImap(
   input: { to: string; subject: string; body: string; inReplyTo?: string | null }
 ): Promise<string> {
   const transporter = nodemailer.createTransport({
-    host: smtpHost(),
+    host: smtpHost(email),
     port: smtpPort(),
     secure: smtpPort() === 465,
     auth: { user: email, pass: password },
@@ -172,4 +179,65 @@ export async function sendEmailImap(
     references: input.inReplyTo || undefined,
   });
   return info.messageId || "";
+}
+
+/** One recent INBOX message, with whether a person wrote it. */
+export interface RecentMailMessage extends ImapMailMessage {
+  fromAddress: string;
+  fromName: string | null;
+  automated: boolean;
+}
+
+/**
+ * Every message that reached INBOX in the last `sinceDays` days, newest first,
+ * capped at `limit` so one sweep of a busy mailbox stays cheap. Automated mail
+ * is returned flagged rather than dropped here, so the caller decides and the
+ * count of what was skipped can be reported.
+ */
+export async function fetchRecentMailImap(
+  email: string,
+  password: string,
+  { sinceDays = 3, limit = 40 }: { sinceDays?: number; limit?: number } = {}
+): Promise<RecentMailMessage[]> {
+  const client = imapClient(email, password);
+  const out: RecentMailMessage[] = [];
+  await client.connect();
+  try {
+    const lock = await client.getMailboxLock("INBOX");
+    try {
+      const since = new Date(Date.now() - sinceDays * 86_400_000);
+      const found = (await client.search({ since }, { uid: true }).catch(() => [])) as number[];
+      const uids = [...found].sort((a, b) => b - a).slice(0, limit);
+      if (uids.length) {
+        for await (const msg of client.fetch(uids, { uid: true, source: true, internalDate: true }, { uid: true })) {
+          if (!msg.source) continue;
+          const parsed = await simpleParser(msg.source as Buffer);
+          const fromAddress = (parsed.from?.value?.[0]?.address ?? emailsIn(parsed.from?.text)[0] ?? "").toLowerCase();
+          const fromName = parsed.from?.value?.[0]?.name?.trim() || null;
+          const headers: Record<string, string> = {};
+          for (const name of ["list-unsubscribe", "list-id", "precedence", "auto-submitted", "x-autoreply", "x-autorespond"]) {
+            const v = parsed.headers.get(name);
+            if (v != null) headers[name] = typeof v === "string" ? v : JSON.stringify(v);
+          }
+          const toText = Array.isArray(parsed.to) ? parsed.to.map((t) => t.text).join(", ") : parsed.to?.text ?? null;
+          out.push({
+            id: parsed.messageId || `imap-${msg.uid}@${imapHost(email)}`,
+            from: parsed.from?.text ?? null,
+            to: toText,
+            subject: parsed.subject ?? null,
+            body: (parsed.text || "").slice(0, 20_000),
+            receivedAt: toIso(parsed.date ?? msg.internalDate),
+            fromAddress,
+            fromName,
+            automated: isAutomatedMail({ from: fromAddress, headers }),
+          });
+        }
+      }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout().catch(() => undefined);
+  }
+  return out;
 }

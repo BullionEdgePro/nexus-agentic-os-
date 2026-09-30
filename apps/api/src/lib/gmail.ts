@@ -498,3 +498,57 @@ export async function sendGmail(
   }
   return String(payload.id ?? "");
 }
+
+/**
+ * Every recent message in the Primary inbox — the Gmail twin of
+ * fetchRecentMailImap. Gmail's own categories already sort promotions, social,
+ * updates and forums away from Primary, which is most of the filtering; the
+ * caller applies lib/mail-filter.ts on top for the no-reply senders that land
+ * in Primary anyway.
+ */
+/** A Primary-inbox message plus the headers that mark mail no person wrote. */
+export interface InboxMailMessage extends MailMessage {
+  listUnsubscribe: string | null;
+  precedence: string | null;
+  autoSubmitted: string | null;
+}
+
+export async function fetchRecentInboxMailFull(accessToken: string, limit = 40): Promise<InboxMailMessage[]> {
+  const query = "in:inbox category:primary newer_than:3d";
+  const list = await gmailGet(
+    `/messages?maxResults=${Math.min(limit, 50)}&q=${encodeURIComponent(query)}`,
+    accessToken
+  );
+  const ids = Array.isArray(list.messages) ? list.messages : [];
+  if (ids.length === 0) return [];
+  const messages = await Promise.all(
+    ids.slice(0, limit).map(async (raw) => {
+      const id = String((raw as Record<string, unknown>).id ?? "");
+      if (!id) return null;
+      try {
+        const message = await gmailGet(`/messages/${id}?format=full`, accessToken);
+        const payload = (message.payload ?? {}) as Record<string, unknown>;
+        const headers = Array.isArray(payload.headers) ? (payload.headers as Array<Record<string, unknown>>) : [];
+        const labels = Array.isArray(message.labelIds) ? (message.labelIds as string[]) : [];
+        const internal = message.internalDate;
+        return {
+          id,
+          threadId: String(message.threadId ?? ""),
+          from: header(headers, "from"),
+          to: header(headers, "to"),
+          subject: header(headers, "subject"),
+          snippet: typeof message.snippet === "string" ? message.snippet : null,
+          receivedAt: typeof internal === "string" && internal ? new Date(Number(internal)).toISOString() : null,
+          unread: labels.includes("UNREAD"),
+          body: extractPlainBody(payload).slice(0, 20_000),
+          listUnsubscribe: header(headers, "list-unsubscribe"),
+          precedence: header(headers, "precedence"),
+          autoSubmitted: header(headers, "auto-submitted"),
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+  return messages.filter((m): m is NonNullable<typeof m> => m !== null);
+}

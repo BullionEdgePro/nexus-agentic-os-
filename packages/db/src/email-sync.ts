@@ -10,10 +10,12 @@ import { contactOwnedBy } from "./client-book.js";
  * here runs inside the caller's tenant context (withTenant), so RLS scopes every
  * read and write to the one business without it being named again.
  *
- * The identity rule (decided with the owner): the email channel covers contacts
- * who ALREADY EXIST and have an email on file — a customer who wrote in on
- * WhatsApp and whose address a colleague recorded. Email-only people, who never
- * had a WhatsApp id, are a later step; the contacts table still requires a wa_id.
+ * The identity rule, as changed by the owner on 2026-09-30: EVERY person who
+ * emails a connected business mailbox becomes a conversation. If a customer on
+ * file already has that address, their record is used; otherwise an email-only
+ * contact is created (channel 'email', external_id = the address — possible
+ * since migration 088 made wa_id optional). The old rule, existing contacts
+ * only, meant nothing ever arrived: no customer had an email saved.
  */
 
 export interface EmailClientContact {
@@ -215,4 +217,49 @@ export async function insertSyncedEmailMessage(email: SyncedEmail): Promise<bool
     ]
   );
   return (rowCount ?? 0) > 0;
+}
+
+/**
+ * The customer behind an email address, found or created — inside the caller's
+ * tenant context (the mailbox's business).
+ *
+ * A customer already on file with this address saved (say, one who wrote in on
+ * WhatsApp) is used, so their WhatsApp and email sit on one record. Otherwise
+ * an email-only contact is created, identified by the address, with the
+ * address also saved as attributes.email — which is what a reply is sent to.
+ *
+ * A new contact from a staff member's own mailbox is theirs (owner_employee_id),
+ * so their reply leaves from that mailbox; from a business mailbox it belongs to
+ * the business pool.
+ */
+export async function findOrCreateEmailContact(
+  organizationId: string,
+  email: string,
+  displayName: string | null,
+  ownerEmployeeId: string | null
+): Promise<string> {
+  const address = email.trim().toLowerCase();
+  const onFile = await getPool().query<{ id: string }>(
+    `select ct.id from contacts ct
+      where ${contactServedBy("$1")}
+        and lower(ct.attributes->>'email') = $2
+      order by ct.created_at
+      limit 1`,
+    [organizationId, address]
+  );
+  if (onFile.rows[0]) return onFile.rows[0].id;
+
+  const created = await getPool().query<{ id: string }>(
+    `insert into contacts (organization_id, channel, external_id, display_name, attributes, owner_employee_id, last_message_at)
+     values ($1, 'email', $2, $3, jsonb_build_object('email', $2::text), $4::uuid, now())
+     on conflict (organization_id, channel, external_id) where external_id is not null
+     do update set
+       display_name = coalesce(contacts.display_name, excluded.display_name),
+       attributes = contacts.attributes || jsonb_build_object('email', $2::text),
+       last_message_at = now(),
+       updated_at = now()
+     returning id`,
+    [organizationId, address, displayName?.trim() || null, ownerEmployeeId]
+  );
+  return created.rows[0].id;
 }

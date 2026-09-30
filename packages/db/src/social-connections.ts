@@ -328,17 +328,19 @@ export async function listGmailConnectionsForSync(): Promise<
  * The password itself is fetched per row through `connectionSecret`, never here.
  */
 export async function listImapConnectionsForSync(): Promise<
-  Array<{ organizationId: string; employeeId: string; email: string }>
+  Array<{ organizationId: string; employeeId: string | null; email: string }>
 > {
+  // Both kinds: a staff member's own mailbox, and a BUSINESS mailbox the owner
+  // connected for a whole business (employee_id null) — the second kind was
+  // filtered out here, so it could be connected and never read.
   const { rows } = await getPool().query<{
     organization_id: string;
-    employee_id: string;
+    employee_id: string | null;
     external_id: string;
   }>(
     `select organization_id, employee_id, external_id
        from social_connections
       where provider = 'imap'
-        and employee_id is not null
         and access_token_enc is not null`
   );
   return rows.map((r) => ({
@@ -435,4 +437,34 @@ export async function connectionExpiry(
     [organizationId, employeeId, provider]
   );
   return rows[0]?.expires_at ?? null;
+}
+
+/**
+ * The business mailboxes the owner connected (IMAP, not tied to a staff member),
+ * for the Channels screen. Cross-tenant by nature — call inside withAllTenants.
+ * Never selects the credential.
+ */
+export async function listBusinessMailboxes(): Promise<
+  Array<{ business: string; email: string; lastSyncedAt: string | null; lastError: string | null; connectedAt: string }>
+> {
+  const { rows } = await getPool().query<{
+    slug: string;
+    external_id: string;
+    last_synced_at: string | null;
+    last_error: string | null;
+    connected_at: string;
+  }>(
+    `select o.slug, c.external_id, c.last_synced_at, c.last_error, c.connected_at
+       from social_connections c
+       join organizations o on o.id = c.organization_id
+      where c.provider = 'imap' and c.employee_id is null
+      order by c.connected_at`
+  );
+  return rows.map((r) => ({
+    business: r.slug,
+    email: r.external_id,
+    lastSyncedAt: r.last_synced_at,
+    lastError: r.last_error,
+    connectedAt: r.connected_at,
+  }));
 }

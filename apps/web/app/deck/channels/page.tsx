@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getChannels, readableError, type ChannelStatus } from "@/lib/api";
+import { BusinessMailboxes } from "./business-mailboxes";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
@@ -94,6 +95,8 @@ export default function ChannelsPage() {
                 </article>
               ))}
             </div>
+
+            <BusinessMailboxes />
 
             <section className="ch-note">
               <h2 className="act-sub-head">What each state means</h2>

@@ -54,13 +54,17 @@ test("the full fetch queries by client address, exactly like the metadata one", 
   assert.match(fn, /clean\.length === 0/, "it must guard the empty-address case");
 });
 
-test("the sync only ever hands the fetch the client book, never a mailbox list", () => {
+// THE RULE CHANGED ON 2026-09-30, BY THE OWNER'S DECISION: a business mailbox
+// now brings in every email a PERSON sends it, not only mail from customers
+// already on file — that rule let nothing in, because no customer had an email
+// saved. What still holds is that the read is BOUNDED: recent Primary-inbox
+// mail only, capped per sweep, never the mailbox's history.
+test("the sync reads recent Primary-inbox mail, bounded, never the whole mailbox", () => {
   const fn = EMAIL_SYNC_SERVICE.slice(EMAIL_SYNC_SERVICE.indexOf("async function runEmailSync"));
-  assert.match(
-    fn,
-    /fetchClientMailFull\(\s*accessToken,\s*clients\.map/,
-    "runEmailSync must fetch using the client addresses it just looked up, nothing else"
-  );
+  assert.match(fn, /fetchRecentInboxMailFull\(accessToken, 40\)/);
+  const fetch = GMAIL.slice(GMAIL.indexOf("export async function fetchRecentInboxMailFull"));
+  assert.match(fetch, /"in:inbox category:primary newer_than:3d"/);
+  assert.match(fetch, /maxResults=\$\{Math\.min\(limit, 50\)\}/);
 });
 
 test("a synced email cannot be stored twice", () => {

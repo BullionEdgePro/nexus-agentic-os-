@@ -64,3 +64,41 @@
 .ch-note ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .ch-note li { font-size: 13px; line-height: 1.5; color: var(--slate); }
 .ch-note strong { color: var(--ink); }
+
+/* ---------- business mailboxes ---------- */
+.deck-root .mb { margin-top: 28px; }
+.deck-root .mb-lede { color: var(--slate); max-width: 68ch; margin: 4px 0 14px; }
+.deck-root .mb-list { display: grid; gap: 10px; }
+.deck-root .mb-row {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: center;
+}
+.deck-root .mb-biz { font-weight: 800; }
+.deck-root .mb-state { font-size: 13.5px; color: var(--slate); min-width: 0; overflow-wrap: anywhere; }
+.deck-root .mb-state b { color: var(--ink); }
+.deck-root .mb-state .bad { color: var(--crit); }
+.deck-root .mb-state .ok { color: var(--good); }
+.deck-root .mb-form { grid-column: 1 / -1; display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--hairline); }
+.deck-root .mb-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.deck-root .mb-fields input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline-strong);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.deck-root .mb-help { font-size: 12.5px; color: var(--mist); margin: 0; }
+.deck-root .mb-help a { color: var(--signal-text); text-decoration: underline; }
+.deck-root .mb-err { color: var(--crit); font-size: 13px; margin: 0; }
+@media (max-width: 720px) {
+  .deck-root .mb-row { grid-template-columns: minmax(0, 1fr); }
+}

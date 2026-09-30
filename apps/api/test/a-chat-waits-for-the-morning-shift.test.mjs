@@ -33,7 +33,8 @@ test("the sweep only offers chats that are genuinely waiting for a person", () =
   assert.match(sql, /or \(c\.is_human_handoff and li\.last_in > now\(\) - interval '30 days'\)/);
   assert.match(sql, /order by c\.is_human_handoff desc, li\.last_in asc/);
   assert.match(sql, /c\.status in \('open', 'pending'\)/);
-  assert.match(sql, /c\.channel = 'whatsapp'/);
+  // Email chats from a business mailbox arrive unassigned, so they are swept too.
+  assert.match(sql, /c\.channel in \('whatsapp', 'email'\)/);
   assert.match(sql, /now\(\) - interval '7 days'/, "a month-old thread is not dropped on the morning shift");
   assert.match(sql, /li\.last_in asc/, "the longest wait is handed out first");
   // Judged by the SERVING business on a shared number, not the number's owner.

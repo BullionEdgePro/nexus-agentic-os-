@@ -230,6 +230,31 @@ export function getChannels(): Promise<{ channels: ChannelStatus[] }> {
   return request(`/api/channels`);
 }
 
+/** A mailbox connected for a whole business (not a staff member's own). */
+export interface BusinessMailbox {
+  business: string;
+  email: string;
+  lastSyncedAt: string | null;
+  lastError: string | null;
+  connectedAt: string;
+}
+
+export function getBusinessMailboxes(): Promise<{ mailboxes: BusinessMailbox[] }> {
+  return request(`/api/channels/mailboxes`);
+}
+
+export function connectBusinessMailbox(input: {
+  business: string;
+  email: string;
+  password: string;
+}): Promise<{ ok: true; business: string; email: string }> {
+  return request(`/api/channels/mailboxes`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function disconnectBusinessMailbox(business: string): Promise<{ ok: boolean }> {
+  return request(`/api/channels/mailboxes/${encodeURIComponent(business)}`, { method: "DELETE" });
+}
+
 /**
  * A thread: its latest messages, plus what HAPPENED to it (assignments,
  * resolves, handoffs, logged calls) as one-line timeline items to merge in by time.

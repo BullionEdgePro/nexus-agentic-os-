@@ -23,11 +23,11 @@
  * cycle that overlaps a manual sync, or the next cycle, stores nothing twice.
  */
 import {
-  clientContactsWithEmail,
   connectionExpiry,
   connectionSecret,
   emailReplyContext,
   findOrCreateEmailConversation,
+  findOrCreateEmailContact,
   insertSyncedEmailMessage,
   listConnections,
   listGmailConnectionsForSync,
@@ -38,13 +38,14 @@ import {
   withTenant,
 } from "@nexus/db";
 import {
-  fetchClientMailFull,
+  fetchRecentInboxMailFull,
   fetchGmailProfile,
   fetchMessageThreadingHeaders,
   refreshGoogleToken,
   sendGmail,
 } from "../lib/gmail.js";
-import { fetchClientMailImap, sendEmailImap } from "../lib/imap-email.js";
+import { fetchRecentMailImap, sendEmailImap } from "../lib/imap-email.js";
+import { emailsIn, isAutomatedMail, senderName } from "../lib/mail-filter.js";
 import { logger } from "../lib/logger.js";
 
 /** Whose mailbox — an (org, employee) pair. Gmail is always a person's here. */
@@ -120,82 +121,64 @@ export async function gmailToken(
   }
 }
 
-/** Every email address in a header value ("Ada <a@x.com>, b@y.com"), lowercased. */
-const emailsIn = (headerValue: string | null): string[] => {
-  if (!headerValue) return [];
-  const found = headerValue.match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/gi) ?? [];
-  return found.map((e) => e.toLowerCase());
-};
-
-/**
- * Pull the mail between a staff member and their clients into email
- * conversations, so it reads in the inbox beside their WhatsApp threads.
- *
- * The privacy boundary is unchanged from the read-only view: fetchClientMailFull
- * queries ONLY addresses in this person's client book, so a mailbox is never
- * listed and nothing outside those threads is touched. What is new is that the
- * body is read (the owner chose this) and stored — for those already-scoped
- * messages only.
- *
- * Direction is decided by the sender: a message from the connected mailbox is
- * outbound, anything else inbound. Dedup on the Gmail message id means running
- * this every inbox open is safe and cheap — a message already stored inserts
- * nothing. The Gmail fetch (slow, network) is kept OUTSIDE the write transaction
- * so a database connection is never held open across it.
- */
 /** One fetched message, in the shape the insert loop below needs — the common
  *  ground between a Gmail message and an IMAP one, which differ only in transport. */
 interface FetchedMail {
   id: string;
   from: string | null;
-  to: string | null;
   body: string;
   snippet?: string | null;
   threadId?: string | null;
   receivedAt: string | null;
+  /** True when no person wrote it: lists, bulk, no-reply, auto-replies. */
+  automated: boolean;
 }
 
 /**
- * File already-fetched client mail into the inbox — the shared half of both
- * transports, so the privacy rule (only mail with a client-book address, and
- * never the owner's own mailbox listing) and the dedup live in ONE place.
+ * File a mailbox's recent mail into the inbox — the shared half of both
+ * transports, so the rules and the dedup live in ONE place.
  *
- * Direction is decided by the sender; dedup is on the message id, so a re-sync,
- * or the same mail seen by two transports, stores nothing twice.
+ * EVERY EMAIL FROM A PERSON (the owner's decision, 2026-09-30). The sender
+ * becomes a customer if they aren't one already, and gets one email
+ * conversation, like a WhatsApp chat. Skipped: automated mail (see
+ * lib/mail-filter.ts), and anything from the mailbox's own address. Dedup is on
+ * the message id, so a re-sync, or the same mail seen twice, stores nothing new.
+ *
+ * A new conversation from a staff member's mailbox is assigned to them; from a
+ * business mailbox it lands in Unassigned, where auto-assign (if the business
+ * turned it on) or a person hands it out.
  */
-async function storeClientMail(
+async function storeInboxMail(
   owner: MailboxOwner,
   ownerAddress: string,
-  clients: Array<{ contactId: string; email: string }>,
   messages: FetchedMail[]
-): Promise<{ newMessages: number; threads: number }> {
-  if (messages.length === 0) return { newMessages: 0, threads: 0 };
-  const byAddress = new Map(clients.map((client) => [client.email, client.contactId]));
+): Promise<{ newMessages: number; threads: number; skippedAutomated: number }> {
+  if (messages.length === 0) return { newMessages: 0, threads: 0, skippedAutomated: 0 };
 
   return withTenant(owner.organizationId, async () => {
     let newMessages = 0;
+    let skippedAutomated = 0;
     const touched = new Set<string>();
     for (const m of messages) {
       const fromEmail = emailsIn(m.from)[0] ?? "";
-      const involved = [...emailsIn(m.from), ...emailsIn(m.to)];
-      // The client this message is with: an involved address that is in the book
-      // and is not the staff member's own mailbox.
-      const clientEmail = involved.find((a) => a !== ownerAddress && byAddress.has(a));
-      if (!clientEmail) continue;
-      const contactId = byAddress.get(clientEmail)!;
-      // A new thread is assigned to the mailbox's owner — their client, their
-      // mail — so it lands in their "My chats" rather than Unassigned.
-      const conversationId = await findOrCreateEmailConversation(
+      if (!fromEmail || fromEmail === ownerAddress) continue;
+      if (m.automated) {
+        skippedAutomated += 1;
+        continue;
+      }
+      const contactId = await findOrCreateEmailContact(
         owner.organizationId,
-        contactId,
+        fromEmail,
+        senderName(m.from),
         owner.employeeId
       );
+      const conversationId = await findOrCreateEmailConversation(owner.organizationId, contactId, owner.employeeId);
       touched.add(conversationId);
       const inserted = await insertSyncedEmailMessage({
         organizationId: owner.organizationId,
         conversationId,
         contactId,
-        direction: fromEmail === ownerAddress ? "outbound" : "inbound",
+        direction: "inbound",
         body: (m.body || m.snippet || "").slice(0, 20_000),
         emailMessageId: m.id,
         emailThreadId: m.threadId || null,
@@ -203,54 +186,51 @@ async function storeClientMail(
       });
       if (inserted) newMessages += 1;
     }
-    return { newMessages, threads: touched.size };
+    return { newMessages, threads: touched.size, skippedAutomated };
   });
 }
 
+/** A Gmail mailbox connected with Google sign-in: its recent Primary inbox. */
 export async function runEmailSync(
   owner: MailboxOwner,
   accessToken: string
-): Promise<{ newMessages: number; threads: number }> {
+): Promise<{ newMessages: number; threads: number; skippedAutomated: number }> {
   const profile = await fetchGmailProfile(accessToken);
   const ownerAddress = profile.emailAddress.trim().toLowerCase();
-
-  const clients = await withTenant(owner.organizationId, () =>
-    clientContactsWithEmail(owner.organizationId, owner.employeeId as string)
+  const messages = await fetchRecentInboxMailFull(accessToken, 40);
+  return storeInboxMail(
+    owner,
+    ownerAddress,
+    messages.map((m) => ({
+      id: m.id,
+      from: m.from,
+      body: m.body,
+      snippet: m.snippet,
+      threadId: m.threadId,
+      receivedAt: m.receivedAt,
+      automated: isAutomatedMail({
+        from: emailsIn(m.from)[0] ?? "",
+        headers: {
+          "list-unsubscribe": m.listUnsubscribe ?? undefined,
+          precedence: m.precedence ?? undefined,
+          "auto-submitted": m.autoSubmitted ?? undefined,
+        },
+      }),
+    }))
   );
-  if (clients.length === 0) return { newMessages: 0, threads: 0 };
-
-  const messages = await fetchClientMailFull(
-    accessToken,
-    clients.map((client) => client.email),
-    40
-  );
-  return storeClientMail(owner, ownerAddress, clients, messages);
 }
 
 /**
- * The IMAP twin of runEmailSync: read a business mailbox's client mail into the
- * inbox over IMAP instead of the Gmail API. Same clients, same insert, same
- * dedup — only the fetch is different, and the owner's address is simply the
- * mailbox address (there is no profile to ask, unlike Gmail).
+ * The IMAP twin of runEmailSync: a business mailbox (Hostinger, or Gmail with
+ * an app password) read over IMAP. The owner's address is the mailbox address.
  */
 export async function runImapEmailSync(
   owner: MailboxOwner,
   credential: { email: string; password: string }
-): Promise<{ newMessages: number; threads: number }> {
+): Promise<{ newMessages: number; threads: number; skippedAutomated: number }> {
   const ownerAddress = credential.email.trim().toLowerCase();
-
-  const clients = await withTenant(owner.organizationId, () =>
-    clientContactsWithEmail(owner.organizationId, owner.employeeId as string)
-  );
-  if (clients.length === 0) return { newMessages: 0, threads: 0 };
-
-  const messages = await fetchClientMailImap(
-    credential.email,
-    credential.password,
-    clients.map((client) => client.email),
-    40
-  );
-  return storeClientMail(owner, ownerAddress, clients, messages);
+  const messages = await fetchRecentMailImap(credential.email, credential.password, { sinceDays: 3, limit: 40 });
+  return storeInboxMail(owner, ownerAddress, messages);
 }
 
 export interface EmailSyncResult {
@@ -412,12 +392,8 @@ export async function sendEmailReply(conversationId: string, text: string): Prom
       "This client has no email address on file, so there is nowhere to send the reply. Add one to their client record first."
     );
   }
-  if (!ctx.ownerEmployeeId) {
-    throw new Error(
-      "This client is not owned by a staff member, so there is no mailbox to reply from."
-    );
-  }
-
+  // A customer who emailed a BUSINESS mailbox belongs to no one staff member:
+  // the reply leaves from that business mailbox (connected with employee null).
   const owner = { organizationId: ctx.organizationId, employeeId: ctx.ownerEmployeeId };
 
   // A business (IMAP) mailbox wins if this staff member has one connected: the
@@ -425,13 +401,22 @@ export async function sendEmailReply(conversationId: string, text: string): Prom
   // the RFC-822 Message-ID, so In-Reply-To threads it directly with no header
   // fetch. The subject is not stored, so a plain "Re:" carries it — the
   // In-Reply-To is what actually threads it in the recipient's client.
-  const conns = await withTenant(owner.organizationId, () =>
-    listConnections(owner.organizationId, owner.employeeId)
-  );
-  const imapConn = conns.find((conn) => conn.provider === "imap" && conn.usable);
+  const personal = owner.employeeId
+    ? await withTenant(owner.organizationId, () => listConnections(owner.organizationId, owner.employeeId))
+    : [];
+  const business = await withTenant(owner.organizationId, () => listConnections(owner.organizationId, null));
+  const personalImap = personal.find((conn) => conn.provider === "imap" && conn.usable);
+  const businessImap = business.find((conn) => conn.provider === "imap" && conn.usable);
+  const imapConn = personalImap ?? businessImap;
+  const imapOwnerId = personalImap ? owner.employeeId : null;
+  if (!imapConn && !owner.employeeId) {
+    throw new Error(
+      "There is no business mailbox connected for this business to reply from. Connect one in Channels."
+    );
+  }
   if (imapConn) {
     const secret = await withTenant(owner.organizationId, () =>
-      connectionSecret(owner.organizationId, owner.employeeId, "imap")
+      connectionSecret(owner.organizationId, imapOwnerId, "imap")
     );
     if (!secret) {
       throw new Error("The business mailbox sign-in can no longer be read — connect it again.");
@@ -443,7 +428,7 @@ export async function sendEmailReply(conversationId: string, text: string): Prom
       inReplyTo: ctx.replyToGmailMessageId,
     });
     logger.info(
-      { conversationId, employeeId: ctx.ownerEmployeeId, messageId },
+      { conversationId, employeeId: ctx.ownerEmployeeId, mailbox: imapConn.externalId, messageId },
       "Email reply sent from the business mailbox"
     );
     return { gmailMessageId: messageId, threadId: ctx.threadId };

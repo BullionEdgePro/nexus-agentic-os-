@@ -338,7 +338,10 @@ export async function claimForAutoAssign(
  * customer said nothing more — was never looked at again when the shift
  * started. This is the list of those chats.
  *
- * WhatsApp only: that is the channel the reply pipeline assigns on. Only chats
+ * WhatsApp and email: the reply pipeline assigns WhatsApp chats as they arrive,
+ * and email chats from a BUSINESS mailbox arrive with nobody on them (a staff
+ * member's own mailbox assigns to them), so the sweep is how they get a person.
+ * Only chats
  * whose customer wrote in the last 7 days — an unanswered month-old thread is
  * not something to drop on whoever happens to be on shift — except a chat the
  * AI handed to a person, which stays eligible for 30 days: that customer was
@@ -359,7 +362,7 @@ export async function listChatsWaitingForAssignee(
           where m.conversation_id = c.id and m.direction = 'inbound'
        ) li on true
       where o.auto_assign
-        and c.channel = 'whatsapp'
+        and c.channel in ('whatsapp', 'email')
         and c.employee_id is null
         and c.status in ('open', 'pending')
         and (li.last_in > now() - interval '7 days'
