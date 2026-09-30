@@ -1438,6 +1438,9 @@ type ServingDecision =
  * under a different business's governance policy. That is why an ambiguous
  * message asks rather than picking the most likely candidate.
  */
+/** How long a sent business menu counts as "still in front of them". */
+const TRIAGE_REPEAT_WINDOW_MS = 5 * 60 * 1000;
+
 async function resolveServingOrganization(ctx: {
   phoneNumberId: string;
   conversationId: string;
@@ -1595,6 +1598,28 @@ async function resolveServingOrganization(ctx: {
   const asked = narrowed
     ? businesses.filter((business) => candidates.some((c) => c.id === business.id))
     : businesses;
+
+  // THE MENU IS STILL ON THEIR SCREEN — DON'T SEND IT AGAIN.
+  //
+  // People send a photo and a voice note, or "Hi" then their question, seconds
+  // apart. Each message arrived here with no business chosen yet, so each got
+  // the full menu: the owner's own test on 2026-09-30 received it twice, six
+  // seconds apart. Worse, every repeat counted as a triage attempt, so a
+  // customer who typed three quick lines could be handed to a human as
+  // "impossible to place" before they had even read the first menu.
+  //
+  // Within the window the message is still recorded and was still classified
+  // above — a clear keyword routes it — it just doesn't trigger a second copy
+  // of a question they already have, or burn one of their three chances.
+  // new Date() rather than Date.parse: the driver may hand back a Date, not a string.
+  const promptedAt = state?.triagePromptedAt ? new Date(state.triagePromptedAt).getTime() : NaN;
+  if (Number.isFinite(promptedAt) && Date.now() - promptedAt < TRIAGE_REPEAT_WINDOW_MS) {
+    logger.info(
+      { conversationId: ctx.conversationId, promptedAt: state?.triagePromptedAt },
+      "Business menu sent moments ago — not repeating it; waiting for their choice"
+    );
+    return { kind: "asked" };
+  }
 
   await askWhichBusiness(ctx, asked);
   return { kind: "asked" };
