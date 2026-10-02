@@ -36,6 +36,7 @@ test("a Messenger delivery becomes one facebook message", () => {
     messageId: "m_abc",
     text: "hello there",
     timestamp: 1_700_000_000_000,
+    unsent: false,
   });
 });
 

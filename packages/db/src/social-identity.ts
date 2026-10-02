@@ -152,3 +152,30 @@ export async function insertInboundSocialMessage(
   );
   return { messageId: rows[0]?.id ?? null };
 }
+
+/** What staff see where a message the customer unsent used to be. */
+export const UNSENT_MESSAGE_BODY = "[The customer unsent this message]";
+
+/**
+ * Erase an inbound Messenger/Instagram message the customer unsent.
+ *
+ * Meta's Platform Terms require an app to delete a message the person unsent.
+ * Messages are append-only for the app role (048 grants no DELETE), so the row
+ * is kept as a marker and its text is overwritten — the customer's words are
+ * gone. Scoped to the business and to inbound messages: an unsend can only ever
+ * erase what that customer sent to that business. Returns the conversation it
+ * was in, or null when Nexus never stored that message.
+ */
+export async function eraseUnsentSocialMessage(
+  organizationId: string,
+  socialMessageId: string
+): Promise<{ conversationId: string } | null> {
+  const { rows } = await getPool().query<{ conversation_id: string }>(
+    `update messages
+        set body = $3
+      where organization_id = $1 and social_message_id = $2 and direction = 'inbound'
+      returning conversation_id`,
+    [organizationId, socialMessageId, UNSENT_MESSAGE_BODY]
+  );
+  return rows[0] ? { conversationId: rows[0].conversation_id } : null;
+}

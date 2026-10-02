@@ -41,13 +41,18 @@ export interface IncomingSocialMessage {
   text: string;
   /** Milliseconds since epoch, from Meta's own timestamp. */
   timestamp: number;
+  /**
+   * The customer UNSENT this message (`message.is_deleted`). Meta's policy is
+   * that the app deletes it too, so this is an erase instruction, not a message.
+   */
+  unsent: boolean;
 }
 
 interface MessagingEvent {
   sender?: { id?: unknown };
   recipient?: { id?: unknown };
   timestamp?: unknown;
-  message?: { mid?: unknown; text?: unknown; is_echo?: unknown };
+  message?: { mid?: unknown; text?: unknown; is_echo?: unknown; is_deleted?: unknown };
 }
 
 interface WebhookEntry {
@@ -94,8 +99,9 @@ export function parseMessagingWebhook(payload: MessagingWebhookPayload): Incomin
         senderId,
         recipientId: typeof event.recipient?.id === "string" ? event.recipient.id : "",
         messageId,
-        text: typeof message.text === "string" ? message.text : "",
+        text: message.is_deleted === true ? "" : typeof message.text === "string" ? message.text : "",
         timestamp: typeof event.timestamp === "number" ? event.timestamp : Date.now(),
+        unsent: message.is_deleted === true,
       });
     }
   }

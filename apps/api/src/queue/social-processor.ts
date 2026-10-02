@@ -5,6 +5,7 @@ import {
   findOrCreateContactByExternalId,
   findOrCreateSocialConversation,
   insertInboundSocialMessage,
+  eraseUnsentSocialMessage,
   findOrganizationById,
   withTenant,
 } from "@nexus/db";
@@ -50,6 +51,11 @@ export async function processSocialInboundJob(job: Job<SocialInboundJob>): Promi
 }
 
 async function ingestOneSocialMessage(event: IncomingSocialMessage): Promise<void> {
+  if (event.unsent) {
+    await eraseUnsentMessage(event);
+    return;
+  }
+
   // Text only, matching every other channel on this platform. A sticker or an
   // attachment parses (mid + sender present) but has no body to render, so it is
   // dropped rather than filed as a blank message. What must never happen is a
@@ -125,5 +131,26 @@ async function ingestOneSocialMessage(event: IncomingSocialMessage): Promise<voi
   logger.info(
     { organizationId, conversationId: filed.conversationId, channel: event.channel },
     "Filed an inbound Messenger/Instagram message into the inbox"
+  );
+}
+
+/**
+ * The customer unsent a message: erase what Nexus stored of it.
+ *
+ * Runs before the no-text drop on purpose — an unsend carries no text, and
+ * dropping it there would keep the words the customer took back.
+ */
+async function eraseUnsentMessage(event: IncomingSocialMessage): Promise<void> {
+  const organizationId = await organizationForConnectedPage(event.pageId);
+  if (!organizationId) {
+    logger.info({ channel: event.channel, pageId: event.pageId }, "Unsend for a Page no business has connected — nothing stored");
+    return;
+  }
+  const erased = await withTenant(organizationId, () =>
+    eraseUnsentSocialMessage(organizationId, event.messageId)
+  );
+  logger.info(
+    { organizationId, channel: event.channel, conversationId: erased?.conversationId ?? null, erased: !!erased },
+    erased ? "Erased a message the customer unsent" : "Unsend for a message Nexus never stored"
   );
 }
