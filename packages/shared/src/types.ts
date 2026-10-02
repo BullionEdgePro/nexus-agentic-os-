@@ -5,7 +5,12 @@ export type BusinessSlug =
   | "juris-prime"
   | "juris-prime-legal"
   | "sfs-international"
-  | "abr";
+  | "abr"
+  // Not a customer business: the sandbox Meta's App Reviewer signs in to, so a
+  // reviewer connecting their own test Page cannot replace a real business's
+  // one-per-business Page/Instagram connection. Off the shared number, no
+  // routing keywords, no agent — no customer can ever reach it.
+  | "review-demo";
 
 export interface Organization {
   id: string;

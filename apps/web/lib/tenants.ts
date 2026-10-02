@@ -54,8 +54,14 @@ export function tenantName(slug: string): string {
   return TENANTS.find((tenant) => tenant.slug === slug)?.name ?? slug;
 }
 
-/** The switcher options every screen shares. */
-export const BUSINESS_OPTIONS: { slug: BusinessSlug; label: string }[] = TENANTS.map((tenant) => ({
-  slug: tenant.slug,
-  label: tenant.name,
-}));
+/**
+ * The switcher options every screen shares.
+ *
+ * The review sandbox is appended HERE and not to TENANTS: it is selectable in the
+ * owner's console (to add the App Reviewer's sign-in) but must never appear on
+ * the public switchboard or in the live-business count.
+ */
+export const BUSINESS_OPTIONS: { slug: BusinessSlug; label: string }[] = [
+  ...TENANTS.map((tenant) => ({ slug: tenant.slug, label: tenant.name })),
+  { slug: "review-demo", label: "Nexus Review Demo" },
+];
