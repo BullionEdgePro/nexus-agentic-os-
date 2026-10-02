@@ -13,6 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8").replace(/\r\n/g, "\n");
 const PROC = read("apps", "api", "src", "queue", "social-processor.ts");
 const DB = read("packages", "db", "src", "social-identity.ts");
+const HOOK = read("apps", "api", "src", "webhook", "whatsapp.ts");
 
 const delivery = (message) => ({
   object: "instagram",
@@ -45,4 +46,11 @@ test("only that business's inbound message is erased, and its words are gone", (
   assert.match(fn, /where organization_id = \$1 and social_message_id = \$2 and direction = 'inbound'/);
   assert.match(fn, /set body = \$3/);
   assert.match(DB, /UNSENT_MESSAGE_BODY = "\[The customer unsent this message\]"/);
+});
+
+test("an unsend is queued under its own job id, not as a duplicate of the message", () => {
+  // Both deliveries carry the same mid; keyed on the bare mid, BullMQ dropped the
+  // unsend as a duplicate job and the erase never ran (found live 2026-10-02).
+  assert.match(HOOK, /first\.is_deleted === true \? first\.mid \+ "-unsent" : first\.mid/);
+  assert.match(HOOK, /jobId: \(entry\?\.id \?\? "social"\) \+ "-" \+ jobKey/);
 });

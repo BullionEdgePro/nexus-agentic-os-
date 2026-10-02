@@ -48,12 +48,16 @@ whatsappWebhook.post("/", async (c) => {
   // go to their own queue and processor. Dormant until a Page is connected: the
   // processor drops any delivery for a Page no business has connected yet.
   if (payload.object === "page" || payload.object === "instagram") {
-    const entry = payload.entry?.[0] as { id?: string; messaging?: Array<{ message?: { mid?: string } }> } | undefined;
+    const entry = payload.entry?.[0] as
+      | { id?: string; messaging?: Array<{ message?: { mid?: string; is_deleted?: boolean } }> }
+      | undefined;
     // BullMQ rejects ":" in a jobId — join with "-". The mid is stable across
     // Meta's retries; the DB dedup on social_message_id is the real backstop, so
     // a Date.now() fallback here only affects a delivery that carried no mid.
-    const mid = entry?.messaging?.[0]?.message?.mid;
-    const jobKey = mid ?? Date.now();
+    // An UNSEND carries the same mid as the message it takes back, so it gets its
+    // own key — under the bare mid BullMQ saw a duplicate and dropped the erase.
+    const first = entry?.messaging?.[0]?.message;
+    const jobKey = first?.mid ? (first.is_deleted === true ? first.mid + "-unsent" : first.mid) : Date.now();
     logger.info(
       { object: payload.object, pageId: entry?.id, events: entry?.messaging?.length ?? 0 },
       "Inbound social webhook accepted"
