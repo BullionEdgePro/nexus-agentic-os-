@@ -62,7 +62,6 @@ export async function sendReplyOnChannel(
       );
     }
     const mid = await sendPageMessage({
-      pageId: connection.pageId,
       pageAccessToken: connection.token,
       recipientId: target.contactExternalId,
       text,

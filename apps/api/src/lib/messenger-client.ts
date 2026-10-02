@@ -111,18 +111,21 @@ export type SentSocialMessageId = string | null;
  *
  * The endpoint and body are identical for both — an Instagram Business account is
  * addressed through the Page it is linked to — so one function covers both
- * channels. `messaging_type: "RESPONSE"` is the honest tag: we only ever reply to
+ * channels. The send goes to `/me/messages`: with a Page access token `me` IS
+ * the Page. Posting to the Instagram account's own id instead (what the IG
+ * connection stores as its external id) is refused by Meta with "(#3)
+ * Application does not have the capability to make this API call" — every
+ * Instagram reply failed that way until 2026-10-02. `messaging_type: "RESPONSE"` is the honest tag: we only ever reply to
  * someone who messaged first, inside the platform's standard window. The page
  * access token comes from the connected account, never a global one, so the send
  * acts only for the business that connected the Page.
  */
 export async function sendPageMessage(input: {
-  pageId: string;
   pageAccessToken: string;
   recipientId: string;
   text: string;
 }): Promise<SentSocialMessageId> {
-  const url = `https://graph.facebook.com/${env.metaGraphApiVersion}/${input.pageId}/messages`;
+  const url = `https://graph.facebook.com/${env.metaGraphApiVersion}/me/messages`;
   const response = await fetch(url, {
     method: "POST",
     headers: {

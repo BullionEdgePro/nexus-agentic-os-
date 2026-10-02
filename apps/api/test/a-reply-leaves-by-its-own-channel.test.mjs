@@ -28,6 +28,16 @@ test("Facebook and Instagram replies go out via the Page send, not WhatsApp", ()
   assert.match(DISPATCH, /recipientId: target\.contactExternalId/, "a social reply addresses the PSID/IGSID, not a phone");
 });
 
+test("an Instagram reply is sent as the Page, not to the Instagram account id", () => {
+  // The IG connection's external id is the Instagram account id; posting to
+  // /{that id}/messages with a Page token is refused with "(#3) Application does
+  // not have the capability". /me/messages with the Page token is the Page.
+  const CLIENT = read("apps", "api", "src", "lib", "messenger-client.ts");
+  assert.match(CLIENT, /graph\.facebook\.com\/\$\{env\.metaGraphApiVersion\}\/me\/messages`/);
+  assert.ok(!/\$\{input\.pageId\}\/messages/.test(CLIENT), "the send no longer addresses a stored id");
+  assert.ok(!/pageId: connection\.pageId/.test(DISPATCH));
+});
+
 test("a WhatsApp reply still goes out via WhatsApp", () => {
   assert.match(DISPATCH, /target\.channel === "whatsapp"/);
   assert.match(DISPATCH, /sendWhatsAppText\(target\.phoneNumberId, target\.contactWaId/);
