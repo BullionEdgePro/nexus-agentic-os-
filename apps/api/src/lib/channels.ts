@@ -36,21 +36,57 @@ function twilioConfigured(): boolean {
  *
  * Read from configuration, never hard-coded to "on": an operator who has not
  * added Twilio keys sees SMS as needs-setup, and the day they add them it flips
- * to live with no code change. WhatsApp is the one channel that is unconditionally
- * live — it is what the whole platform already runs on.
+ * to live with no code change. WhatsApp is live while a line answers for it; once
+ * the shared line was switched off it counts the people answering on their own.
  */
-export function channelStatuses(): ChannelStatus[] {
-  const twilio = twilioConfigured();
+export interface WhatsAppStanding {
+  retiredSharedNumber: { displayNumber: string | null; retiredAt: string } | null;
+  staffWithOwnNumber: number;
+  activeStaff: number;
+}
 
-  return [
-    {
+/**
+ * WhatsApp's row. LIVE while the shared line answers. Once that line was
+ * switched off (migration 094) WhatsApp is only as live as the people who have
+ * connected their own numbers — so it says how many have, and waits on Meta
+ * while nobody can (their Tech Provider onboarding fix).
+ */
+function whatsappStatus(standing?: WhatsAppStanding): ChannelStatus {
+  if (!standing?.retiredSharedNumber) {
+    return {
       channel: "whatsapp",
       label: "WhatsApp",
       state: "live",
       summary: "Live. Every conversation the platform runs on today.",
       requirements: [],
       canSend: true,
-    },
+    };
+  }
+  const { staffWithOwnNumber: connected, activeStaff: total } = standing;
+  const line = standing.retiredSharedNumber.displayNumber ?? "The shared number";
+  return {
+    channel: "whatsapp",
+    label: "WhatsApp",
+    state: connected > 0 ? "live" : "awaiting-approval",
+    summary:
+      `${line} was switched off. Staff now answer on their own WhatsApp Business numbers — ` +
+      `${connected} of ${total} connected.`,
+    requirements:
+      connected >= total
+        ? []
+        : [
+            "Each staff member signs in, opens Connections and connects their own WhatsApp Business number.",
+            "Meta's Tech Provider onboarding has to work for that connect to finish — it is a Meta bug, reported and waiting on their fix.",
+          ],
+    canSend: connected > 0,
+  };
+}
+
+export function channelStatuses(whatsapp?: WhatsAppStanding): ChannelStatus[] {
+  const twilio = twilioConfigured();
+
+  return [
+    whatsappStatus(whatsapp),
     {
       channel: "email",
       // LIVE, and it was mislabelled "next build" long after it shipped: client

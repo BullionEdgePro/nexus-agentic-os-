@@ -225,6 +225,12 @@ function ChannelPanel({ channel }: { channel: MyChannel | null }) {
           Nothing will send from it. Ask the owner to add it in Meta Business Manager, or use the
           shared number until they have.
         </p>
+      ) : channel.state === "no-number" ? (
+        <p className="mc-warn">
+          You have no WhatsApp number in Nexus yet, so customers cannot reach you here on WhatsApp.
+          Open <strong>Connections</strong> and connect your WhatsApp Business number — you keep
+          using the app on your phone, and every customer who messages it is yours.
+        </p>
       ) : (
         <p>
           You send from the company&rsquo;s shared number
@@ -237,10 +243,10 @@ function ChannelPanel({ channel }: { channel: MyChannel | null }) {
           to stop being answered wrongly. */}
       {channel.personalNumberOnFile ? (
         <p className="mc-note">
-          Your personal mobile ({channel.personalNumberOnFile}) is on file so colleagues can reach
-          you. It is not connected to this system and cannot be — the WhatsApp on your phone has no
-          way to be read by software. A second business number has to be added to the company
-          account in Meta Business Manager before it can appear here.
+          Your mobile ({channel.personalNumberOnFile}) is on file so colleagues can reach you. A
+          personal WhatsApp cannot be connected — the WhatsApp on your phone has no way to be read
+          by software. A WhatsApp <em>Business</em> number can, from Connections, and you keep
+          using the app on your phone.
         </p>
       ) : null}
 

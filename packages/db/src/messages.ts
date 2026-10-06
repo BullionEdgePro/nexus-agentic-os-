@@ -17,6 +17,13 @@ export interface RecordInboundMessageInput {
   body: string;
   messageType?: string;
   rawPayload: unknown;
+  /**
+   * The staff member's own number this arrived on. A customer who writes to
+   * two people at the same business has two threads, one per person — never
+   * one merged chat that whoever answered last owns. A legacy thread with no
+   * number (the old shared line) is picked up rather than orphaned.
+   */
+  onNumber?: string | null;
 }
 
 export interface RecordInboundMessageResult {
@@ -62,8 +69,9 @@ export async function recordInboundMessage(
     const conversationResult = await db.query<{ id: string; is_human_handoff: boolean }>(
       `select id, is_human_handoff from conversations
        where organization_id = $1 and contact_id = $2 and status in ('open', 'pending', 'resolved')
-       order by opened_at desc limit 1`,
-      [input.organizationId, contactId]
+         and ($3::text is null or phone_number_id = $3 or phone_number_id is null)
+       order by (phone_number_id is not distinct from $3) desc, opened_at desc limit 1`,
+      [input.organizationId, contactId, input.onNumber ?? null]
     );
 
     let conversationId: string;
@@ -73,9 +81,9 @@ export async function recordInboundMessage(
       isHumanHandoff = conversationResult.rows[0].is_human_handoff;
     } else {
       const inserted = await db.query<{ id: string; is_human_handoff: boolean }>(
-        `insert into conversations (organization_id, contact_id) values ($1, $2)
+        `insert into conversations (organization_id, contact_id, phone_number_id) values ($1, $2, $3)
          returning id, is_human_handoff`,
-        [input.organizationId, contactId]
+        [input.organizationId, contactId, input.onNumber ?? null]
       );
       conversationId = inserted.rows[0].id;
       isHumanHandoff = inserted.rows[0].is_human_handoff;
@@ -227,6 +235,8 @@ export interface RecordOutboundEchoInput {
   waMessageId: string;
   /** The staff member who sent it from their own WhatsApp Business app. */
   employeeId: string;
+  /** Their number — keys the thread the same way recordInboundMessage does. */
+  onNumber?: string | null;
 }
 
 /**
@@ -262,15 +272,16 @@ export async function recordOutboundEcho(
     const existing = await db.query<{ id: string }>(
       `select id from conversations
         where organization_id = $1 and contact_id = $2 and status in ('open', 'pending', 'resolved')
-        order by opened_at desc limit 1`,
-      [input.organizationId, contactId]
+          and ($3::text is null or phone_number_id = $3 or phone_number_id is null)
+        order by (phone_number_id is not distinct from $3) desc, opened_at desc limit 1`,
+      [input.organizationId, contactId, input.onNumber ?? null]
     );
     const conversationId =
       existing.rows[0]?.id ??
       (
         await db.query<{ id: string }>(
-          `insert into conversations (organization_id, contact_id) values ($1, $2) returning id`,
-          [input.organizationId, contactId]
+          `insert into conversations (organization_id, contact_id, phone_number_id) values ($1, $2, $3) returning id`,
+          [input.organizationId, contactId, input.onNumber ?? null]
         )
       ).rows[0].id;
 

@@ -31,7 +31,8 @@ import { sendEmailReply } from "../services/email-sync.js";
 export interface OutboundReplyTarget {
   organizationId: string;
   channel: ConversationChannel;
-  phoneNumberId: string;
+  /** Null when the chat's line was switched off — WhatsApp then refuses in words. */
+  phoneNumberId: string | null;
   contactWaId: string | null;
   contactExternalId: string | null;
   /** The conversation itself — email resolves its mailbox and thread from this. */
@@ -85,6 +86,12 @@ export async function sendReplyOnChannel(
   if (target.channel === "whatsapp") {
     if (!target.contactWaId) {
       throw new Error("This conversation has no WhatsApp recipient to reply to.");
+    }
+    if (!target.phoneNumberId) {
+      throw new Error(
+        "This chat came in on a WhatsApp number that has been switched off, so Nexus cannot reply from it. " +
+          "When the customer writes to a staff member's own WhatsApp, the chat continues there."
+      );
     }
     const wamid = await sendWhatsAppText(target.phoneNumberId, target.contactWaId, text);
     return { waMessageId: wamid, socialMessageId: null, emailMessageId: null, emailThreadId: null };

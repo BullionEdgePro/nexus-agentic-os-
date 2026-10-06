@@ -128,7 +128,8 @@ export interface ConversationLookup {
   /** The channel-scoped recipient (a Messenger PSID / Instagram IGSID) for a social reply; null on WhatsApp. */
   contactExternalId: string | null;
   organizationSlug: BusinessSlug;
-  phoneNumberId: string;
+  /** Null when the line this chat is on was switched off (migration 094). */
+  phoneNumberId: string | null;
 }
 
 export async function findConversationById(conversationId: string): Promise<ConversationLookup | null> {
@@ -157,7 +158,7 @@ export async function findConversationById(conversationId: string): Promise<Conv
         channel: ConversationChannel;
         external_id: string | null;
         slug: BusinessSlug;
-        whatsapp_phone_number_id: string;
+        whatsapp_phone_number_id: string | null;
       }>(
         // The number the conversation is ON: its own if it has one (a staff
         // member's dedicated line), otherwise the shared company number. A reply
@@ -165,11 +166,17 @@ export async function findConversationById(conversationId: string): Promise<Conv
         // new thread. `channel` and the contact's `external_id` come along too,
         // so a reply can be dispatched to the right platform — a WhatsApp number,
         // a Messenger PSID, an Instagram IGSID.
+        // A line that was switched off at Meta (retired_whatsapp_numbers) is not
+        // a number to reply from: it comes back null, and the dispatcher says so
+        // in words instead of passing on Meta's "not registered" error.
         `select c.id, c.organization_id, c.contact_id, ct.wa_id, c.channel, ct.external_id, o.slug,
-                coalesce(c.phone_number_id, o.whatsapp_phone_number_id) as whatsapp_phone_number_id
+                case when r.phone_number_id is null
+                     then coalesce(c.phone_number_id, o.whatsapp_phone_number_id) end as whatsapp_phone_number_id
          from conversations c
          join organizations o on o.id = c.organization_id
          join contacts ct on ct.id = c.contact_id
+         left join retired_whatsapp_numbers r
+           on r.phone_number_id = coalesce(c.phone_number_id, o.whatsapp_phone_number_id)
          where c.id = $1`,
         [conversationId]
       );

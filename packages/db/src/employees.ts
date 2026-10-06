@@ -229,6 +229,10 @@ export async function assignEmployeeWhatsAppNumber(
     return rows[0] ? toEmployee(rows[0]) : null;
   }
 
+  // A line handed to a person is live again, even one that was switched off
+  // before (migration 094) — the same SIM registered anew.
+  await getPool().query(`delete from retired_whatsapp_numbers where phone_number_id = $1`, [input.phoneNumberId]);
+
   const { rows } = await getPool().query<EmployeeRow>(
     `with freed as (
        update employees

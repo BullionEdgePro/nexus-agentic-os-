@@ -423,9 +423,12 @@ export async function getAssignmentAlertContext(
             e.is_active, e.full_name, e.whatsapp_number,
             coalesce(nullif(trim(ct.display_name), ''), 'a customer') as contact_name,
             srv.id as serving_id, srv.slug as serving_slug, srv.name as serving_name,
-            own.id as owner_id, own.whatsapp_phone_number_id as phone_number_id
+            own.id as owner_id,
+            -- A switched-off line cannot send the phone alert (migration 094).
+            case when r.phone_number_id is null then own.whatsapp_phone_number_id end as phone_number_id
        from conversations c
        join organizations own on own.id = c.organization_id
+       left join retired_whatsapp_numbers r on r.phone_number_id = own.whatsapp_phone_number_id
        join organizations srv on srv.id = coalesce(c.routed_organization_id, c.organization_id)
        join employees e on e.id = $2
        left join contacts ct on ct.id = c.contact_id

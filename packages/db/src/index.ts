@@ -45,3 +45,4 @@ export * from "./quick-replies.js";
 export * from "./call-logs.js";
 export * from "./email-sync.js";
 export * from "./inbox.js";
+export * from "./retired-numbers.js";

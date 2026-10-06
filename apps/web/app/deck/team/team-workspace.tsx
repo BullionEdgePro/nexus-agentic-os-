@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { BusinessSocialsPanel } from "./business-socials";
 import { WhatsAppNumberPicker } from "./whatsapp-number";
+import { WhatsAppReadiness } from "./whatsapp-readiness";
 import { BUSINESS_OPTIONS } from "@/lib/store";
 import {
   getTeam,
@@ -443,6 +444,8 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
               </button>
             </div>
           )}
+
+          <WhatsAppReadiness team={team} />
 
           {team.length === 0 ? (
             <p className="team-empty">Nobody added yet. The AI answers every conversation for this business.</p>

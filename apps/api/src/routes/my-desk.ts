@@ -13,6 +13,8 @@ import {
   getDisplayNumbers,
   updateEmployeeSchedule,
   updateEmployeeSocialAccounts,
+  listConnections,
+  isWhatsAppNumberRetired,
 } from "@nexus/db";
 import { parseWeeklySchedule, weeklyHours, resolvePresence, parseSocialAccounts } from "@nexus/employees";
 import { listWabaNumbers } from "../lib/whatsapp-client.js";
@@ -357,12 +359,29 @@ myDeskRoute.get("/channel", async (c) => {
 
   const mine = own ? live.find((number) => number.phoneNumberId === own) : undefined;
   const shared = live.find((number) => number.phoneNumberId === organization.whatsappPhoneNumberId);
+  // Connected through Coexistence: the number sits on the person's OWN
+  // WhatsApp account, so the business's listing never shows it. Their stored
+  // connection is the fact here, not a missing number.
+  const ownConnection =
+    own && !mine
+      ? (await withTenant(desk.organizationId, () => listConnections(desk.organizationId, desk.employeeId))).find(
+          (connection) => connection.provider === "whatsapp" && connection.externalId === own
+        )
+      : undefined;
+  const sharedRetired = await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId);
 
   return c.json({
     // The three states are distinct on purpose. "own-number" and "shared" both
     // send; only the first is a private channel, and conflating them is the
     // whole thing this endpoint exists to avoid.
-    state: mine ? "own-number" : own ? "claimed-but-not-on-the-account" : "shared",
+    state:
+      mine || ownConnection
+        ? "own-number"
+        : own
+          ? "claimed-but-not-on-the-account"
+          : sharedRetired
+            ? "no-number"
+            : "shared",
     ownNumber: mine
       ? {
           phoneNumberId: mine.phoneNumberId,
@@ -370,8 +389,15 @@ myDeskRoute.get("/channel", async (c) => {
           verifiedName: mine.verifiedName,
           quality: mine.qualityRating,
         }
-      : null,
-    sharedNumber: shared
+      : ownConnection && own
+        ? {
+            phoneNumberId: own,
+            displayNumber: employee.whatsappNumber ?? ownConnection.displayName ?? own,
+            verifiedName: employee.whatsappVerifiedName ?? null,
+            quality: null,
+          }
+        : null,
+    sharedNumber: sharedRetired ? null : shared
       ? { displayNumber: shared.displayPhoneNumber, verifiedName: shared.verifiedName, quality: shared.qualityRating }
       : null,
     personalNumberOnFile: employee.whatsappNumber ?? null,

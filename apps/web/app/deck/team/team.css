@@ -868,3 +868,27 @@
 .dir-status.s-online { background: var(--good-soft); color: var(--good); }
 .dir-status.s-busy { background: var(--warn-soft); color: var(--warn); }
 @media (prefers-reduced-motion: reduce) { .dir-live, .dir-card { animation: none; } }
+
+/* ---------- WhatsApp roll call: who answers on their own number ---------- */
+
+.wa-ready {
+  border: 1px solid var(--hairline-strong); border-radius: var(--r-sm);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.wa-ready-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.wa-ready-head h3 { color: var(--ink); letter-spacing: .1em; }
+.wa-ready-count {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--crit); font-variant-numeric: tabular-nums;
+}
+.wa-ready-count.done { color: var(--good); }
+.wa-ready-sum { font-size: 13px; color: var(--ink-soft); max-width: 62ch; }
+.wa-ready-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wa-ready-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13.5px; }
+.wa-ready-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--slate); flex: none; }
+.wa-ready-list li.on .wa-ready-dot { background: var(--good); border-color: var(--good); }
+.wa-ready-name { color: var(--ink); font-weight: 600; }
+.wa-ready-state { color: var(--slate); font-size: 12.5px; }
+.wa-ready-list li.on .wa-ready-state { color: var(--good); }
+.wa-ready-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.wa-ready-note { font-size: 12.5px; color: var(--slate); }

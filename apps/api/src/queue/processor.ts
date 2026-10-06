@@ -35,6 +35,7 @@ import {
   withServingTenant,
   getActivePhrase,
   wasAccountedFor,
+  claimForAutoAssign,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import { findEmployeeByCode, attributeConversation, optOutOfReengagement } from "@nexus/db";
@@ -329,6 +330,7 @@ async function processMessageEcho(phoneNumberId: string, echo: WhatsAppTextMessa
       body,
       waMessageId: echo.id,
       employeeId: employee.id,
+      onNumber: employee.whatsappPhoneNumberId,
     });
     // Null message means Meta redelivered an echo already recorded — the first
     // delivery already mirrored it, so there is nothing to redo or re-publish.
@@ -341,6 +343,9 @@ async function processMessageEcho(phoneNumberId: string, echo: WhatsAppTextMessa
       // They answered from their phone, so the conversation is in their hands and
       // the twin must stay out — the same custody an inbound on their number sets.
       await setConversationHandoff(result.conversationId, true, "taken_by_employee", employee.id);
+      // A chat they STARTED from their phone is theirs too. Only if nobody has
+      // it: an echo must not take a chat back from a colleague it was handed to.
+      await claimForAutoAssign(result.conversationId, employee.id, employee.fullName);
     });
 
     const organization = await findOrganizationById(employee.organizationId);
@@ -393,8 +398,15 @@ async function processDeliveryStatuses(
   // so the owner's context is the one that can see the row to update. Scoping
   // to the serving business would match nothing and every receipt would be
   // silently discarded, which is the shared-number trap wearing a third face.
-  const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
-  if (!organization) {
+  // A staff member's OWN number belongs to no business row, so the receipts for
+  // everything sent from it — their replies and their campaigns — resolve
+  // through the person instead. Before this they were dropped as "unmapped" and
+  // every staff reply stayed at 'sent' forever.
+  const organizationId =
+    (await findOrganizationByPhoneNumberId(phoneNumberId))?.id ??
+    (await findEmployeeByPhoneNumberId(phoneNumberId))?.organizationId ??
+    null;
+  if (!organizationId) {
     logger.warn({ phoneNumberId }, "Delivery status for an unmapped phone_number_id");
     return;
   }
@@ -409,7 +421,7 @@ async function processDeliveryStatuses(
       // silently matching nothing — which is what happened until migration 051,
       // and would have gone on happening because "0 rows updated" is the same
       // answer a duplicate webhook gives.
-      const [movedMessage, movedRecipient] = await withTenant(organization.id, () =>
+      const [movedMessage, movedRecipient] = await withTenant(organizationId, () =>
         Promise.all([
           recordDeliveryStatus({ waMessageId: status.id, status: status.status, errorText }),
           // Narrowed rather than cast. `MessageStatus` includes 'queued', which
@@ -431,7 +443,7 @@ async function processDeliveryStatuses(
       // line in the log whether or not anybody is watching the operator.
       if (status.status === "failed" && moved) {
         logger.error(
-          { organizationId: organization.id, waMessageId: status.id, errorText },
+          { organizationId, waMessageId: status.id, errorText },
           "WhatsApp reported a message as UNDELIVERED — the customer never received this reply"
         );
       }
@@ -519,6 +531,8 @@ async function handleStaffNumberMessage(
     // The real WhatsApp type ("image", "audio", "button"...), so the inbox can
     // offer the file and nothing downstream mistakes a photo for typed text.
     messageType: message.type,
+    // One thread per person: a customer writing to two colleagues has two chats.
+    onNumber: employee.whatsappPhoneNumberId,
   });
 
   // Null messageId means the webhook retried a message already recorded — the

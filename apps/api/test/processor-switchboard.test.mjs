@@ -164,6 +164,7 @@ mock.module("@nexus/db", {
     // declare them.
     findEmployeeByPhoneNumberId: async () => null,
     assignConversationToEmployee: async () => {},
+    claimForAutoAssign: async () => true,
     setConversationPhoneNumber: async () => {},
     findOrganizationByPhoneNumberId: async () => org("org-zip"),
     findOrganizationById: async (id) => (ORGS[id] ? org(id) : null),

@@ -13,6 +13,7 @@ import {
   getBroadcast,
   getSegment,
   segmentContacts,
+  isWhatsAppNumberRetired,
 } from "@nexus/db";
 import type { AudienceFilter } from "@nexus/shared";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
@@ -171,6 +172,18 @@ broadcastsRoute.post("/:id/send", async (c) => {
   ]);
   if (!organization) return c.json({ error: "Organization not found" }, 404);
   if (!template) return c.json({ error: "Template not found" }, 404);
+  // A business campaign leaves from the business's line. Once that line was
+  // switched off at Meta there is nothing to send from — refuse before a single
+  // recipient is queued, rather than fail them one by one at Meta.
+  if (await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId)) {
+    return c.json(
+      {
+        error:
+          "This business's shared WhatsApp number was switched off, so a business campaign has nothing to send from. Staff can send campaigns from their own WhatsApp numbers.",
+      },
+      409
+    );
+  }
   // Checked at creation too, but a template can lose approval at Meta between
   // drafting and sending, and this is the last point before messages go out.
   if (!template.isApproved) {

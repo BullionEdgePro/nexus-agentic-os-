@@ -15,6 +15,7 @@ import {
   getBroadcastTemplate,
   createBroadcastRecipients,
   updateBroadcastStatus,
+  isWhatsAppNumberRetired,
 } from "@nexus/db";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
@@ -151,7 +152,11 @@ myCampaignsRoute.get("/campaigns", async (c) => {
     canBroadcast: employee.canBroadcast ?? false,
     allowance,
     dailyCeiling: ceiling,
-    sendsFrom: employee.whatsappPhoneNumberId ? "your own number" : "the shared company number",
+    sendsFrom: employee.whatsappPhoneNumberId
+      ? "your own number"
+      : (await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId))
+        ? "nothing yet — connect your own WhatsApp first"
+        : "the shared company number",
     // The names, not only the count. A number is the thing somebody clicks send
     // on without reading; a list of names is one they check first.
     audience: audience.map((person) => ({ displayName: person.displayName, waId: person.waId })),
@@ -285,7 +290,17 @@ myCampaignsRoute.post("/campaigns", async (c) => {
   // Their own number when they have one, the company's when they do not.
   // Stamped onto the row so the answer to "what did this go out from" never
   // changes afterwards.
-  const from = employee.whatsappPhoneNumberId ?? organization.whatsappPhoneNumberId;
+  const sharedRetired = await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId);
+  const from = employee.whatsappPhoneNumberId ?? (sharedRetired ? null : organization.whatsappPhoneNumberId);
+  if (!from) {
+    return c.json(
+      {
+        error:
+          "You have no WhatsApp number of your own yet, and the shared company number was switched off. Connect your WhatsApp Business number in Connections first.",
+      },
+      409
+    );
+  }
 
   const broadcast = await withTenant(desk.organizationId, () =>
     createStaffBroadcast({

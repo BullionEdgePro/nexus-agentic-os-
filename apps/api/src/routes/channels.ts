@@ -4,6 +4,7 @@ import {
   listBusinessMailboxes,
   removeConnection,
   saveConnection,
+  whatsAppStanding,
   withAllTenants,
   withTenant,
 } from "@nexus/db";
@@ -21,8 +22,8 @@ import { logger } from "../lib/logger.js";
  */
 export const channelsRoute = new Hono();
 
-channelsRoute.get("/", (c) => {
-  return c.json({ channels: channelStatuses() });
+channelsRoute.get("/", async (c) => {
+  return c.json({ channels: channelStatuses(await whatsAppStanding()) });
 });
 
 // ============================================================

@@ -98,7 +98,7 @@ export function WhatsAppNumberPicker({
             }
           }}
         >
-          <option value="">None — sends from the shared company number</option>
+          <option value="">None</option>
           {spare.map((n) => {
             const heldByElse = n.assignedTo && n.assignedTo.id !== member.id;
             return (

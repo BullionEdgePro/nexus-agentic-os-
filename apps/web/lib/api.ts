@@ -2545,7 +2545,7 @@ export interface MyChannel {
    * private. Collapsing them into a boolean is how a staff member concludes
    * they have their own line when every message leaves from the company's.
    */
-  state: "own-number" | "claimed-but-not-on-the-account" | "shared";
+  state: "own-number" | "claimed-but-not-on-the-account" | "shared" | "no-number";
   ownNumber: { phoneNumberId: string; displayNumber: string; verifiedName: string; quality: string | null } | null;
   sharedNumber: { displayNumber: string; verifiedName: string; quality: string | null } | null;
   personalNumberOnFile: string | null;

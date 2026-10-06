@@ -106,7 +106,10 @@ test("the receipt is applied as the number's OWNER, which is the unusual answer 
     PROCESSOR.indexOf("function describeStatusError")
   );
   assert.match(fn, /findOrganizationByPhoneNumberId/);
-  assert.match(fn, /withTenant\(organization\.id/);
+  // Owner first; a staff member's OWN number (no business row) resolves through
+  // the person, so their replies' receipts land too (2026-10-06).
+  assert.ok(fn.indexOf("findOrganizationByPhoneNumberId") < fn.indexOf("findEmployeeByPhoneNumberId"));
+  assert.match(fn, /withTenant\(organizationId,/);
   assert.ok(!/withServingTenant/.test(fn), "the serving business cannot see the owner's outbound row");
 });
 
