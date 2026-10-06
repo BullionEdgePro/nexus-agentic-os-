@@ -65,7 +65,14 @@ export function WhatsAppReadiness({ team }: { team: Member[] }) {
           {connected} of {team.length} connected
         </span>
       </div>
-      {status && status.state !== "live" ? <p className="wa-ready-sum">{status.summary}</p> : null}
+      {/* The platform-wide count belongs on Channels; here it would sit beside
+          this business's own count and read as a contradiction. */}
+      {status && /switched off/.test(status.summary) ? (
+        <p className="wa-ready-sum">
+          The shared company number was switched off, so anyone below who is not connected gets no
+          WhatsApp at all.
+        </p>
+      ) : null}
       <ul className="wa-ready-list">
         {team.map((member) => (
           <li key={member.id} className={member.whatsappPhoneNumberId ? "on" : ""}>
