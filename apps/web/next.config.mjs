@@ -17,6 +17,19 @@ const nextConfig = {
     // stabilizes this as a top-level option; on Next 14 it's experimental.)
     outputFileTracingRoot: join(here, "..", ".."),
   },
+  // The service worker must never be served from a cache, or a fix to it
+  // reaches phones days late (spec 2026-10-09-nexus-mobile-app-design.md).
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

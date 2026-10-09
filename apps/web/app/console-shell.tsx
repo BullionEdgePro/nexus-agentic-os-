@@ -7,6 +7,7 @@ import { ViewAsStaff } from "./view-as-staff";
 import { Assistant } from "./assistant";
 import { CommandPalette } from "./command-palette";
 import { AssignmentAlerts } from "./assignment-alerts";
+import { InstallBanner } from "./install-app";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
@@ -180,6 +181,8 @@ export function ConsoleShell({
             indistinguishable from a quiet one unless something says so on every
             page. See ViewAsStaff. */}
         {role === "operator" ? <ViewAsStaff /> : null}
+        {/* Offers to install Nexus as an app; shows nothing once installed. */}
+        <InstallBanner />
         {children}
       </main>
       {/* Every signed-in screen, both roles. It sits outside <main> because it

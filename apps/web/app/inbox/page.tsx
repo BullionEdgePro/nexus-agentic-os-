@@ -358,6 +358,10 @@ export default function InboxPage() {
   // cause the render that re-runs this.
   const params = useSearchParams();
   const applied = useRef(false);
+  // A linked chat waits here until this person's own list has loaded, and is
+  // opened only if it is in that list (a notification tap, or a shared link,
+  // must never open a chat the signed-in person cannot see).
+  const pendingConversation = useRef<string | null>(null);
 
   useEffect(() => {
     if (applied.current) return;
@@ -373,9 +377,48 @@ export default function InboxPage() {
     if (business && businesses.some((option) => option.slug === business)) {
       if (business !== selectedOrg) setSelectedOrg(business as typeof selectedOrg);
     }
-    if (conversation) selectConversation(conversation);
+    if (conversation) pendingConversation.current = conversation;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
+
+  useEffect(() => {
+    const pending = pendingConversation.current;
+    if (!pending || isLoadingConversations) return;
+    if (conversations.some((c) => c.id === pending)) {
+      selectConversation(pending);
+      pendingConversation.current = null;
+    } else if (conversations.length > 0) {
+      // The list is in and the chat is not in it: not this person's to open.
+      pendingConversation.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations, isLoadingConversations]);
+
+  // On a phone an open chat is its own screen, so the system back gesture
+  // must return to the list rather than leave the app.
+  useEffect(() => {
+    if (!selectedConversationId || !window.matchMedia("(max-width: 760px)").matches) return;
+    history.pushState({ nexusThread: selectedConversationId }, "");
+    const onPop = () => closeConversation();
+    window.addEventListener("popstate", onPop);
+    return function stopListeningForBack() {
+      window.removeEventListener("popstate", onPop);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversationId]);
+
+  // The visible height, which shrinks when the phone keyboard opens, so the
+  // composer stays on screen above it (iOS does not shrink 100dvh for that).
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const sync = () => document.documentElement.style.setProperty("--vvh", `${viewport.height}px`);
+    sync();
+    viewport.addEventListener("resize", sync);
+    return function stopTrackingHeight() {
+      viewport.removeEventListener("resize", sync);
+    };
+  }, []);
 
   const activeConversation = conversations.find((c) => c.id === selectedConversationId);
   const messages = selectedConversationId ? messagesByConversation[selectedConversationId] ?? [] : [];
@@ -981,7 +1024,7 @@ export default function InboxPage() {
                 type="button"
                 className="ibx-iconbtn ibx-back"
                 aria-label="Back to the list"
-                onClick={closeConversation}
+                onClick={() => (history.state?.nexusThread ? history.back() : closeConversation())}
               >
                 <Icon name="back" />
               </button>

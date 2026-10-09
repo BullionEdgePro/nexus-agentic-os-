@@ -1448,6 +1448,16 @@
   .ibx-msgs { padding: 12px; }
   .ibx-bubble { max-width: 88%; }
   .ibx-compose-hint { display: none; }
+  /* Installed on a phone (spec 2026-10-09): the open chat fills the visible
+     height, which shrinks with the keyboard, so the composer stays above it. */
+  .ibx.has-thread { height: var(--vvh, 100dvh); }
+  .ibx-thread-head { padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
+  .ibx-compose-wrap { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  /* Thumb-sized targets. */
+  .ibx-iconbtn { min-width: 44px; min-height: 44px; }
+  .ibx-convo { min-height: 56px; }
+  /* The customer drawer takes the whole screen; it closes the same way. */
+  .ibx-details { width: 100vw; }
 }
 
 @media (prefers-reduced-motion: reduce) {

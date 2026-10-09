@@ -53,6 +53,9 @@ test("every custom property a stylesheet reads is one something defines", () => 
   for (const file of files) {
     const src = readFileSync(file, "utf8");
     for (const m of src.matchAll(/^\s*(--[\w-]+)\s*:/gm)) defined.add(m[1]);
+    // Set from code at runtime (e.g. the inbox's --vvh, the visible height the
+    // phone keyboard shrinks) — defined, just not in a stylesheet.
+    for (const m of src.matchAll(/setProperty\(\s*["'](--[\w-]+)["']/g)) defined.add(m[1]);
     for (const m of src.matchAll(/var\(\s*(--[\w-]+)/g)) {
       if (!used.has(m[1])) used.set(m[1], new Set());
       used.get(m[1]).add(file.slice(web.length + 1));
@@ -83,6 +86,11 @@ test("a fallback is not where the design lives", () => {
   const defined = new Set(RUNTIME);
   for (const f of files) {
     for (const m of readFileSync(f, "utf8").matchAll(/^\s*(--[\w-]+)\s*:/gm)) defined.add(m[1]);
+  }
+  // Set from code at runtime: the fallback covers the first paint, before the
+  // script runs, which is what a fallback is for.
+  for (const f of walk(join(web, "app")).filter((p) => /\.tsx?$/.test(p))) {
+    for (const m of readFileSync(f, "utf8").matchAll(/setProperty\(\s*["'](--[\w-]+)["']/g)) defined.add(m[1]);
   }
 
   const offenders = [];

@@ -5,3 +5,6 @@ dist/
 .env.local
 *.tsbuildinfo
 .turbo/
+
+# Generated status reports (PDFs handed to the owner, not source)
+reports/

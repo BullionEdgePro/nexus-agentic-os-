@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { THEME_BOOT } from "@/lib/theme";
+import { ServiceWorkerRegister } from "./sw-register";
 
 // `/` is the public front page now, so this title is what shows in search
 // results and shared links — it has to name the product rather than the
@@ -21,6 +22,20 @@ export const metadata: Metadata = {
     description:
       "One WhatsApp number, five businesses. Every reply is routed, checked and logged before it reaches a customer.",
   },
+  // Installed from Safari's Add to Home Screen, iOS opens Nexus full screen
+  // under its own name and icon (spec 2026-10-09-nexus-mobile-app-design.md).
+  appleWebApp: { capable: true, title: "Nexus", statusBarStyle: "default" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
+};
+
+// The status bar and Android task switcher take the console's --signal blue.
+// viewportFit "cover" lets the phone inbox use the full screen; the layouts pad
+// with env(safe-area-inset-*) themselves.
+export const viewport: Viewport = {
+  themeColor: "#0873c9",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -32,7 +47,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Before first paint — a dark console must never flash white. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
-      <body className="h-screen bg-sky-50 text-slate-900">{children}</body>
+      <body className="h-screen bg-sky-50 text-slate-900">
+        <ServiceWorkerRegister />
+        {children}
+      </body>
     </html>
   );
 }

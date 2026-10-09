@@ -338,3 +338,29 @@
   .deck-root.shell .shell-rail::before,
   .deck-root.shell .rail-brand svg circle { animation: none; }
 }
+
+/* ---------- Install Nexus as an app (spec 2026-10-09) ---------- */
+
+.deck-root .install-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 14px; padding: 10px 12px;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: 12px;
+  color: var(--ink); font-size: 14px;
+}
+.deck-root .install-banner img { border-radius: 8px; flex: none; }
+.deck-root .install-banner p { flex: 1; margin: 0; min-width: 0; }
+.deck-root .install-banner .install-go {
+  flex: none; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center;
+  background: var(--btn-grad); color: #fff; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.deck-root .install-banner .install-x {
+  flex: none; width: 40px; height: 40px; border: 0; background: transparent;
+  color: var(--slate); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 999px;
+}
+.deck-root .install-banner .install-go:focus-visible,
+.deck-root .install-banner .install-x:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+@media (max-width: 520px) {
+  .deck-root .install-banner { flex-wrap: wrap; }
+  .deck-root .install-banner p { flex-basis: calc(100% - 92px); }
+}
