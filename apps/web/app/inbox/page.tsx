@@ -218,6 +218,9 @@ const DATE_RANGES: { key: DateRange; label: string; ms: number }[] = [
 ];
 
 /** The emoji a reply most often needs — one tap, no hunting. */
+/** WhatsApp refuses a text longer than this; the composer warns before it is reached. */
+const WHATSAPP_TEXT_LIMIT = 4096;
+
 const EMOJI = [
   "😊", "🙂", "😄", "😁", "😉", "😍", "🥰", "🤩", "😎", "🤗",
   "🙏", "👍", "👌", "👏", "🙌", "💪", "🤝", "✌️", "👋", "🎉",
@@ -313,6 +316,17 @@ export default function InboxPage() {
   }, []);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  // A larger writing space for a long answer; Escape (or the same button) closes it.
+  const [composeExpanded, setComposeExpanded] = useState(false);
+  // The box grows with what is on screen -- wrapped lines included -- not with
+  // the number of line breaks, which left a long sentence squeezed into one
+  // scrolling line. CSS caps it (40vh, or 62vh expanded); past that it scrolls.
+  useEffect(() => {
+    const box = composerRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${box.scrollHeight}px`;
+  }, [draft, composeExpanded]);
   // A single label to narrow the list to, on top of the folder.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   // A pipeline stage to narrow to — the stage bar across the top.
@@ -1207,8 +1221,33 @@ export default function InboxPage() {
                   e.preventDefault();
                   handleSend();
                 }}
-                className="ibx-compose"
+                className={`ibx-compose${composeExpanded ? " expanded" : ""}`}
               >
+                {/* A TEXTAREA, not a one-line input — a line break in a quick reply,
+                    an AI draft or an email answer used to be flattened away.
+                    Enter sends; Shift+Enter starts a new line; "/" opens replies.
+                    It takes the card's full width; the tools sit on a row beneath. */}
+                <textarea
+                  ref={composerRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && composeExpanded) {
+                      e.preventDefault();
+                      setComposeExpanded(false);
+                      return;
+                    }
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && slashQuery === null) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  rows={3}
+                  placeholder='Type message or use "/" for quick replies'
+                  className="ibx-input"
+                  aria-label="Message"
+                />
+                <div className="ibx-compose-tools">
                 <div className="ibx-emoji">
                   <button
                     type="button"
@@ -1229,23 +1268,6 @@ export default function InboxPage() {
                     </div>
                   ) : null}
                 </div>
-                {/* A TEXTAREA, not a one-line input — a line break in a quick reply,
-                    an AI draft or an email answer used to be flattened away.
-                    Enter sends; Shift+Enter starts a new line; "/" opens replies. */}
-                <textarea
-                  ref={composerRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && slashQuery === null) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  rows={Math.min(6, Math.max(1, draft.split("\n").length))}
-                  placeholder='Type message or use "/" for quick replies'
-                  className="ibx-input"
-                />
                 <button
                   type="button"
                   className={`ibx-iconbtn ibx-magic${ai === "suggest" ? " busy" : ""}`}
@@ -1256,9 +1278,33 @@ export default function InboxPage() {
                 >
                   <Icon name="magic" />
                 </button>
+                <span className="ibx-compose-spacer" />
+                {draft.length > WHATSAPP_TEXT_LIMIT - 500 ? (
+                  <span
+                    className={`ibx-compose-count${draft.length > WHATSAPP_TEXT_LIMIT ? " over" : ""}`}
+                    title="WhatsApp refuses a message longer than 4,096 characters"
+                  >
+                    {draft.length.toLocaleString()} / {WHATSAPP_TEXT_LIMIT.toLocaleString()}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="ibx-iconbtn ibx-expand"
+                  aria-pressed={composeExpanded}
+                  aria-label={composeExpanded ? "Make the message box smaller" : "Make the message box bigger"}
+                  title={composeExpanded ? "Smaller (Esc)" : "Bigger box for a long message"}
+                  onClick={() => {
+                    setComposeExpanded((open) => !open);
+                    composerRef.current?.focus();
+                  }}
+                >
+                  <Icon name={composeExpanded ? "collapse" : "expand"} />
+                </button>
                 <button type="submit" disabled={isSending || !draft.trim()} className="ibx-send" aria-label="Send">
+                  <span className="ibx-send-label">Send</span>
                   <Icon name="send" />
                 </button>
+                </div>
               </form>
 
               {/* AI Assist. Both fill the box for a person to read and send — never
@@ -1439,7 +1485,9 @@ type IconName =
   | "smile"
   | "magic"
   | "send"
-  | "back";
+  | "back"
+  | "expand"
+  | "collapse";
 
 const ICON_PATHS: Record<IconName, string> = {
   inbox: "M4 13h4l1.5 3h5L16 13h4M5.5 5h13L21 13v6H3v-6l2.5-8Z",
@@ -1461,6 +1509,8 @@ const ICON_PATHS: Record<IconName, string> = {
   magic: "m4 20 10-10m2-6 .8 2.2L19 7l-2.2.8L16 10l-.8-2.2L13 7l2.2-.8L16 4ZM7 3l.5 1.5L9 5l-1.5.5L7 7l-.5-1.5L5 5l1.5-.5L7 3Zm12 10 .5 1.5L21 15l-1.5.5L19 17l-.5-1.5L17 15l1.5-.5L19 13Z",
   send: "M4 12 20 4l-6 16-3-7-7-1Z",
   back: "m15 18-6-6 6-6",
+  expand: "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
+  collapse: "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7",
 };
 
 function Icon({ name, className }: { name: IconName; className?: string }) {

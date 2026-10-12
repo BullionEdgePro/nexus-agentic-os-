@@ -790,11 +790,15 @@
   color: var(--warn);
 }
 .ibx-ai-error { background: var(--crit-soft); color: var(--crit); }
+/* The composer is a card: the message takes the full width on top, the tools
+   sit on a row beneath. It starts three lines tall and grows with what is on
+   screen (page.tsx sets the height from scrollHeight) up to a real share of the
+   screen; "expanded" opens a large writing space for a long answer. */
 .ibx-compose {
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  padding: 6px 6px 6px 6px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 8px 6px;
   border: 1px solid var(--hairline);
   border-radius: var(--r);
   background: var(--paper);
@@ -803,32 +807,57 @@
 }
 .ibx-compose:focus-within { border-color: var(--sky); box-shadow: 0 0 0 4px var(--sky-wash), var(--lift-sm); }
 .ibx-input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
-  padding: 7px 6px;
+  padding: 6px 8px;
   border: 0;
   background: transparent;
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1.5;
   resize: none;
-  max-height: 9.5em;
+  min-height: 4.6em;
+  max-height: min(40vh, 320px);
+  overflow-y: auto;
   outline: none;
+  transition: max-height .22s var(--ease-out);
 }
+.ibx-compose.expanded .ibx-input { max-height: 62vh; min-height: 14em; }
+.ibx-compose-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--hairline);
+}
+.ibx-compose-spacer { flex: 1; }
+.ibx-compose-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mist);
+  padding: 0 6px;
+}
+.ibx-compose-count.over { color: var(--crit); font-weight: 700; }
+.ibx-expand[aria-pressed="true"] { background: var(--sky-soft); color: var(--signal-deep); }
 .deck-root .ibx-input:focus-visible { box-shadow: none; }
 .ibx-input::placeholder { color: var(--mist); }
 .ibx-magic { color: var(--sky-deep); }
 .ibx-magic:hover:not(:disabled) { background: var(--sky-soft); color: var(--signal-deep); }
 .ibx-magic.busy .ibx-ic { animation: nx-spin 1.1s linear infinite; }
 .ibx-send {
-  display: grid;
-  place-items: center;
-  width: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   height: 38px;
+  padding: 0 16px 0 18px;
   flex: 0 0 auto;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 700;
   background: var(--sky-grad);
   color: var(--on-accent);
   cursor: pointer;
@@ -836,7 +865,9 @@
   transition: transform .2s var(--ease-spring), box-shadow .2s, opacity .2s;
 }
 .ibx-send .ibx-ic { width: 17px; height: 17px; transform: translateX(-1px); }
-.ibx-send:hover:not(:disabled) { transform: scale(1.07) rotate(-8deg); box-shadow: 0 10px 20px -8px var(--sky-glow); }
+.ibx-send:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 20px -8px var(--sky-glow); }
+.ibx-send:hover:not(:disabled) .ibx-ic { transform: translateX(2px) rotate(-8deg); }
+.ibx-send .ibx-ic { transition: transform .2s var(--ease-spring); }
 .ibx-send:active:not(:disabled) { transform: scale(.94); }
 .ibx-send:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 
