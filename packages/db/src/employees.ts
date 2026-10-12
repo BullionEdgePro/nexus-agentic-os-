@@ -185,9 +185,14 @@ export async function findEmployeeById(id: string): Promise<Employee | null> {
  * THE HINGE OF MULTI-NUMBER ROUTING. An inbound message resolves by
  * phone_number_id to an ORGANIZATION first (the shared company number). When
  * that finds nothing, the number may instead be a staff member's own dedicated
- * business number — this answers whose. Unscoped on purpose: it runs in the
- * webhook's cross-tenant context, before any tenant is known, exactly like
- * findOrganizationByPhoneNumberId beside it.
+ * business number — this answers whose. Cross-tenant on purpose: it is the
+ * question "which business is this?", so it cannot run inside one. It used to
+ * say it "runs in the webhook's cross-tenant context" — but the worker has no
+ * context at all, and `employees` is tenant data, so under DB_TENANT_ASSERT=
+ * strict the first message ever sent to a staff member's own number (12 Oct
+ * 2026) threw on every retry and never reached the inbox. It names its reason
+ * itself now, so none of its three callers (a customer's message, the staff
+ * member's own reply echoed from the phone, delivery receipts) has to remember.
  *
  * Returns null for an unknown or inactive number, which the caller treats the
  * same as an unmapped one — a message on a number nobody owns is dropped, not
@@ -196,12 +201,14 @@ export async function findEmployeeById(id: string): Promise<Employee | null> {
 export async function findEmployeeByPhoneNumberId(
   phoneNumberId: string
 ): Promise<Employee | null> {
-  const { rows } = await getPool().query<EmployeeRow>(
-    `select ${EMPLOYEE_COLUMNS} from employees
-      where whatsapp_phone_number_id = $1 and is_active = true`,
-    [phoneNumberId]
-  );
-  return rows[0] ? toEmployee(rows[0]) : null;
+  return withAllTenants("whatsapp inbound: which staff member owns this number", async () => {
+    const { rows } = await getPool().query<EmployeeRow>(
+      `select ${EMPLOYEE_COLUMNS} from employees
+        where whatsapp_phone_number_id = $1 and is_active = true`,
+      [phoneNumberId]
+    );
+    return rows[0] ? toEmployee(rows[0]) : null;
+  });
 }
 
 /**
