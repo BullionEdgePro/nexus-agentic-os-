@@ -36,17 +36,21 @@
 
 alter table contacts alter column wa_id drop not null;
 
-alter table contacts add column channel text not null default 'whatsapp'
+-- Every statement is re-runnable (12 Oct 2026): schema.sql already carries
+-- these columns, so a from-scratch rebuild (schema-drift-check, or a restore)
+-- stopped here with "column channel already exists".
+alter table contacts add column if not exists channel text not null default 'whatsapp'
   check (channel in ('whatsapp', 'email', 'sms', 'instagram', 'phone', 'facebook'));
 
-alter table contacts add column external_id text;
+alter table contacts add column if not exists external_id text;
 
 -- One row per person per channel, for the channels identified by external_id.
 -- Partial (external_id is not null) so it never touches WhatsApp-only rows.
-create unique index contacts_external_identity_key
+create unique index if not exists contacts_external_identity_key
   on contacts (organization_id, channel, external_id)
   where external_id is not null;
 
 -- A contact is reachable on at least one channel, always.
+alter table contacts drop constraint if exists contacts_has_identity;
 alter table contacts add constraint contacts_has_identity
   check (wa_id is not null or external_id is not null);

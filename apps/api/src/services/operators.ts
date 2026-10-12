@@ -261,7 +261,9 @@ export async function unansweredConversations(
     conversation_id: string;
     serving_organization_id: string;
     contact_name: string | null;
-    wa_id: string;
+    wa_id: string | null;
+    /** The email address or social id a customer without a phone wrote from. */
+    external_id: string | null;
     waited_hours: string;
     is_human_handoff: boolean;
     last_body: string | null;
@@ -280,6 +282,7 @@ export async function unansweredConversations(
             coalesce(c.routed_organization_id, c.organization_id) as serving_organization_id,
             ct.display_name as contact_name,
             ct.wa_id,
+            ct.external_id,
             round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as waited_hours,
             c.is_human_handoff,
             last.body as last_body,
@@ -459,7 +462,7 @@ export async function staffWhatsAppNumbers(): Promise<Set<string>> {
  * and a reader needs to know which. "We judged this a salesman" is a call that
  * can be wrong; "this number is on our own rota" is a fact.
  */
-export function looksLikeAColleague(row: { wa_id: string }, staff: Set<string>): boolean {
+export function looksLikeAColleague(row: { wa_id: string | null }, staff: Set<string>): boolean {
   return staff.has((row.wa_id ?? "").replace(/[^0-9]/g, ""));
 }
 
@@ -481,7 +484,7 @@ export async function unansweredButNotReportedFor(organizationId: string) {
     .map((row) => ({
     conversationId: row.conversation_id,
     servingOrganizationId: row.serving_organization_id,
-    who: row.contact_name ?? `+${row.wa_id}`,
+    who: customerLabel(row),
     waitedHours: Number(row.waited_hours),
     // The customer's own words, trimmed. This is the evidence for the
     // judgement, and without it "we think this is a pitch" is unreviewable.
@@ -536,6 +539,16 @@ export async function unansweredButNotReported(): Promise<
 
   return out.sort((a, b) => b.waitedHours - a.waitedHours);
 }
+/**
+ * How a finding names a customer: their name, else the number, else the address
+ * or handle they wrote from. Email, Facebook and Instagram customers have no
+ * wa_id, and the bare +wa_id titled 12 of 40 open findings "+null has been
+ * waiting 235 hours" (12 Oct 2026).
+ */
+function customerLabel(row: { contact_name: string | null; wa_id: string | null; external_id: string | null }): string {
+  return row.contact_name ?? (row.wa_id ? `+${row.wa_id}` : row.external_id ?? "A customer");
+}
+
 const customerWaiting: Operator = {
   slug: "customer-waiting",
   title: "Customer waiting",
@@ -565,7 +578,7 @@ const customerWaiting: Operator = {
       .filter((row) => !looksLikeAColleague(row, staff))
       .map((row) => {
       const hours = Number(row.waited_hours);
-      const who = row.contact_name ?? `+${row.wa_id}`;
+      const who = customerLabel(row);
       return {
         fingerprint: row.conversation_id,
         severity: hours >= WAITING_URGENT_HOURS ? "urgent" : "warn",
@@ -1832,7 +1845,8 @@ const handoverAbandoned: Operator = {
       conversation_id: string;
       serving_organization_id: string;
       contact_name: string | null;
-      wa_id: string;
+      wa_id: string | null;
+      external_id: string | null;
       paused_hours: string;
       last_body: string | null;
       has_assessment: boolean;
@@ -1845,6 +1859,7 @@ const handoverAbandoned: Operator = {
               coalesce(c.routed_organization_id, c.organization_id) as serving_organization_id,
               ct.display_name as contact_name,
               ct.wa_id,
+              ct.external_id,
               round(extract(epoch from (now() - last.created_at)) / 3600.0, 1)::text as paused_hours,
               last_in.body as last_body,
               exists (
@@ -1908,7 +1923,7 @@ const handoverAbandoned: Operator = {
       )
       .map((row) => {
         const hours = Number(row.paused_hours);
-        const who = row.contact_name ?? `+${row.wa_id}`;
+        const who = customerLabel(row);
         const days = Math.floor(hours / 24);
         return {
           fingerprint: row.conversation_id,

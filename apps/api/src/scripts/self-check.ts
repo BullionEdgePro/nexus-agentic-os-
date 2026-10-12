@@ -645,7 +645,10 @@ async function main() {
   // Registry reads. `organizations` is the tenant registry, not tenant data —
   // scoping the lookup that decides which tenant we are would be circular.
   const organizations = await withAllTenants("self-check: tenant registry", () => listOrganizations());
-  check("all five businesses active", organizations.length === 5, `${organizations.length} found`);
+  // review-demo is the sandbox Meta's App Reviewer signs in to: a real row on
+  // purpose, not one of the businesses. Counting it failed this gate (12 Oct 2026).
+  const realBusinesses = organizations.filter((o) => o.slug !== "review-demo");
+  check("all five businesses active", realBusinesses.length === 5, `${realBusinesses.length} found`);
 
   const zipicka = await withAllTenants("self-check: tenant registry", () =>
     findOrganizationBySlug("zipicka")
