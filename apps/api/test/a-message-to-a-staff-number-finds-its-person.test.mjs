@@ -39,3 +39,19 @@ test("all three paths that ask it are covered by that one fix", () => {
   assert.equal(calls.length, 3, "message, echo, receipts");
   assert.ok(!/withAllTenants\([^)]*\)\s*=>\s*findEmployeeByPhoneNumberId/.test(PROC), "no caller has to remember to wrap it");
 });
+
+// THE SECOND HALF OF THE SAME DAY. With the lookup fixed, the test messages were
+// saved and assigned — and still invisible. The customer had written to the old
+// shared number in August, so the message joined that thread (a legacy thread
+// with no number is adopted by the first number that receives it, keeping the
+// customer's history). But in August the switchboard had ROUTED that thread to
+// SFS International, and Zipicka's inbox lists only chats routed to Zipicka. A
+// chat on a staff member's own number belongs to that person's business, full
+// stop: pinning it to the number clears the old routing.
+const CONV = read("packages", "db", "src", "conversations.ts");
+
+test("pinning a chat to a staff member's own number clears any old routing", () => {
+  const at = CONV.indexOf("export async function setConversationPhoneNumber(");
+  const fn = CONV.slice(at, CONV.indexOf("\n}\n", at));
+  assert.match(fn, /set phone_number_id = \$2,\s*routed_organization_id = null/);
+});

@@ -245,10 +245,15 @@ export async function setConversationPhoneNumber(
   conversationId: string,
   phoneNumberId: string
 ): Promise<void> {
-  await getPool().query(`update conversations set phone_number_id = $2 where id = $1`, [
-    conversationId,
-    phoneNumberId,
-  ]);
+  // A chat on a staff member's OWN number belongs to that person's business, so
+  // any routing left from the shared-number switchboard is cleared. Without
+  // this, a customer's August thread routed to SFS was adopted by a Zipicka
+  // staff number on 12 Oct 2026, assigned correctly — and hidden from Zipicka's
+  // inbox, which lists only chats routed to Zipicka.
+  await getPool().query(
+    `update conversations set phone_number_id = $2, routed_organization_id = null where id = $1`,
+    [conversationId, phoneNumberId]
+  );
 }
 
 /**
