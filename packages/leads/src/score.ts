@@ -164,6 +164,18 @@ const PITCH_RULE: Rule = {
     // (seller) — so the pairing carries the signal, not the word.
     "data available", "leads available", "database", "investor data", "owner data",
 
+    // The store-growth cold pitch, which became most of a business mailbox once
+    // every email from a person reached the inbox (30 Sep 2026). Each phrase is
+    // the SENDER describing our shop back to us or what they will do to it --
+    // never something a buyer asks. "your store" alone is not here: "is your
+    // store open?" is a customer. Pinned by a-store-growth-pitch-is-a-pitch.
+    "checked your store", "visited your store", "love the brand", "what you've built",
+    "what you’ve built", "caught my attention", "more sales", "extra sales",
+    "additional sales", "organic traffic", "organic growth", "conversion",
+    "free sample for you", "ai videos", "no upfront", "keine vorauszahlung",
+    "shop owner", "store owner", "checkout configuration", "technical consultant",
+    "black friday",
+
     // Arabic equivalents. "نحن شركة" (we are a company) and "نقدم خدمات" (we
     // offer services) are the standard openings of an Arabic cold pitch, and
     // "هل تحتاج" / "هل ترغب" (do you need / would you like) carry the same

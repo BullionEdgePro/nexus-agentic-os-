@@ -45,6 +45,31 @@ const imapPort = () => Number(process.env.IMAP_PORT || 993);
 const smtpHost = (email = "") => (isGoogle(email) ? "smtp.gmail.com" : process.env.SMTP_HOST || "smtp.hostinger.com");
 const smtpPort = () => Number(process.env.SMTP_PORT || 465);
 
+/**
+ * The headers that say "no person wrote this", as lib/mail-filter.ts reads them.
+ *
+ * mailparser does NOT keep List-* headers under their own names: it folds
+ * List-Unsubscribe, List-Id and the rest into one `list` object
+ * ({ unsubscribe: {...}, id: {...} }). Reading `get("list-unsubscribe")` was
+ * therefore always empty, and every properly-marked newsletter (Canva,
+ * AliExpress, Amazon, Cision) reached the inbox as an urgent "customer waiting"
+ * until 12 Oct 2026. Both shapes are read, so a parser change cannot reopen it.
+ */
+export function automationHeaders(parsedHeaders: Map<string, unknown>): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const asText = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
+  for (const name of ["list-unsubscribe", "list-id", "precedence", "auto-submitted", "x-autoreply", "x-autorespond"]) {
+    const v = parsedHeaders.get(name);
+    if (v != null) headers[name] = asText(v);
+  }
+  const list = parsedHeaders.get("list") as Record<string, unknown> | undefined;
+  if (list && typeof list === "object") {
+    if (list.unsubscribe != null && !headers["list-unsubscribe"]) headers["list-unsubscribe"] = asText(list.unsubscribe);
+    if (list.id != null && !headers["list-id"]) headers["list-id"] = asText(list.id);
+  }
+  return headers;
+}
+
 /** IMAP is always available — the host defaults to Hostinger, no server setup. */
 export function imapConfigured(): boolean {
   return true;
@@ -214,11 +239,7 @@ export async function fetchRecentMailImap(
           const parsed = await simpleParser(msg.source as Buffer);
           const fromAddress = (parsed.from?.value?.[0]?.address ?? emailsIn(parsed.from?.text)[0] ?? "").toLowerCase();
           const fromName = parsed.from?.value?.[0]?.name?.trim() || null;
-          const headers: Record<string, string> = {};
-          for (const name of ["list-unsubscribe", "list-id", "precedence", "auto-submitted", "x-autoreply", "x-autorespond"]) {
-            const v = parsed.headers.get(name);
-            if (v != null) headers[name] = typeof v === "string" ? v : JSON.stringify(v);
-          }
+          const headers = automationHeaders(parsed.headers);
           const toText = Array.isArray(parsed.to) ? parsed.to.map((t) => t.text).join(", ") : parsed.to?.text ?? null;
           out.push({
             id: parsed.messageId || `imap-${msg.uid}@${imapHost(email)}`,
