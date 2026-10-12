@@ -68,7 +68,7 @@ export interface MailboxOwner {
  */
 export async function gmailToken(
   owner: MailboxOwner
-): Promise<{ accessToken: string; scopes: string[] } | { error: string; status: 404 | 401 }> {
+): Promise<{ accessToken: string; scopes: string[] } | { error: string; status: 404 | 409 }> {
   const stored = await withTenant(owner.organizationId, () =>
     connectionSecret(owner.organizationId, owner.employeeId, "gmail")
   );
@@ -91,10 +91,13 @@ export async function gmailToken(
     return {
       error:
         "This Gmail sign-in has expired and carries nothing to renew it — that happens when consent was given without offline access. Connect it again.",
-      status: 401,
+      status: 409,
     };
   }
 
+  // 409, NOT 401. A Google sign-out is a conflict with this connection's state,
+  // not this person's Nexus session lapsing — and the web client reads every 401
+  // as the latter and replaces these sentences with "sign in again" (12 Oct 2026).
   try {
     const renewed = await refreshGoogleToken(stored.refreshToken);
     await withTenant(owner.organizationId, () =>
@@ -116,7 +119,7 @@ export async function gmailToken(
       error: message.startsWith("GMAIL_RECONNECT")
         ? "Google has signed this connection out — access was revoked or the password changed. Connect it again."
         : "Could not renew the Gmail sign-in just now. Try again shortly.",
-      status: 401,
+      status: 409,
     };
   }
 }

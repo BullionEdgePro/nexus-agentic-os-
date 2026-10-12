@@ -28,6 +28,7 @@ import {
   scheduleScheduledMessageSweep,
 } from "./queue/scheduled-messages-queue.js";
 import { processScheduledMessageSweep } from "./queue/scheduled-messages-processor.js";
+import { startPushDispatcher } from "./services/push-dispatcher.js";
 import { SOCIAL_INBOUND_QUEUE, getSocialInboundQueue } from "./queue/social-inbound-queue.js";
 import { processSocialInboundJob } from "./queue/social-processor.js";
 import type { SocialInboundJob } from "@nexus/shared";
@@ -162,6 +163,9 @@ broadcastWorker.on("failed", (job, err) =>
 );
 
 logger.info("Nexus background workers started (inbound webhook + broadcast send + knowledge re-index)");
+
+// Phones hear about their own chats. Listens only; off (and says so) without VAPID keys.
+startPushDispatcher();
 
 // Idempotent — replaces the existing schedule rather than stacking one per
 // deploy. Best-effort: a scheduling failure must not stop message processing.

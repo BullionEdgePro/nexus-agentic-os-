@@ -124,4 +124,15 @@ export const env = {
    * anything.
    */
   apiToken: process.env.NEXUS_API_TOKEN ?? "",
+
+  /**
+   * Web-push (VAPID) keys for phone notifications, generated once and kept in
+   * /opt/nexus/.env. All three or nothing: without them no notification is sent
+   * and Settings says so, rather than a phone that was promised alerts staying
+   * silent. The subject is a mailto: or https: contact the push services can
+   * reach if these notifications ever misbehave.
+   */
+  vapidPublicKey: (process.env.VAPID_PUBLIC_KEY ?? "").trim(),
+  vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY ?? "").trim(),
+  vapidSubject: (process.env.VAPID_SUBJECT ?? "").trim(),
 };
