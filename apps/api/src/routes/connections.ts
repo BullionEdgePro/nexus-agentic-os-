@@ -1082,6 +1082,8 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
         phoneNumberId: connectedPhoneNumberId,
         displayNumber: details.displayNumber,
         verifiedName: details.verifiedName,
+        // Its templates are the ones it can send (migration 096).
+        wabaId: connectedWabaId,
       });
     });
 

@@ -132,7 +132,7 @@ async function main(): Promise<void> {
   console.log("Reads");
   await withAllTenants("schema-check: brain status", () => step("brain status", () => getBrainStatus()));
 
-  const templates = await withTenant(org.id, () => listBroadcastTemplates(org.id));
+  const templates = await withTenant(org.id, () => listBroadcastTemplates(org.id, org.whatsappBusinessAccountId));
   const template = templates[0];
   if (template) {
     await withTenant(org.id, () =>

@@ -1,5 +1,7 @@
 import {
   listOrganizations,
+  listStaffWhatsAppAccounts,
+  connectionSecret,
   upsertTemplateFromMeta,
   retireMissingTemplates,
   withTenant,
@@ -66,6 +68,7 @@ export async function syncTemplatesForOrganization(organization: {
 
       await upsertTemplateFromMeta({
         organizationId: organization.id,
+        whatsappBusinessAccountId: organization.whatsappBusinessAccountId,
         metaTemplateId: template.id,
         name: template.name,
         language: template.language,
@@ -78,7 +81,9 @@ export async function syncTemplatesForOrganization(organization: {
     // Only retire when Meta actually answered. An empty list from a failed or
     // permission-denied call would otherwise mark every template deleted and
     // quietly disable bulk messaging across the platform.
-    return templates.length > 0 ? await retireMissingTemplates(organization.id, seen) : 0;
+    return templates.length > 0
+      ? await retireMissingTemplates(organization.id, seen, organization.whatsappBusinessAccountId)
+      : 0;
   });
 
   logger.info(
@@ -107,5 +112,54 @@ export async function syncAllTemplates(): Promise<SyncResult[]> {
     }
   }
 
+  results.push(...(await syncStaffNumberTemplates()));
+  return results;
+}
+
+/**
+ * The templates on each staff member's OWN WhatsApp account.
+ *
+ * A number connected through Coexistence sits on the account of whichever
+ * business portfolio owns it -- on 12 Oct 2026, +971 52 563 1476 landed on
+ * 1915340836093863, not Zipicka's -- and a template can only be sent from a
+ * number on the account that holds it. Read with that number's own token,
+ * because the platform's system user cannot see an account another portfolio
+ * owns; stored against the staff member's business, tagged with the account.
+ */
+export async function syncStaffNumberTemplates(): Promise<SyncResult[]> {
+  const accounts = await listStaffWhatsAppAccounts();
+  const results: SyncResult[] = [];
+  for (const account of accounts) {
+    try {
+      const secret = await withTenant(account.organizationId, () =>
+        connectionSecret(account.organizationId, account.employeeId, "whatsapp")
+      );
+      if (!secret) continue;
+      const templates = await listMetaTemplates(account.wabaId, secret.accessToken);
+      let approved = 0;
+      const seen: string[] = [];
+      const retired = await withTenant(account.organizationId, async () => {
+        for (const template of templates) {
+          if (!template.id || isHiddenTemplate(template.name)) continue;
+          seen.push(template.id);
+          if (template.status === "APPROVED") approved++;
+          await upsertTemplateFromMeta({
+            organizationId: account.organizationId,
+            whatsappBusinessAccountId: account.wabaId,
+            metaTemplateId: template.id,
+            name: template.name,
+            language: template.language,
+            category: template.category,
+            status: template.status,
+            bodyParamCount: template.bodyParamCount,
+          });
+        }
+        return templates.length > 0 ? await retireMissingTemplates(account.organizationId, seen, account.wabaId) : 0;
+      });
+      results.push({ organizationSlug: `${account.organizationSlug} (staff account ${account.wabaId})`, synced: seen.length, approved, retired });
+    } catch (err) {
+      logger.error({ wabaId: account.wabaId, err }, "Template sync failed for a staff number's account");
+    }
+  }
   return results;
 }

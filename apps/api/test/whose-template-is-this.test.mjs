@@ -211,7 +211,9 @@ test("the template getter reads the column the check needs", () => {
   // not have made this comparison even if it had tried to.
   const DB = read("packages", "db", "src", "broadcasts.ts");
   const at = DB.indexOf("export async function getBroadcastTemplate(");
-  const body = DB.slice(at, at + 900);
+  // The whole function, not a fixed 900 characters: migration 096 added the
+  // account column and pushed the mapping past that window.
+  const body = DB.slice(at, DB.indexOf("\n}\n", at));
   assert.ok(body.includes("select organization_id,"), "organization_id is not selected");
   assert.ok(body.includes("organizationId: row.organization_id"), "it is selected and then dropped");
 });

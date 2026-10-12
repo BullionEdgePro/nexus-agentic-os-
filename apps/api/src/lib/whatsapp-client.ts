@@ -162,11 +162,14 @@ function countBodyParams(components: unknown): number {
   return new Set(body.text.match(/\{\{\s*\d+\s*\}\}/g) ?? []).size;
 }
 
-export async function listMetaTemplates(wabaId: string): Promise<MetaTemplate[]> {
+export async function listMetaTemplates(wabaId: string, accessToken: string = env.metaAccessToken): Promise<MetaTemplate[]> {
   const templates: MetaTemplate[] = [];
+  // A staff number's own account is read with that number's own token: the
+  // platform's system user has no access to a WhatsApp account another
+  // business portfolio owns (Coexistence, 12 Oct 2026).
   let url =
     `https://graph.facebook.com/${env.metaGraphApiVersion}/${wabaId}/message_templates` +
-    `?limit=100&access_token=${encodeURIComponent(env.metaAccessToken)}`;
+    `?limit=100&access_token=${encodeURIComponent(accessToken)}`;
 
   // Paged deliberately. Reading only the first page would silently drop
   // templates once the account has more than a hundred, and the symptom would

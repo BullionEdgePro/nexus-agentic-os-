@@ -49,6 +49,8 @@ export async function createBroadcast(input: CreateBroadcastInput): Promise<Broa
 
 export interface BroadcastTemplateInfo {
   organizationId: string;
+  /** The WhatsApp account the template lives on; a number on another account cannot send it. */
+  whatsappBusinessAccountId: string | null;
   metaTemplateName: string;
   language: string;
   isApproved: boolean;
@@ -58,6 +60,7 @@ export interface BroadcastTemplateInfo {
 export async function getBroadcastTemplate(templateId: string): Promise<BroadcastTemplateInfo | null> {
   const { rows } = await getPool().query<{
     organization_id: string;
+    whatsapp_business_account_id: string | null;
     meta_template_name: string;
     language: string;
     is_approved: boolean;
@@ -67,7 +70,7 @@ export async function getBroadcastTemplate(templateId: string): Promise<Broadcas
     // it the create route could not check that a template row belongs to the
     // business the broadcast is for, and it did not -- a broadcast for one
     // company could be paired with another company's template row by id alone.
-    `select organization_id, meta_template_name, language, is_approved, body_param_count
+    `select organization_id, whatsapp_business_account_id, meta_template_name, language, is_approved, body_param_count
        from message_templates where id = $1`,
     [templateId]
   );
@@ -75,6 +78,7 @@ export async function getBroadcastTemplate(templateId: string): Promise<Broadcas
   if (!row) return null;
   return {
     organizationId: row.organization_id,
+    whatsappBusinessAccountId: row.whatsapp_business_account_id,
     metaTemplateName: row.meta_template_name,
     language: row.language,
     isApproved: row.is_approved,
@@ -288,7 +292,11 @@ export interface TemplateRow {
  * refuses anything not approved, so this list is "what we know about", not
  * "what we may send".
  */
-export async function listBroadcastTemplates(organizationId: string): Promise<TemplateRow[]> {
+export async function listBroadcastTemplates(
+  organizationId: string,
+  /** Only templates on this WhatsApp account: the one the message will be sent from. */
+  whatsappBusinessAccountId: string | null
+): Promise<TemplateRow[]> {
   const { rows } = await getPool().query<{
     id: string;
     meta_template_name: string;
@@ -304,8 +312,9 @@ export async function listBroadcastTemplates(organizationId: string): Promise<Te
             status, body_param_count, synced_at, created_at
        from message_templates
       where organization_id = $1
+        and whatsapp_business_account_id is not distinct from $2
       order by is_approved desc, meta_template_name asc`,
-    [organizationId]
+    [organizationId, whatsappBusinessAccountId]
   );
   return rows.map((row) => ({
     id: row.id,
@@ -479,6 +488,8 @@ export async function getBroadcast(id: string): Promise<BroadcastRow | null> {
 
 export interface TemplateMirrorInput {
   organizationId: string;
+  /** The account Meta answered for: the business's own, or a staff number's. */
+  whatsappBusinessAccountId: string;
   metaTemplateId: string;
   name: string;
   language: string;
@@ -500,8 +511,8 @@ export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promis
   await getPool().query(
     `insert into message_templates
        (organization_id, meta_template_id, meta_template_name, language, category,
-        status, is_approved, body_param_count, synced_at)
-     values ($1, $2, $3, $4, $5, $6, $6 = 'APPROVED', $7, now())
+        status, is_approved, body_param_count, synced_at, whatsapp_business_account_id)
+     values ($1, $2, $3, $4, $5, $6, $6 = 'APPROVED', $7, now(), $8)
      on conflict (organization_id, meta_template_id) where meta_template_id is not null
      do update set meta_template_name = excluded.meta_template_name,
                    language           = excluded.language,
@@ -509,6 +520,7 @@ export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promis
                    status             = excluded.status,
                    is_approved        = excluded.is_approved,
                    body_param_count   = excluded.body_param_count,
+                   whatsapp_business_account_id = excluded.whatsapp_business_account_id,
                    synced_at          = now()`,
     [
       input.organizationId,
@@ -518,6 +530,7 @@ export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promis
       input.category,
       input.status,
       input.bodyParamCount,
+      input.whatsappBusinessAccountId,
     ]
   );
 }
@@ -531,7 +544,9 @@ export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promis
  */
 export async function retireMissingTemplates(
   organizationId: string,
-  keepMetaIds: string[]
+  keepMetaIds: string[],
+  /** Only the account just read: retiring across accounts would wipe the other's templates. */
+  whatsappBusinessAccountId: string
 ): Promise<number> {
   const { rowCount } = await getPool().query(
     `update message_templates
@@ -539,8 +554,9 @@ export async function retireMissingTemplates(
       where organization_id = $1
         and meta_template_id is not null
         and not (meta_template_id = any($2::text[]))
-        and status is distinct from 'DELETED'`,
-    [organizationId, keepMetaIds]
+        and status is distinct from 'DELETED'
+        and whatsapp_business_account_id = $3`,
+    [organizationId, keepMetaIds, whatsappBusinessAccountId]
   );
   return rowCount ?? 0;
 }

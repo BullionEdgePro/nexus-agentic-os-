@@ -33,7 +33,7 @@ broadcastsRoute.get("/:slug", async (c) => {
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
   const [templates, broadcasts, reachable] = await Promise.all([
-    listBroadcastTemplates(organization.id),
+    listBroadcastTemplates(organization.id, organization.whatsappBusinessAccountId),
     listBroadcasts(organization.id),
     countReachableContacts(organization.id),
   ]);
@@ -120,6 +120,15 @@ broadcastsRoute.post("/", async (c) => {
   if (template.organizationId !== organization.id) {
     return c.json({ error: "That template belongs to a different business." }, 403);
   }
+  // A business broadcast goes out from the business's number, so its template
+  // must be on the business's own WhatsApp account, not a staff number's
+  // (migration 096). Meta would refuse it for every recipient otherwise.
+  if (template.whatsappBusinessAccountId !== organization.whatsappBusinessAccountId) {
+    return c.json(
+      { error: "That template is approved on a staff member's own WhatsApp account, not this business's." },
+      422
+    );
+  }
 
   // AND ITS NAME MUST NOT SPEAK FOR SOMEBODY ELSE. Passing the check above is
   // not enough on a shared WhatsApp account: a sync writes every template on
@@ -196,6 +205,15 @@ broadcastsRoute.post("/:id/send", async (c) => {
   // only thing standing between that row and a customer's phone.
   if (template.organizationId !== organization.id) {
     return c.json({ error: "That template belongs to a different business." }, 403);
+  }
+  // A business broadcast goes out from the business's number, so its template
+  // must be on the business's own WhatsApp account, not a staff number's
+  // (migration 096). Meta would refuse it for every recipient otherwise.
+  if (template.whatsappBusinessAccountId !== organization.whatsappBusinessAccountId) {
+    return c.json(
+      { error: "That template is approved on a staff member's own WhatsApp account, not this business's." },
+      422
+    );
   }
   if (attributeTemplate(template.metaTemplateName, organization.slug) === "other-business") {
     return c.json(

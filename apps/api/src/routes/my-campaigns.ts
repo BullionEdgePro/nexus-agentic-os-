@@ -120,6 +120,23 @@ myCampaignsRoute.post("/channel/release", async (c) => {
 // Campaigns to your own book
 // ============================================================
 
+/**
+ * The WhatsApp account a campaign goes out from: the staff member's own number's
+ * account when they have one (a Coexistence number sits on its own portfolio's
+ * account), else the business's. A number assigned from the business's own
+ * account (Team, or claimed here) records none, so it falls back to the
+ * business's, which is where it is.
+ */
+function sendingAccountOf(
+  employee: { whatsappPhoneNumberId?: string | null; whatsappBusinessAccountId?: string | null },
+  organization: { whatsappBusinessAccountId: string | null }
+): string | null {
+  if (employee.whatsappPhoneNumberId) {
+    return employee.whatsappBusinessAccountId ?? organization.whatsappBusinessAccountId;
+  }
+  return organization.whatsappBusinessAccountId;
+}
+
 myCampaignsRoute.get("/campaigns", async (c) => {
   const desk = deskOf(c);
   if ("error" in desk) return c.json({ error: desk.error }, 403);
@@ -134,8 +151,11 @@ myCampaignsRoute.get("/campaigns", async (c) => {
   const audience = await withTenant(desk.organizationId, () =>
     myClientsForBroadcast(desk.organizationId, desk.employeeId)
   );
+  // Only templates on the WhatsApp account the campaign will go out from: a
+  // template on another account is refused by Meta for every recipient.
+  const sendingAccount = sendingAccountOf(employee, organization);
   const templates = await withTenant(desk.organizationId, () =>
-    listBroadcastTemplates(desk.organizationId)
+    listBroadcastTemplates(desk.organizationId, sendingAccount)
   );
   const allowance = await broadcastAllowanceRemaining(
     desk.employeeId,
@@ -227,6 +247,16 @@ myCampaignsRoute.post("/campaigns", async (c) => {
   if (!template.isApproved) return c.json({ error: "WhatsApp has not approved that message." }, 422);
   if (template.organizationId !== organization.id) {
     return c.json({ error: "That message belongs to a different business." }, 403);
+  }
+  const sendingAccount = sendingAccountOf(employee, organization);
+  if (template.whatsappBusinessAccountId !== sendingAccount) {
+    return c.json(
+      {
+        error:
+          "That message is approved on a different WhatsApp account from the number you send from, so WhatsApp would refuse it. Choose one of the messages listed for your number.",
+      },
+      422
+    );
   }
   if (attributeTemplate(template.metaTemplateName, organization.slug) === "other-business") {
     return c.json(

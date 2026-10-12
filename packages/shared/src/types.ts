@@ -462,6 +462,8 @@ export interface Employee {
   whatsappNumber?: string | null;
   /** Set only once Meta has confirmed the number exists on the business account. */
   whatsappVerifiedName?: string | null;
+  /** The WhatsApp Business Account the number is on (whose templates it can send). */
+  whatsappBusinessAccountId?: string | null;
   whatsappConnectedAt?: string | null;
   whatsappQualityRating?: string | null;
   /** Off by default: a staff campaign spends the shared number's quality rating. */

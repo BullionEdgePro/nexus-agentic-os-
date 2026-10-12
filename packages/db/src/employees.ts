@@ -35,6 +35,7 @@ interface EmployeeRow {
   human_first: boolean;
   is_active: boolean;
   whatsapp_verified_name: string | null;
+  whatsapp_business_account_id: string | null;
   whatsapp_connected_at: string | null;
   whatsapp_quality_rating: string | null;
   can_broadcast: boolean;
@@ -48,7 +49,7 @@ const EMPLOYEE_COLUMNS = `
   escalation_rules, twin_disclosure, digital_signature, manual_presence, manual_presence_until,
   last_seen_at, last_login_at, last_login_device, human_first, is_active,
   whatsapp_verified_name, whatsapp_connected_at, whatsapp_quality_rating,
-  can_broadcast, broadcast_monthly_cap
+  can_broadcast, broadcast_monthly_cap, whatsapp_business_account_id
 `;
 
 function toEmployee(row: EmployeeRow): Employee {
@@ -65,6 +66,7 @@ function toEmployee(row: EmployeeRow): Employee {
     whatsappPhoneNumberId: row.whatsapp_phone_number_id,
     whatsappNumber: row.whatsapp_number,
     whatsappVerifiedName: row.whatsapp_verified_name,
+    whatsappBusinessAccountId: row.whatsapp_business_account_id,
     whatsappConnectedAt: row.whatsapp_connected_at,
     whatsappQualityRating: row.whatsapp_quality_rating,
     canBroadcast: row.can_broadcast,
@@ -212,6 +214,38 @@ export async function findEmployeeByPhoneNumberId(
 }
 
 /**
+ * Every distinct WhatsApp account a staff member's own number sits on, with one
+ * staff member whose stored sign-in can read it. Cross-tenant on purpose: the
+ * template sync runs from the worker for every business at once.
+ */
+export async function listStaffWhatsAppAccounts(): Promise<
+  { wabaId: string; organizationId: string; organizationSlug: string; employeeId: string }[]
+> {
+  return withAllTenants("template sync: every staff number's WhatsApp account", async () => {
+    const { rows } = await getPool().query<{
+      waba_id: string;
+      organization_id: string;
+      slug: string;
+      employee_id: string;
+    }>(
+      `select distinct on (e.organization_id, e.whatsapp_business_account_id)
+              e.whatsapp_business_account_id as waba_id, e.organization_id, o.slug, e.id as employee_id
+         from employees e
+         join organizations o on o.id = e.organization_id
+        where e.is_active and e.whatsapp_business_account_id is not null
+          and e.whatsapp_business_account_id is distinct from o.whatsapp_business_account_id
+        order by e.organization_id, e.whatsapp_business_account_id, e.whatsapp_connected_at desc nulls last`
+    );
+    return rows.map((r) => ({
+      wabaId: r.waba_id,
+      organizationId: r.organization_id,
+      organizationSlug: r.slug,
+      employeeId: r.employee_id,
+    }));
+  });
+}
+
+/**
  * Give a staff member a dedicated WhatsApp number, or take it away (null).
  *
  * A number belongs to exactly ONE person: assigning it here first clears it from
@@ -222,13 +256,20 @@ export async function findEmployeeByPhoneNumberId(
  */
 export async function assignEmployeeWhatsAppNumber(
   employeeId: string,
-  input: { phoneNumberId: string | null; displayNumber: string | null; verifiedName: string | null }
+  input: {
+    phoneNumberId: string | null;
+    displayNumber: string | null;
+    verifiedName: string | null;
+    /** The WhatsApp account the number is on; its templates are the ones it can send. */
+    wabaId?: string | null;
+  }
 ): Promise<Employee | null> {
   if (input.phoneNumberId === null) {
     const { rows } = await getPool().query<EmployeeRow>(
       `update employees
           set whatsapp_phone_number_id = null, whatsapp_number = null,
-              whatsapp_verified_name = null, whatsapp_connected_at = null, updated_at = now()
+              whatsapp_verified_name = null, whatsapp_connected_at = null,
+              whatsapp_business_account_id = null, updated_at = now()
         where id = $1
         returning *`,
       [employeeId]
@@ -244,15 +285,17 @@ export async function assignEmployeeWhatsAppNumber(
     `with freed as (
        update employees
           set whatsapp_phone_number_id = null, whatsapp_number = null,
-              whatsapp_verified_name = null, whatsapp_connected_at = null, updated_at = now()
+              whatsapp_verified_name = null, whatsapp_connected_at = null,
+              whatsapp_business_account_id = null, updated_at = now()
         where whatsapp_phone_number_id = $2 and id <> $1
      )
      update employees
         set whatsapp_phone_number_id = $2, whatsapp_number = $3,
-            whatsapp_verified_name = $4, whatsapp_connected_at = now(), updated_at = now()
+            whatsapp_verified_name = $4, whatsapp_connected_at = now(),
+            whatsapp_business_account_id = $5, updated_at = now()
       where id = $1
       returning *`,
-    [employeeId, input.phoneNumberId, input.displayNumber, input.verifiedName]
+    [employeeId, input.phoneNumberId, input.displayNumber, input.verifiedName, input.wabaId ?? null]
   );
   return rows[0] ? toEmployee(rows[0]) : null;
 }
