@@ -33,6 +33,7 @@ import { phrasesRoute } from "./routes/phrases.js";
 import { forecastsRoute } from "./routes/forecasts.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
+import { hqRoute } from "./routes/hq.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
@@ -361,6 +362,10 @@ app.route("/api/operators", operatorsRoute);
 // handlers, because neither path carries a :slug for requireTenantScope.
 app.route("/api/search", searchRoute);
 app.route("/api/me", meRoute);
+// Business HQ: admins only, guarded before the route is mounted.
+app.use("/api/hq", operatorOnly);
+app.use("/api/hq/*", operatorOnly);
+app.route("/api/hq", hqRoute);
 
 const server = serve({ fetch: app.fetch, port: env.apiPort }, (info) => {
   logger.info(`Nexus API listening on http://localhost:${info.port}`);

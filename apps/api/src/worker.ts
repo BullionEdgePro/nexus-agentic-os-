@@ -29,6 +29,8 @@ import {
 } from "./queue/scheduled-messages-queue.js";
 import { processScheduledMessageSweep } from "./queue/scheduled-messages-processor.js";
 import { startPushDispatcher } from "./services/push-dispatcher.js";
+import { HQ_CHECKS_QUEUE, scheduleHqChecks } from "./queue/hq-checks-queue.js";
+import { processHqChecksJob } from "./queue/hq-checks-processor.js";
 import { SOCIAL_INBOUND_QUEUE, getSocialInboundQueue } from "./queue/social-inbound-queue.js";
 import { processSocialInboundJob } from "./queue/social-processor.js";
 import type { SocialInboundJob } from "@nexus/shared";
@@ -166,6 +168,17 @@ logger.info("Nexus background workers started (inbound webhook + broadcast send 
 
 // Phones hear about their own chats. Listens only; off (and says so) without VAPID keys.
 startPushDispatcher();
+
+// Business HQ: every business's website checked at 06:00 Dubai time, plus
+// "Check now". One at a time: the checks call PageSpeed and RDAP, which rate-limit.
+const hqChecksWorker = new Worker(HQ_CHECKS_QUEUE, processHqChecksJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+hqChecksWorker.on("failed", (job, err) => logger.error({ jobId: job?.id, err }, "Business HQ checks job failed"));
+scheduleHqChecks()
+  .then(() => logger.info("Business HQ checks scheduled (daily 06:00 Asia/Dubai)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule Business HQ checks"));
 
 // Idempotent — replaces the existing schedule rather than stacking one per
 // deploy. Best-effort: a scheduling failure must not stop message processing.

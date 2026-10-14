@@ -99,6 +99,14 @@ export const TENANT_SCOPED_TABLES = [
   // Added 2026-09-28 with customer lists (migration 093). A business's saved
   // audiences are its own; read under its tenant, or across all on purpose.
   "contact_segments",
+  // Business HQ (migration 097, 14 Oct 2026). The vault holds every login of a
+  // business; an unwrapped query on it must throw, not silently read nothing.
+  "hq_profiles",
+  "hq_keywords",
+  "hq_social_accounts",
+  "hq_vault_entries",
+  "hq_vault_reveals",
+  "hq_checks",
 ];
 // Not on the list, and each for a reason worth stating:
 //

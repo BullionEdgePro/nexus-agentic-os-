@@ -44,6 +44,9 @@ const TAB_API = {
   "/": "/api/metrics/overview",
   "/inbox": "/api/organizations/",
   "/deck/operators": "/api/operators",
+  // Business HQ: every business's website, socials and vault. Admins only,
+  // guarded by operatorOnly on the whole /api/hq prefix.
+  "/deck/hq": "/api/hq",
   "/deck/tasks": "/api/tasks",
   // The Workspace board. Same endpoint as the list beside it, because it is
   // the same rows asked a different question -- what is owed TODAY rather

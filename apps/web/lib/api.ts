@@ -2921,3 +2921,86 @@ export function connectBusinessEmail(input: {
 export function disconnectBusinessEmail(): Promise<{ ok: boolean }> {
   return request("/api/connections/imap", { method: "DELETE" });
 }
+
+// ============================================================
+// Business HQ (admins only; spec 2026-10-14-business-hq-design.md)
+// ============================================================
+
+export type HqSeverity = "critical" | "warning" | "notice";
+export interface HqIssue { code: string; severity: HqSeverity; title: string; fix: string }
+export interface HqCard { slug: string; name: string; logoUrl: string | null; websiteUrl: string | null; score: number; topIssues: HqIssue[]; issueCount: number }
+export interface HqCheck { kind: string; ranAt: string; ok: boolean | null; data: Record<string, unknown>; error: string | null }
+export interface HqProfile {
+  domain: string | null; registrarNote: string | null; hostingNote: string | null; platformNote: string | null;
+  gbpUrl: string | null; gbpRating: number | null; gbpReviewCount: number | null; gbpUnansweredReviews: number | null;
+  gbpLastPostAt: string | null; gbpLastPhotoAt: string | null; notes: string | null; updatedAt: string; updatedBy: string | null;
+}
+export interface HqKeyword { id: string; keyword: string; position: number | null; checkedAt: string | null }
+export interface HqSocial {
+  id: string; platform: string; handle: string | null; url: string | null; followers: number | null; lastPostAt: string | null;
+  twoFactor: boolean | null; recoveryContact: string | null; vaultEntryId: string | null; updatedAt: string; source: "recorded" | "connected";
+}
+export interface HqVaultEntry {
+  id: string; section: "website" | "social" | "other"; service: string; label: string | null; username: string | null;
+  url: string | null; notes: string | null; hasSecret: boolean; secretChangedAt: string | null; updatedAt: string; updatedBy: string | null;
+}
+export interface HqReveal { id: string; entryId: string; service: string; adminId: string; adminName: string | null; revealedAt: string; ip: string | null; userAgent: string | null }
+export interface HqBusinessDetail {
+  business: { slug: string; name: string; logoUrl: string | null; websiteUrl: string | null };
+  profile: HqProfile | null;
+  checks: Partial<Record<string, HqCheck>>;
+  issues: HqIssue[];
+  score: number;
+  keywords: HqKeyword[];
+  socials: HqSocial[];
+  vault: HqVaultEntry[];
+  reveals: HqReveal[];
+  vaultConfigured: boolean;
+  unlockedSeconds: number;
+}
+
+export function getHqOverview(): Promise<{ businesses: HqCard[] }> {
+  return request("/api/hq");
+}
+export function getHqBusiness(slug: string): Promise<HqBusinessDetail> {
+  return request(`/api/hq/${slug}`);
+}
+export function saveHqProfile(slug: string, patch: Partial<HqProfile>): Promise<{ profile: HqProfile }> {
+  return request(`/api/hq/${slug}/profile`, { method: "PUT", body: JSON.stringify(patch) });
+}
+export function saveHqKeyword(slug: string, input: { id?: string; keyword: string; position: number | null; checkedAt: string | null }): Promise<{ keyword: HqKeyword }> {
+  return input.id
+    ? request(`/api/hq/${slug}/keywords/${input.id}`, { method: "PUT", body: JSON.stringify(input) })
+    : request(`/api/hq/${slug}/keywords`, { method: "POST", body: JSON.stringify(input) });
+}
+export function deleteHqKeyword(slug: string, id: string): Promise<{ ok: boolean }> {
+  return request(`/api/hq/${slug}/keywords/${id}`, { method: "DELETE" });
+}
+export function saveHqSocial(slug: string, input: Partial<HqSocial> & { platform: string }): Promise<{ social: HqSocial }> {
+  return input.id && !input.id.startsWith("connected-")
+    ? request(`/api/hq/${slug}/socials/${input.id}`, { method: "PUT", body: JSON.stringify(input) })
+    : request(`/api/hq/${slug}/socials`, { method: "POST", body: JSON.stringify({ ...input, id: undefined }) });
+}
+export function deleteHqSocial(slug: string, id: string): Promise<{ ok: boolean }> {
+  return request(`/api/hq/${slug}/socials/${id}`, { method: "DELETE" });
+}
+export function saveHqVaultEntry(slug: string, input: Partial<HqVaultEntry> & { service: string; secret?: string }): Promise<{ entry: HqVaultEntry }> {
+  return input.id
+    ? request(`/api/hq/${slug}/vault/${input.id}`, { method: "PUT", body: JSON.stringify(input) })
+    : request(`/api/hq/${slug}/vault`, { method: "POST", body: JSON.stringify(input) });
+}
+export function deleteHqVaultEntry(slug: string, id: string): Promise<{ ok: boolean }> {
+  return request(`/api/hq/${slug}/vault/${id}`, { method: "DELETE" });
+}
+export function unlockHqVault(password: string): Promise<{ ok: true; expiresInSeconds: number }> {
+  return request("/api/hq/unlock", { method: "POST", body: JSON.stringify({ password }) });
+}
+export function lockHqVault(): Promise<{ ok: boolean }> {
+  return request("/api/hq/lock", { method: "POST" });
+}
+export function revealHqSecret(slug: string, id: string): Promise<{ secret: string }> {
+  return request(`/api/hq/${slug}/vault/${id}/reveal`, { method: "POST" });
+}
+export function checkHqNow(slug: string): Promise<{ queued: boolean }> {
+  return request(`/api/hq/${slug}/check`, { method: "POST" });
+}

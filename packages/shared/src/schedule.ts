@@ -24,6 +24,7 @@ export const SCHEDULED_JOBS = [
   "calendar-sync",
   "email-sync",
   "scheduled-messages",
+  "hq-checks",
 ] as const;
 
 export type ScheduledJob = (typeof SCHEDULED_JOBS)[number];
@@ -64,6 +65,9 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
   // message: a stalled sweep is caught within the hour, and an individual send's
   // own failure is recorded on its row regardless.
   "scheduled-messages": 45 * MINUTE,
+  // Business HQ's daily 06:00 website checks. Daily, so the same margin as the
+  // other daily jobs: a deploy can land the first run up to a day late.
+  "hq-checks": 30 * HOUR,
 };
 
 /**

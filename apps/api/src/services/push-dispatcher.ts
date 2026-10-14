@@ -1,4 +1,4 @@
-import type { InboxSocketEvent } from "@nexus/shared";
+import type { InboxSocketEvent, HqIssue } from "@nexus/shared";
 import {
   getPushConversationFacts,
   listEmployees,
@@ -126,6 +126,24 @@ async function alertOwnersAboutPlatform(): Promise<void> {
     const subs = devicesFor(await listPushSubscriptionsForSubjects(owners), [
       { subjects: owners, requiresMode: "mine" },
     ]);
+    await deliver(subs, () => payload);
+  }
+}
+
+/**
+ * Business HQ: tell the owner's phones about a business that just turned
+ * critical (domain or SSL about to expire, site down). Once per problem per
+ * business per day, however many checks see it. A no-op without VAPID keys.
+ */
+export async function notifyOwnersOfHqCritical(org: { id: string; name: string }, issues: HqIssue[]): Promise<void> {
+  if (!pushConfigured() || issues.length === 0) return;
+  const redis = getRedisConnection();
+  for (const issue of issues) {
+    const first = await redis.set(`push:hq:${org.id}:${issue.code}`, "1", "EX", 86_400, "NX");
+    if (first !== "OK") continue;
+    const owners = await listOwnerPushSubjects();
+    const subs = devicesFor(await listPushSubscriptionsForSubjects(owners), [{ subjects: owners, requiresMode: "mine" }]);
+    const payload = { ...buildPlatformPayload(`${org.name}: ${issue.title}`), url: "/deck/hq" };
     await deliver(subs, () => payload);
   }
 }

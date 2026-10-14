@@ -252,6 +252,21 @@ export const NAV: NavItem[] = [
     operatorOnly: true,
   },
   {
+    href: "/deck/hq",
+    label: "Business HQ",
+    // Each business's website, domain, hosting, SEO, socials and the vault of
+    // logins to all of them (spec 2026-10-14-business-hq-design.md). Admins
+    // only: /api/hq is operatorOnly, and the vault holds every password.
+    operatorOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M4 21V8l8-5 8 5v13" />
+        <path d="M9 21v-6h6v6" />
+        <path d="M9 10.5h.01M15 10.5h.01" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/channels",
     label: "Channels",
     // Where the business's messaging channels are connected — WhatsApp, email,
@@ -363,7 +378,7 @@ export const NAV: NavItem[] = [
 // Labels are deliberately unchanged: findings name screens by their headings
 // ("on the How we answer screen"), and a renamed door would break that promise.
 export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
-  { title: "Manage", hrefs: ["/", "/inbox", "/deck/operators", "/deck/board", "/deck/tasks", "/deck/bookings"] },
+  { title: "Manage", hrefs: ["/", "/inbox", "/deck/operators", "/deck/hq", "/deck/board", "/deck/tasks", "/deck/bookings"] },
   { title: "Customers", hrefs: ["/deck/my-clients", "/deck/customers", "/deck/team"] },
   { title: "Reach", hrefs: ["/deck/my-campaigns", "/deck/broadcasts", "/deck/links"] },
   { title: "Automate", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue"] },

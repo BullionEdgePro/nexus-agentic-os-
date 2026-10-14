@@ -91,6 +91,7 @@ const TAB_API = {
   "/": { operator: "/api/metrics/overview", staff: "/api/my/day" },
   "/inbox": "/api/organizations",
   "/deck/operators": "/api/operators",
+  "/deck/hq": "/api/hq",
   "/deck/board": "/api/tasks",
   "/deck/tasks": "/api/tasks",
   "/deck/bookings": "/api/bookings",
