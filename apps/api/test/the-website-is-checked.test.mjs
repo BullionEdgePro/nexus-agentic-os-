@@ -57,6 +57,7 @@ function deps(over = {}) {
     "https://sfsintrealestate.com/": () => new Response(WP, { status: 200, headers: { server: "LiteSpeed" } }),
     "https://sfsintrealestate.com/robots.txt": () => new Response("User-agent: *\nDisallow: /wp-admin/\n", { status: 200 }),
     "https://sfsintrealestate.com/sitemap.xml": () => new Response("<?xml version='1.0'?><urlset></urlset>", { status: 200 }),
+    bootstrap: () => new Response(JSON.stringify({ services: [[["com", "net"], ["https://rdap.verisign.com/com/v1/"]]] }), { status: 200 }),
     rdap: () => new Response(JSON.stringify({ events: [{ eventAction: "expiration", eventDate: "2027-01-01T00:00:00Z" }] }), { status: 200 }),
     speed: () => new Response(JSON.stringify({ lighthouseResult: { categories: { performance: { score: 0.81 } } } }), { status: 200 }),
     ...over.responses,
@@ -68,7 +69,7 @@ function deps(over = {}) {
       fetch: async (url) => {
         calls.push(String(url));
         const u = String(url);
-        const key = u.includes("rdap.org") ? "rdap" : u.includes("pagespeedonline") ? "speed" : u;
+        const key = u.includes("data.iana.org/rdap/dns.json") ? "bootstrap" : u.includes("rdap.") ? "rdap" : u.includes("pagespeedonline") ? "speed" : u;
         const make = responses[key];
         if (!make) return new Response("not found", { status: 404 });
         return make();
@@ -99,15 +100,33 @@ test("a healthy site passes every check and each result is recorded", async () =
 });
 
 test("a domain RDAP cannot answer reads unknown, and nothing else is lost", async () => {
-  const d = deps({ responses: { rdap: () => new Response("", { status: 404 }) } });
+  // The IANA registry list has no RDAP service for .ae (checked 14 Oct 2026).
+  const d = deps();
   const r = await runHqChecks({ id: "org-2", websiteUrl: "https://jurisprimelegal.ae" }, {
     ...d.deps,
-    fetch: async (url) => (String(url).includes("rdap.org") ? new Response("", { status: 404 }) : d.deps.fetch(String(url).replace("jurisprimelegal.ae", "sfsintrealestate.com"))),
+    fetch: async (url) => d.deps.fetch(String(url).replace("jurisprimelegal.ae", "sfsintrealestate.com")),
   });
   assert.equal(r.rdap.ok, null);
   assert.match(r.rdap.error, /\.ae/);
+  assert.ok(!d.calls.some((u) => u.includes("rdap.verisign")), "no registry was asked about a .ae domain");
   assert.equal(r.http.ok, true);
   assert.equal(r.tls.ok, true);
+});
+
+// FOUND ON THE FIRST LIVE RUN (14 Oct 2026): every domain read "HTTP 403".
+// rdap.org only forwards to the registry, and Verisign refuses Node's default
+// request identity. The registry is asked directly, from IANA's list, with a
+// named user agent.
+test("the registry itself is asked, by name, from IANA's list", async () => {
+  const seen = [];
+  const d = deps();
+  const r = await runHqChecks(ORG, { ...d.deps, fetch: async (url, init) => { seen.push({ url: String(url), init }); return d.deps.fetch(url, init); } });
+  assert.equal(r.rdap.ok, true);
+  const asked = seen.find((x) => x.url.startsWith("https://rdap.verisign.com/com/v1/domain/"));
+  assert.ok(asked, "the .com registry was asked directly");
+  assert.equal(asked.url, "https://rdap.verisign.com/com/v1/domain/sfsintrealestate.com");
+  assert.match(String(new Headers(asked.init?.headers).get("user-agent")), /NexusBusinessHQ/);
+  assert.ok(!seen.some((x) => x.url.includes("rdap.org")), "no third-party redirector");
 });
 
 test("a PageSpeed timeout leaves speed unknown and the other checks complete", async () => {

@@ -156,7 +156,7 @@ async function safeGet(deps: HqCheckDeps, url: string, timeoutMs = TIMEOUT_MS): 
   let current = url;
   for (let hop = 0; hop < 6; hop++) {
     await publicAddress(deps, new URL(current).hostname);
-    const res = await deps.fetch(current, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs), headers: { "user-agent": "NexusBusinessHQ/1.0 (+https://nexusagenticos.com)" } });
+    const res = await deps.fetch(current, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs), headers: { "user-agent": USER_AGENT } });
     if (res.status < 300 || res.status >= 400) return { res, finalUrl: current };
     const location = res.headers.get("location");
     if (!location) return { res, finalUrl: current };
@@ -168,6 +168,31 @@ async function safeGet(deps: HqCheckDeps, url: string, timeoutMs = TIMEOUT_MS): 
 }
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 300);
+
+const USER_AGENT = "NexusBusinessHQ/1.0 (+https://nexusagenticos.com)";
+const IANA_RDAP_BOOTSTRAP = "https://data.iana.org/rdap/dns.json";
+let bootstrapCache: { at: number; byTld: Map<string, string> } | null = null;
+
+/**
+ * The registry's own RDAP server for a TLD, from IANA's bootstrap list.
+ *
+ * Asked directly rather than through rdap.org: that service only redirects, and
+ * on the first live run (14 Oct 2026) Verisign refused the redirected request
+ * from Node's default identity with 403 for every .com. The list is cached for
+ * a day; a TLD absent from it (.ae, on 14 Oct 2026) has no public RDAP at all.
+ */
+async function rdapBaseFor(deps: HqCheckDeps, tld: string, cacheable: boolean): Promise<string | null> {
+  if (!cacheable || !bootstrapCache || Date.now() - bootstrapCache.at > 86_400_000) {
+    const res = await deps.fetch(IANA_RDAP_BOOTSTRAP, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { "user-agent": USER_AGENT } });
+    if (!res.ok) throw new Error(`the IANA registry list did not answer (HTTP ${res.status})`);
+    const json = (await res.json()) as { services?: [string[], string[]][] };
+    const byTld = new Map<string, string>();
+    for (const [tlds, urls] of json.services ?? []) for (const t of tlds) if (urls?.[0]) byTld.set(t.toLowerCase(), urls[0]);
+    bootstrapCache = { at: Date.now(), byTld };
+  }
+  const base = bootstrapCache.byTld.get(tld) ?? null;
+  return base ? (base.endsWith("/") ? base : `${base}/`) : null;
+}
 
 // ---------- the runner ----------
 
@@ -202,9 +227,15 @@ export async function runHqChecks(
 
     const branches: [HqCheckKind, () => Promise<HqCheckResult>][] = [
       ["rdap", async () => {
-        const res = await deps.fetch(`https://rdap.org/domain/${registrable}`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-        const tld = registrable.slice(registrable.lastIndexOf("."));
-        if (!res.ok) return { ok: null, data: {}, error: `No RDAP answer for ${tld} domains (HTTP ${res.status}); enter the expiry by hand` };
+        const tldName = registrable.slice(registrable.lastIndexOf(".") + 1).toLowerCase();
+        const tld = `.${tldName}`;
+        const base = await rdapBaseFor(deps, tldName, !overrides.fetch);
+        if (!base) return { ok: null, data: {}, error: `The ${tld} registry has no public lookup service; note the expiry date in the registrar field` };
+        const res = await deps.fetch(`${base}domain/${registrable}`, {
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+          headers: { "user-agent": USER_AGENT, accept: "application/rdap+json, application/json" },
+        });
+        if (!res.ok) return { ok: null, data: {}, error: `The ${tld} registry did not answer (HTTP ${res.status})` };
         const parsed = parseRdap(await res.json());
         return parsed.expiresAt
           ? { ok: true, data: parsed, error: null }

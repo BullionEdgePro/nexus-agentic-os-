@@ -215,6 +215,9 @@ export function detectProvider(input: {
   headers: Record<string, string>;
 }): { provider: string; behindProxy: boolean } {
   const h = Object.fromEntries(Object.entries(input.headers ?? {}).map(([k, v]) => [k.toLowerCase(), String(v)]));
+  // Shopify first: Shopify itself sits behind Cloudflare, and "Shopify" is the
+  // useful answer (Zipicka read "Behind Cloudflare" on the first live run).
+  if (h["x-shopid"] || h["x-shopify-stage"] || /myshopify\.com$|shopify/i.test(input.ptr ?? "")) return { provider: "Shopify", behindProxy: false };
   // Cloudflare's proxy answers for the site, so its IP says nothing about the
   // real host. Say that, rather than name Cloudflare as the host.
   if ((h.server ?? "").toLowerCase() === "cloudflare" || h["cf-ray"]) {

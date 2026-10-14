@@ -123,3 +123,9 @@ test("only http and https links are kept", async () => {
   assert.equal(safeHttpUrl("hpanel.hostinger.com"), "https://hpanel.hostinger.com");
   for (const bad of ["javascript:fetch('/x')", " JavaScript:alert(1)", "data:text/html,x", "vbscript:x", "file:///etc/passwd"]) assert.equal(safeHttpUrl(bad), null, bad);
 });
+
+// FOUND ON THE FIRST LIVE RUN: Zipicka read "Behind Cloudflare" — Shopify
+// itself sits behind Cloudflare, and a Shopify signal is the better answer.
+test("a Shopify store behind Cloudflare is named Shopify", () => {
+  assert.equal(detectProvider({ nameservers: [], ip: "23.227.38.65", ptr: "myshopify.com", headers: { server: "cloudflare", "cf-ray": "x" } }).provider, "Shopify");
+});
