@@ -107,6 +107,8 @@ export const TENANT_SCOPED_TABLES = [
   "hq_vault_entries",
   "hq_vault_reveals",
   "hq_checks",
+  // Org charts (migration 098).
+  "hq_org_members",
 ];
 // Not on the list, and each for a reason worth stating:
 //

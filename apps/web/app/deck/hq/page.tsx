@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getHqOverview, readableError, type HqCard } from "@/lib/api";
+import { getHqOverview, getHqGroup, readableError, type HqCard, type HqGroupView } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { HqOverview } from "./overview";
+import { HqGroupChart } from "./org-chart";
 import "../deck.css";
 import "./hq.css";
 
@@ -14,12 +15,17 @@ import "./hq.css";
 export default function BusinessHqPage() {
   const [businesses, setBusinesses] = useState<HqCard[] | null>(null);
   const [error, setError] = useState("");
+  const [group, setGroup] = useState<HqGroupView | null>(null);
 
   useEffect(() => {
     let live = true;
     getHqOverview()
       .then((data) => live && setBusinesses(data.businesses))
       .catch((err) => live && setError(readableError(err)));
+    // The group chart is a bonus view: if it fails, the business cards still show.
+    getHqGroup()
+      .then((g) => live && setGroup(g))
+      .catch(() => undefined);
     return () => {
       live = false;
     };
@@ -46,6 +52,12 @@ export default function BusinessHqPage() {
         {error ? <p className="hq-error">{error}</p> : null}
         {!businesses && !error ? <p className="hq-loading">Checking your businesses…</p> : null}
         {businesses ? <HqOverview businesses={businesses} /> : null}
+        {group ? (
+          <>
+            <h2 className="hq-section-title">Group structure</h2>
+            <HqGroupChart group={group} />
+          </>
+        ) : null}
       </div>
     </div>
   );

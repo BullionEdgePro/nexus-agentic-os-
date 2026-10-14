@@ -15,16 +15,18 @@ import {
 } from "@/lib/api";
 import { ScoreRing } from "../overview";
 import { VaultPanel } from "./vault-panel";
+import { OrgChartView } from "../org-chart";
 
 /**
  * One business in Business HQ (spec 2026-10-14-business-hq-design.md §3.2).
  * Five tabs over one response; `tab` and `now` are props so every tab renders
  * the same on the server, in tests and in the browser.
  */
-export type HqTab = "overview" | "website" | "seo" | "social" | "vault";
+export type HqTab = "overview" | "team" | "website" | "seo" | "social" | "vault";
 
 export const TABS: { id: HqTab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "team", label: "Team & structure" },
   { id: "website", label: "Website & domain" },
   { id: "seo", label: "SEO & Google" },
   { id: "social", label: "Social media" },
@@ -121,6 +123,7 @@ export function HqBusinessView({
 
       <div className="hq-panel" role="tabpanel">
         {tab === "overview" ? <OverviewTab data={data} now={now} /> : null}
+        {tab === "team" && data.orgChart ? <OrgChartView slug={slug} chart={data.orgChart} onChanged={onChanged} /> : null}
         {tab === "website" ? <WebsiteTab data={data} now={now} onChanged={onChanged} /> : null}
         {tab === "seo" ? <SeoTab data={data} now={now} onChanged={onChanged} /> : null}
         {tab === "social" ? <SocialTab data={data} now={now} onChanged={onChanged} /> : null}

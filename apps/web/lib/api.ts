@@ -2947,6 +2947,7 @@ export interface HqVaultEntry {
 export interface HqReveal { id: string; entryId: string; service: string; adminId: string; adminName: string | null; revealedAt: string; ip: string | null; userAgent: string | null }
 export interface HqBusinessDetail {
   business: { slug: string; name: string; logoUrl: string | null; websiteUrl: string | null };
+  orgChart: HqOrgChart;
   profile: HqProfile | null;
   checks: Partial<Record<string, HqCheck>>;
   issues: HqIssue[];
@@ -3003,4 +3004,38 @@ export function revealHqSecret(slug: string, id: string): Promise<{ secret: stri
 }
 export function checkHqNow(slug: string): Promise<{ queued: boolean }> {
   return request(`/api/hq/${slug}/check`, { method: "POST" });
+}
+
+// ---------- Business HQ org charts ----------
+
+export interface HqOrgNode {
+  id: string;
+  kind: "owner" | "staff" | "manual" | "vacancy";
+  name: string;
+  title: string | null;
+  department: string | null;
+  avatarUrl: string | null;
+  onShift: boolean | null;
+  whatsappConnected: boolean | null;
+  onNexus: boolean;
+  memberId: string | null;
+  children: HqOrgNode[];
+}
+export interface HqOrgChart { root: HqOrgNode; headcount: number; vacancies: number; departments: string[] }
+export interface HqGroupView {
+  owner: { name: string; title: string | null };
+  companies: { slug: string; name: string; logoUrl: string | null; headcount: number; vacancies: number; departments: string[] }[];
+}
+
+export function getHqGroup(): Promise<HqGroupView> {
+  return request("/api/hq/group");
+}
+export function addHqOrgMember(slug: string, input: { kind: "manual" | "vacancy"; fullName?: string; jobTitle?: string; department?: string; reportsTo: string }): Promise<{ member: unknown }> {
+  return request(`/api/hq/${slug}/org`, { method: "POST", body: JSON.stringify(input) });
+}
+export function saveHqOrgNode(slug: string, nodeId: string, input: { reportsTo: string; department?: string | null; fullName?: string; jobTitle?: string }): Promise<{ member: unknown }> {
+  return request(`/api/hq/${slug}/org/${encodeURIComponent(nodeId)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function removeHqOrgMember(slug: string, nodeId: string): Promise<{ ok: boolean }> {
+  return request(`/api/hq/${slug}/org/${encodeURIComponent(nodeId)}`, { method: "DELETE" });
 }

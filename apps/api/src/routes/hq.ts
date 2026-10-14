@@ -18,12 +18,18 @@ import {
   sealVaultSecret,
   vaultConfigured,
   withTenant,
+  listEmployees,
+  getHqGroup,
+  listOrgMembers,
+  upsertOrgMember,
+  deleteOrgMember,
   type HqBusiness,
   type HqProfileFields,
   type HqSocialPlatform,
   type VaultSection,
 } from "@nexus/db";
-import { looksLikeCardNumber, safeHttpUrl } from "@nexus/shared";
+import { looksLikeCardNumber, safeHttpUrl, buildOrgChart, wouldCreateLoop, type OrgChart } from "@nexus/shared";
+import { resolvePresence } from "@nexus/employees";
 import type { SessionScope } from "../lib/session.js";
 import { judgeBusiness } from "../services/hq-state.js";
 import { unlockVault, lockVault, vaultUnlockedFor, revealVaultSecret } from "../services/vault-unlock.js";
@@ -80,6 +86,111 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 const date = (v: unknown): string | null => (typeof v === "string" && v && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : null);
 const hasCard = (values: unknown[]) => values.some((v) => typeof v === "string" && looksLikeCardNumber(v));
 
+// ---------- organizational charts ----------
+
+const activeBusinesses = async () => (await listHqBusinesses()).filter((b) => b.isActive && b.slug !== "review-demo");
+
+/** A company's chart: its active Nexus staff, the details set in HQ, the group's owner on top. */
+async function orgChartFor(business: HqBusiness, companyCount: number): Promise<OrgChart> {
+  const [group, employees, members] = await Promise.all([getHqGroup(), listEmployees(business.id), listOrgMembers(business.id)]);
+  const now = new Date();
+  return buildOrgChart({
+    owner: { name: group.ownerName, title: group.ownerTitle },
+    companyCount,
+    staff: employees.map((e) => ({
+      id: e.id,
+      fullName: e.fullName,
+      jobTitle: e.jobTitle ?? null,
+      avatarUrl: e.avatarUrl ?? null,
+      isActive: e.isActive,
+      onShift: resolvePresence(e, now).status !== "offline",
+      whatsappConnected: !!e.whatsappPhoneNumberId,
+    })),
+    members,
+  });
+}
+
+/** Every node id on a chart, for validating a reporting line. */
+function chartIds(chart: OrgChart): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (n: OrgChart["root"]) => {
+    out.set(n.id, n.name);
+    n.children.forEach(walk);
+  };
+  walk(chart.root);
+  return out;
+}
+
+// Registered before "/:slug" so "group" is never read as a business.
+hqRoute.get("/group", async (c) => {
+  const businesses = await activeBusinesses();
+  const group = await getHqGroup();
+  const companies = await Promise.all(
+    businesses.map(async (b) => {
+      const chart = await orgChartFor(b, businesses.length);
+      return { slug: b.slug, name: b.name, logoUrl: b.logoUrl, headcount: chart.headcount, vacancies: chart.vacancies, departments: chart.departments };
+    })
+  );
+  return c.json({ owner: { name: group.ownerName, title: group.ownerTitle }, companies });
+});
+
+hqRoute.post("/:slug/org", async (c) => {
+  const business = await businessBySlug(c.req.param("slug"));
+  if (!business) return c.json({ error: "Business not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const kind = body.kind === "vacancy" ? "vacancy" : body.kind === "manual" ? "manual" : null;
+  if (!kind) return c.json({ error: "Add a person or a vacancy." }, 400);
+  const fullName = str(body.fullName, 120);
+  const jobTitle = str(body.jobTitle, 120);
+  if (kind === "manual" && !fullName) return c.json({ error: "Write the person's name." }, 400);
+  if (kind === "vacancy" && !jobTitle) return c.json({ error: "Write the role you are hiring for." }, 400);
+  const chart = await orgChartFor(business, (await activeBusinesses()).length);
+  const reportsTo = str(body.reportsTo, 80) ?? "owner";
+  if (!chartIds(chart).has(reportsTo)) return c.json({ error: "Choose someone on this company's chart." }, 400);
+  const member = await upsertOrgMember(business.id, { kind, employeeId: null, fullName: kind === "manual" ? fullName : null, jobTitle, department: str(body.department, 80), reportsTo });
+  return c.json({ member });
+});
+
+hqRoute.put("/:slug/org/:nodeId", async (c) => {
+  const business = await businessBySlug(c.req.param("slug"));
+  if (!business) return c.json({ error: "Business not found" }, 404);
+  const nodeId = c.req.param("nodeId");
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const [chart, members] = await Promise.all([orgChartFor(business, (await activeBusinesses()).length), listOrgMembers(business.id)]);
+  const ids = chartIds(chart);
+  if (!nodeId || nodeId === "owner" || !ids.has(nodeId)) return c.json({ error: "That person is not on this company's chart." }, 404);
+  const reportsTo = str(body.reportsTo, 80) ?? "owner";
+  if (!ids.has(reportsTo)) return c.json({ error: "Choose someone on this company's chart." }, 400);
+  if (wouldCreateLoop(members, nodeId, reportsTo)) {
+    return c.json({ error: `That would make ${ids.get(nodeId)} report to someone who reports to them.` }, 422);
+  }
+  const department = str(body.department, 80);
+  if (nodeId.startsWith("e:")) {
+    const member = await upsertOrgMember(business.id, { kind: "staff", employeeId: nodeId.slice(2), fullName: null, jobTitle: null, department, reportsTo });
+    return c.json({ member });
+  }
+  const existing = members.find((m) => `m:${m.id}` === nodeId);
+  if (!existing) return c.json({ error: "That person is not on this company's chart." }, 404);
+  const member = await upsertOrgMember(business.id, {
+    id: existing.id,
+    kind: existing.kind,
+    employeeId: null,
+    fullName: existing.kind === "manual" ? str(body.fullName, 120) ?? existing.fullName : null,
+    jobTitle: str(body.jobTitle, 120) ?? existing.jobTitle,
+    department,
+    reportsTo,
+  });
+  return c.json({ member });
+});
+
+hqRoute.delete("/:slug/org/:nodeId", async (c) => {
+  const business = await businessBySlug(c.req.param("slug"));
+  if (!business) return c.json({ error: "Business not found" }, 404);
+  const nodeId = c.req.param("nodeId") ?? "";
+  if (!nodeId.startsWith("m:")) return c.json({ error: "Nexus staff leave the chart when their account is switched off in Team." }, 400);
+  return (await deleteOrgMember(business.id, nodeId.slice(2))) ? c.json({ ok: true }) : c.json({ error: "That person is not on this company's chart." }, 404);
+});
+
 // ---------- the businesses ----------
 
 hqRoute.get("/", async (c) => {
@@ -133,8 +244,11 @@ hqRoute.get("/:slug", async (c) => {
       source: "connected" as const,
     }));
 
+  const orgChart = await orgChartFor(business, (await activeBusinesses()).length);
+
   return c.json({
     business: { slug: business.slug, name: business.name, logoUrl: business.logoUrl, websiteUrl: business.websiteUrl },
+    orgChart,
     profile,
     checks,
     issues,

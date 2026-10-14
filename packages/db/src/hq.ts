@@ -464,3 +464,101 @@ export async function listHqBusinesses(): Promise<HqBusiness[]> {
     }));
   });
 }
+
+// ---------- organizational charts (migration 098) ----------
+
+export interface HqGroup {
+  ownerName: string;
+  ownerTitle: string | null;
+}
+
+export interface OrgMemberRow {
+  id: string;
+  kind: "staff" | "manual" | "vacancy";
+  employeeId: string | null;
+  fullName: string | null;
+  jobTitle: string | null;
+  department: string | null;
+  reportsTo: string | null;
+}
+
+/** Who owns every company; one row. */
+export async function getHqGroup(): Promise<HqGroup> {
+  return withAllTenants("business hq: the owner of the group", async () => {
+    const { rows } = await getPool().query(`select owner_name, owner_title from hq_group where id`);
+    return { ownerName: rows[0]?.owner_name ?? "Owner", ownerTitle: rows[0]?.owner_title ?? null };
+  });
+}
+
+export async function listOrgMembers(organizationId: string): Promise<OrgMemberRow[]> {
+  return withAllTenants("business hq: a company's chart rows", async () => {
+    const { rows } = await getPool().query(
+      `select id, kind, employee_id, full_name, job_title, department, reports_to
+         from hq_org_members where organization_id = $1 order by created_at`,
+      [organizationId]
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      employeeId: r.employee_id,
+      fullName: r.full_name,
+      jobTitle: r.job_title,
+      department: r.department,
+      reportsTo: r.reports_to,
+    }));
+  });
+}
+
+/**
+ * Create or change a chart row. A 'staff' row is keyed by its employee, so
+ * setting a Nexus person's manager twice updates one row.
+ */
+export async function upsertOrgMember(
+  organizationId: string,
+  input: Omit<OrgMemberRow, "id"> & { id?: string }
+): Promise<OrgMemberRow | null> {
+  return withAllTenants("business hq: save a chart row", async () => {
+    const values = [input.kind, input.employeeId, input.fullName, input.jobTitle, input.department, input.reportsTo];
+    const { rows } = input.id
+      ? await getPool().query(
+          `update hq_org_members
+              set kind = $3, employee_id = $4, full_name = $5, job_title = $6, department = $7, reports_to = $8, updated_at = now()
+            where id = $1 and organization_id = $2
+            returning id, kind, employee_id, full_name, job_title, department, reports_to`,
+          [input.id, organizationId, ...values]
+        )
+      : input.kind === "staff"
+        ? await getPool().query(
+            `insert into hq_org_members (organization_id, kind, employee_id, full_name, job_title, department, reports_to)
+             values ($1, $2, $3, $4, $5, $6, $7)
+             on conflict (organization_id, employee_id) where employee_id is not null
+             do update set department = excluded.department, reports_to = excluded.reports_to, updated_at = now()
+             returning id, kind, employee_id, full_name, job_title, department, reports_to`,
+            [organizationId, ...values]
+          )
+        : await getPool().query(
+            `insert into hq_org_members (organization_id, kind, employee_id, full_name, job_title, department, reports_to)
+             values ($1, $2, $3, $4, $5, $6, $7)
+             returning id, kind, employee_id, full_name, job_title, department, reports_to`,
+            [organizationId, ...values]
+          );
+    const r = rows[0];
+    return r
+      ? { id: r.id, kind: r.kind, employeeId: r.employee_id, fullName: r.full_name, jobTitle: r.job_title, department: r.department, reportsTo: r.reports_to }
+      : null;
+  });
+}
+
+/** Remove a person added by hand or a vacancy; anyone who reported to them climbs a level. */
+export async function deleteOrgMember(organizationId: string, id: string): Promise<boolean> {
+  return withAllTenants("business hq: remove a chart row", async () => {
+    const { rows } = await getPool().query(`select reports_to from hq_org_members where id = $1 and organization_id = $2 and kind <> 'staff'`, [id, organizationId]);
+    if (!rows[0]) return false;
+    await getPool().query(
+      `update hq_org_members set reports_to = $3, updated_at = now() where organization_id = $1 and reports_to = $2`,
+      [organizationId, `m:${id}`, rows[0].reports_to ?? "owner"]
+    );
+    await getPool().query(`delete from hq_org_members where id = $1 and organization_id = $2`, [id, organizationId]);
+    return true;
+  });
+}
