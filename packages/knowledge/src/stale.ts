@@ -127,7 +127,11 @@ export function shouldRetrySoon(error: string | null | undefined): boolean {
     text.includes("eai_again") ||
     text.includes("socket hang up") ||
     text.includes("network") ||
-    text.includes("timeout")
+    text.includes("timeout") ||
+    // fetchDocument's own timeout: it aborts its AbortController, and Node
+    // reports that as "This operation was aborted" — no "timeout" in it. Three
+    // Juris Prime pages carried exactly this and waited the full cooldown.
+    text.includes("operation was aborted")
   );
 }
 

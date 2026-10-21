@@ -4,6 +4,28 @@ import { chunkText, dropPlaceholderChunks } from "./chunk.js";
 import { embedTexts, EMBEDDING_MODEL } from "./embed.js";
 import { fetchDocument, type FetchedDocument } from "./fetch-url.js";
 import { stripSharedBoilerplate } from "./html.js";
+import { shouldRetrySoon } from "./stale.js";
+
+/**
+ * Whether an unchanged page that just fetched cleanly clears its failure.
+ *
+ * FOUND 21 OCT 2026. The hash shortcut below only touched last_checked_at, so a
+ * source marked failed by one network blip stayed failed for as long as its
+ * page did not change — fetched successfully every six hours, never searched.
+ * Nine of Juris Prime's seventeen pages sat like that, some since August,
+ * including power-of-attorney attestation and witnessing of signature; the
+ * retrieval check answered those questions with the wrong pages.
+ *
+ * Only a failure where the server never answered is cleared: that is the one
+ * a clean fetch disproves. A definitive failure (a 404, a page of placeholder
+ * text) is about the content, and identical content does not change it.
+ */
+export function clearsFailureOnUnchangedContent(
+  status: string | null | undefined,
+  error: string | null | undefined
+): boolean {
+  return status === "failed" && shouldRetrySoon(error);
+}
 
 export type SourceKind = "text" | "url" | "file" | "faq" | "sop";
 
@@ -156,15 +178,16 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   // changes between crawls (a promo banner, a renamed section) would fail to
   // match its own row and silently create a duplicate source, so the knowledge
   // base would then hold and cite BOTH the old and new copies of that page.
+  type ExistingSource = { id: string; content_hash: string | null; status: string; error: string | null };
   const { rows: existing } = await scoped(async () => input.uri
-    ? await pool.query<{ id: string; content_hash: string | null }>(
-        `select id, content_hash from knowledge_sources
+    ? await pool.query<ExistingSource>(
+        `select id, content_hash, status, error from knowledge_sources
          where organization_id = $1 and uri = $2
            and employee_id is not distinct from $3`,
         [input.organizationId, input.uri, input.employeeId ?? null]
       )
-    : await pool.query<{ id: string; content_hash: string | null }>(
-        `select id, content_hash from knowledge_sources
+    : await pool.query<ExistingSource>(
+        `select id, content_hash, status, error from knowledge_sources
          where organization_id = $1 and title = $2 and uri is null
            and employee_id is not distinct from $3`,
         [input.organizationId, input.title, input.employeeId ?? null]
@@ -185,10 +208,16 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
   //
   //   update knowledge_sources set content_hash = null where <affected>;
   if (existing[0] && existing[0].content_hash === contentHash) {
+    const recovered = clearsFailureOnUnchangedContent(existing[0].status, existing[0].error);
     await scoped(() =>
-      pool.query(`update knowledge_sources set last_checked_at = now() where id = $1`, [
-        existing[0].id,
-      ])
+      pool.query(
+        recovered
+          ? `update knowledge_sources
+               set last_checked_at = now(), status = 'indexed', error = null, retry_after = null
+             where id = $1`
+          : `update knowledge_sources set last_checked_at = now() where id = $1`,
+        [existing[0].id]
+      )
     );
     return { sourceId: existing[0].id, chunks: 0, skipped: true };
   }
@@ -279,10 +308,16 @@ export async function ingestTextSource(input: IngestSourceInput): Promise<Ingest
     // Scoped like the rest, and it matters most here: this is the write that
     // makes a failure DIAGNOSABLE, so a version of it that throws on the
     // tenant assert would replace a recorded reason with a second exception.
+    //
+    // content_hash is cleared with it. updateSource already stored the NEW
+    // hash, but the chunks are still the old page's, so leaving the hash would
+    // let the unchanged-content shortcut vouch for passages that were never
+    // embedded from this content. Cleared, the next sweep re-embeds.
     await scoped(() =>
       pool.query(
-        `update knowledge_sources set status = 'failed', error = $2, last_checked_at = now()
-         where id = $1`,
+        `update knowledge_sources
+            set status = 'failed', error = $2, last_checked_at = now(), content_hash = null
+          where id = $1`,
         [sourceId, err instanceof Error ? err.message : String(err)]
       )
     );
