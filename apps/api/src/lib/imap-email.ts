@@ -75,8 +75,19 @@ export function imapConfigured(): boolean {
   return true;
 }
 
-function imapClient(email: string, password: string): ImapFlow {
-  return new ImapFlow({
+/**
+ * Every client gets an `error` listener before it can emit one.
+ *
+ * FOUND 21 OCT 2026. imapflow reports a failed login twice: `connect()` rejects,
+ * which the sweep catches and records against that one mailbox — AND the client
+ * emits an `error` event. With no listener, Node turns that event into an
+ * uncaught exception, so one Hostinger login hiccup killed the whole worker:
+ * every queue (WhatsApp replies included) stopped until Docker restarted it,
+ * three times in a day. The event carries nothing the rejected promise does
+ * not, so the listener only has to exist.
+ */
+export function imapClient(email: string, password: string): ImapFlow {
+  const client = new ImapFlow({
     host: imapHost(email),
     port: imapPort(),
     secure: true,
@@ -85,6 +96,8 @@ function imapClient(email: string, password: string): ImapFlow {
     // A mailbox that will not answer must not hang the sweep on it.
     socketTimeout: 20_000,
   });
+  client.on("error", () => undefined);
+  return client;
 }
 
 /**

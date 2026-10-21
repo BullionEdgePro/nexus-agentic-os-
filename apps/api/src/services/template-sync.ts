@@ -94,12 +94,23 @@ export async function syncTemplatesForOrganization(organization: {
   return { organizationSlug: organization.slug, synced: seen.length, approved, retired };
 }
 
+/**
+ * Whether this is an account Meta could answer for. Meta's ids are all digits;
+ * the App Review sandbox (review-demo) carries `none-review-demo` because the
+ * column is required, and asking Meta for it logged a level-50 "Template sync
+ * failed" every half hour from 2 Oct — noise in exactly the log a health check
+ * reads for real failures.
+ */
+export function isMetaAccountId(id: string | null | undefined): id is string {
+  return typeof id === "string" && /^\d+$/.test(id);
+}
+
 export async function syncAllTemplates(): Promise<SyncResult[]> {
   const organizations = await listOrganizations();
   const results: SyncResult[] = [];
 
   for (const organization of organizations) {
-    if (!organization.whatsappBusinessAccountId) {
+    if (!isMetaAccountId(organization.whatsappBusinessAccountId)) {
       logger.warn({ organization: organization.slug }, "No WhatsApp account id; skipping sync");
       continue;
     }

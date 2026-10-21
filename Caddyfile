@@ -16,3 +16,25 @@ nexusagenticos.com {
 www.nexusagenticos.com {
 	redir https://nexusagenticos.com{uri} permanent
 }
+
+# Broadlark (broadlark.com) runs on this same VPS and shares this Caddy, so its
+# site lives here. Committed 21 Oct 2026 from the server copy, which had been
+# edited in place since the Broadlark move. After changing it on the server:
+#
+#   docker compose -f /opt/nexus/docker-compose.prod.yml exec caddy \n#     caddy reload --config /etc/caddy/Caddyfile
+#
+# A reload, not a restart: every site keeps serving throughout.
+
+broadlark.com {
+	encode zstd gzip
+	# Uploads go through the app; Caddy itself sets no body limit.
+	reverse_proxy broadlark-web:3210 {
+		# The app rate-limits on the leftmost X-Forwarded-For. Hand it exactly
+		# one address: the real visitor (via Cloudflare) or the direct caller.
+		header_up X-Forwarded-For {client_ip}
+	}
+}
+
+www.broadlark.com {
+	redir https://broadlark.com{uri} permanent
+}
