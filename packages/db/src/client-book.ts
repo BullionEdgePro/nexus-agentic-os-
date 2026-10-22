@@ -488,6 +488,9 @@ export async function myClientsForBroadcast(
       where ${contactServedBy("$1")}
         and ${contactOwnedBy("$2")}
         and ct.reengagement_opted_out = false
+        -- WhatsApp-reachable only (22 Oct 2026): a book also holds email
+        -- customers, and the first real campaign sent 57 messages to "nobody".
+        and coalesce(ct.wa_id, '') <> ''
       order by ct.display_name nulls last`,
     [organizationId, employeeId]
   );
