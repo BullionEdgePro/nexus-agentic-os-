@@ -988,6 +988,8 @@ export interface StaffConversation {
   lastAt: string | null;
   lastBody: string | null;
   waiting: boolean;
+  /** Somebody selling to us: labelled, never counted as a customer waiting. */
+  pitch: boolean;
 }
 
 export interface StaffTimelineItem {

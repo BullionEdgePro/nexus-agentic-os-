@@ -161,7 +161,7 @@ export default function StaffWorkPage() {
                     <a href={`/inbox?business=${row.businessSlug}&conversation=${row.conversationId}`}>
                       <span className="sw-waiting-who">{row.contactName ?? "A customer"}</span>
                       <span className="sw-waiting-on">waiting on {row.employeeName}</span>
-                      <span className="sw-waiting-since">since {ago(row.since)}</span>
+                      <span className="sw-waiting-since">waiting {ago(row.since).replace(" ago", "")}</span>
                     </a>
                   </li>
                 ))}
@@ -306,8 +306,14 @@ function PersonWork({ person }: { person: StaffWorkPerson }) {
                       {c.lastBody ?? "—"}
                     </td>
                     <td>
-                      <span className={`sw-state ${c.waiting ? "crit" : c.status === "resolved" ? "muted" : "ok"}`}>
-                        {c.waiting ? `Waiting ${ago(c.lastAt).replace(" ago", "")}` : c.status === "resolved" ? "Closed" : "Answered"}
+                      <span className={`sw-state ${c.waiting ? "crit" : c.pitch || c.status === "resolved" ? "muted" : "ok"}`}>
+                        {c.waiting
+                          ? `Waiting ${ago(c.lastAt).replace(" ago", "")}`
+                          : c.pitch
+                            ? "Sales pitch"
+                            : c.status === "resolved"
+                              ? "Closed"
+                              : "Answered"}
                       </span>
                     </td>
                   </tr>

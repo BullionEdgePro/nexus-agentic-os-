@@ -54,6 +54,10 @@ const app = new Hono();
 // (app.example.com → api.example.com), so the cookie is same-site and a
 // SameSite=Lax cookie still travels.
 app.use("/api/*", cors({ origin: env.webOrigins, credentials: true }));
+// The Overview's health strip calls /health/jobs cross-origin too; without
+// this the browser blocked every check and it could only say "unknown"
+// (22 Oct 2026). Same origins, same credentials as /api/*.
+app.use("/health/*", cors({ origin: env.webOrigins, credentials: true }));
 app.use("/auth/*", cors({ origin: env.webOrigins, credentials: true }));
 // The public links endpoint carries no cookie and needs none, so it is open to
 // any origin: a business's own website may well want to read it directly rather

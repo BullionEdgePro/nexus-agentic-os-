@@ -8,6 +8,8 @@ import {
   staffWorkOverview,
   staffMemberWork,
 } from "@nexus/db";
+// The same rule the customer-waiting operator uses to tell a pitch from a customer.
+import { looksLikeAnInboundPitch } from "../services/operators.js";
 
 /**
  * Employee activity, for the people who run the platform.
@@ -82,11 +84,11 @@ activityRoute.get("/staff-work", async (c) => {
     if (!organization) return c.json({ error: "Organization not found" }, 404);
     organizationId = organization.id;
   }
-  return c.json(await staffWorkOverview(organizationId));
+  return c.json(await staffWorkOverview(organizationId, looksLikeAnInboundPitch));
 });
 
 activityRoute.get("/staff-work/:employeeId", async (c) => {
-  const work = await staffMemberWork(c.req.param("employeeId"));
+  const work = await staffMemberWork(c.req.param("employeeId"), looksLikeAnInboundPitch);
   if (!work) return c.json({ error: "Staff member not found" }, 404);
   return c.json(work);
 });

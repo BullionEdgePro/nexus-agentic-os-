@@ -1307,3 +1307,42 @@ html.nx-theme-fade .deck-root * {
   .nx-theme-crater { transition: none; }
   .nx-theme.is-dark .nx-theme-stars i { animation: none; }
 }
+
+/* The business filter (lib/business-tabs.tsx), shared by every page that uses
+   it (22 Oct 2026). It was styled only inside the old Team activity sheet, so
+   Staff work rendered it as run-together text; pages may still restyle it. */
+.deck-root .act-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
+.deck-root .act-tabs button {
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.deck-root .act-tabs button:hover { background: var(--pebble); color: var(--ink); }
+.deck-root .act-tabs button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.deck-root .act-tabs .bt-only { font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.deck-root .act-tabs.bt-waiting { min-height: 34px; }
+
+/* CALM — one voice (22 Oct 2026). The small print across every dashboard was
+   set in IBM Plex Mono ("■ open + pending", "N-01", rule descriptions), which
+   read as a terminal rather than a calm product. The token every one of those
+   rules reads now points at the body face; real code, keys and preformatted
+   text keep a true monospace. Figures stay aligned with tabular numerals. */
+.deck-root { --mono: var(--sans); font-variant-numeric: tabular-nums; }
+.deck-root code,
+.deck-root kbd,
+.deck-root pre,
+.deck-root samp {
+  font-family: var(--font-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+/* CALM — the Overview's own rail marks "you are here" the way every other
+   screen does: a soft wash and bold ink, not a solid blue block. */
+.deck-root:not(.shell) .rail a.on { background: var(--signal-soft); color: var(--ink); font-weight: 700; }
+.deck-root:not(.shell) .rail a.on .rail-icon { color: var(--signal); }

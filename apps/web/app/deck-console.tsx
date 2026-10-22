@@ -159,9 +159,10 @@ function liveStats(m: OverviewMetrics): Stat[] {
   const tokens = m.tokensUsed;
   return [
     { k: "Active conversations", v: String(m.activeConversations), d: "open + pending", cls: "flat", spark: [], hi: true },
-    { k: "AI resolution", v: m.aiResolutionPct != null ? String(m.aiResolutionPct) : "—", unit: "%", d: "last 7 days", cls: "flat", spark: [] },
+    // No unit on a value that does not exist: "—%" read as a broken screen.
+    { k: "AI resolution", v: m.aiResolutionPct != null ? String(m.aiResolutionPct) : "—", unit: m.aiResolutionPct != null ? "%" : undefined, d: m.aiResolutionPct != null ? "last 7 days" : "No data this week", cls: "flat", spark: [] },
     { k: "Messages today", v: m.messagesToday.toLocaleString(), d: "since midnight", cls: "flat", spark: [] },
-    { k: "Avg first response", v: m.avgFirstResponseMs != null ? (m.avgFirstResponseMs / 1000).toFixed(1) : "—", unit: "s", d: "last 7 days", cls: "flat", spark: [] },
+    { k: "Avg first response", v: m.avgFirstResponseMs != null ? (m.avgFirstResponseMs / 1000).toFixed(1) : "—", unit: m.avgFirstResponseMs != null ? "s" : undefined, d: m.avgFirstResponseMs != null ? "last 7 days" : "No data this week", cls: "flat", spark: [] },
     { k: "Governance holds", v: String(m.governanceHolds), d: "last 24h", cls: "flat", spark: [] },
     { k: "Tokens used", v: tokens >= 1000 ? (tokens / 1000).toFixed(1) : String(tokens), unit: tokens >= 1000 ? "k" : undefined, d: "last 7 days", cls: "flat", spark: [] },
   ];

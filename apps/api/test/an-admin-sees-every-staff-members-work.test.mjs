@@ -70,3 +70,18 @@ test("the page shows people, attention, their chats and their timeline", () => {
   assert.match(PAGE, /Needs your attention/);
   assert.match(PAGE, /What they did/);
 });
+
+test("FOUND ON SCREEN: a sales pitch is not a customer kept waiting", () => {
+  // The first live render listed "Harmowiy digital1", "Debby Ecom21" and
+  // "Ridof Digital Team" — store-growth pitches in Ralph's mailbox — as
+  // customers waiting 24 days. The customer-waiting operator already knows
+  // a pitch (looksLikeAnInboundPitch); Staff work now asks the same rule.
+  assert.match(ROUTE, /staffWorkOverview\(organizationId, looksLikeAnInboundPitch\)/);
+  assert.match(ROUTE, /staffMemberWork\(c\.req\.param\("employeeId"\), looksLikeAnInboundPitch\)/);
+  assert.match(DB, /la\.category = 'inbound_pitch'/);
+  assert.match(DB, /isPitch\(/);
+});
+
+test("FOUND ON SCREEN: someone who signed in is not 'active never'", () => {
+  assert.match(DB, /r\.last_login_at\]/);
+});
