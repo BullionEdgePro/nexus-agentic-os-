@@ -2,8 +2,10 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { toCsv, csvFilename } from "@nexus/shared";
 import {
+  assignContactOwnerIfUnowned,
   contactBelongsToBusiness,
   ensureContactForServingBusiness,
+  findEmployeeById,
   exportContacts,
   exportContactRecord,
   exportMessages,
@@ -128,9 +130,27 @@ contactsRoute.post("/:slug/contacts/import", async (c) => {
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
   const body = await c.req
-    .json<{ rows?: Array<{ waId?: string; displayName?: string; line?: number }> }>()
+    .json<{ rows?: Array<{ waId?: string; displayName?: string; line?: number }>; assignTo?: string }>()
     .catch(() => null);
   const rows = Array.isArray(body?.rows) ? body.rows : null;
+
+  // INTO WHOSE BOOK (22 Oct 2026). A staff campaign reaches only the people in
+  // that person's book, and an import used to land in nobody's. Checked before
+  // a single row is written: a wrong name must refuse the file, not half of it.
+  // The owner may fill anybody's book; a staff member, only their own.
+  const assignTo = typeof body?.assignTo === "string" && body.assignTo.trim() ? body.assignTo.trim() : null;
+  let assignee: { id: string; fullName: string } | null = null;
+  if (assignTo) {
+    const scope = c.get("scope") as { role?: string; employeeId?: string } | undefined;
+    if (scope?.role !== "operator" && scope?.employeeId !== assignTo) {
+      return c.json({ error: "You can only import into your own book." }, 403);
+    }
+    const employee = await findEmployeeById(assignTo).catch(() => null);
+    if (!employee || employee.organizationId !== organization.id) {
+      return c.json({ error: "That person is not in this business." }, 400);
+    }
+    assignee = { id: employee.id, fullName: employee.fullName };
+  }
   if (!rows || rows.length === 0) {
     return c.json({ error: "There were no rows to import." }, 400);
   }
@@ -160,10 +180,20 @@ contactsRoute.post("/:slug/contacts/import", async (c) => {
         waId,
         displayName: row?.displayName ?? null,
       });
+      let reason: string | undefined;
+      // Only a contact that belongs to THIS business goes in a book here; one
+      // owned by another business on the shared number is theirs to place.
+      if (assignee && result.ownerOrganizationId === organization.id) {
+        const placed = await assignContactOwnerIfUnowned(result.contactId, assignee.id);
+        if (!placed.assigned && placed.currentOwnerName) {
+          reason = `already in ${placed.currentOwnerName}'s book`;
+        }
+      }
       results.push({
         line,
         waId,
         outcome: result.created ? "added" : "already-known",
+        ...(reason ? { reason } : {}),
       });
     } catch (err) {
       results.push({

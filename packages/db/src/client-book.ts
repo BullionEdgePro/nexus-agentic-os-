@@ -639,3 +639,36 @@ export async function clientEmailAddresses(
   );
   return rows.map((row) => row.email);
 }
+
+/**
+ * Put a contact in a staff member's book, unless it is already in somebody's.
+ *
+ * Used by the customer import (22 Oct 2026): a staff campaign reaches only the
+ * people in that person's book, and an imported list used to land in nobody's.
+ * It never MOVES a contact — taking a client out of a colleague's book is a
+ * conversation for the owner, not a side effect of uploading a file — so it
+ * reports whose book the contact is already in instead.
+ */
+export async function assignContactOwnerIfUnowned(
+  contactId: string,
+  employeeId: string
+): Promise<{ assigned: boolean; currentOwnerName: string | null }> {
+  const { rowCount } = await getPool().query(
+    `update contacts set owner_employee_id = $2
+      where id = $1
+        and owner_employee_id is null`,
+    [contactId, employeeId]
+  );
+  if ((rowCount ?? 0) > 0) return { assigned: true, currentOwnerName: null };
+  const { rows } = await getPool().query<{ full_name: string | null; owner_employee_id: string | null }>(
+    `select e.full_name, c.owner_employee_id
+       from contacts c
+       left join employees e on e.id = c.owner_employee_id
+      where c.id = $1`,
+    [contactId]
+  );
+  return {
+    assigned: rows[0]?.owner_employee_id === employeeId,
+    currentOwnerName: rows[0]?.owner_employee_id === employeeId ? null : rows[0]?.full_name ?? null,
+  };
+}

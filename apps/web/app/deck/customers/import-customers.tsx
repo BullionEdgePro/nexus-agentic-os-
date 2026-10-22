@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { parseCsv, findColumns } from "@/lib/csv-parse";
-import { importContacts, readableError, type ImportedContact } from "@/lib/api";
+import { getTeam, importContacts, readableError, type ImportedContact } from "@/lib/api";
 
 /**
  * Bringing a customer list in.
@@ -42,6 +42,25 @@ export function ImportCustomers({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<ImportedContact[] | null>(null);
+  // Whose book the list goes into. A staff campaign reaches only the people in
+  // that person's book, so a list imported into nobody's cannot be campaigned to.
+  const [team, setTeam] = useState<Array<{ id: string; fullName: string }>>([]);
+  const [assignTo, setAssignTo] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getTeam(business)
+      .then(({ employees }) => {
+        if (!cancelled) setTeam(employees.filter((e) => e.isActive).map((e) => ({ id: e.id, fullName: e.fullName })));
+      })
+      .catch(() => {
+        // The picker simply stays at "Nobody" — the import itself still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, business]);
 
   const grid = useMemo(() => (text.trim() ? parseCsv(text) : []), [text]);
   const header = grid[0] ?? [];
@@ -73,7 +92,7 @@ export function ImportCustomers({
       // The server's refusal carries a sentence written for a person, and
       // silently dropping them here would mean the report did not mention rows
       // that were in the file.
-      const data = await importContacts(business, rows);
+      const data = await importContacts(business, rows, assignTo || null);
       setResults(data.results);
       onImported();
     } catch (err) {
@@ -120,6 +139,21 @@ export function ImportCustomers({
 
           {/* NAMED, NOT COUNTED. A refusal the reader cannot locate in their own
               file is the same as no report at all. */}
+          {/* Kept in a colleague's book rather than moved — said, so nobody
+              wonders why a name they imported is not in the book they chose. */}
+          {results.some((r) => r.outcome !== "refused" && r.reason) ? (
+            <p className="cu-import-note">
+              {results.filter((r) => r.outcome !== "refused" && r.reason).length} were already in a
+              colleague&rsquo;s book and stayed there:{" "}
+              {results
+                .filter((r) => r.outcome !== "refused" && r.reason)
+                .slice(0, 5)
+                .map((r) => `${r.waId} (${r.reason})`)
+                .join(", ")}
+              .
+            </p>
+          ) : null}
+
           {refused.length > 0 ? (
             <ul className="cu-import-refused">
               {refused.slice(0, 20).map((row) => (
@@ -190,6 +224,20 @@ export function ImportCustomers({
                 </select>
               </label>
             </div>
+          ) : null}
+
+          {team.length > 0 ? (
+            <label className="cu-import-field">
+              <span>Add to whose book</span>
+              <select value={assignTo} onChange={(event) => setAssignTo(event.target.value)}>
+                <option value="">Nobody — the business only</option>
+                {team.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
           ) : null}
 
           {/* THE PREVIEW IS THE POINT. Whatever this shows is what will be

@@ -1976,7 +1976,9 @@ export interface ImportedContact {
  */
 export function importContacts(
   orgSlug: BusinessSlug,
-  rows: Array<{ waId: string; displayName?: string | null; line?: number }>
+  rows: Array<{ waId: string; displayName?: string | null; line?: number }>,
+  /** A staff member's id: put the imported customers in that person's book. */
+  assignTo?: string | null
 ): Promise<{
   results: ImportedContact[];
   added: number;
@@ -1985,7 +1987,7 @@ export function importContacts(
 }> {
   return request(`/api/organizations/${orgSlug}/contacts/import`, {
     method: "POST",
-    body: JSON.stringify({ rows }),
+    body: JSON.stringify(assignTo ? { rows, assignTo } : { rows }),
   });
 }
 
