@@ -51,7 +51,9 @@ const root = join(here, "..", "..", "..");
 const read = (...p) => readFileSync(join(root, ...p), "utf8");
 
 const ROUTE = read("apps", "api", "src", "routes", "broadcasts.ts");
-const PROVISION = read("apps", "api", "src", "scripts", "provision-templates.ts");
+// The template definitions moved from scripts/provision-templates.ts into this
+// catalogue on 22 Oct 2026; the script and the staff template sync both read it.
+const PROVISION = read("apps", "api", "src", "lib", "campaign-templates.ts");
 const PAGE = read("apps", "web", "app", "deck", "broadcasts", "page.tsx");
 
 // ============================================================
@@ -147,7 +149,7 @@ test("every provisioned template is attributed to the business that provisions i
   // string "a,b" and passed nothing.
   for (const [slug, names] of Object.entries(PROVISIONED_TEMPLATE_BY_SLUG)) {
     assert.ok(
-      PROVISION.includes(`slug: "${slug}"`),
+      PROVISION.includes(`  ${/^[a-z]+$/.test(slug) ? slug : `"${slug}"`}: [`),
       `${slug} is attributed a template but the provisioning script does not create one for it`
     );
     assert.ok(Array.isArray(names), `${slug} must map to a list of template names`);

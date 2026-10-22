@@ -114,5 +114,6 @@ test("a number connected through Coexistence is the person's own, not 'missing'"
 });
 
 test("the owner sees who is connected and can send the instructions", () => {
-  assert.match(TEAM, /<WhatsAppReadiness team=\{team\} \/>/);
+  // business= since 22 Oct 2026: the card also shows each person's campaign readiness.
+  assert.match(TEAM, /<WhatsAppReadiness team=\{team\} business=\{business\} \/>/);
 });

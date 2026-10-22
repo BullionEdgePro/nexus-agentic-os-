@@ -143,7 +143,9 @@ contactsRoute.post("/:slug/contacts/import", async (c) => {
   if (assignTo) {
     const scope = c.get("scope") as { role?: string; employeeId?: string } | undefined;
     if (scope?.role !== "operator" && scope?.employeeId !== assignTo) {
-      return c.json({ error: "You can only import into your own book." }, 403);
+      // 400, not 403: this route never answers 403 (a distinguishable refusal
+      // is how a shared number leaks who exists), even where nothing would leak.
+      return c.json({ error: "You can only import into your own book." }, 400);
     }
     const employee = await findEmployeeById(assignTo).catch(() => null);
     if (!employee || employee.organizationId !== organization.id) {

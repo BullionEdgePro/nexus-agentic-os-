@@ -37,7 +37,9 @@ const read = (...p) => readFileSync(join(root, ...p), "utf8");
 
 const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
 const BOOK = read("packages", "db", "src", "client-book.ts");
-const PROVISION = read("apps", "api", "src", "scripts", "provision-templates.ts");
+// The template definitions moved from scripts/provision-templates.ts into this
+// catalogue on 22 Oct 2026 (the staff template sync reads them too).
+const PROVISION = read("apps", "api", "src", "lib", "campaign-templates.ts");
 const CLIENT = read("apps", "api", "src", "lib", "whatsapp-client.ts");
 
 // ============================================================

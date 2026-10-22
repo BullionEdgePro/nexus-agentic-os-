@@ -57,7 +57,7 @@
 export const PROVISIONED_TEMPLATE_BY_SLUG: Readonly<Record<string, readonly string[]>> =
   Object.freeze({
     zipicka: ["zipicka_order_update", "zipicka_promotions"],
-    "sfs-international": ["sfs_property_update"],
+    "sfs-international": ["sfs_property_update", "sfs_general_update"],
     "juris-prime": ["juris_prime_attestation_update"],
     "juris-prime-legal": ["juris_prime_legal_update"],
     abr: ["abr_matter_update"],
