@@ -76,18 +76,19 @@ export default function StaffWorkPage() {
   const [people, setPeople] = useState<StaffWorkPerson[]>([]);
   const [attention, setAttention] = useState<StaffWorkAttention | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // A failed LOAD is kept apart from anything else: when the data did not
+  // arrive, nothing below is drawn as though it had (a-failed-load-draws-nothing).
+  const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    setLoadError("");
     try {
       const data = await getStaffWork(business);
       setPeople(data.people);
       setAttention(data.attention);
     } catch (err) {
-      setError(readableError(err));
+      setLoadError(readableError(err));
     } finally {
       setLoading(false);
     }
@@ -115,15 +116,23 @@ export default function StaffWorkPage() {
               in one place.
             </p>
           </div>
-          <BusinessTabs value={business} onChange={(slug) => { setBusiness(slug); setSelected(null); }} />
+          <BusinessTabs value={business} onChange={(slug) => {
+              setLoading(true);
+              setBusiness(slug);
+              setSelected(null);
+            }} />
         </header>
 
-        {error ? (
+        {loadError ? (
           <p className="sw-error" role="alert">
-            {error} <button type="button" onClick={() => void load()}>Try again</button>
+            {loadError} <button type="button" onClick={() => void load()}>Try again</button>
           </p>
         ) : null}
 
+        {loadError ? null : loading ? (
+          <p className="sw-note">Loading staff…</p>
+        ) : (
+          <>
         {attention ? (
           <section className="sw-card sw-attention" aria-label="Needs your attention">
             <h2>Needs your attention</h2>
@@ -160,8 +169,6 @@ export default function StaffWorkPage() {
             ) : null}
           </section>
         ) : null}
-
-        {loading && !people.length ? <p className="sw-note">Loading staff…</p> : null}
 
         <section className="sw-grid" aria-label="Staff">
           {people.map((p) => (
@@ -217,6 +224,8 @@ export default function StaffWorkPage() {
         </section>
 
         {person ? <PersonWork key={person.employeeId} person={person} /> : null}
+          </>
+        )}
 
         <ResponseTimes business={business} />
       </main>
