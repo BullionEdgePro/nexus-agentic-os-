@@ -504,8 +504,12 @@ export async function listMyBroadcasts(
     createdAt: string;
     templateName: string | null;
     sent: number;
+    /** Of `sent`, the ones WhatsApp confirmed reached the phone (a read counts). */
+    delivered: number;
     failed: number;
     total: number;
+    /** The commonest raw failure texts, at most three — explained by the caller. */
+    topFailures: Array<{ reason: string; count: number }>;
   }>
 > {
   const { rows } = await getPool().query<{
@@ -514,13 +518,21 @@ export async function listMyBroadcasts(
     created_at: string;
     template_name: string | null;
     sent: string;
+    delivered: string;
     failed: string;
     total: string;
+    top_failures: Array<{ reason: string; count: number }> | null;
   }>(
     `select b.id, b.status, b.created_at, t.meta_template_name as template_name,
             count(r.id) filter (where r.status in ('sent', 'delivered')) as sent,
+            count(r.id) filter (where r.status = 'delivered') as delivered,
             count(r.id) filter (where r.status = 'failed') as failed,
-            count(r.id) as total
+            count(r.id) as total,
+            (select json_agg(json_build_object('reason', f.reason, 'count', f.n) order by f.n desc)
+               from (select left(fr.delivery_error, 500) as reason, count(*)::int as n
+                       from broadcast_recipients fr
+                      where fr.broadcast_id = b.id and fr.status = 'failed' and fr.delivery_error is not null
+                      group by 1 order by 2 desc limit 3) f) as top_failures
        from broadcasts b
        left join message_templates t on t.id = b.template_id
        left join broadcast_recipients r on r.broadcast_id = b.id
@@ -536,8 +548,10 @@ export async function listMyBroadcasts(
     createdAt: row.created_at,
     templateName: row.template_name,
     sent: Number(row.sent),
+    delivered: Number(row.delivered),
     failed: Number(row.failed),
     total: Number(row.total),
+    topFailures: row.top_failures ?? [],
   }));
 }
 
@@ -596,13 +610,23 @@ export async function optOutOfReengagement(contactId: string): Promise<boolean> 
  * and it is described that way wherever it is shown. A floor that is honest
  * about being a floor beats a precise number that is wrong.
  */
-export async function dailyReachUsed(): Promise<number> {
+export async function dailyReachUsed(fromPhoneNumberId?: string | null): Promise<number> {
   return withAllTenants("daily reach: a ceiling that belongs to the number, not a tenant", async () => {
+    // Per number when one is named (22 Oct 2026): a staff member's own number
+    // has its own limit, and other numbers' campaigns do not use it up.
+    //
+    // Timed by the CAMPAIGN (b.created_at). broadcast_recipients has no
+    // created_at; this filtered on one from the day it was written, threw every
+    // time, and the caller's catch turned that into "no warning" — so the limit
+    // warning never appeared once. Found 22 Oct 2026.
     const { rows } = await getPool().query<{ n: string }>(
       `select count(distinct r.contact_id) as n
          from broadcast_recipients r
-        where r.created_at >= now() - interval '24 hours'
-          and r.status <> 'failed'`
+         join broadcasts b on b.id = r.broadcast_id
+        where b.created_at >= now() - interval '24 hours'
+          and r.status <> 'failed'
+          ${fromPhoneNumberId ? "and b.from_phone_number_id = $1" : ""}`,
+      fromPhoneNumberId ? [fromPhoneNumberId] : []
     );
     return Number(rows[0]?.n ?? 0);
   });

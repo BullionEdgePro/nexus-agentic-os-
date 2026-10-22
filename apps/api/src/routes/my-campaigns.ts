@@ -11,7 +11,6 @@ import {
   broadcastAllowanceRemaining,
   listBroadcastTemplates,
   dailyReachUsed,
-  listOrganizations,
   getBroadcastTemplate,
   createBroadcastRecipients,
   updateBroadcastStatus,
@@ -19,7 +18,7 @@ import {
 } from "@nexus/db";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
-import { listWabaNumbers, readAccountStanding, sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
+import { listWabaNumbers, readNumberStanding, sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { deskOf, text } from "./my-desk.js";
 import { campaignReadiness, sendingAccountOf } from "../services/campaign-readiness.js";
 import { logger } from "../lib/logger.js";
@@ -161,7 +160,18 @@ myCampaignsRoute.get("/campaigns", async (c) => {
   // What the NUMBER can still start today, shared across all six businesses.
   // Reported on the way in, not only after a send: a person deciding whether to
   // message four hundred people should see the ceiling while they decide.
-  const ceiling = await describeDailyCeiling(audience.length);
+  const retired = await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId);
+  const sendingNumber = employee.whatsappPhoneNumberId ?? (retired ? null : organization.whatsappPhoneNumberId);
+  const ceiling = await describeDailyCeiling(audience.length, sendingNumber);
+  // Said on the way in, like the ceiling: someone deciding whether to send
+  // should know WhatsApp's view of the number before they press anything.
+  const quality = sendingNumber ? (await readNumberStanding(sendingNumber))?.quality ?? null : null;
+  const healthWarning =
+    quality === "RED"
+      ? "WhatsApp rates this number's quality as low (red), so campaigns from it are stopped until the rating recovers."
+      : quality === "YELLOW"
+        ? "WhatsApp rates this number's quality as medium (yellow). Send only to people who expect to hear from you."
+        : null;
 
   const readiness = await campaignReadiness(desk.employeeId, desk.organizationId);
 
@@ -171,6 +181,7 @@ myCampaignsRoute.get("/campaigns", async (c) => {
     canBroadcast: employee.canBroadcast ?? false,
     allowance,
     dailyCeiling: ceiling,
+    healthWarning,
     sendsFrom: employee.whatsappPhoneNumberId
       ? "your own number"
       : (await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId))
@@ -297,14 +308,6 @@ myCampaignsRoute.post("/campaigns", async (c) => {
   //
   // Logged at warn and returned to the caller, so the console can say it before
   // the send and afterwards.
-  const overDailyCeiling = await describeDailyCeiling(audience.length);
-  if (overDailyCeiling) {
-    logger.warn(
-      { employeeId: desk.employeeId, audience: audience.length, ...overDailyCeiling },
-      "Campaign is larger than the number can start today — sending anyway, per policy"
-    );
-  }
-
   // Their own number when they have one, the company's when they do not.
   // Stamped onto the row so the answer to "what did this go out from" never
   // changes afterwards.
@@ -319,6 +322,34 @@ myCampaignsRoute.post("/campaigns", async (c) => {
       409
     );
   }
+
+  // HOW WHATSAPP RATES THE NUMBER, asked before anything is written. RED means
+  // recipients have been blocking or reporting it; sending more would spend the
+  // rest of its standing, and it is the line this person's customers use.
+  // YELLOW is allowed and said. An unanswered lookup is neither.
+  const standing = await readNumberStanding(from);
+  if (standing?.quality === "RED") {
+    return c.json(
+      {
+        error:
+          "WhatsApp rates this number's quality as low (red) — people have been blocking or reporting its messages. Nothing was sent. Wait for the rating to recover before another campaign.",
+      },
+      409
+    );
+  }
+  const healthWarning =
+    standing?.quality === "YELLOW"
+      ? "WhatsApp rates this number's quality as medium (yellow). Send only to people who expect to hear from you."
+      : null;
+
+  const overDailyCeiling = await describeDailyCeiling(audience.length, from);
+  if (overDailyCeiling) {
+    logger.warn(
+      { employeeId: desk.employeeId, audience: audience.length, ...overDailyCeiling },
+      "Campaign is larger than the number can start today — sending anyway, per policy"
+    );
+  }
+
 
   const broadcast = await withTenant(desk.organizationId, () =>
     createStaffBroadcast({
@@ -369,6 +400,7 @@ myCampaignsRoute.post("/campaigns", async (c) => {
     // Present only when it matters. A warning that appears on every send is one
     // nobody reads by the third campaign.
     dailyCeiling: overDailyCeiling,
+    healthWarning,
   });
 });
 
@@ -496,26 +528,23 @@ function staffTemplateParams(count: number, displayName: string | null): string[
  * than an honest approximation.
  */
 async function describeDailyCeiling(
-  audienceSize: number
+  audienceSize: number,
+  fromPhoneNumberId: string | null
 ): Promise<{ tier: string | null; limit: number; usedToday: number; remainingToday: number } | null> {
+  // The number the campaign goes out from, not the company account's first
+  // number: a staff member's own number has its own tier (22 Oct 2026).
+  if (!fromPhoneNumberId) return null;
   try {
-    const organizations = await listOrganizations();
-    const waba = organizations.find((o) => o.whatsappBusinessAccountId)?.whatsappBusinessAccountId;
-    if (!waba) return null;
-
-    const standing = await readAccountStanding(waba);
-    const limit = standing?.dailyCustomerLimit ?? null;
-    // No limit reported means an unlimited tier. Nothing to warn about.
+    const standing = await readNumberStanding(fromPhoneNumberId);
+    const limit = standing?.dailyLimit ?? null;
     if (limit === null) return null;
 
-    const usedToday = await dailyReachUsed();
+    const usedToday = await dailyReachUsed(fromPhoneNumberId);
     const remainingToday = Math.max(0, limit - usedToday);
     if (audienceSize <= remainingToday) return null;
 
     return { tier: standing?.tier ?? null, limit, usedToday, remainingToday };
   } catch {
-    // Meta unreachable, or the count failed. The campaign is not blocked by our
-    // inability to describe a ceiling — it was never being enforced here.
     return null;
   }
 }

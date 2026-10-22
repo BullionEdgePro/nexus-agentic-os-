@@ -130,10 +130,12 @@ export default function MyCampaignsPage() {
             · sending from <strong>{view.sendsFrom}</strong>
           </p>
 
+          {view.healthWarning ? <p className="cmp-ceiling">{view.healthWarning}</p> : null}
+
           {view.dailyCeiling ? (
             <p className="cmp-ceiling">
               WhatsApp lets this number start <strong>{view.dailyCeiling.limit}</strong> new
-              conversations a day, shared across every business here, and at least{" "}
+              conversations a day, and at least{" "}
               <strong>{view.dailyCeiling.usedToday}</strong> have already gone out today — about{" "}
               <strong>{view.dailyCeiling.remainingToday}</strong> left. A campaign larger than that
               will send until the ceiling and the rest will not arrive today. Nothing here will stop

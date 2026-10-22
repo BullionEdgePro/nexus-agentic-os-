@@ -449,6 +449,31 @@ export function tierToDailyLimit(tier: string | null | undefined): number | null
 }
 
 /**
+ * One number's own messaging tier and quality, read with that number's token.
+ *
+ * readAccountStanding reports the FIRST number on an account; a staff member's
+ * own number sits on its own account and has its own tier (22 Oct 2026), so
+ * the daily limit and the RED gate ask about the number the campaign actually
+ * goes out from. null when Meta does not answer — never read as a pass.
+ */
+export async function readNumberStanding(
+  phoneNumberId: string
+): Promise<{ tier: string | null; dailyLimit: number | null; quality: string | null } | null> {
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/${env.metaGraphApiVersion}/${phoneNumberId}?fields=quality_rating,messaging_limit_tier`,
+      { headers: { Authorization: `Bearer ${await bearerFor(phoneNumberId)}` } }
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as { quality_rating?: string; messaging_limit_tier?: string };
+    const tier = json.messaging_limit_tier ? String(json.messaging_limit_tier) : null;
+    return { tier, dailyLimit: tierToDailyLimit(tier), quality: json.quality_rating ? String(json.quality_rating) : null };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * How this WhatsApp account is actually doing, as Meta sees it.
  *
  * ============================================================

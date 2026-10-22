@@ -3,12 +3,15 @@ import type { BroadcastSendJob } from "@nexus/shared";
 import {
   updateBroadcastRecipientStatus,
   broadcastOutcome,
+  broadcastStatus,
+  shouldTrip,
   updateBroadcastStatus,
   withAllTenants,
 } from "@nexus/db";
 import { sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { isUpstreamUnavailable } from "../scripts/upstream.js";
 import { logger } from "../lib/logger.js";
+import { explainSendError } from "../lib/send-errors.js";
 
 /**
  * Delivering one message of a campaign.
@@ -48,6 +51,13 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
   // upstream. Naming that here rather than re-deriving the tenant keeps the
   // send path from re-resolving an audience that must not change mid-send.
   await withAllTenants(`broadcast delivery: recipient ${recipientId}`, async () => {
+    // A PAUSED CAMPAIGN SENDS NOTHING MORE (22 Oct 2026). Read fresh before
+    // every send: the jobs were all queued up front, so the pause has to be
+    // honoured here, one recipient at a time. The recipient stays 'pending' —
+    // nothing was tried for them.
+    if ((await broadcastStatus(broadcastId)) === "paused") return;
+
+    let failure: string | null = null;
     try {
       // The receipt was already being returned and thrown away: the reply path was
       // wired to it on 17 August and this one was not. Without it 'sent' here can
@@ -85,6 +95,7 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
 
       logger.error({ broadcastId, recipientId, err }, "Broadcast send failed for recipient");
       await updateBroadcastRecipientStatus(recipientId, "failed", null, reason);
+      failure = reason;
     }
 
     // COMPLETED IS NOT THE ONLY WAY TO FINISH. This wrote "completed" whenever
@@ -92,7 +103,23 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
     // exactly the state of one where every message arrived. `failed` has been an
     // allowed status since the table was made and nothing had ever set it.
     const outcome = await broadcastOutcome(broadcastId);
-    if (outcome.done) {
+
+    // THE CIRCUIT BREAKER (22 Oct 2026). More than half of at least ten
+    // attempts refused: stop, before the rest of the list spends the number's
+    // standing too. Logged with the reason in words.
+    if (failure && shouldTrip(outcome) && (await broadcastStatus(broadcastId)) === "sending") {
+      await updateBroadcastStatus(broadcastId, "paused");
+      logger.warn(
+        { broadcastId, ...outcome, reason: explainSendError(failure) },
+        "Campaign paused: most of its messages were refused"
+      );
+      return;
+    }
+
+    // Finishing never un-pauses: a paused campaign keeps pending recipients and
+    // so is never "done", but a race between its last jobs must not overwrite
+    // the pause either.
+    if (outcome.done && (await broadcastStatus(broadcastId)) !== "paused") {
       const status = outcome.sent === 0 && outcome.failed > 0 ? "failed" : "completed";
       await updateBroadcastStatus(broadcastId, status);
       logger.info({ broadcastId, ...outcome, status }, "Broadcast finished");

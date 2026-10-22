@@ -2632,6 +2632,8 @@ export interface MyCampaignsView {
   allowance: { used: number; cap: number | null; remaining: number | null };
   /** Present only when the campaign is larger than the number can start today. */
   dailyCeiling: { tier: string | null; limit: number; usedToday: number; remainingToday: number } | null;
+  /** WhatsApp's quality rating of the sending number, in words, when it is not green. */
+  healthWarning: string | null;
   sendsFrom: string;
   audience: Array<{ displayName: string | null; waId: string }>;
   templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;

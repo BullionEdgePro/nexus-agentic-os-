@@ -532,7 +532,7 @@ export interface CreateBroadcastInput {
   scheduledAt?: string;
 }
 
-export type BroadcastStatus = "draft" | "scheduled" | "sending" | "completed" | "failed";
+export type BroadcastStatus = "draft" | "scheduled" | "sending" | "completed" | "failed" | "paused";
 
 /** Job payload for the per-recipient broadcast-send queue. */
 export interface BroadcastSendJob {

@@ -271,6 +271,27 @@ export async function broadcastOutcome(
   };
 }
 
+/**
+ * Whether a campaign has failed badly enough to stop (22 Oct 2026).
+ *
+ * At least ten attempts, so two unlucky numbers at the start cannot halt a
+ * campaign; MORE than half failed, so a campaign split down the middle keeps
+ * going. Past that line, every further refusal is another mark against the
+ * sending number's standing, which is worth more than the rest of the list.
+ */
+export function shouldTrip(outcome: { sent: number; failed: number }): boolean {
+  const attempted = outcome.sent + outcome.failed;
+  return attempted >= 10 && outcome.failed * 2 > attempted;
+}
+
+/** The campaign's current status, read fresh — the worker checks it before every send. */
+export async function broadcastStatus(broadcastId: string): Promise<string | null> {
+  const { rows } = await getPool().query<{ status: string }>(`select status from broadcasts where id = $1`, [
+    broadcastId,
+  ]);
+  return rows[0]?.status ?? null;
+}
+
 export interface TemplateRow {
   id: string;
   metaTemplateName: string;
