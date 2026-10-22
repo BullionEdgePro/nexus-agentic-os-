@@ -21,6 +21,7 @@ import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nex
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { listWabaNumbers, readAccountStanding } from "../lib/whatsapp-client.js";
 import { deskOf, text } from "./my-desk.js";
+import { campaignReadiness, sendingAccountOf } from "../services/campaign-readiness.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -120,23 +121,6 @@ myCampaignsRoute.post("/channel/release", async (c) => {
 // Campaigns to your own book
 // ============================================================
 
-/**
- * The WhatsApp account a campaign goes out from: the staff member's own number's
- * account when they have one (a Coexistence number sits on its own portfolio's
- * account), else the business's. A number assigned from the business's own
- * account (Team, or claimed here) records none, so it falls back to the
- * business's, which is where it is.
- */
-function sendingAccountOf(
-  employee: { whatsappPhoneNumberId?: string | null; whatsappBusinessAccountId?: string | null },
-  organization: { whatsappBusinessAccountId: string | null }
-): string | null {
-  if (employee.whatsappPhoneNumberId) {
-    return employee.whatsappBusinessAccountId ?? organization.whatsappBusinessAccountId;
-  }
-  return organization.whatsappBusinessAccountId;
-}
-
 myCampaignsRoute.get("/campaigns", async (c) => {
   const desk = deskOf(c);
   if ("error" in desk) return c.json({ error: desk.error }, 403);
@@ -167,8 +151,11 @@ myCampaignsRoute.get("/campaigns", async (c) => {
   // message four hundred people should see the ceiling while they decide.
   const ceiling = await describeDailyCeiling(audience.length);
 
+  const readiness = await campaignReadiness(desk.employeeId, desk.organizationId);
+
   return c.json({
     campaigns,
+    readiness,
     canBroadcast: employee.canBroadcast ?? false,
     allowance,
     dailyCeiling: ceiling,
@@ -240,6 +227,13 @@ myCampaignsRoute.post("/campaigns", async (c) => {
       },
       403
     );
+  }
+
+  // The same four checks the screen shows, so the two cannot disagree.
+  const readiness = await campaignReadiness(desk.employeeId, desk.organizationId);
+  if (readiness.some((c) => c.ok !== true)) {
+    const first = readiness.find((c) => c.ok !== true)!;
+    return c.json({ error: `${first.detail} ${first.fix ?? ""}`.trim(), readiness }, 422);
   }
 
   const template = await withTenant(desk.organizationId, () => getBroadcastTemplate(templateId));

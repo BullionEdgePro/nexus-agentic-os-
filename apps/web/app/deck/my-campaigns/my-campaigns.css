@@ -158,3 +158,61 @@
   max-width: 78ch;
 }
 .deck-root .cmp-warn-line { color: var(--warn); }
+
+/* Ready to send: the same four checks the server refuses a send on. */
+.cmp-ready {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--paper);
+  padding: 14px 16px;
+  margin: 0 0 18px;
+}
+.cmp-ready h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+.cmp-ready h2 span {
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+.cmp-ready h2 span.cmp-ready-all {
+  color: var(--good);
+}
+.cmp-ready ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cmp-ready li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+.cmp-ready li em {
+  display: block;
+  font-style: normal;
+  color: var(--slate);
+  font-size: 0.82rem;
+  margin-top: 2px;
+}
+.cmp-ready-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--pebble);
+}
+.cmp-ready li.ok .cmp-ready-dot {
+  background: var(--good);
+}
+.cmp-ready li.no .cmp-ready-dot {
+  background: var(--warn);
+}

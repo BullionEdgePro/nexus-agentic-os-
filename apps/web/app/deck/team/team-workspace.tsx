@@ -445,7 +445,7 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
             </div>
           )}
 
-          <WhatsAppReadiness team={team} />
+          <WhatsAppReadiness team={team} business={business} />
 
           {team.length === 0 ? (
             <p className="team-empty">Nobody added yet. The AI answers every conversation for this business.</p>

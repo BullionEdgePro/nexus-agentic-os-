@@ -11,6 +11,7 @@ import {
   sendMyCampaign,
   type MyCampaignsView,
   type MyChannel,
+  type ReadinessCheck,
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
@@ -71,6 +72,7 @@ export default function MyCampaignsPage() {
   }
 
   const audience = view?.audience ?? [];
+  const ready = (view?.readiness ?? []).every((check) => check.ok === true);
   const template = view?.templates.find((candidate) => candidate.id === chosen);
 
   return (
@@ -81,6 +83,8 @@ export default function MyCampaignsPage() {
       </header>
 
       <NumberPanel channel={channel} onChanged={load} />
+
+      {view?.readiness ? <Readiness checks={view.readiness} /> : null}
 
       {view && !view.canBroadcast ? (
         <p className="cmp-blocked">
@@ -148,7 +152,7 @@ export default function MyCampaignsPage() {
             <button
               type="button"
               className="cmp-go"
-              disabled={!chosen}
+              disabled={!chosen || !ready}
               onClick={() => {
                 setRefused(null);
                 setConfirming(true);
@@ -263,6 +267,33 @@ export default function MyCampaignsPage() {
  * has not found at Meta cannot send anything — and one stored anyway produces a
  * campaign that reports success to a whole client book and reaches nobody.
  */
+/**
+ * The four things a campaign needs, each with the one thing to do about it.
+ * The same checks the server refuses a send on, so a green list here is a send
+ * that will be accepted.
+ */
+function Readiness({ checks }: { checks: ReadinessCheck[] }) {
+  const done = checks.filter((check) => check.ok === true).length;
+  return (
+    <section className="cmp-ready" aria-label="Ready to send">
+      <h2>
+        Ready to send <span className={done === checks.length ? "cmp-ready-all" : ""}>{done} of {checks.length}</span>
+      </h2>
+      <ul>
+        {checks.map((check) => (
+          <li key={check.key} className={check.ok === true ? "ok" : check.ok === null ? "unknown" : "no"}>
+            <span className="cmp-ready-dot" aria-hidden="true" />
+            <span>
+              {check.detail}
+              {check.ok !== true && check.fix ? <em>{check.fix}</em> : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function NumberPanel({ channel, onChanged }: { channel: MyChannel | null; onChanged: () => void }) {
   const [numbers, setNumbers] = useState<
     Array<{ phoneNumberId: string; displayNumber: string; verifiedName: string; isShared: boolean }>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getChannels, type ChannelStatus } from "@/lib/api";
+import { getCampaignReadiness, getChannels, type ChannelStatus } from "@/lib/api";
 
 /**
  * Who answers WhatsApp on their own number — the owner's checklist.
@@ -26,8 +26,43 @@ interface Member {
   whatsappPhoneNumberId?: string | null;
 }
 
-export function WhatsAppReadiness({ team }: { team: Member[] }) {
+export function WhatsAppReadiness({ team, business }: { team: Member[]; business: string }) {
   const [status, setStatus] = useState<ChannelStatus | null>(null);
+  // Campaign readiness per person: the same four checks each staff member sees
+  // on My campaigns. Absent (not "0 of 4") while loading or if it failed — a
+  // count nobody could compute must not read as a person who is not ready.
+  const [campaigns, setCampaigns] = useState<Map<string, { done: number; total: number; next: string | null }>>(
+    new Map()
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    getCampaignReadiness(business)
+      .then(({ people }) => {
+        if (cancelled) return;
+        setCampaigns(
+          new Map(
+            people.map((person) => {
+              const missing = person.checks.find((check) => check.ok !== true);
+              return [
+                person.employeeId,
+                {
+                  done: person.checks.filter((check) => check.ok === true).length,
+                  total: person.checks.length,
+                  next: missing ? missing.detail : null,
+                },
+              ];
+            })
+          )
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCampaigns(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [business]);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -81,6 +116,14 @@ export function WhatsAppReadiness({ team }: { team: Member[] }) {
             <span className="wa-ready-state">
               {member.whatsappPhoneNumberId ? "answers on their own number" : "not connected — gets no WhatsApp"}
             </span>
+            {campaigns.get(member.id) ? (
+              <span
+                className={`wa-ready-cmp ${campaigns.get(member.id)!.done === campaigns.get(member.id)!.total ? "done" : ""}`}
+                title={campaigns.get(member.id)!.next ?? "Ready to send campaigns"}
+              >
+                Campaigns {campaigns.get(member.id)!.done}/{campaigns.get(member.id)!.total}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

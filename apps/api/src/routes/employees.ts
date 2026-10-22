@@ -21,6 +21,7 @@ import {
   recordAssignmentEvent,
 } from "@nexus/db";
 import { randomInt } from "node:crypto";
+import { campaignReadiness } from "../services/campaign-readiness.js";
 import {
   listWabaNumbers,
   addWabaNumber,
@@ -387,6 +388,31 @@ employeesRoute.delete("/:slug/employees/:employeeId/calendar", async (c) => {
   const removed = await disconnectCalendar(organization.id, c.req.param("employeeId"));
   if (!removed) return c.json({ error: "No calendar is connected for that person." }, 404);
   return c.json({ ok: true });
+});
+
+/**
+ * Campaign readiness for every active person in the business — the owner's view
+ * of the same four checks each staff member sees on their Campaigns screen
+ * (services/campaign-readiness.ts). One function, so the owner's "3 of 4" and
+ * the staff member's checklist cannot disagree.
+ */
+employeesRoute.get("/:slug/campaign-readiness", async (c) => {
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can see the whole team's campaign readiness." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const employees = (await listEmployees(organization.id)).filter((employee) => employee.isActive);
+  const people = [];
+  for (const employee of employees) {
+    people.push({
+      employeeId: employee.id,
+      fullName: employee.fullName,
+      checks: await campaignReadiness(employee.id, organization.id),
+    });
+  }
+  return c.json({ people });
 });
 
 /**

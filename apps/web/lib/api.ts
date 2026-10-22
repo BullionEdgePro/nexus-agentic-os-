@@ -2610,8 +2610,17 @@ export interface MyCampaign {
   total: number;
 }
 
+/** One of the four things a campaign needs (services/campaign-readiness.ts). ok:null = could not check. */
+export interface ReadinessCheck {
+  key: "allowed" | "number" | "message" | "clients";
+  ok: boolean | null;
+  detail: string;
+  fix: string | null;
+}
+
 export interface MyCampaignsView {
   campaigns: MyCampaign[];
+  readiness: ReadinessCheck[];
   canBroadcast: boolean;
   /** cap and remaining are null when no ceiling is set here — not the same as unlimited. */
   allowance: { used: number; cap: number | null; remaining: number | null };
@@ -2628,6 +2637,13 @@ export function getMyCampaigns(): Promise<MyCampaignsView> {
 
 export function sendMyCampaign(templateId: string): Promise<{ broadcastId: string; enqueued: number }> {
   return request("/api/my/campaigns", { method: "POST", body: JSON.stringify({ templateId }) });
+}
+
+/** The owner's view: every active person's four checks. */
+export function getCampaignReadiness(
+  business: string
+): Promise<{ people: Array<{ employeeId: string; fullName: string; checks: ReadinessCheck[] }> }> {
+  return request(`/api/organizations/${business}/campaign-readiness`);
 }
 
 export function claimMyNumber(phoneNumberId: string): Promise<{ ok: true }> {
