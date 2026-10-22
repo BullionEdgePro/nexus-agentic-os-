@@ -2652,6 +2652,11 @@ export function getCampaignReadiness(
   return request(`/api/organizations/${business}/campaign-readiness`);
 }
 
+/** One copy of a message to one number, through the campaign's own send. Leaves no campaign behind. */
+export function sendMyCampaignTest(templateId: string, to: string): Promise<{ ok: true; messageId: string | null }> {
+  return request("/api/my/campaigns/test", { method: "POST", body: JSON.stringify({ templateId, to }) });
+}
+
 export function claimMyNumber(phoneNumberId: string): Promise<{ ok: true }> {
   return request("/api/my/channel/claim", { method: "POST", body: JSON.stringify({ phoneNumberId }) });
 }

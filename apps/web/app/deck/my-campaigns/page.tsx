@@ -9,6 +9,7 @@ import {
   readableError,
   releaseMyNumber,
   sendMyCampaign,
+  sendMyCampaignTest,
   type MyCampaignsView,
   type MyChannel,
   type ReadinessCheck,
@@ -52,6 +53,10 @@ export default function MyCampaignsPage() {
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
+  // Trying the message on one number first: the campaign itself goes to everyone.
+  const [testTo, setTestTo] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -151,6 +156,46 @@ export default function MyCampaignsPage() {
               be approved by Meta before it can be sent to people who have not written in recently.
             </em>
           </label>
+
+          {chosen ? (
+            <div className="cmp-test">
+              <label>
+                <span>Try it on your own WhatsApp first</span>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="+971 50 123 4567"
+                  value={testTo}
+                  onChange={(event) => {
+                    setTestTo(event.target.value);
+                    setTestResult(null);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={testing || !testTo.trim()}
+                onClick={async () => {
+                  setTesting(true);
+                  setTestResult(null);
+                  try {
+                    await sendMyCampaignTest(chosen, testTo.trim());
+                    setTestResult({ ok: true, text: "Sent. Check that WhatsApp — it should arrive within a minute." });
+                  } catch (err) {
+                    setTestResult({ ok: false, text: readableError(err) });
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+              >
+                {testing ? "Sending test…" : "Send a test"}
+              </button>
+              {testResult ? (
+                <p className={testResult.ok ? "cmp-test-ok" : "mc-error"}>{testResult.text}</p>
+              ) : null}
+              <em>One copy to that number only. Nobody in your book gets it, and it is not counted anywhere.</em>
+            </div>
+          ) : null}
 
           {audience.length === 0 ? (
             <p className="mc-empty">

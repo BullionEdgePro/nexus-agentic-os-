@@ -19,7 +19,7 @@ import {
 } from "@nexus/db";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
-import { listWabaNumbers, readAccountStanding } from "../lib/whatsapp-client.js";
+import { listWabaNumbers, readAccountStanding, sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { deskOf, text } from "./my-desk.js";
 import { campaignReadiness, sendingAccountOf } from "../services/campaign-readiness.js";
 import { logger } from "../lib/logger.js";
@@ -250,26 +250,8 @@ myCampaignsRoute.post("/campaigns", async (c) => {
 
   const template = await withTenant(desk.organizationId, () => getBroadcastTemplate(templateId));
   if (!template) return c.json({ error: "That message no longer exists." }, 404);
-  if (!template.isApproved) return c.json({ error: "WhatsApp has not approved that message." }, 422);
-  if (template.organizationId !== organization.id) {
-    return c.json({ error: "That message belongs to a different business." }, 403);
-  }
-  const sendingAccount = sendingAccountOf(employee, organization);
-  if (template.whatsappBusinessAccountId !== sendingAccount) {
-    return c.json(
-      {
-        error:
-          "That message is approved on a different WhatsApp account from the number you send from, so WhatsApp would refuse it. Choose one of the messages listed for your number.",
-      },
-      422
-    );
-  }
-  if (attributeTemplate(template.metaTemplateName, organization.slug) === "other-business") {
-    return c.json(
-      { error: describeWrongTemplate(template.metaTemplateName, organization.slug) },
-      422
-    );
-  }
+  const refusal = templateRefusal(template, organization, sendingAccountOf(employee, organization));
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
 
   const audience = await withTenant(desk.organizationId, () =>
     myClientsForBroadcast(desk.organizationId, desk.employeeId)
@@ -388,6 +370,103 @@ myCampaignsRoute.post("/campaigns", async (c) => {
     // nobody reads by the third campaign.
     dailyCeiling: overDailyCeiling,
   });
+});
+
+/**
+ * Whether this template may go out from this sender — the checks a campaign and
+ * a test send share, so a test that passes is a campaign that will be accepted.
+ */
+function templateRefusal(
+  template: { isApproved: boolean; organizationId: string; whatsappBusinessAccountId: string | null; metaTemplateName: string },
+  organization: { id: string; slug: string },
+  sendingAccount: string | null
+): { error: string; status: 403 | 422 } | null {
+  if (!template.isApproved) return { error: "WhatsApp has not approved that message.", status: 422 };
+  if (template.organizationId !== organization.id) {
+    return { error: "That message belongs to a different business.", status: 403 };
+  }
+  if (template.whatsappBusinessAccountId !== sendingAccount) {
+    return {
+      error:
+        "That message is approved on a different WhatsApp account from the number you send from, so WhatsApp would refuse it. Choose one of the messages listed for your number.",
+      status: 422,
+    };
+  }
+  if (attributeTemplate(template.metaTemplateName, organization.slug) === "other-business") {
+    return { error: describeWrongTemplate(template.metaTemplateName, organization.slug), status: 422 };
+  }
+  return null;
+}
+
+/**
+ * Why a test send to `to` is refused, or null. Exported for its test.
+ *
+ * Not the profile number: connecting a WhatsApp Business number overwrites
+ * employees.whatsapp_number with that very number, and a number cannot message
+ * itself — so the sender types the number to try it on.
+ */
+export function testSendRefusal(to: string, sendingDisplayNumber: string | null): string | null {
+  const digits = to.replace(/\D/g, "");
+  if (digits.length < 8 || /[a-z]/i.test(to)) return "That is not a phone number.";
+  if (sendingDisplayNumber && digits === sendingDisplayNumber.replace(/\D/g, "")) {
+    return "That is the number the campaign sends from — use your personal WhatsApp.";
+  }
+  return null;
+}
+
+/**
+ * Try a message on yourself before your whole book gets it.
+ *
+ * A staff campaign always goes to everybody in the book, so until this existed
+ * the only way to learn whether a message arrives was to send it to all of
+ * them. This goes through the SAME send and the SAME template checks, to one
+ * number, and leaves nothing behind: no broadcast row, no recipient, nothing
+ * counted against any limit. Meta's answer comes back in words.
+ */
+myCampaignsRoute.post("/campaigns/test", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  const templateId = text(body.templateId, 64);
+  const to = text(body.to, 40);
+  if (!templateId) return c.json({ error: "Choose a message to try." }, 400);
+  if (!to) return c.json({ error: "Which number should the test go to?" }, 400);
+
+  const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
+  const organization = await withTenant(desk.organizationId, () => findOrganizationById(desk.organizationId));
+  if (!employee || !organization) return c.json({ error: "Account not found." }, 404);
+  if (!employee.canBroadcast) return c.json({ error: "Campaigns are not switched on for you." }, 403);
+
+  const sharedRetired = await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId);
+  const from = employee.whatsappPhoneNumberId ?? (sharedRetired ? null : organization.whatsappPhoneNumberId);
+  if (!from) {
+    return c.json({ error: "You have no WhatsApp number to send from yet. Connect yours in Connections first." }, 409);
+  }
+
+  const refusedTo = testSendRefusal(to, employee.whatsappPhoneNumberId ? employee.whatsappNumber ?? null : null);
+  if (refusedTo) return c.json({ error: refusedTo }, 400);
+
+  const template = await withTenant(desk.organizationId, () => getBroadcastTemplate(templateId));
+  if (!template) return c.json({ error: "That message no longer exists." }, 404);
+  const refusal = templateRefusal(template, organization, sendingAccountOf(employee, organization));
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+
+  try {
+    const messageId = await sendWhatsAppTemplate(
+      from,
+      to.replace(/\D/g, ""),
+      template.metaTemplateName,
+      template.language,
+      staffTemplateParams(template.bodyParamCount, employee.fullName)
+    );
+    logger.info({ employeeId: desk.employeeId, template: template.metaTemplateName, from }, "Campaign test sent");
+    return c.json({ ok: true, messageId });
+  } catch (err) {
+    const reason = explainSendError(err instanceof Error ? err.message : String(err));
+    logger.warn({ employeeId: desk.employeeId, template: template.metaTemplateName, from, reason }, "Campaign test refused");
+    return c.json({ error: reason }, 502);
+  }
 });
 
 /**

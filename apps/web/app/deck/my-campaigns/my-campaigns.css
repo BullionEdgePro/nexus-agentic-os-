@@ -227,3 +227,37 @@
   color: var(--slate);
   white-space: normal;
 }
+
+/* Try it on yourself first. */
+.cmp-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin: 12px 0;
+}
+.cmp-test label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--slate);
+}
+.cmp-test input {
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.cmp-test em {
+  flex-basis: 100%;
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+.cmp-test-ok {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--good);
+}
