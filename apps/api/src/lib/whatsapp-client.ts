@@ -230,14 +230,17 @@ export interface CreateTemplateResult {
 
 export async function createMetaTemplate(
   wabaId: string,
-  spec: TemplateSpec
+  spec: TemplateSpec,
+  // A staff member's own account is written with that number's own token, for
+  // the reason listMetaTemplates reads it with one.
+  accessToken: string = env.metaAccessToken
 ): Promise<CreateTemplateResult> {
   const response = await fetch(
     `https://graph.facebook.com/${env.metaGraphApiVersion}/${wabaId}/message_templates`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.metaAccessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

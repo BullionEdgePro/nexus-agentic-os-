@@ -7,7 +7,8 @@ import {
   withTenant,
 } from "@nexus/db";
 import { isHiddenTemplate } from "@nexus/shared";
-import { listMetaTemplates } from "../lib/whatsapp-client.js";
+import { listMetaTemplates, createMetaTemplate } from "../lib/whatsapp-client.js";
+import { missingCampaignTemplates } from "../lib/campaign-templates.js";
 import { logger } from "../lib/logger.js";
 
 export interface SyncResult {
@@ -145,8 +146,35 @@ export async function syncStaffNumberTemplates(): Promise<SyncResult[]> {
       const secret = await withTenant(account.organizationId, () =>
         connectionSecret(account.organizationId, account.employeeId, "whatsapp")
       );
-      if (!secret) continue;
+      if (!secret) {
+        logger.warn(
+          { organization: account.organizationSlug, wabaId: account.wabaId, employeeId: account.employeeId },
+          "A staff number's account has no stored WhatsApp token — its templates cannot be read or created"
+        );
+        continue;
+      }
       const templates = await listMetaTemplates(account.wabaId, secret.accessToken);
+
+      // TEMPLATES FOLLOW THE NUMBER. A number connected on a fresh account holds
+      // no templates, and without one it cannot start a single conversation —
+      // Keshav Arora's SFS number on 22 Oct 2026. Whatever the business's
+      // catalogue has that this account lacks is submitted here, every cycle,
+      // so it needs nobody to run a script and a failed submission is simply
+      // tried again in half an hour. New ones arrive PENDING on the next read.
+      for (const spec of missingCampaignTemplates(account.organizationSlug, templates.map((t) => t.name))) {
+        const created = await createMetaTemplate(account.wabaId, spec, secret.accessToken);
+        if (created.ok || /already exists|duplicate/i.test(created.error ?? "")) {
+          logger.info(
+            { organization: account.organizationSlug, wabaId: account.wabaId, template: spec.name, status: created.status },
+            "Submitted a campaign template to a staff number's account"
+          );
+        } else {
+          logger.warn(
+            { organization: account.organizationSlug, wabaId: account.wabaId, template: spec.name, err: created.error },
+            "Could not submit a campaign template to a staff number's account — retrying next cycle"
+          );
+        }
+      }
       let approved = 0;
       const seen: string[] = [];
       const retired = await withTenant(account.organizationId, async () => {
