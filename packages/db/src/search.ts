@@ -65,7 +65,9 @@ interface TaskRow {
 export async function search(
   term: string,
   organizationId: string | null,
-  limit = 8
+  limit = 8,
+  /** A staff member searching: their own clients and tasks only (22 Oct 2026). */
+  employeeId: string | null = null
 ): Promise<SearchHit[]> {
   const trimmed = term.trim();
   // Two characters is the floor. One letter matches most of the database and
@@ -126,9 +128,10 @@ export async function search(
                    and ct.organization_id = $2))
           and (lower(coalesce(ct.display_name, '')) like $1
                or ($3::text is not null and ct.wa_id like $3))
+          and ($5::uuid is null or ct.owner_employee_id = $5::uuid)
         order by lm.created_at desc nulls last
         limit $4`,
-      [like, organizationId, digitLike, limit]
+      [like, organizationId, digitLike, limit, employeeId]
     ),
     getPool().query<TaskRow>(
       `select t.id, t.title, t.status, t.due_at,
@@ -139,10 +142,11 @@ export async function search(
          left join contacts ct on ct.id = t.contact_id
         where ($2::uuid is null or t.organization_id = $2)
           and lower(t.title) like $1
+          and ($4::uuid is null or t.employee_id = $4::uuid)
         order by case when t.status = 'open' then 0 else 1 end,
                  t.due_at asc nulls last
         limit $3`,
-      [like, organizationId, limit]
+      [like, organizationId, limit, employeeId]
     ),
   ]);
 

@@ -837,7 +837,10 @@ employeesRoute.get("/:slug/leads", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
-  const employeeId = c.req.query("employeeId") || null;
+  // A staff member's leads are their own, whatever the query asks for.
+  const leadScope = scopeOf(c);
+  const employeeId =
+    leadScope.role === "employee" ? leadScope.employeeId ?? null : c.req.query("employeeId") || null;
   const leads = await listEmployeeLeads(organization.id, employeeId);
 
   // The labels already given, folded in here rather than fetched separately by
@@ -914,6 +917,12 @@ employeesRoute.get("/:slug/employees/:employeeId/conversations", async (c) => {
 
   const employee = await findEmployeeById(c.req.param("employeeId"));
   if (!employee || employee.organizationId !== organization.id) {
+    return c.json({ error: "Employee not found" }, 404);
+  }
+  // A staff member asks for their own only — the id came from the URL, and a
+  // colleague's list is the admin's to see (22 Oct 2026).
+  const scope = scopeOf(c);
+  if (scope.role === "employee" && scope.employeeId !== employee.id) {
     return c.json({ error: "Employee not found" }, 404);
   }
 

@@ -86,8 +86,11 @@ organizationsRoute.get("/:slug/conversations", async (c) => {
   // 200, not 50: the folder and channel counts are computed over this list, and
   // at 50 a busy business's "Awaiting reply (12)" quietly meant "of the latest
   // fifty". The reader decides each row's unread count (migration 090).
-  const reader = readerOf(c.get("scope") as SessionScope | undefined);
-  const conversations = await getConversationsForOrganization(organization.id, 200, reader);
+  const scope = c.get("scope") as SessionScope | undefined;
+  const reader = readerOf(scope);
+  // A staff member gets their own conversations only; the admin, the business.
+  const viewer = scope?.role === "employee" ? scope.employeeId ?? "00000000-0000-0000-0000-000000000000" : null;
+  const conversations = await getConversationsForOrganization(organization.id, 200, reader, viewer);
   return c.json({ conversations });
 });
 

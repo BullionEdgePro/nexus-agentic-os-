@@ -79,7 +79,9 @@ tasksRoute.get("/", async (c) => {
 
   // ?mine=1 narrows to the caller. Only meaningful for an employee — an
   // operator has no employee row, so for them it would filter to nothing.
-  const mine = c.req.query("mine") === "1" && scope.role !== "operator";
+  // A staff member's list is their own without asking (22 Oct 2026); ?mine=1
+  // used to be opt-in and the web pages never sent it.
+  const mine = scope.role !== "operator";
 
   const [tasks, counts] = await Promise.all([
     listTasks({

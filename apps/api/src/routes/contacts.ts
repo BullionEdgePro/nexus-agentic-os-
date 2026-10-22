@@ -56,13 +56,23 @@ function csvResponse(c: Context, csv: string, filename: string): Response {
   });
 }
 
+/**
+ * A staff member's own book, or null for the admin (22 Oct 2026). Customers are
+ * private like conversations: a staff member sees the clients that are theirs.
+ */
+function ownedBy(c: Context): string | null {
+  const scope = c.get("scope") as { role?: string; employeeId?: string } | undefined;
+  if (scope?.role === "operator") return null;
+  return scope?.employeeId ?? "00000000-0000-0000-0000-000000000000";
+}
+
 contactsRoute.get("/:slug/contacts", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
   const search = c.req.query("q") ?? "";
   return c.json({
-    contacts: await listContacts(organization.id, { search }),
+    contacts: await listContacts(organization.id, { search, ownedBy: ownedBy(c) }),
   });
 });
 
@@ -222,7 +232,7 @@ contactsRoute.get("/:slug/contacts/:contactId", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
-  const contact = await getContact(organization.id, c.req.param("contactId"));
+  const contact = await getContact(organization.id, c.req.param("contactId"), ownedBy(c));
   // Same 404 for "no such contact" and "not one of yours". Telling one firm
   // that a person exists elsewhere on this number is an answer it has no reason
   // to have -- and on a shared number it is a question two competitors could
@@ -317,6 +327,11 @@ contactsRoute.delete("/:slug/contacts/:contactId/memory", async (c) => {
  * the egress policy is the architecture, not a setting.
  */
 contactsRoute.get("/:slug/export/customers.csv", async (c) => {
+  // The whole customer base leaves with an export: the admin's to take. 404,
+  // not 403 — this route never answers 403 (see the import's note).
+  if ((c.get("scope") as { role?: string } | undefined)?.role !== "operator") {
+    return c.json({ error: "Not found" }, 404);
+  }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
@@ -332,6 +347,11 @@ contactsRoute.get("/:slug/export/customers.csv", async (c) => {
 });
 
 contactsRoute.get("/:slug/export/messages.csv", async (c) => {
+  // The whole customer base leaves with an export: the admin's to take. 404,
+  // not 403 — this route never answers 403 (see the import's note).
+  if ((c.get("scope") as { role?: string } | undefined)?.role !== "operator") {
+    return c.json({ error: "Not found" }, 404);
+  }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
@@ -359,6 +379,11 @@ contactsRoute.get("/:slug/export/messages.csv", async (c) => {
  * subject of that summary is the one person entitled to read it.
  */
 contactsRoute.get("/:slug/contacts/:contactId/export.json", async (c) => {
+  // The whole customer base leaves with an export: the admin's to take. 404,
+  // not 403 — this route never answers 403 (see the import's note).
+  if ((c.get("scope") as { role?: string } | undefined)?.role !== "operator") {
+    return c.json({ error: "Not found" }, 404);
+  }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 

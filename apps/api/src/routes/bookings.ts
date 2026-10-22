@@ -71,7 +71,9 @@ bookingsRoute.get("/", async (c) => {
 
   // ?mine=1 narrows to the caller's own diary. Meaningless for an operator, who
   // has no employee row and would filter down to nothing.
-  const mine = c.req.query("mine") === "1" && scope.role !== "operator";
+  // A staff member's list is their own without asking (22 Oct 2026); ?mine=1
+  // used to be opt-in and the web pages never sent it.
+  const mine = scope.role !== "operator";
   // ?upcoming=1 hides what has already happened. Off by default: an operator
   // asking whether yesterday's viewing went ahead has to have somewhere to look.
   const upcomingOnly = c.req.query("upcoming") === "1";

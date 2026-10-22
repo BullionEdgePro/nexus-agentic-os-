@@ -99,7 +99,11 @@ const toSummary = (row: SummaryRow): ContactSummary => ({
  */
 export async function listContacts(
   organizationId: string,
-  options: { search?: string; limit?: number } = {}
+  /**
+   * ownedBy: a staff member looking — only the clients in their own book
+   * (contacts.owner_employee_id). Undefined/null for the admin (22 Oct 2026).
+   */
+  options: { search?: string; limit?: number; ownedBy?: string | null } = {}
 ): Promise<ContactSummary[]> {
   const search = options.search?.trim().toLowerCase() ?? "";
   const like = search ? `%${search}%` : null;
@@ -126,9 +130,10 @@ export async function listContacts(
         and ($2::text is null
              or lower(coalesce(ct.display_name, '')) like $2
              or ($3::text is not null and ct.wa_id like $3))
+        and ($5::uuid is null or ct.owner_employee_id = $5::uuid)
       order by ct.last_message_at desc nulls last
       limit $4`,
-    [organizationId, like, digitLike, options.limit ?? 100]
+    [organizationId, like, digitLike, options.limit ?? 100, options.ownedBy ?? null]
   );
   return rows.map(toSummary);
 }
@@ -165,7 +170,9 @@ export interface ContactDetail extends ContactSummary {
  */
 export async function getContact(
   organizationId: string,
-  contactId: string
+  contactId: string,
+  /** A staff member looking: only a client in their own book (22 Oct 2026). */
+  ownedBy: string | null = null
 ): Promise<ContactDetail | null> {
   const { rows } = await getPool().query<
     SummaryRow & { served_by: string[] | null }
@@ -189,8 +196,9 @@ export async function getContact(
                where o.id = any (ct.served_organization_ids)
             ) as served_by
        from contacts ct
-      where ct.id = $2 and ${contactServedBy("$1")}`,
-    [organizationId, contactId]
+      where ct.id = $2 and ${contactServedBy("$1")}
+        and ($3::uuid is null or ct.owner_employee_id = $3::uuid)`,
+    [organizationId, contactId, ownedBy]
   );
   if (!rows[0]) return null;
 

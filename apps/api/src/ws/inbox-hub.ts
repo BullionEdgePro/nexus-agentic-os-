@@ -1,14 +1,26 @@
 import type { ServerType } from "@hono/node-server";
 import { WebSocketServer, WebSocket } from "ws";
 import type { InboxSocketEvent } from "@nexus/shared";
+import { conversationViewers, conversationVisibleTo } from "@nexus/db";
 import { subscribeToInboxEvents } from "../lib/pubsub.js";
 import { verifySessionToken, readCookie, SESSION_COOKIE } from "../lib/session.js";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 
+/**
+ * Who is listening, decided from the SESSION (22 Oct 2026).
+ *
+ * The hub used to trust a client-chosen ?org, and with none it sent every
+ * business's messages to whoever was signed in. A staff member is now pinned to
+ * their own business and to the conversations that are theirs; only the admin
+ * may watch one business (?org) or all of them.
+ */
 interface Client {
   socket: WebSocket;
-  organizationSlug: string | null; // null = no filter, receive every event (used for local/dev testing)
+  /** Null only for the admin watching every business. */
+  organizationSlug: string | null;
+  /** Set for a staff member: they receive events for their own conversations only. */
+  employeeId: string | null;
 }
 
 const WS_PATH = "/ws";
@@ -45,8 +57,10 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
       }
 
       wss.handleUpgrade(request, socket, head, (ws) => {
-        const organizationSlug = url.searchParams.get("org");
-        const client: Client = { socket: ws, organizationSlug };
+        const client: Client =
+          session.role === "operator"
+            ? { socket: ws, organizationSlug: url.searchParams.get("org"), employeeId: null }
+            : { socket: ws, organizationSlug: session.organizationSlug ?? "", employeeId: session.employeeId ?? "" };
         clients.add(client);
         ws.on("close", () => clients.delete(client));
         ws.on("error", () => clients.delete(client));
@@ -55,11 +69,20 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
   });
 
   const unsubscribe = subscribeToInboxEvents((event: InboxSocketEvent) => {
-    const payload = JSON.stringify(event);
-    for (const client of clients) {
-      if (client.organizationSlug && client.organizationSlug !== event.organizationSlug) continue;
-      if (client.socket.readyState === WebSocket.OPEN) client.socket.send(payload);
-    }
+    void (async () => {
+      const payload = JSON.stringify(event);
+      const listening = [...clients].filter(
+        (client) => !client.organizationSlug || client.organizationSlug === event.organizationSlug
+      );
+      // Asked once per event, and only when a staff member is listening.
+      const viewers = listening.some((client) => client.employeeId)
+        ? await conversationViewers(event.conversationId).catch(() => null)
+        : null;
+      for (const client of listening) {
+        if (client.employeeId && !(viewers && conversationVisibleTo(viewers, client.employeeId))) continue;
+        if (client.socket.readyState === WebSocket.OPEN) client.socket.send(payload);
+      }
+    })();
   });
 
   logger.info(`Unified Inbox WebSocket endpoint attached at ${WS_PATH}`);

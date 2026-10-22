@@ -86,7 +86,8 @@ test("unread is per person and counts from their last look", () => {
   assert.match(CONVERSATIONS_DB, /mu\.direction = 'inbound'[\s\S]*mu\.created_at > coalesce\(\s*rd\.last_read_at/);
   // Filed under the SERVING business so the list query (run under that scope) sees it.
   assert.match(INBOX_DB, /coalesce\(routed_organization_id, organization_id\), now\(\)/);
-  assert.match(ORG_ROUTE, /getConversationsForOrganization\(organization\.id, 200, reader\)/);
+  // `viewer` since 22 Oct 2026: a staff member's list is filtered to their own.
+  assert.match(ORG_ROUTE, /getConversationsForOrganization\(organization\.id, 200, reader, viewer\)/);
 });
 
 test("only the owner changes the inbox settings, within bounds", () => {

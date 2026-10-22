@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
-import { findConversationById, getConversationRouting } from "@nexus/db";
+import { conversationViewers, conversationVisibleTo, findConversationById, getConversationRouting } from "@nexus/db";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 
@@ -96,6 +96,17 @@ export const requireConversationScope: MiddlewareHandler = async (c, next) => {
       employeeId: scope.employeeId,
       conversationId,
     });
+  }
+
+  // THE PERSON, NOT ONLY THE BUSINESS (22 Oct 2026). A staff member opened any
+  // colleague's chat by id — messages, notes, details, tasks, AI summary — and
+  // could write to it. Theirs, or one the admin added them to; anything else,
+  // including a chat that belongs to nobody, is the admin's. Answered exactly
+  // like a missing conversation, so a refusal cannot reveal which ids exist.
+  const viewers = await conversationViewers(conversationId);
+  if (!viewers || !conversationVisibleTo(viewers, scope.employeeId)) {
+    logger.warn({ path: c.req.path, employeeId: scope.employeeId, conversationId }, "Blocked a staff member from a conversation that is not theirs");
+    return c.json({ error: "Conversation not found" }, 404);
   }
 
   return next();

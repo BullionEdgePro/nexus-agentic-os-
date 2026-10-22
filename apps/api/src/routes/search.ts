@@ -33,6 +33,7 @@ searchRoute.get("/", async (c) => {
     }
   }
 
-  const hits = await search(term, organizationId);
+  // A staff member finds their own clients and tasks, not their colleagues'.
+  const hits = await search(term, organizationId, 8, scope.role === "employee" ? scope.employeeId ?? "00000000-0000-0000-0000-000000000000" : null);
   return c.json({ hits, term });
 });

@@ -12,6 +12,8 @@ import {
   DISMISSAL_HORIZONS,
   DEFAULT_DISMISSAL_HORIZON,
   dismissalHorizon,
+  conversationViewers,
+  conversationVisibleTo,
 } from "@nexus/db";
 import { isJobStalled } from "@nexus/shared";
 import { OPERATORS, unansweredButNotReported } from "../services/operators.js";
@@ -56,7 +58,7 @@ operatorsRoute.get("/", async (c) => {
     }
   }
 
-  const [findings, counts, lastSeen, heartbeats] = await Promise.all([
+  const [allFindings, counts, lastSeen, heartbeats] = await Promise.all([
     listOpenFindings(organizationId),
     countOpenFindings(organizationId),
     lastSeenByOperator(organizationId),
@@ -78,6 +80,21 @@ operatorsRoute.get("/", async (c) => {
   // ran. The heartbeat is the only record that the sweep HAPPENED.
   const sweep = heartbeats.find((beat) => beat.job === "operators");
   const lastSweptAt = sweep?.lastFinishedAt ?? null;
+
+  // A staff member sees the findings about their own conversations only (22 Oct
+  // 2026): a finding names a customer and quotes their chat. Anything not
+  // about a conversation of theirs is the admin's.
+  let findings = allFindings;
+  if (scope.role !== "operator") {
+    const kept = [];
+    for (const finding of allFindings) {
+      if (finding.subjectKind === "conversation" && finding.subjectId) {
+        const viewers = await conversationViewers(finding.subjectId).catch(() => null);
+        if (viewers && conversationVisibleTo(viewers, scope.employeeId)) kept.push(finding);
+      }
+    }
+    findings = kept;
+  }
 
   return c.json({
     findings,

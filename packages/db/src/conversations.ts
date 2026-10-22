@@ -51,7 +51,14 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
 export async function getConversationsForOrganization(
   organizationId: string,
   limit = 50,
-  reader: string | null = null
+  reader: string | null = null,
+  /**
+   * A staff member looking: only the conversations that are theirs (owner or
+   * collaborator). Null for the admin, who sees the whole business. Decided in
+   * SQL, not by the screen — the inbox's "My chats" used to be a client-side
+   * filter over the whole business (22 Oct 2026).
+   */
+  viewer: string | null = null
 ): Promise<ConversationSummary[]> {
   const { rows } = await getPool().query<ConversationSummaryRow>(
     `select
@@ -110,11 +117,44 @@ export async function getConversationsForOrganization(
      -- Migration 054 widened the policy so the serving business can read these
      -- at all; this decides which of them are its own.
      where coalesce(c.routed_organization_id, c.organization_id) = $1
+       and ($4::uuid is null or c.employee_id = $4::uuid or $4::uuid = any(coalesce(c.collaborator_ids, '{}')))
      order by coalesce(lm.created_at, c.opened_at) desc
      limit $2`,
-    [organizationId, limit, reader]
+    [organizationId, limit, reader, viewer]
   );
   return rows.map(toSummary);
+}
+
+/**
+ * Whether a staff member may see this conversation: it is theirs, or the admin
+ * added them to it. One rule for the inbox list, every conversation route and
+ * the live socket (22 Oct 2026). A conversation that belongs to nobody is the
+ * admin's until they assign it — the owner's decision.
+ */
+export function conversationVisibleTo(
+  conversation: { employeeId: string | null; collaboratorIds: string[] | null },
+  employeeId: string | null | undefined
+): boolean {
+  if (!employeeId) return false;
+  return conversation.employeeId === employeeId || (conversation.collaboratorIds ?? []).includes(employeeId);
+}
+
+/**
+ * Who a conversation belongs to, for the checks above. Cross-tenant on purpose,
+ * like findConversationById: it runs before any tenant context exists, and the
+ * caller decides access with the answer.
+ */
+export async function conversationViewers(
+  conversationId: string
+): Promise<{ employeeId: string | null; collaboratorIds: string[] } | null> {
+  return withAllTenants("conversation access: who it belongs to, checked before any scope exists", async () => {
+    const { rows } = await getPool().query<{ employee_id: string | null; collaborator_ids: string[] | null }>(
+      `select employee_id, collaborator_ids from conversations where id = $1`,
+      [conversationId]
+    );
+    if (!rows[0]) return null;
+    return { employeeId: rows[0].employee_id, collaboratorIds: rows[0].collaborator_ids ?? [] };
+  });
 }
 
 export interface ConversationLookup {

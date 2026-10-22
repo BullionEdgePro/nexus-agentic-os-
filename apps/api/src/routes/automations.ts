@@ -114,6 +114,8 @@ automationsRoute.get("/", async (c) => {
 
 automationsRoute.get("/runs", async (c) => {
   const scope = scopeOf(c);
+  // What ran, for whom: the admin's log (22 Oct 2026).
+  if (scope.role !== "operator") return c.json({ error: "Only the owner can see automation runs." }, 403);
   const where = await businessFor(c, scope);
   if ("error" in where) return c.json({ error: where.error }, where.status);
   return c.json({ runs: await listAutomationRuns(where.organizationId) });

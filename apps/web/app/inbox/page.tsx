@@ -443,7 +443,9 @@ export default function InboxPage() {
   // conversations personally, so "My chats" would always be empty — dropped.
   const queues = useMemo(() => {
     const all = queueFolders(sla);
-    return myEmployeeId ? all : all.filter((f) => f.key !== "mine");
+    // A staff member's list holds only their own chats (the server filters it
+    // since 22 Oct 2026), so "Unassigned" would always be empty for them.
+    return myEmployeeId ? all.filter((f) => f.key !== "unassigned") : all.filter((f) => f.key !== "mine");
   }, [sla, myEmployeeId]);
   const counts = useMemo(() => {
     const out = {} as Record<FolderKey, number>;
@@ -757,6 +759,8 @@ export default function InboxPage() {
 
         <h3 className="ibx-side-h">View</h3>
         <div className="ibx-filters">
+          {/* The admin's filter: a staff member sees only their own chats. */}
+          {!myEmployeeId ? (
           <label className="ibx-filter">
             <span>Team member</span>
             <select
@@ -774,6 +778,7 @@ export default function InboxPage() {
               ))}
             </select>
           </label>
+          ) : null}
           <label className="ibx-filter">
             <span>Tags</span>
             <select
