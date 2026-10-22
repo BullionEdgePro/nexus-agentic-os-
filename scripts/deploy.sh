@@ -26,6 +26,23 @@ export GIT_COMMIT
 echo "Building $GIT_COMMIT"
 
 $COMPOSE build api worker web || { echo "Build failed."; exit 1; }
+
+# FONTS ARE CHECKED, NOT ASSUMED (22 Oct 2026). next/font downloads the
+# typefaces from Google at build time and, when that download fails, quietly
+# falls back to system fonts -- the build passes, build-check passes, and the
+# site ships looking wrong. It failed on two of three builds in one afternoon.
+# So the built CSS is asked whether it holds the fonts, and the web image is
+# rebuilt uncached until it does, three tries at most, before anything restarts.
+fonts_in_web() {
+  docker run --rm --entrypoint sh nexus-web -c 'cat /app/apps/web/.next/static/css/*.css' 2>/dev/null \
+    | grep -o "@font-face" | wc -l
+}
+for attempt in 1 2 3; do
+  [ "$(fonts_in_web)" -gt 0 ] && break
+  echo "The web build has no fonts (the Google Fonts download failed) -- rebuilding web, attempt $attempt of 3."
+  $COMPOSE build --no-cache web || { echo "Build failed."; exit 1; }
+done
+[ "$(fonts_in_web)" -gt 0 ] || { echo "The web build still has no fonts after 3 tries -- not deploying it."; exit 1; }
 $COMPOSE up -d --no-deps api worker web || { echo "Restart failed."; exit 1; }
 
 echo
