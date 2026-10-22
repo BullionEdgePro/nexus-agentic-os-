@@ -54,10 +54,10 @@
 .lk-url button {
   flex: 0 0 auto;
   align-self: stretch;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 0 18px;
   border-radius: var(--r-sm);
   border: 1px solid var(--ink);
@@ -132,10 +132,10 @@
 
 .lk-qr-side button {
   align-self: flex-start;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 8px 14px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);

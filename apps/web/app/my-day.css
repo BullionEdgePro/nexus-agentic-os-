@@ -57,10 +57,10 @@
   align-items: center;
   gap: 10px;
   margin: 0 0 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--signal-text);
 }
 .day-date {

@@ -167,10 +167,10 @@
    grouping nineteen doors. Quiet enough to read as scaffolding, not as an item. */
 .deck-root.shell .rail-group {
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   padding: 12px 10px 3px;
 }
@@ -444,3 +444,31 @@
   .deck-root .rail-foot { margin-top: 0; border-top: 0; padding: 0; }
   .deck-root .rail-foot-who { display: none; }
 }
+
+/* CALM — the strip above every page (22 Oct 2026). "View as staff" read as a
+   stray link in the corner; it is now a small button on the right. The
+   install offer is slimmer and quieter, and still remembers a dismissal. */
+.deck-root.shell .shell-main > .vas-open {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  margin: 14px 24px 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.deck-root.shell .shell-main > .vas-open:hover { background: var(--pebble); color: var(--ink); }
+.deck-root.shell .shell-main > .vas-pick { margin: 14px 24px; justify-content: flex-end; }
+.deck-root .install-banner {
+  margin: 12px 24px 0;
+  padding: 8px 10px 8px 12px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  box-shadow: var(--lift-sm);
+}
+.deck-root .install-banner .install-go { min-height: 36px; background: var(--signal); }

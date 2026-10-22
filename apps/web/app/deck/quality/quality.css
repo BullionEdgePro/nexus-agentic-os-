@@ -31,10 +31,10 @@
 .q-card.q-bad  { border-left-color: var(--crit); }
 
 .q-label {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 .q-value {
@@ -112,10 +112,10 @@
 
 .q-refresh {
   margin-top: 16px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 8px 14px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -149,10 +149,10 @@
 }
 
 .q-ask button {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 11px 20px;
   border-radius: 100px;
   border: 1px solid var(--ink);
@@ -178,10 +178,10 @@
 .q-reply-table { margin-top: 12px; }
 .q-understood {
   margin-top: 10px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -267,10 +267,10 @@
 .br-table { width: 100%; margin-top: 16px; border-collapse: collapse; font-size: 12.5px; }
 .br-table th {
   text-align: left;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   font-weight: 400;
   padding: 0 10px 7px 0;

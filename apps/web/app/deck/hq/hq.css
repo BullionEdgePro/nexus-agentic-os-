@@ -2,7 +2,7 @@
    Uses the deck tokens only; health reads as good / warn / crit. */
 .hq-root { max-width: 1180px; margin: 0 auto; padding: 28px 24px 64px; }
 .hq-head { margin-bottom: 22px; }
-.hq-eyebrow { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--signal-text); }
+.hq-eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--signal-text); }
 .hq-head h1 { margin: 0; font-family: var(--display); font-size: 30px; color: var(--ink); text-wrap: balance; }
 .hq-lede { margin: 8px 0 0; max-width: 68ch; color: var(--slate); font-size: 14px; line-height: 1.55; }
 .hq-summary { margin: 12px 0 0; font-weight: 700; color: var(--ink); }
@@ -97,7 +97,7 @@
 .hq-no span { color: var(--crit); }
 
 .hq-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.hq-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
+.hq-table th { text-align: left; font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--mist); padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
 .hq-table td { padding: 8px; border-bottom: 1px solid var(--hairline); color: var(--ink); }
 .hq-table td.num { font-variant-numeric: tabular-nums; }
 .hq-inline { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

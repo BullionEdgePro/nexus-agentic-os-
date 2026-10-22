@@ -85,10 +85,10 @@ a.sw-tile:hover { outline: 2px solid var(--hairline-strong); }
 
 /* Kept for the response-times section below. */
 .act-sub-head {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .14em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--signal-text);
   margin: 34px 0 12px;
 }

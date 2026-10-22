@@ -87,10 +87,10 @@
 
 .deck-root .hs-kind,
 .deck-root .hm-tag {
-  font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   justify-self: start;
 }
@@ -140,11 +140,11 @@
 .deck-root .hm-head strong { font-family: var(--display); font-size: 14px; font-weight: 600; }
 
 .deck-root .hm-head span {
-  font-family: var(--mono);
-  font-size: 9.5px;
+  font-family: var(--sans);
+  font-size: 12px;
   color: var(--mist);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* An unread row carries a rule as well as its position. A background wash
@@ -162,10 +162,10 @@
 
 .deck-root .hm-foot a,
 .deck-root .hm-foot button {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--signal-text);
   background: none;
   border: none;
@@ -235,10 +235,10 @@
 .deck-root .acct-who span { font-size: 11.5px; color: var(--slate); overflow-wrap: anywhere; }
 
 .deck-root .acct-role {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font-family: var(--sans);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--mist);
 }
 
@@ -246,10 +246,10 @@
 .deck-root .acct-rows div { display: grid; gap: 2px; }
 
 .deck-root .acct-rows dt {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -262,10 +262,10 @@
 .deck-root .acct-form label { display: grid; gap: 4px; }
 
 .deck-root .acct-form span {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -286,10 +286,10 @@
 .deck-root .acct-fixed { display: grid; gap: 4px; }
 
 .deck-root .acct-fixed > span {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -340,10 +340,10 @@
    "Choose File / no file selected" that cannot be made to match anything. */
 .deck-root .acct-file {
   display: inline-block;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 7px 13px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -359,10 +359,10 @@
 .deck-root .acct-file:focus-within { outline: 2px solid var(--signal); outline-offset: 2px; }
 
 .deck-root .acct-photo-acts button {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 7px 13px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -379,10 +379,10 @@
 .deck-root .acct-actions { display: flex; gap: 8px; }
 
 .deck-root .acct-actions button {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 8px 14px;
   border-radius: 100px;
   border: 1px solid var(--ink);
@@ -410,10 +410,10 @@
 }
 
 .deck-root .acct-foot button {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   background: none;
   border: 1px solid transparent;
   border-radius: 100px;
@@ -431,9 +431,9 @@
 }
 
 .deck-root .acct-saved {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  text-transform: none;
   color: var(--good);
 }
 
@@ -484,10 +484,10 @@
 }
 
 .hm-mine-head span {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 

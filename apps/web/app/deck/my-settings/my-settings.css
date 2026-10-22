@@ -53,10 +53,10 @@
 /* fields */
 .set-field { display: flex; flex-direction: column; gap: 5px; }
 .set-field > span:first-child {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--slate);
 }
 .set-field input {

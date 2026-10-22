@@ -23,8 +23,8 @@
 .deck-root .cmp-compose h2,
 .deck-root .cmp-history h2 {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--slate);
   margin: 0 0 12px;
 }

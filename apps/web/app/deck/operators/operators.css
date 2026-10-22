@@ -25,10 +25,10 @@
    everything", which on this page is the failure it exists to prevent. */
 .op-truncated {
   margin: 4px 0 10px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--warn);
 }
 
@@ -77,10 +77,10 @@
   flex-wrap: wrap;
   gap: 5px 10px;
   margin: 8px 0 0;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -88,10 +88,10 @@
 
 .op-sev {
   flex: 0 0 auto;
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 3px 8px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -193,10 +193,10 @@
 }
 
 .op-accept {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 9px;
   border: 1px solid var(--hairline);
   border-radius: var(--r);
@@ -219,10 +219,10 @@
 }
 
 .op-dismissed-toggle {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   background: transparent;
   border: 0;
   padding: 0;
@@ -270,10 +270,10 @@
 
 .op-forhow-opt,
 .op-forhow-cancel {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 9px;
   border-radius: var(--r);
   cursor: pointer;

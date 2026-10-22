@@ -35,10 +35,10 @@
 }
 
 .pl-brand {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--signal-text);
 }
 
@@ -136,10 +136,10 @@
 
 .pl-copy {
   align-self: flex-start;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 9px 18px;
   border-radius: 100px;
   border: 1px solid var(--ink);
@@ -160,10 +160,10 @@
 }
 
 .pl-where h2 {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--signal-text);
   margin-bottom: 14px;
 }

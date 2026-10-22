@@ -18,10 +18,10 @@
 }
 
 .fc-btn {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 9px 15px;
   border-radius: var(--r-sm);
   border: 1px solid var(--hairline-strong);
@@ -77,10 +77,10 @@
    the figure rests on is not an aside; on this platform it is usually the
    reason the figure is absent. */
 .fc-evidence {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -211,10 +211,10 @@
 }
 
 .fc-bar-day {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--slate);
 }
 
@@ -223,10 +223,10 @@
 .fc-accuracy { margin: 22px 0 0; }
 
 .fc-accuracy h3 {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   margin: 0 0 8px;
 }
@@ -246,10 +246,10 @@
 }
 
 .fc-acc-table th {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   text-align: right;
   padding: 6px 10px;

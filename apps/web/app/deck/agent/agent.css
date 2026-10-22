@@ -101,10 +101,10 @@
 .ag-revert,
 .ag-restore,
 .ag-history-toggle {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 7px 14px;
   border-radius: 100px;
   cursor: pointer;

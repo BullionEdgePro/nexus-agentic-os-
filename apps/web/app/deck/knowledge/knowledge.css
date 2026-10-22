@@ -31,10 +31,10 @@
 
 .kn-modes { display: flex; gap: 7px; margin-bottom: 12px; }
 .kn-modes button {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 7px 13px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -60,10 +60,10 @@
 
 .kn-add label { display: flex; flex-direction: column; gap: 6px; }
 .kn-add label span {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -87,10 +87,10 @@
 
 .kn-submit {
   align-self: flex-start;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 12px 22px;
   border-radius: 100px;
   border: 1px solid var(--ink);
@@ -158,10 +158,10 @@
 
 .kn-remove,
 .kn-cancel {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 6px 12px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -187,10 +187,10 @@
 }
 
 .kn-danger {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 7px 14px;
   border-radius: 100px;
   border: 1px solid var(--crit);

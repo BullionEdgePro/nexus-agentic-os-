@@ -1,5 +1,5 @@
 /* ============================================================
-   NEXUS AGENTIC OS — "Clear Sky" theme
+   NEXUS AGENTIC OS — "Calm" theme (22 Oct 2026; was "Clear Sky")
    ============================================================
 
    A console lit like a clear morning: an ice-blue ground, white cards,
@@ -31,53 +31,52 @@
 
 .deck-root {
   /* --- ground and surfaces -------------------------------- */
-  --marble: #f3f8fd;          /* canvas — pale ice */
+  --marble: #f6f7f9;          /* canvas — soft cool grey */
   --paper: #ffffff;           /* cards and elevated panels */
-  --pebble: #e8f2fc;          /* inset fills, badges, hover washes */
-  --charcoal: #0a2f55;        /* inverse surfaces — deep ocean, not black */
-  --charcoal-card: #113f6e;
+  --pebble: #f1f3f6;          /* inset fills, badges, hover washes */
+  --charcoal: #111827;        /* inverse surfaces — deep ink, not black */
+  --charcoal-card: #1f2937;
 
   /* --- ink ------------------------------------------------ */
-  --ink: #0b2a4a;
-  --ink-soft: rgba(11, 42, 74, 0.78);
-  --slate: #44678a;           /* secondary copy, helper text */
-  --mist: #51708f;            /* tertiary copy — 4.6:1 on pebble, the worst ground */
-  --faint: #a8c3dc;           /* genuinely disabled/inactive ONLY — never content */
+  --ink: #111827;
+  --ink-soft: rgba(17, 24, 39, 0.78);
+  --slate: #4b5563;           /* secondary copy, helper text — 7:1 on pebble */
+  --mist: #5f6773;            /* tertiary copy — 5.2:1 on pebble, the worst ground */
+  --faint: #c2c8d0;           /* genuinely disabled/inactive ONLY — never content */
   --muted: var(--slate);
 
   /* --- lines ---------------------------------------------- */
-  --hairline: #d6e7f6;
-  --hairline-strong: #b4d2ee;
-  --hairline-on-dark: rgba(243, 248, 253, 0.2);
+  --hairline: #e5e7eb;
+  --hairline-strong: #d1d5db;
+  --hairline-on-dark: rgba(246, 247, 249, 0.18);
 
   /* --- the sky: the brand's light blue --------------------- */
-  --sky: #3fb2ff;             /* luminous — fills, glows, graphics; never small text */
-  --sky-deep: #1a8fe3;
-  --sky-soft: #e1f1ff;        /* our own chat bubbles, the selected row */
-  --sky-wash: rgba(63, 178, 255, 0.12);
-  --sky-glow: rgba(63, 178, 255, 0.35);
-  --sky-grad: linear-gradient(135deg, #5ec4ff 0%, #2b9cf0 55%, #1673d4 100%);
+  --sky: #3b82f6;             /* luminous — fills and graphics; never small text */
+  --sky-deep: #2563eb;
+  --sky-soft: #eef2fb;        /* our own chat bubbles, the selected row */
+  --sky-wash: rgba(59, 130, 246, 0.08);
+  --sky-glow: rgba(37, 99, 235, 0.16);
+  --sky-grad: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   /* The same sky, deep enough to carry white text (4.2-6:1 across the ramp).
      --sky-grad is for glow and decoration only; anything with words on it
      takes this one. */
-  --btn-grad: linear-gradient(135deg, #1486e0 0%, #0873c9 55%, #065fa8 100%);
-  --aurora: radial-gradient(60% 50% at 15% 0%, rgba(94, 196, 255, 0.28), transparent 70%),
-            radial-gradient(50% 45% at 100% 20%, rgba(124, 214, 255, 0.22), transparent 70%),
-            radial-gradient(70% 60% at 50% 110%, rgba(43, 156, 240, 0.12), transparent 70%);
+  --btn-grad: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  /* Calm (22 Oct 2026): no moving glow behind the work. */
+  --aurora: linear-gradient(transparent, transparent);
 
   /* --- the working accent ---------------------------------- */
-  --signal: #0873c9;          /* 4.96:1 behind white text */
-  --signal-soft: rgba(8, 115, 201, 0.09);
-  --signal-deep: #05589c;     /* informational text on pebble fills */
-  --signal-text: #065fa8;     /* links and inline accents — 6:1 on the ground */
+  --signal: #1d4ed8;          /* 6.7:1 behind white text */
+  --signal-soft: rgba(29, 78, 216, 0.08);
+  --signal-deep: #1e3a8a;     /* informational text on pebble fills */
+  --signal-text: #1d4ed8;     /* links and inline accents — 6.5:1 on the ground */
   /* Text ON a blue gradient or a channel colour. White in BOTH themes: the
      gradients stay deep blue in the dark, where --paper turns to night. */
   --on-accent: #ffffff;
 
   /* --- text on the inverse (ocean) surfaces ---------------- */
-  --ink-on-dark: #f3f8fd;
-  --mist-on-dark: #a8c9e8;
-  --signal-on-dark: #8fd3ff;
+  --ink-on-dark: #f9fafb;
+  --mist-on-dark: #c3cad4;
+  --signal-on-dark: #93b4ff;
 
   /* --- severity, which outranks the accent ---------------- */
   --good: #0f7a56;
@@ -95,13 +94,11 @@
   --r-pill: 9999px;
 
   /* --- elevation ------------------------------------------ */
-  /* Sky-tinted, never grey: a neutral shadow on this palette reads as dirt. */
-  --lift: rgba(30, 110, 180, 0.05) 0 4px 6px 0,
-          rgba(30, 110, 180, 0.04) 0 10px 18px 0,
-          rgba(30, 110, 180, 0.09) 0 28px 48px 0;
-  --lift-sm: rgba(30, 110, 180, 0.05) 0 2px 4px 0,
-             rgba(30, 110, 180, 0.04) 0 6px 12px 0,
-             rgba(30, 110, 180, 0.06) 0 12px 22px 0;
+  /* Soft, cool and close: a premium surface barely lifts. */
+  --lift: rgba(17, 24, 39, 0.04) 0 1px 2px 0,
+          rgba(17, 24, 39, 0.06) 0 12px 28px -12px;
+  --lift-sm: rgba(17, 24, 39, 0.04) 0 1px 2px 0,
+             rgba(17, 24, 39, 0.04) 0 6px 16px -8px;
 
   /* --- motion --------------------------------------------- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -177,13 +174,13 @@
 
 /* ---- shared bits ---- */
 .deck-root .eyebrow {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase;
+  font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none;
   color: var(--slate);
 }
 .deck-root .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .deck-root .pill {
-  display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10.5px;
-  letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: 100px;
+  display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 12px;
+  letter-spacing: 0; text-transform: none; padding: 3px 9px; border-radius: 100px;
   border: 1px solid var(--hairline-strong); color: var(--ink-soft);
 }
 .deck-root .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
@@ -191,7 +188,7 @@
 .deck-root .dot.warnd { background: var(--warn); }
 .deck-root .btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-  font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none;
   padding: 13px 22px; border-radius: var(--r-sm); border: 1px solid var(--ink); color: var(--marble);
   background: var(--signal); transition: transform .12s ease, background .16s ease, color .16s ease;
 }
@@ -230,7 +227,7 @@
   position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between;
   padding: 26px 52px; max-width: 1280px; margin: 0 auto;
 }
-.deck-root .nav-links { display: flex; align-items: center; gap: 34px; font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--slate); }
+.deck-root .nav-links { display: flex; align-items: center; gap: 34px; font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--slate); }
 .deck-root .nav-links a:hover { color: var(--ink); }
 
 .deck-root .hero {
@@ -247,7 +244,7 @@
 .deck-root .hero-sub { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 22px; flex-wrap: wrap; }
 .deck-root .hero-sub p { max-width: 46ch; color: var(--slate); font-size: 16.5px; }
 .deck-root .cta-row { display: flex; align-items: center; gap: 16px; flex: none; }
-.deck-root .cta-row .link-btn { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); border-bottom: 1px solid var(--hairline-strong); padding-bottom: 2px; }
+.deck-root .cta-row .link-btn { font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--ink); border-bottom: 1px solid var(--hairline-strong); padding-bottom: 2px; }
 .deck-root .cta-row .link-btn:hover { border-color: var(--signal); color: var(--signal-text); }
 
 /* ---- the routing plate (signature diagram) ---- */
@@ -257,8 +254,8 @@
 }
 .deck-root .plate-titleblock {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 18px; border-bottom: 1px solid var(--hairline); font-family: var(--mono); font-size: 10.5px;
-  letter-spacing: .08em; text-transform: uppercase; color: var(--slate); flex-wrap: wrap;
+  padding: 12px 18px; border-bottom: 1px solid var(--hairline); font-family: var(--sans); font-size: 12px;
+  letter-spacing: 0; text-transform: none; color: var(--slate); flex-wrap: wrap;
 }
 .deck-root .plate-titleblock b { color: var(--ink); font-weight: 600; }
 .deck-root .plate-body { position: relative; height: 380px; }
@@ -272,7 +269,7 @@
   content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed var(--hairline-strong);
 }
 .deck-root .plate-core b { font-family: var(--display); font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; }
-.deck-root .plate-core span { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--signal-text); text-transform: uppercase; display: block; margin-top: 2px; }
+.deck-root .plate-core span { font-family: var(--sans); font-size: 12px; letter-spacing: 0; color: var(--signal-text); text-transform: none; display: block; margin-top: 2px; }
 .deck-root .plate-node {
   position: absolute; transform: translate(-50%, -50%); width: 132px; padding: 9px 11px 10px;
   border-radius: var(--r-sm); background: var(--paper); border: 1px solid var(--hairline-strong);
@@ -281,7 +278,7 @@
 .deck-root .plate-node:hover { transform: translate(-50%, -50%) scale(1.04); border-color: var(--signal); }
 .deck-root .plate-node .ref { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--signal-text); }
 .deck-root .plate-node .nm { font-family: var(--sans); font-size: 12px; font-weight: 600; margin-top: 3px; }
-.deck-root .plate-node .rl { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; color: var(--mist); text-transform: uppercase; margin-top: 1px; }
+.deck-root .plate-node .rl { font-family: var(--sans); font-size: 12px; letter-spacing: 0; color: var(--mist); text-transform: none; margin-top: 1px; }
 
 /* ---- stat band ---- */
 .deck-root .stat-band {
@@ -315,21 +312,21 @@
 .deck-root .tenant-list { margin-top: 28px; display: flex; flex-direction: column; gap: 9px; }
 .deck-root .tenant-list .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .deck-root .tenant-list .row span.name { font-weight: 500; }
-.deck-root .tenant-list .row span.role { font-family: var(--mono); font-size: 10.5px; color: var(--mist); text-transform: uppercase; letter-spacing: .05em; }
+.deck-root .tenant-list .row span.role { font-family: var(--sans); font-size: 12px; color: var(--mist); text-transform: none; letter-spacing: 0; }
 /* A tenant that is configured but not yet answering customers reads as a hollow
    node, so "live" stays the only filled state on the plate — a board that
    lights every node green tells the operator nothing. */
 .deck-root .tenant-list .row .dot:not(.live) { box-shadow: inset 0 0 0 1.5px var(--mist); }
 .deck-root .tenant-list .row span.state {
-  margin-left: auto; font-family: var(--mono); font-size: 10px;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--mist);
+  margin-left: auto; font-family: var(--sans); font-size: 12px;
+  letter-spacing: 0; text-transform: none; color: var(--mist);
 }
 
 .deck-root .auth-card { width: 100%; padding: 30px 28px; border-radius: var(--r); background: var(--paper); border: 1px solid var(--hairline-strong); }
 .deck-root .auth-card h3 { font-family: var(--display); font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 .deck-root .auth-card .sub { color: var(--mist); font-size: 12.5px; margin-top: 5px; font-family: var(--mono); }
 .deck-root .field { margin-top: 19px; }
-.deck-root .field label { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--slate); margin-bottom: 7px; }
+.deck-root .field label { display: block; font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--slate); margin-bottom: 7px; }
 .deck-root .field .inp { display: flex; align-items: center; gap: 10px; background: var(--marble); border: 1px solid var(--hairline-strong); border-radius: var(--r-sm); padding: 0 13px; transition: border-color .16s; }
 .deck-root .field .inp:focus-within { border-color: var(--signal); }
 .deck-root .field .inp svg { width: 15px; height: 15px; color: var(--mist); flex: none; }
@@ -378,7 +375,7 @@
 .deck-root .rail a:hover { color: var(--ink); background: var(--paper); }
 .deck-root .rail a.on { color: var(--marble); background: var(--signal); }
 .deck-root .rail .sep { flex: 1; }
-.deck-root .rail a .tip { position: absolute; left: 48px; white-space: nowrap; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; background: var(--signal); color: var(--marble); padding: 5px 9px; border-radius: 5px; opacity: 0; transform: translateX(-4px); transition: .15s; pointer-events: none; z-index: 5; }
+.deck-root .rail a .tip { position: absolute; left: 48px; white-space: nowrap; font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; background: var(--signal); color: var(--marble); padding: 5px 9px; border-radius: 5px; opacity: 0; transform: translateX(-4px); transition: .15s; pointer-events: none; z-index: 5; }
 .deck-root .rail a:hover .tip { opacity: 1; transform: none; }
 
 .deck-root .main { grid-row: 2 / 3; overflow: auto; padding: 22px 26px 40px; }
@@ -391,7 +388,7 @@
 .deck-root .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 18px; }
 .deck-root .stat { padding: 15px 15px 12px; border-radius: var(--r); position: relative; overflow: hidden; background: var(--paper); border: 1px solid var(--hairline); }
 .deck-root .stat.hi { border-color: var(--ink); }
-.deck-root .stat .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--slate); }
+.deck-root .stat .k { font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--slate); }
 .deck-root .stat .v { font-family: var(--display); font-size: 25px; font-weight: 700; letter-spacing: -.02em; margin-top: 8px; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 5px; }
 .deck-root .stat .v small { font-size: 12px; font-weight: 500; color: var(--slate); font-family: var(--sans); }
 .deck-root .stat .d { font-family: var(--mono); font-size: 10.5px; margin-top: 4px; display: flex; align-items: center; gap: 5px; color: var(--slate); }
@@ -411,12 +408,12 @@
 .deck-root .core { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 108px; height: 108px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: var(--paper); border: 1.4px solid var(--ink); }
 .deck-root .core::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed var(--hairline-strong); }
 .deck-root .core b { font-family: var(--display); font-size: 11.5px; font-weight: 700; letter-spacing: -.01em; }
-.deck-root .core span { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--signal-text); text-transform: uppercase; display: block; margin-top: 2px; }
+.deck-root .core span { font-family: var(--sans); font-size: 12px; letter-spacing: 0; color: var(--signal-text); text-transform: none; display: block; margin-top: 2px; }
 .deck-root .node { position: absolute; transform: translate(-50%, -50%); width: 116px; padding: 9px 11px; border-radius: var(--r-sm); background: var(--paper); border: 1px solid var(--hairline-strong); transition: transform .16s, border-color .16s; }
 .deck-root .node:hover { transform: translate(-50%, -50%) scale(1.05); border-color: var(--signal); }
 .deck-root .node .ref { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; color: var(--signal-text); }
 .deck-root .node .nm { font-size: 12px; font-weight: 600; letter-spacing: -.01em; margin-top: 2px; }
-.deck-root .node .rl { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); margin-top: 1px; }
+.deck-root .node .rl { font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--mist); margin-top: 1px; }
 .deck-root .node .st { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-family: var(--mono); font-size: 9.5px; color: var(--slate); }
 
 .deck-root .gov-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--hairline); }
@@ -443,7 +440,7 @@
 .deck-root .feed-b .top b { font-size: 12px; font-weight: 600; }
 .deck-root .feed-b .top time { margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--mist); }
 .deck-root .feed-b p { font-size: 12px; color: var(--slate); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.deck-root .tag { font-family: var(--mono); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--hairline-strong); color: var(--slate); }
+.deck-root .tag { font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--hairline-strong); color: var(--slate); }
 .deck-root .tag.ai { color: var(--signal-text); border-color: rgba(0, 107, 255, .35); }
 .deck-root .tag.h { color: var(--warn); border-color: rgba(156, 93, 15, .35); }
 
@@ -539,8 +536,8 @@
 /* Section headings, matching the shared shell. The rail is hidden wholesale
    below 900px (see the media query), so no small-screen rule is needed here. */
 .deck-root .app .rail .rail-group {
-  font-family: var(--sans); font-size: 10px; font-weight: 600;
-  letter-spacing: 0.07em; text-transform: uppercase; color: var(--mist);
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  letter-spacing: 0; text-transform: none; color: var(--mist);
   padding: 12px 10px 3px;
 }
 .deck-root .app .rail a:first-of-type + .rail-group,

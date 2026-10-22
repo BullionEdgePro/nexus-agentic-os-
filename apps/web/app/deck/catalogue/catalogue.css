@@ -209,10 +209,10 @@
 }
 
 .mk-actions button {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 9px 13px;
   border: 1px solid var(--signal);
   border-radius: var(--r-sm);
@@ -269,10 +269,10 @@
 }
 .mk-table th {
   text-align: left;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   font-weight: 400;
   padding: 0 10px 7px 0;
@@ -292,10 +292,10 @@
 .mk-behind p { margin: 0; }
 .mk-behind button {
   margin-top: 9px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 8px 12px;
   border: 1px solid var(--warn);
   border-radius: var(--r-sm);

@@ -35,10 +35,10 @@
 .ch-name { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); flex: 1; }
 
 .ch-pill {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 3px 8px;
   border-radius: 999px;
   white-space: nowrap;

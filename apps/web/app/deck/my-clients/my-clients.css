@@ -32,8 +32,8 @@
 
 .deck-root .mc-channel h2 {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--slate);
   margin: 0 0 8px;
 }
@@ -108,9 +108,9 @@
 .deck-root .mc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .deck-root .mc-table th {
   text-align: left;
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: .05em;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--slate);
   font-weight: 600;
   padding: 0 10px 7px;
@@ -159,8 +159,8 @@
 }
 .deck-root .lnk h2 {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--slate);
   margin: 0 0 10px;
 }
@@ -266,8 +266,8 @@
 .deck-root .cnx { margin-bottom: 22px; }
 .deck-root .cnx h2 {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--slate);
   margin: 0 0 10px;
 }
@@ -374,9 +374,9 @@
   border-top: 1px solid var(--hairline);
 }
 .deck-root .cnx-stats dt {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .05em;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--slate);
   margin-bottom: 2px;
 }

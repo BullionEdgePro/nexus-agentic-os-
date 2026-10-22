@@ -48,10 +48,10 @@
 }
 
 .bd-view span {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -188,10 +188,10 @@
 }
 
 .bd-empty {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--faint);
   padding: 6px 2px;
 }
@@ -243,10 +243,10 @@
 
 .bd-auto-add,
 .bd-auto-save {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 8px 14px;
   border-radius: 100px;
   border: 1px solid var(--ink);
@@ -283,10 +283,10 @@
 }
 
 .bd-auto-form span {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -346,10 +346,10 @@
    one that says "this is doing something" rather than "this is fine". */
 .bd-auto-on,
 .bd-auto-off {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 6px 12px;
   border-radius: 100px;
   cursor: pointer;
@@ -376,10 +376,10 @@
 }
 
 .bd-auto-remove {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 6px 10px;
   border-radius: 100px;
   border: 1px solid transparent;
@@ -401,8 +401,8 @@
 .deck-root .bd-runs h4 {
   margin: 0 0 8px;
   font-size: 12px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--slate);
   display: flex;
   align-items: center;

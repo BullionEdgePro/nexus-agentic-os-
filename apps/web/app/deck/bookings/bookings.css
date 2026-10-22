@@ -27,10 +27,10 @@
 }
 
 .bk-when strong {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   font-weight: 400;
 }
@@ -162,9 +162,9 @@
 .deck-root .bk-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 
 .deck-root .bk-field > span {
-  font-size: 11px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--slate);
 }
 

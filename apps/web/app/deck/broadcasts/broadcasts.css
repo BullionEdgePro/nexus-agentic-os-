@@ -36,10 +36,10 @@
 .bc-out {
   display: inline-block;
   margin-top: 14px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--signal-text);
   text-decoration: none;
   border-bottom: 1px solid currentColor;
@@ -60,10 +60,10 @@
 
 .bc-row label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 260px; }
 .bc-row label span {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 .bc-row select {
@@ -81,10 +81,10 @@
 .bc-audience strong { font-size: 18px; font-variant-numeric: tabular-nums; }
 
 .bc-send {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 12px 20px;
   border-radius: 100px;
   border: 1px solid var(--ink);
@@ -118,10 +118,10 @@
 }
 
 .bc-sync {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 8px 14px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -135,9 +135,9 @@
 /* A template that is on the account but not this business's to send. */
 .deck-root .bc-foreign {
   margin-left: 8px;
-  font-size: 10.5px;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .deck-root .bc-note {

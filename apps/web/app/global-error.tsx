@@ -45,8 +45,8 @@ export default function GlobalError({
           display: "grid",
           placeItems: "center",
           padding: "48px 24px",
-          background: "#f3f8fd",
-          color: "#0b2a4a",
+          background: "#f6f7f9",
+          color: "#111827",
           font: "16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif",
         }}
       >
@@ -54,7 +54,7 @@ export default function GlobalError({
           style={{
             maxWidth: "58ch",
             background: "#ffffff",
-            border: "1px solid #d6e7f6",
+            border: "1px solid #e5e7eb",
             borderRadius: 16,
             padding: 32,
           }}
@@ -62,11 +62,11 @@ export default function GlobalError({
           <h1 style={{ margin: "0 0 14px", fontSize: 26, lineHeight: 1.25 }}>
             The console could not start.
           </h1>
-          <p style={{ margin: "0 0 12px", color: "#44678a" }}>
+          <p style={{ margin: "0 0 12px", color: "#4b5563" }}>
             This is not a problem with your data or with the agent — customers are still being
             answered. It is the console itself failing to load.
           </p>
-          <p style={{ margin: "0 0 22px", color: "#44678a" }}>
+          <p style={{ margin: "0 0 22px", color: "#4b5563" }}>
             Reloading sometimes clears it. If it does not, this needs somebody with access to the
             platform.
           </p>
@@ -77,8 +77,8 @@ export default function GlobalError({
               font: "600 14px/1 system-ui, sans-serif",
               padding: "11px 16px",
               borderRadius: 8,
-              border: "1px solid #0b2a4a",
-              background: "#0b2a4a",
+              border: "1px solid #111827",
+              background: "#111827",
               color: "#ffffff",
               cursor: "pointer",
             }}
@@ -86,9 +86,9 @@ export default function GlobalError({
             Reload the console
           </button>
           {error.digest ? (
-            <p style={{ marginTop: 22, fontSize: 12.5, color: "#44678a" }}>
+            <p style={{ marginTop: 22, fontSize: 12.5, color: "#4b5563" }}>
               Quote{" "}
-              <code style={{ background: "#e8f2fc", borderRadius: 4, padding: "2px 6px" }}>
+              <code style={{ background: "#f1f3f6", borderRadius: 4, padding: "2px 6px" }}>
                 {error.digest}
               </code>{" "}
               when reporting this.

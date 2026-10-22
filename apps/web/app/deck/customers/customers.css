@@ -13,10 +13,10 @@
 }
 
 .cu-search span {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
 }
 
@@ -99,8 +99,8 @@
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
   color: var(--slate);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .cu-pri.urgent,
@@ -155,10 +155,10 @@
 
 .cu-detail h3 {
   margin: 8px 0 0;
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   font-weight: 400;
 }
@@ -171,10 +171,10 @@
 }
 
 .cu-close {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 5px 11px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -212,10 +212,10 @@
 
 .cu-forget {
   justify-self: start;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 6px 12px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -259,8 +259,8 @@
 }
 
 .cu-status {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--mist);
 }
 
@@ -284,19 +284,19 @@
 }
 
 .cu-export span {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   margin-right: 2px;
 }
 
 .cu-export button {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 6px 12px;
   border-radius: 100px;
   border: 1px solid var(--hairline-strong);
@@ -365,7 +365,7 @@
 .deck-root .cu-import-close { border: 0; background: none; font: inherit; color: var(--slate); cursor: pointer; text-decoration: underline; }
 
 .deck-root .cu-import-field { display: flex; flex-direction: column; gap: 5px; }
-.deck-root .cu-import-field > span { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--slate); }
+.deck-root .cu-import-field > span { font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--slate); }
 .deck-root .cu-import-field textarea {
   font-family: var(--mono);
   font-size: 12.5px;

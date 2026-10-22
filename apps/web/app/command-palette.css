@@ -73,10 +73,10 @@
 .cmdp-group {
   display: block;
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--mist);
   padding: 10px 11px 3px;
 }
