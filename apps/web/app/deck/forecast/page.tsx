@@ -115,7 +115,7 @@ export default function ForecastPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
         <header className="act-head">
-          <h1>What&rsquo;s coming</h1>
+          <h1>Forecast</h1>
         </header>
         <p className="act-lede">
           Projected demand for the next {status?.horizonDays ?? 7} days, and — more to the point —

@@ -155,7 +155,7 @@ export default function BroadcastsPage() {
       <div className="act-root">
 
         <header className="act-head">
-          <h1>Broadcasts</h1>
+          <h1>Campaigns</h1>
         </header>
         <p className="act-lede">
           Send one approved WhatsApp template to every contact of a business at once. Everything

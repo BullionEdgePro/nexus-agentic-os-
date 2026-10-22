@@ -364,3 +364,83 @@
   .deck-root .install-banner { flex-wrap: wrap; }
   .deck-root .install-banner p { flex-basis: calc(100% - 92px); }
 }
+
+/* ============================================================
+   CALM — the rail (22 Oct 2026)
+   ============================================================
+   The owner's direction: calm and premium. A solid white rail with no moving
+   glow behind it, headings in plain sentence case, a quiet "you are here"
+   instead of a glowing edge, no sideways hover jump, and the account closing
+   the rail instead of sign-out sitting in the list like a screen. */
+
+.deck-root.shell .shell-rail { padding: 18px 12px 12px; gap: 1px; }
+.deck-root.shell .shell-rail::before { display: none; }
+
+.deck-root.shell .rail-brand { padding: 4px 8px 16px; margin-bottom: 8px; }
+.deck-root.shell .rail-brand svg {
+  background: var(--signal);
+  box-shadow: none;
+}
+.deck-root.shell .rail-brand svg circle { animation: none; }
+.deck-root.shell .rail-wordmark {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 15.5px;
+  background: none;
+  color: var(--ink);
+}
+
+.deck-root.shell .rail-search { margin: 2px 2px 8px; border-radius: var(--r-sm); }
+
+.deck-root.shell .rail-group {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--slate);
+  padding: 16px 10px 5px;
+}
+
+.deck-root.shell .shell-rail a { padding: 8px 10px; color: var(--ink-soft); }
+.deck-root.shell .shell-rail a:not(.rail-brand):hover {
+  transform: none;
+  background: var(--pebble);
+  color: var(--ink);
+}
+.deck-root.shell .shell-rail a.on {
+  background: var(--signal-soft);
+  color: var(--ink);
+  font-weight: 700;
+}
+.deck-root.shell .shell-rail a.on::before {
+  left: -12px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  background: var(--signal);
+  box-shadow: none;
+}
+.deck-root.shell .shell-rail a.on .rail-icon { color: var(--signal); }
+.deck-root.shell .rail-label { font-size: 14px; }
+
+.deck-root.shell .shell-main { background: var(--marble); }
+
+/* The account at the foot of the rail — both shells, the front page too. */
+.deck-root .rail-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 6px 4px 10px;
+  border-top: 1px solid var(--hairline);
+}
+.deck-root .rail-foot-who { display: flex; flex-direction: column; min-width: 0; }
+.deck-root .rail-foot-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.deck-root .rail-foot-role { font-size: 12px; color: var(--slate); }
+.deck-root.shell .rail-foot a { padding: 7px 9px; color: var(--slate); }
+
+@media (max-width: 860px) {
+  .deck-root .rail-foot { margin-top: 0; border-top: 0; padding: 0; }
+  .deck-root .rail-foot-who { display: none; }
+}

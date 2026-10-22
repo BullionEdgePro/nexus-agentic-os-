@@ -151,7 +151,7 @@ export default function AgentPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
         <header className="act-head">
-          <h1>How the agent behaves</h1>
+          <h1>Agent settings</h1>
         </header>
         <p className="act-lede">
           The standing instruction underneath every reply. Knowledge gives it facts and procedures

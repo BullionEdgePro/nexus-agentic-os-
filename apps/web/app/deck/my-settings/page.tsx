@@ -63,7 +63,7 @@ export default function MySettingsPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
         <header className="act-head">
-          <h1>Settings</h1>
+          <h1>My settings</h1>
         </header>
         <p className="act-lede">
           Your details, in one place — how you appear to your team, the number your customers reach

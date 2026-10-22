@@ -162,7 +162,7 @@ export default function TasksPage() {
       <div className="act-root">
 
         <header className="act-head">
-          <h1>Follow-ups</h1>
+          <h1>Tasks</h1>
         </header>
         <p className="act-lede">
           What a conversation left someone to do. The handover brief says what the agent already

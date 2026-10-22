@@ -109,21 +109,23 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
           entry must never be invisible just because it was not filed here. */}
       {visible.filter((item) => !grouped.has(item.href)).map(link)}
 
-      <span className="sep" />
-
-      {/* Always a real link to a real route. It used to branch: a plain <a>
-          doing a GET on the nine screens where onSignOut was not passed —
-          against a route that only accepted POST, so those answered 405 — and
-          an <a> with NO href on the front page, which a keyboard cannot
-          reach. One path now, working without JavaScript, everywhere. */}
-      <a href="/api/auth/logout" title="Sign out">
-        <span className="rail-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />
-          </svg>
+      {/* The account, not a destination (22 Oct 2026): sign-out sat in the
+          list like a screen. It now closes the rail, under who is signed in.
+          Always a real link to a real route, working without JavaScript. */}
+      <div className="rail-foot">
+        <span className="rail-foot-who">
+          <span className="rail-foot-name">{role === "operator" ? "Admin" : "Staff"}</span>
+          <span className="rail-foot-role">{role === "operator" ? "All businesses" : "Your own work"}</span>
         </span>
-        <span className="rail-label">Sign out</span>
-      </a>
+        <a href="/api/auth/logout" title="Sign out">
+          <span className="rail-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />
+            </svg>
+          </span>
+          <span className="rail-label">Sign out</span>
+        </a>
+      </div>
     </>
   );
 }

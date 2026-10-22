@@ -1192,7 +1192,7 @@ const procedureSwitchedOn: Operator = {
           `by a method this platform worked out for itself, from ${row.derived_from_count} ` +
           `conversations that went well. It switched on ` +
           (days >= 1 ? `${days} day${days === 1 ? "" : "s"} ago` : "today") +
-          ` and nobody here has looked at it. Read it on the How we answer screen — if it is ` +
+          ` and nobody here has looked at it. Read it on the Answer rules screen — if it is ` +
           `wrong, switching it off is one click and this platform will not switch it back on.`,
         subjectKind: "procedure",
         subjectId: row.id,
@@ -1314,7 +1314,7 @@ const procedureAwaitingReview: Operator = {
         detail:
           oldestDays >= PROCEDURE_REVIEW_DAYS
             ? `${waiting} waiting, the oldest for ${plural(Math.floor(oldestDays), "day")}. Accepting one makes the agent follow that order of questions; dismissing it stops the platform proposing it again until the evidence doubles.`
-            : `${waiting} waiting on the "How we answer" screen. Each was drawn from at least five conversations that ended without a human.`,
+            : `${waiting} waiting on the "Answer rules" screen. Each was drawn from at least five conversations that ended without a human.`,
         subjectKind: "organization",
         subjectId: organizationId,
       },

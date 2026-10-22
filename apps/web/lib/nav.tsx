@@ -55,7 +55,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/inbox",
-    label: "Conversations",
+    label: "Inbox",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" />
@@ -87,7 +87,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/tasks",
-    label: "Follow-ups",
+    label: "Tasks",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M9 5h10M9 12h10M9 19h10" />
@@ -154,7 +154,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/my-settings",
-    label: "Settings",
+    label: "My settings",
     // Your own account — name, photo, WhatsApp number and the socials your link
     // points to. Staff-only for the same reason My clients is: it edits the
     // person's own employee row, which an operator does not have.
@@ -181,7 +181,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/team",
-    label: "Team",
+    label: "Team & rules",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <circle cx="9" cy="8" r="3.1" />
@@ -192,7 +192,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/agent",
-    label: "How it behaves",
+    label: "Agent settings",
     // Beside Knowledge and How we answer, because the three together are what
     // shapes a reply: what it is told to be, what it knows, and what it does in
     // particular situations. Operator-only -- see the route.
@@ -216,7 +216,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/procedures",
-    label: "How we answer",
+    label: "Answer rules",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M5 5.5h3M5 12h3M5 18.5h3" />
@@ -297,7 +297,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/broadcasts",
-    label: "Broadcasts",
+    label: "Campaigns",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M3 11l18-8-8 18-2-8-8-2Z" />
@@ -317,7 +317,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/forecast",
-    label: "What's coming",
+    label: "Forecast",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M3 16.5l5-5 3.5 3.5L21 6" />
@@ -378,12 +378,15 @@ export const NAV: NavItem[] = [
 // Labels are deliberately unchanged: findings name screens by their headings
 // ("on the How we answer screen"), and a renamed door would break that promise.
 export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
-  { title: "Manage", hrefs: ["/", "/inbox", "/deck/operators", "/deck/hq", "/deck/board", "/deck/tasks", "/deck/bookings"] },
-  { title: "Customers", hrefs: ["/deck/my-clients", "/deck/customers", "/deck/team"] },
-  { title: "Reach", hrefs: ["/deck/my-campaigns", "/deck/broadcasts", "/deck/links"] },
-  { title: "Automate", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue"] },
-  { title: "Analyse", hrefs: ["/deck/forecast", "/deck/activity", "/deck/quality"] },
-  { title: "Settings", hrefs: ["/deck/channels", "/deck/connections", "/deck/my-settings"] },
+  { title: "Home", hrefs: ["/", "/inbox", "/deck/operators"] },
+  { title: "Work", hrefs: ["/deck/tasks", "/deck/bookings", "/deck/board"] },
+  { title: "People", hrefs: ["/deck/activity", "/deck/team", "/deck/customers", "/deck/my-clients"] },
+  { title: "Grow", hrefs: ["/deck/broadcasts", "/deck/my-campaigns", "/deck/links"] },
+  { title: "AI agent", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue"] },
+  { title: "Insights", hrefs: ["/deck/forecast", "/deck/quality"] },
+  // Two runs that never meet: an admin sees Admin, a staff member sees You.
+  { title: "Admin", hrefs: ["/deck/hq", "/deck/channels"] },
+  { title: "You", hrefs: ["/deck/connections", "/deck/my-settings"] },
 ];
 
 /**

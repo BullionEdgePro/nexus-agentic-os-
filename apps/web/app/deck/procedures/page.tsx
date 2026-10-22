@@ -155,7 +155,7 @@ export default function ProceduresPage() {
       <div className="act-root">
 
         <header className="act-head">
-          <h1>How we answer</h1>
+          <h1>Answer rules</h1>
         </header>
         <p className="act-lede">
           Knowledge is what a business knows. This is the order it works in — what to establish
