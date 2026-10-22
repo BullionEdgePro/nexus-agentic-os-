@@ -309,18 +309,26 @@ export async function pauseBroadcastIfFailing(
   return (rowCount ?? 0) > 0 ? { sent: outcome.sent, failed: outcome.failed } : null;
 }
 
-/** The same, for a delivery receipt: finds the campaign from the message id. */
+/**
+ * The same, for a delivery receipt: finds the campaign from the message id.
+ *
+ * Wraps itself cross-tenant, like dailyReachUsed: the webhook pipeline that
+ * calls it must never run platform-wide (tenant-context.test), and a receipt on
+ * a staff number can belong to a campaign of the staff member's own business.
+ */
 export async function pauseBroadcastIfFailingByMessage(
   waMessageId: string
 ): Promise<{ broadcastId: string; sent: number; failed: number } | null> {
-  const { rows } = await getPool().query<{ broadcast_id: string }>(
-    `select broadcast_id from broadcast_recipients where wa_message_id = $1 limit 1`,
-    [waMessageId]
-  );
-  const broadcastId = rows[0]?.broadcast_id;
-  if (!broadcastId) return null;
-  const paused = await pauseBroadcastIfFailing(broadcastId);
-  return paused ? { broadcastId, ...paused } : null;
+  return withAllTenants("campaign breaker: a receipt names a message, the campaign may be any business's", async () => {
+    const { rows } = await getPool().query<{ broadcast_id: string }>(
+      `select broadcast_id from broadcast_recipients where wa_message_id = $1 limit 1`,
+      [waMessageId]
+    );
+    const broadcastId = rows[0]?.broadcast_id;
+    if (!broadcastId) return null;
+    const paused = await pauseBroadcastIfFailing(broadcastId);
+    return paused ? { broadcastId, ...paused } : null;
+  });
 }
 
 /** The campaign's current status, read fresh — the worker checks it before every send. */

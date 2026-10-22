@@ -37,7 +37,6 @@ import {
   wasAccountedFor,
   claimForAutoAssign,
   pauseBroadcastIfFailingByMessage,
-  withAllTenants,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import { findEmployeeByCode, attributeConversation, optOutOfReengagement } from "@nexus/db";
@@ -454,10 +453,8 @@ async function processDeliveryStatuses(
       // A campaign refused AFTER sending counts towards its circuit breaker
       // (review, 22 Oct 2026): this is where 131026/131047/131049 usually land.
       if (status.status === "failed" && movedRecipient) {
-        const paused = await withAllTenants(
-          "campaign breaker: the receipt names a message, the campaign may be any business's",
-          () => pauseBroadcastIfFailingByMessage(status.id)
-        );
+        // Self-scoped in packages/db: this pipeline never runs platform-wide.
+        const paused = await pauseBroadcastIfFailingByMessage(status.id);
         if (paused) {
           logger.warn(
             { ...paused, reason: errorText ? explainSendError(errorText) : null },
