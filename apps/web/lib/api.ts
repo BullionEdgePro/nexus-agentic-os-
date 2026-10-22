@@ -2608,8 +2608,12 @@ export interface MyCampaign {
   createdAt: string;
   templateName: string | null;
   sent: number;
+  /** Of `sent`, confirmed on the phone by WhatsApp (a read counts). */
+  delivered: number;
   failed: number;
   total: number;
+  /** The commonest reasons, already in plain words. */
+  topFailures: Array<{ reason: string; count: number }>;
 }
 
 /** One of the four things a campaign needs (services/campaign-readiness.ts). ok:null = could not check. */

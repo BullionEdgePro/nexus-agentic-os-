@@ -23,6 +23,7 @@ import { listWabaNumbers, readAccountStanding } from "../lib/whatsapp-client.js"
 import { deskOf, text } from "./my-desk.js";
 import { campaignReadiness, sendingAccountOf } from "../services/campaign-readiness.js";
 import { logger } from "../lib/logger.js";
+import { explainSendError } from "../lib/send-errors.js";
 
 /**
  * A staff member's own number, and campaigns to their own book.
@@ -131,7 +132,18 @@ myCampaignsRoute.get("/campaigns", async (c) => {
   const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
   if (!organization || !employee) return c.json({ error: "Account not found." }, 404);
 
-  const campaigns = await withTenant(desk.organizationId, () => listMyBroadcasts(desk.employeeId));
+  // Failure reasons arrive as Meta's raw bodies; each is explained here so the
+  // screen shows a sentence, and identical explanations are merged.
+  const campaigns = (await withTenant(desk.organizationId, () => listMyBroadcasts(desk.employeeId))).map(
+    (campaign) => {
+      const merged = new Map<string, number>();
+      for (const failure of campaign.topFailures) {
+        const reason = explainSendError(failure.reason);
+        merged.set(reason, (merged.get(reason) ?? 0) + failure.count);
+      }
+      return { ...campaign, topFailures: [...merged].map(([reason, count]) => ({ reason, count })) };
+    }
+  );
   const audience = await withTenant(desk.organizationId, () =>
     myClientsForBroadcast(desk.organizationId, desk.employeeId)
   );

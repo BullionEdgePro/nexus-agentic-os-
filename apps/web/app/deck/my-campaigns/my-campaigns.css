@@ -216,3 +216,14 @@
 .cmp-ready li.no .cmp-ready-dot {
   background: var(--warn);
 }
+
+/* Why a campaign's messages failed, in words, under the count. */
+.cmp-why {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  text-align: left;
+  font-size: 0.78rem;
+  color: var(--slate);
+  white-space: normal;
+}

@@ -35,6 +35,14 @@ import "./my-campaigns.css";
  * "Send", because "Send" is what somebody clicks without reading and "Message
  * 47 people" is not.
  */
+/** What each campaign state means to the person who sent it. */
+const STATUS_WORDS: Record<string, string> = {
+  sending: "Sending",
+  completed: "Finished",
+  failed: "Failed — nothing was delivered",
+  paused: "Paused — most messages were refused",
+};
+
 export default function MyCampaignsPage() {
   const [view, setView] = useState<MyCampaignsView | null>(null);
   const [channel, setChannel] = useState<MyChannel | null>(null);
@@ -232,7 +240,8 @@ export default function MyCampaignsPage() {
               <tr>
                 <th scope="col">When</th>
                 <th scope="col">Message</th>
-                <th scope="col">Reached</th>
+                <th scope="col">Sent</th>
+                <th scope="col">Delivered</th>
                 <th scope="col">Failed</th>
                 <th scope="col">Status</th>
               </tr>
@@ -245,8 +254,20 @@ export default function MyCampaignsPage() {
                   <td className="mc-num">
                     {campaign.sent} of {campaign.total}
                   </td>
-                  <td className="mc-num">{campaign.failed || "—"}</td>
-                  <td>{campaign.status}</td>
+                  <td className="mc-num">{campaign.delivered || "—"}</td>
+                  <td className="mc-num">
+                    {campaign.failed || "—"}
+                    {campaign.topFailures.length ? (
+                      <ul className="cmp-why">
+                        {campaign.topFailures.map((failure) => (
+                          <li key={failure.reason}>
+                            {failure.count} × {failure.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </td>
+                  <td>{STATUS_WORDS[campaign.status] ?? campaign.status}</td>
                 </tr>
               ))}
             </tbody>
