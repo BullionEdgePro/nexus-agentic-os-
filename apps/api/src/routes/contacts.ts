@@ -183,9 +183,12 @@ contactsRoute.post("/:slug/contacts/import", async (c) => {
         displayName: row?.displayName ?? null,
       });
       let reason: string | undefined;
-      // Only a contact that belongs to THIS business goes in a book here; one
-      // owned by another business on the shared number is theirs to place.
-      if (assignee && result.ownerOrganizationId === organization.id) {
+      // Not guarded on result.ownerOrganizationId: that is whichever business
+      // OWNS the number (Zipicka for the shared line), so the guard skipped
+      // every SFS row while reporting "added" (review, 22 Oct 2026). A staff
+      // book needs the contact SERVED by this business, which the call above
+      // guarantees by opening this business's conversation for them.
+      if (assignee) {
         const placed = await assignContactOwnerIfUnowned(result.contactId, assignee.id);
         if (!placed.assigned && placed.currentOwnerName) {
           reason = `already in ${placed.currentOwnerName}'s book`;

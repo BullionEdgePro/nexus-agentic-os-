@@ -54,9 +54,11 @@ test("a paused campaign sends nothing more", () => {
 });
 
 test("a tripped campaign is paused and says why, and finishing never un-pauses it", () => {
-  assert.match(PROCESSOR, /shouldTrip\(/);
-  assert.match(PROCESSOR, /updateBroadcastStatus\(broadcastId, "paused"\)/);
+  // The pause itself lives in pauseBroadcastIfFailing (packages/db), shared
+  // with the delivery-receipt path since the review; the worker logs the why.
+  assert.match(PROCESSOR, /pauseBroadcastIfFailing\(/);
   assert.match(PROCESSOR, /explainSendError\(/);
+  assert.match(PROCESSOR, /outcome\.done && \(await broadcastStatus\(broadcastId\)\) !== "paused"/);
 });
 
 test("the daily limit is read from the number the campaign goes out from", () => {
@@ -80,4 +82,25 @@ test("a number WhatsApp rates RED is refused before anything is queued", () => {
   const body = send.slice(0, send.indexOf("\n});"));
   assert.ok(body.indexOf('=== "RED"') > 0, "RED is checked");
   assert.ok(body.indexOf('=== "RED"') < body.indexOf("createStaffBroadcast("), "before the campaign row exists");
+});
+
+const WEBHOOK = read("apps", "api", "src", "queue", "processor.ts");
+const BROADCASTS = read("packages", "db", "src", "broadcasts.ts");
+
+test("REVIEW FINDING: the breaker counts refusals Meta reports later, not only at send time", () => {
+  // Meta accepts most messages at send time and refuses them afterwards by
+  // webhook (131026, 131047, 131049). A breaker that only looked when the send
+  // call itself failed never saw them.
+  assert.match(PROCESSOR, /pauseBroadcastIfFailing\(broadcastId\)/);
+  assert.doesNotMatch(PROCESSOR, /if \(failure && shouldTrip/);
+  const at = WEBHOOK.indexOf("recordBroadcastDelivery({");
+  assert.ok(at > 0);
+  assert.match(WEBHOOK.slice(at, at + 1500), /pauseBroadcastIfFailingByMessage\(/);
+});
+
+test("REVIEW FINDING: pausing is conditional, and only while something is left to stop", () => {
+  const fn = BROADCASTS.slice(BROADCASTS.indexOf("export async function pauseBroadcastIfFailing("));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /outcome\.done/);
+  assert.match(body, /where id = \$1 and status = 'sending'/);
 });

@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { testSendRefusal } from "../src/routes/my-campaigns.ts";
+import { internationalDigits, testSendRefusal } from "../src/routes/my-campaigns.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROUTE = readFileSync(join(here, "..", "src", "routes", "my-campaigns.ts"), "utf8");
@@ -54,4 +54,27 @@ test("the test goes through the campaign's own send, with the campaign's own che
 
 test("a test leaves no campaign behind and counts against nothing", () => {
   assert.doesNotMatch(body, /createStaffBroadcast|createBroadcastRecipients|getBroadcastSendQueue/);
+});
+
+test("REVIEW FINDING: a number without its country code is refused, not dialled abroad", () => {
+  // "525631476" is a UAE mobile typed locally; dialled as-is it is +52 (Mexico).
+  assert.equal(
+    testSendRefusal("525631476", null),
+    "Write the number with its country code, starting with + (for example +971 50 123 4567)."
+  );
+  assert.equal(testSendRefusal("0525631476", null), "Write the number with its country code, starting with + (for example +971 50 123 4567).");
+  assert.equal(testSendRefusal("00971501234567", null), null);
+  assert.equal(testSendRefusal("+971 50 123 4567", null), null);
+});
+
+test("REVIEW FINDING: a test cannot reach someone who opted out, nor run without limit", () => {
+  assert.match(body, /isWaIdOptedOut\(/);
+  assert.match(body, /takeTestSend\(desk\.employeeId\)/);
+});
+
+test("REVIEW FOLLOW-UP: 00 is an international prefix, not part of the number", () => {
+  assert.equal(internationalDigits("00971 50 123 4567"), "971501234567");
+  assert.equal(internationalDigits("+971 50 123 4567"), "971501234567");
+  assert.match(body, /const toDigits = internationalDigits\(to\)/);
+  assert.match(body, /isWaIdOptedOut\(toDigits\)/);
 });

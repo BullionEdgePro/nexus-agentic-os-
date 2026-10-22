@@ -284,6 +284,45 @@ export function shouldTrip(outcome: { sent: number; failed: number }): boolean {
   return attempted >= 10 && outcome.failed * 2 > attempted;
 }
 
+/**
+ * Pause a campaign that is failing, while there is still something to stop.
+ *
+ * Called after EVERY recipient's send and after every failed delivery receipt
+ * (review, 22 Oct 2026): Meta accepts most messages at send time and refuses
+ * them afterwards by webhook, so a check that only ran when the send call
+ * itself failed never saw the refusals that hurt the number. Nothing is paused
+ * once no recipient is pending — there is nothing left to protect, and a
+ * "paused" campaign with nothing waiting would read as stuck forever. The
+ * update is conditional on 'sending', so it can never overwrite a finish.
+ *
+ * Returns the outcome when it paused, null otherwise.
+ */
+export async function pauseBroadcastIfFailing(
+  broadcastId: string
+): Promise<{ sent: number; failed: number } | null> {
+  const outcome = await broadcastOutcome(broadcastId);
+  if (outcome.done || !shouldTrip(outcome)) return null;
+  const { rowCount } = await getPool().query(
+    `update broadcasts set status = 'paused' where id = $1 and status = 'sending'`,
+    [broadcastId]
+  );
+  return (rowCount ?? 0) > 0 ? { sent: outcome.sent, failed: outcome.failed } : null;
+}
+
+/** The same, for a delivery receipt: finds the campaign from the message id. */
+export async function pauseBroadcastIfFailingByMessage(
+  waMessageId: string
+): Promise<{ broadcastId: string; sent: number; failed: number } | null> {
+  const { rows } = await getPool().query<{ broadcast_id: string }>(
+    `select broadcast_id from broadcast_recipients where wa_message_id = $1 limit 1`,
+    [waMessageId]
+  );
+  const broadcastId = rows[0]?.broadcast_id;
+  if (!broadcastId) return null;
+  const paused = await pauseBroadcastIfFailing(broadcastId);
+  return paused ? { broadcastId, ...paused } : null;
+}
+
 /** The campaign's current status, read fresh — the worker checks it before every send. */
 export async function broadcastStatus(broadcastId: string): Promise<string | null> {
   const { rows } = await getPool().query<{ status: string }>(`select status from broadcasts where id = $1`, [

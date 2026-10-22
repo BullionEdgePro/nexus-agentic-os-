@@ -4,7 +4,7 @@ import {
   updateBroadcastRecipientStatus,
   broadcastOutcome,
   broadcastStatus,
-  shouldTrip,
+  pauseBroadcastIfFailing,
   updateBroadcastStatus,
   withAllTenants,
 } from "@nexus/db";
@@ -104,13 +104,12 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
     // allowed status since the table was made and nothing had ever set it.
     const outcome = await broadcastOutcome(broadcastId);
 
-    // THE CIRCUIT BREAKER (22 Oct 2026). More than half of at least ten
-    // attempts refused: stop, before the rest of the list spends the number's
-    // standing too. Logged with the reason in words.
-    if (failure && shouldTrip(outcome) && (await broadcastStatus(broadcastId)) === "sending") {
-      await updateBroadcastStatus(broadcastId, "paused");
+    // THE CIRCUIT BREAKER (22 Oct 2026). After every recipient, not only a
+    // failed one: refusals Meta reports later by webhook count too (review).
+    const paused = await pauseBroadcastIfFailing(broadcastId);
+    if (paused) {
       logger.warn(
-        { broadcastId, ...outcome, reason: explainSendError(failure) },
+        { broadcastId, ...paused, reason: failure ? explainSendError(failure) : "refused after sending (delivery receipts)" },
         "Campaign paused: most of its messages were refused"
       );
       return;

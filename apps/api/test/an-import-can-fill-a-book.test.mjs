@@ -40,3 +40,13 @@ test("assigning only ever claims an unowned contact", () => {
   assert.ok(fn.length > 0, "assignContactOwnerIfUnowned exists");
   assert.match(fn.slice(0, 1500), /where id = \$1\s+and owner_employee_id is null/);
 });
+
+test("REVIEW FINDING: a contact on the shared number is still put in the chosen book", () => {
+  // ensureContactForServingBusiness files every contact under the business
+  // that OWNS the number (Zipicka, for the shared line), so a guard on
+  // "owned by this business" skipped every SFS row while reporting "added".
+  // A staff book needs the contact SERVED by the business, which the helper
+  // guarantees by opening a conversation for it.
+  assert.doesNotMatch(handlerBody, /ownerOrganizationId === organization\.id/);
+  assert.match(handlerBody, /assignContactOwnerIfUnowned\(result\.contactId, assignee\.id\)/);
+});

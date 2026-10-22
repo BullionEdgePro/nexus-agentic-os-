@@ -36,6 +36,8 @@ import {
   getActivePhrase,
   wasAccountedFor,
   claimForAutoAssign,
+  pauseBroadcastIfFailingByMessage,
+  withAllTenants,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import { findEmployeeByCode, attributeConversation, optOutOfReengagement } from "@nexus/db";
@@ -66,6 +68,7 @@ import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
+import { explainSendError } from "../lib/send-errors.js";
 import { withConversationLock } from "./conversation-lock.js";
 import { describeInboundMessage } from "../lib/inbound-media.js";
 
@@ -446,6 +449,21 @@ async function processDeliveryStatuses(
           { organizationId, waMessageId: status.id, errorText },
           "WhatsApp reported a message as UNDELIVERED — the customer never received this reply"
         );
+      }
+
+      // A campaign refused AFTER sending counts towards its circuit breaker
+      // (review, 22 Oct 2026): this is where 131026/131047/131049 usually land.
+      if (status.status === "failed" && movedRecipient) {
+        const paused = await withAllTenants(
+          "campaign breaker: the receipt names a message, the campaign may be any business's",
+          () => pauseBroadcastIfFailingByMessage(status.id)
+        );
+        if (paused) {
+          logger.warn(
+            { ...paused, reason: errorText ? explainSendError(errorText) : null },
+            "Campaign paused: most of its messages were refused"
+          );
+        }
       }
     } catch (err) {
       logger.warn({ waMessageId: status.id, err }, "Could not record a delivery status");

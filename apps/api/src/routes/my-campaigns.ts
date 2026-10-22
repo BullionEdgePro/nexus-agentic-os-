@@ -15,6 +15,7 @@ import {
   createBroadcastRecipients,
   updateBroadcastStatus,
   isWhatsAppNumberRetired,
+  isWaIdOptedOut,
 } from "@nexus/db";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
@@ -438,12 +439,42 @@ function templateRefusal(
  * itself — so the sender types the number to try it on.
  */
 export function testSendRefusal(to: string, sendingDisplayNumber: string | null): string | null {
-  const digits = to.replace(/\D/g, "");
+  const digits = internationalDigits(to);
   if (digits.length < 8 || /[a-z]/i.test(to)) return "That is not a phone number.";
-  if (sendingDisplayNumber && digits === sendingDisplayNumber.replace(/\D/g, "")) {
+  // Checked first, so typing your own number without the + gets the reason
+  // that actually applies.
+  if (sendingDisplayNumber && digits === internationalDigits(sendingDisplayNumber)) {
     return "That is the number the campaign sends from — use your personal WhatsApp.";
   }
+  // INTERNATIONAL FORM ONLY (review, 22 Oct 2026). "525631476" is a UAE mobile
+  // typed locally; sent as it stands it is +52, a stranger in Mexico.
+  if (!/^\s*(\+|00)/.test(to)) {
+    return "Write the number with its country code, starting with + (for example +971 50 123 4567).";
+  }
   return null;
+}
+
+/** The number as WhatsApp wants it: digits only, an international 00 dropped. */
+export function internationalDigits(input: string): string {
+  return input.replace(/\D/g, "").replace(/^00/, "");
+}
+
+/**
+ * At most TEST_SENDS_PER_HOUR tests per person per hour. Kept in this process:
+ * one API container serves every request, and a restart forgetting the count
+ * is harmless — the limit only stops a test send becoming an unmetered sender.
+ */
+const TEST_SENDS_PER_HOUR = 5;
+const testSends = new Map<string, number[]>();
+function takeTestSend(employeeId: string, now = Date.now()): boolean {
+  const recent = (testSends.get(employeeId) ?? []).filter((at) => now - at < 3_600_000);
+  if (recent.length >= TEST_SENDS_PER_HOUR) {
+    testSends.set(employeeId, recent);
+    return false;
+  }
+  recent.push(now);
+  testSends.set(employeeId, recent);
+  return true;
 }
 
 /**
@@ -478,6 +509,13 @@ myCampaignsRoute.post("/campaigns/test", async (c) => {
 
   const refusedTo = testSendRefusal(to, employee.whatsappPhoneNumberId ? employee.whatsappNumber ?? null : null);
   if (refusedTo) return c.json({ error: refusedTo }, 400);
+  const toDigits = internationalDigits(to);
+  if (await isWaIdOptedOut(toDigits)) {
+    return c.json({ error: "That number belongs to someone who asked not to be messaged." }, 400);
+  }
+  if (!takeTestSend(desk.employeeId)) {
+    return c.json({ error: `That is ${TEST_SENDS_PER_HOUR} tests this hour — try again later.` }, 429);
+  }
 
   const template = await withTenant(desk.organizationId, () => getBroadcastTemplate(templateId));
   if (!template) return c.json({ error: "That message no longer exists." }, 404);
@@ -487,7 +525,7 @@ myCampaignsRoute.post("/campaigns/test", async (c) => {
   try {
     const messageId = await sendWhatsAppTemplate(
       from,
-      to.replace(/\D/g, ""),
+      toDigits,
       template.metaTemplateName,
       template.language,
       staffTemplateParams(template.bodyParamCount, employee.fullName)

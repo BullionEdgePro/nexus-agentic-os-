@@ -696,3 +696,20 @@ export async function assignContactOwnerIfUnowned(
     currentOwnerName: rows[0]?.owner_employee_id === employeeId ? null : rows[0]?.full_name ?? null,
   };
 }
+
+/**
+ * Whether anyone with this WhatsApp number asked not to be messaged.
+ *
+ * Across every business on purpose: the test send (22 Oct 2026) reaches a
+ * number outside anybody's book, so the only honest check is whether this
+ * person has said no to any of us.
+ */
+export async function isWaIdOptedOut(waId: string): Promise<boolean> {
+  return withAllTenants("opt-out check: a person's no applies whichever business asks", async () => {
+    const { rows } = await getPool().query<{ one: number }>(
+      `select 1 as one from contacts where wa_id = $1 and reengagement_opted_out limit 1`,
+      [waId.replace(/\D/g, "")]
+    );
+    return rows.length > 0;
+  });
+}
