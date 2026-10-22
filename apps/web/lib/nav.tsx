@@ -307,7 +307,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/activity",
-    label: "Team activity",
+    label: "Staff work",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M3 12h3.5l2.5-6 3.5 13 2.5-7h6" />

@@ -806,7 +806,7 @@ const QUICK: { href: string; label: string; hint: string; d: string }[] = [
   { href: "/deck/operators", label: "Needs attention", hint: "What is wrong right now", d: "M12 3 2 20h20L12 3Zm0 6v5m0 3h.01" },
   { href: "/deck/broadcasts", label: "Broadcast", hint: "A campaign or a customer list", d: "M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Zm13-3a5 5 0 0 1 0 8" },
   { href: "/deck/team", label: "Team & inbox rules", hint: "People, rotas, auto-assign", d: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 10a7 7 0 0 1 14 0m1-10a3 3 0 1 0 0-6m5 16a5 5 0 0 0-4-4.9" },
-  { href: "/deck/activity", label: "Team activity", hint: "Response times per person", d: "M3 12h4l3 8 4-16 3 8h4" },
+  { href: "/deck/activity", label: "Staff work", hint: "Every chat and action, per person", d: "M3 12h4l3 8 4-16 3 8h4" },
 ];
 
 /** An icon for each KPI tile — by the label the tile already carries. */

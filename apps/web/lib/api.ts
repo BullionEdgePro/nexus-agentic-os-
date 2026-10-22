@@ -940,6 +940,69 @@ export interface ActivityEvent {
 }
 
 /** Operator-only: what every employee across every business has been doing. */
+/** Staff work (admin only): each staff member's chats, replies and activity. */
+export interface StaffWorkPerson {
+  employeeId: string;
+  fullName: string;
+  jobTitle: string | null;
+  businessSlug: BusinessSlug;
+  businessName: string;
+  whatsappNumber: string | null;
+  whatsappQuality: string | null;
+  connections: string[];
+  chats: number;
+  chatsByChannel: Record<string, number>;
+  waiting: number;
+  oldestWaitingAt: string | null;
+  repliesToday: number;
+  repliesWeek: number;
+  openTasks: number;
+  overdueTasks: number;
+  upcomingBookings: number;
+  campaigns30d: number;
+  pausedCampaigns: number;
+  lastActiveAt: string | null;
+  status: "online" | "away" | "never-signed-in";
+}
+
+export interface StaffWorkAttention {
+  waitingLong: Array<{ conversationId: string; contactName: string | null; employeeName: string; businessSlug: BusinessSlug; since: string }>;
+  waitingLongTotal: number;
+  unowned: Array<{ businessSlug: BusinessSlug; businessName: string; count: number }>;
+  staffWithoutNumber: number;
+  pausedCampaigns: number;
+}
+
+export function getStaffWork(business?: BusinessSlug | ""): Promise<{ people: StaffWorkPerson[]; attention: StaffWorkAttention }> {
+  return request(`/api/activity/staff-work${business ? `?business=${business}` : ""}`);
+}
+
+export interface StaffConversation {
+  id: string;
+  businessSlug: BusinessSlug;
+  contactName: string | null;
+  contactWaId: string | null;
+  channel: string;
+  status: string;
+  lastDirection: string | null;
+  lastAt: string | null;
+  lastBody: string | null;
+  waiting: boolean;
+}
+
+export interface StaffTimelineItem {
+  kind: "reply" | "note" | "event" | "task" | "booking" | "campaign" | "connected";
+  what: string;
+  at: string;
+  conversationId: string | null;
+}
+
+export function getStaffMemberWork(
+  employeeId: string
+): Promise<{ conversations: StaffConversation[]; timeline: StaffTimelineItem[] }> {
+  return request(`/api/activity/staff-work/${employeeId}`);
+}
+
 export function getActivity(
   orgSlug?: BusinessSlug
 ): Promise<{ employees: EmployeeActivity[]; events: ActivityEvent[] }> {

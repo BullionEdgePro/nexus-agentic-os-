@@ -1,108 +1,89 @@
-/* ============================================================
-   Employee activity — the operator's view of who is doing what.
-   Inherits the routing-plate tokens from deck.css; everything
-   here is scoped under .act-root.
+/* Staff work (22 Oct 2026) — calm cards on the deck tokens. */
+.sw { max-width: 1240px; margin: 0 auto; padding: 36px 32px 64px; display: flex; flex-direction: column; gap: 24px; }
+.sw-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.sw-eyebrow { margin: 0 0 6px; font-size: 13px; font-weight: 500; color: var(--slate); }
+.sw-title { margin: 0; font-family: var(--font-serif, Georgia, serif); font-weight: 400; font-size: clamp(34px, 4vw, 44px); line-height: 1.05; letter-spacing: -0.01em; color: var(--ink); }
+.sw-lede { margin: 8px 0 0; max-width: 620px; font-size: 15px; line-height: 1.5; color: var(--slate); }
+.sw-note { margin: 0; font-size: 14px; color: var(--slate); }
+.sw-error { margin: 0; padding: 12px 14px; border-radius: var(--r-sm); background: var(--crit-soft); color: var(--crit); font-size: 14px; }
+.sw-error button { margin-left: 8px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 
-   Laid out as a ledger rather than a dashboard: rows of people
-   with their numbers in fixed columns, because the question this
-   answers is comparative ("who is carrying the load") and a grid
-   of cards makes comparison harder than a table does.
-   ============================================================ */
+.sw-card { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r); box-shadow: var(--lift-sm); }
+.sw-attention { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.sw-attention h2, .sw-detail h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); }
+.sw-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.sw-tile { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: var(--r-sm); background: var(--pebble); color: var(--ink); text-decoration: none; }
+.sw-tile strong { font-size: 26px; font-weight: 700; line-height: 1; }
+.sw-tile span { font-size: 13px; line-height: 1.4; color: var(--ink-soft); }
+.sw-tile.crit { background: var(--crit-soft); }
+.sw-tile.crit strong { color: var(--crit); }
+.sw-tile.warn { background: var(--warn-soft); }
+.sw-tile.warn strong { color: var(--warn); }
+.sw-tile.ok { background: var(--good-soft); }
+.sw-tile.ok strong { color: var(--good); }
+a.sw-tile:hover { outline: 2px solid var(--hairline-strong); }
+.sw-waiting { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--hairline); }
+.sw-waiting a { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 2px; border-bottom: 1px solid var(--hairline); text-decoration: none; color: var(--ink); font-size: 14px; }
+.sw-waiting a:hover { background: var(--pebble); }
+.sw-waiting-who { font-weight: 600; }
+.sw-waiting-on { color: var(--slate); }
+.sw-waiting-since { margin-left: auto; color: var(--crit); font-weight: 600; }
 
-.act-root { max-width: 1120px; margin: 0 auto; padding: 28px 22px 64px; }
+.sw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.sw-person { padding: 18px; display: flex; flex-direction: column; gap: 14px; transition: box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
+.sw-person.on { border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-soft); }
+.sw-person-head { display: flex; align-items: center; gap: 12px; }
+.sw-avatar { width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--signal-soft); color: var(--signal-text); font-weight: 700; font-size: 14px; }
+.sw-person-name { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.sw-person-name strong { font-size: 15px; color: var(--ink); }
+.sw-person-name span { font-size: 12.5px; color: var(--slate); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw-status { flex: none; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: var(--r-pill); background: var(--pebble); color: var(--slate); }
+.sw-status.online { background: var(--good-soft); color: var(--good); }
+.sw-status.never-signed-in { background: var(--crit-soft); color: var(--crit); }
+.sw-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sw-chips span { font-size: 12px; padding: 4px 9px; border-radius: 8px; background: var(--pebble); color: var(--ink-soft); }
+.sw-chips span.muted { color: var(--slate); }
+.sw-stats { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.sw-stats div { display: flex; flex-direction: column-reverse; gap: 2px; }
+.sw-stats dt { font-size: 12px; color: var(--slate); }
+.sw-stats dd { margin: 0; font-size: 20px; font-weight: 700; color: var(--ink); }
+.sw-stats dd.crit { color: var(--crit); }
+.sw-meta { margin: 0; font-size: 12.5px; color: var(--slate); }
+.sw-person-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--slate); }
+.sw-person-foot button { min-height: 36px; border: 1px solid var(--hairline-strong); background: var(--paper); border-radius: var(--r-sm); padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.sw-person-foot button:hover { background: var(--pebble); }
 
-.act-back {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--slate);
-  text-decoration: none;
+.sw-detail { padding: 22px; display: flex; flex-wrap: wrap; gap: 24px; }
+.sw-detail-chats { flex: 2 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.sw-detail-timeline { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.sw-detail-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.sw-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.sw-filter button { border: 0; border-radius: var(--r-pill); padding: 6px 12px; background: var(--pebble); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.sw-filter button.on { background: var(--ink); color: var(--paper); font-weight: 600; }
+.sw-table-wrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: var(--r-sm); }
+.sw-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13.5px; }
+.sw-table th { text-align: left; padding: 10px 14px; font-weight: 600; color: var(--slate); background: var(--marble); }
+.sw-table td { padding: 11px 14px; border-top: 1px solid var(--hairline); color: var(--ink); vertical-align: top; }
+.sw-table a { color: var(--ink); font-weight: 600; text-decoration: none; }
+.sw-table a:hover { color: var(--signal-text); text-decoration: underline; }
+.sw-preview { color: var(--ink-soft); max-width: 360px; }
+.sw-state { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: var(--r-pill); white-space: nowrap; }
+.sw-state.crit { background: var(--crit-soft); color: var(--crit); }
+.sw-state.ok { background: var(--good-soft); color: var(--good); }
+.sw-state.muted { background: var(--pebble); color: var(--slate); }
+.sw-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; max-height: 520px; overflow-y: auto; }
+.sw-timeline li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--ink); line-height: 1.45; }
+.sw-timeline a { color: var(--ink); text-decoration: none; }
+.sw-timeline a:hover { color: var(--signal-text); text-decoration: underline; }
+.sw-timeline time { display: block; font-size: 12px; color: var(--slate); }
+.sw-dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--signal); }
+
+@media (max-width: 900px) {
+  .sw { padding: 24px 16px 48px; }
+  .sw-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.act-back:hover { color: var(--signal-text); }
 
-.act-head { margin: 18px 0 6px; }
-.act-head h1 {
-  font-family: var(--display);
-  font-size: clamp(26px, 4vw, 34px);
-  letter-spacing: -0.02em;
-}
-.act-lede { font-size: 14px; color: var(--slate); max-width: 62ch; line-height: 1.55; }
-
-.act-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0 16px; }
-.act-tabs button {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  padding: 7px 12px;
-  border-radius: 100px;
-  border: 1px solid var(--hairline-strong);
-  background: transparent;
-  color: var(--slate);
-  cursor: pointer;
-}
-.act-tabs button[aria-pressed="true"] {
-  background: var(--signal);
-  border-color: var(--ink);
-  color: var(--marble);
-}
-
-/* --- the roll of people --- */
-
-.act-table {
-  border: 1px solid var(--hairline);
-  border-radius: var(--r);
-  background: var(--paper);
-  overflow-x: auto;
-}
-.act-table table { width: 100%; border-collapse: collapse; min-width: 700px; }
-
-.act-table th {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--mist);
-  text-align: right;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--hairline);
-  white-space: nowrap;
-}
-.act-table th:first-child, .act-table td:first-child { text-align: left; }
-
-.act-table td {
-  padding: 13px 14px;
-  font-size: 13.5px;
-  text-align: right;
-  border-bottom: 1px solid var(--hairline);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.act-table tbody tr:last-child td { border-bottom: 0; }
-.act-table tbody tr:hover { background: var(--pebble); }
-
-.act-who { display: flex; flex-direction: column; gap: 2px; }
-.act-name { font-weight: 600; }
-.act-sub { font-family: var(--mono); font-size: 10px; color: var(--mist); letter-spacing: .04em; }
-
-/* Zero is not the same as a number, and should not read like one. */
-.act-zero { color: var(--mist); }
-
-.act-flag {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  padding: 3px 7px;
-  border-radius: 100px;
-  border: 1px solid var(--hairline-strong);
-  color: var(--slate);
-}
-.act-flag.warn { border-color: rgba(196, 52, 42, .4); color: var(--crit); background: rgba(196, 52, 42, .06); }
-
-/* --- the timeline --- */
-
+/* Kept for the response-times section below. */
 .act-sub-head {
   font-family: var(--mono);
   font-size: 10px;
@@ -111,23 +92,6 @@
   color: var(--signal-text);
   margin: 34px 0 12px;
 }
-
-.act-feed { display: flex; flex-direction: column; gap: 1px; }
-.act-event {
-  display: grid;
-  grid-template-columns: 130px 1fr auto;
-  gap: 14px;
-  align-items: baseline;
-  padding: 11px 14px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-sm);
-  background: var(--paper);
-  font-size: 13px;
-}
-.act-when { font-family: var(--mono); font-size: 10.5px; color: var(--mist); font-variant-numeric: tabular-nums; }
-.act-detail { color: var(--slate); }
-.act-detail b { color: var(--ink); font-weight: 600; }
-.act-score { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 .act-empty {
   border: 1px dashed var(--hairline-strong);
@@ -149,33 +113,6 @@
   padding: 10px 12px;
 }
 
-.act-caveat {
-  margin-top: 30px;
-  border-top: 1px solid var(--hairline);
-  padding-top: 14px;
-  font-size: 12.5px;
-  color: var(--mist);
-  line-height: 1.6;
-  max-width: 70ch;
-}
-
-@media (max-width: 620px) {
-  .act-event { grid-template-columns: 1fr; gap: 4px; }
-}
-
-/* The business switcher, shared by every screen that has one. */
-.deck-root .act-tabs .bt-only {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  padding: 6px 2px;
-}
-
-/* Drawn empty until we know who is asking — see BusinessTabs. Holds the row's
-   height so the page below does not jump when the answer arrives. */
-.deck-root .act-tabs.bt-waiting { min-height: 34px; }
-
-/* ---------- response times (Clear Sky) ---------- */
 .rt { margin-top: 30px; }
 .rt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .rt-head .act-sub-head { margin: 0; }

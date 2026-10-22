@@ -5,6 +5,8 @@ import {
   findOrganizationBySlug,
   getStaffResponseTimes,
   getInboxSettings,
+  staffWorkOverview,
+  staffMemberWork,
 } from "@nexus/db";
 
 /**
@@ -66,4 +68,25 @@ activityRoute.get("/response-times", async (c) => {
 
   const staff = await getStaffResponseTimes(organizationId, days, targetMinutes);
   return c.json({ staff, days, targetMinutes });
+});
+
+/**
+ * Staff work: every staff member's chats, replies and activity (22 Oct 2026).
+ * Operator-only at the mount (/api/activity/*), like everything here.
+ */
+activityRoute.get("/staff-work", async (c) => {
+  const slug = c.req.query("business");
+  let organizationId: string | null = null;
+  if (slug) {
+    const organization = await findOrganizationBySlug(slug);
+    if (!organization) return c.json({ error: "Organization not found" }, 404);
+    organizationId = organization.id;
+  }
+  return c.json(await staffWorkOverview(organizationId));
+});
+
+activityRoute.get("/staff-work/:employeeId", async (c) => {
+  const work = await staffMemberWork(c.req.param("employeeId"));
+  if (!work) return c.json({ error: "Staff member not found" }, 404);
+  return c.json(work);
 });
