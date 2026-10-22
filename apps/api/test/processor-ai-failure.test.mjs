@@ -66,6 +66,7 @@ mock.module("@nexus/db", {
     // module-load failure rather than a wrong answer.
     recordBroadcastDelivery: async () => false,
     pauseBroadcastIfFailingByMessage: async () => null,
+    assignContactOwnerIfUnowned: async () => ({ assigned: true, currentOwnerName: null }),
     // Returns TRUE, preserving what these fixtures were written to test.
     // Escalation now only pauses the agent when somebody can take over, and
     // these cases all assert the staffed behaviour. Flipping this to false

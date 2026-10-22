@@ -37,6 +37,7 @@ import {
   wasAccountedFor,
   claimForAutoAssign,
   pauseBroadcastIfFailingByMessage,
+  assignContactOwnerIfUnowned,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import { findEmployeeByCode, attributeConversation, optOutOfReengagement } from "@nexus/db";
@@ -556,6 +557,10 @@ async function handleStaffNumberMessage(
 
   await withTenant(employee.organizationId, async () => {
     await assignConversationToEmployee(result.conversationId, employee.id);
+    // A customer who writes to your own number is your client (22 Oct 2026):
+    // without this the book stayed empty and a campaign could never reach the
+    // people this person actually talks to. Only when nobody owns them yet.
+    await assignContactOwnerIfUnowned(result.contactId, employee.id);
     // Pin the conversation to this number so the reply leaves from it, not the
     // shared line — the whole point of a person having their own.
     if (employee.whatsappPhoneNumberId) {
