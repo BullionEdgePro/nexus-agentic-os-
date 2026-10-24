@@ -50,3 +50,4 @@ export * from "./retired-numbers.js";
 export * from "./push-subscriptions.js";
 export * from "./hq.js";
 export * from "./vault-crypto.js";
+export * from "./team-chat.js";
