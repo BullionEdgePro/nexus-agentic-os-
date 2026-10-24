@@ -17,7 +17,9 @@ const INBOX = () => read("apps", "web", "app", "inbox", "page.tsx");
 
 test("staff land on their queue: waiting, longest waiting first", () => {
   const src = INBOX();
-  const landing = src.slice(src.indexOf("if (myEmployeeId) {"), src.indexOf("if (myEmployeeId) {") + 400);
+  const from = src.indexOf("if (myEmployeeId) {");
+  assert.ok(from >= 0, "the staff landing exists");
+  const landing = src.slice(from, from + 400);
   assert.match(landing, /setFolder\("awaiting"\)/);
   assert.match(landing, /setOldestFirst\(true\)/);
   assert.match(src, /\["awaiting", "Waiting"\]/);
@@ -58,13 +60,14 @@ test("the command bar offers the open chat's actions first, and clears them when
 // ---- §4 Copilot --------------------------------------------------------------
 
 test("a draft's style changes the voice or language, never the no-invented-facts rule", () => {
-  const ROUTE = read("apps", "api", "src", "routes", "conversations.ts");
-  const at = ROUTE.indexOf('conversationsRoute.post("/:id/suggest"');
-  const body = ROUTE.slice(at, ROUTE.indexOf("\n});", at));
+  const CONVERSATIONS = read("apps", "api", "src", "routes", "conversations.ts");
+  const at = CONVERSATIONS.indexOf('conversationsRoute.post("/:id/suggest"');
+  assert.ok(at >= 0, "the suggest route exists");
+  const body = CONVERSATIONS.slice(at, CONVERSATIONS.indexOf("\n});", at));
   assert.match(body, /NEVER invent facts, prices, availability, dates or promises/);
   assert.match(body, /\(style \? ` \$\{DRAFT_STYLES\[style\]\}` : ""\)/);
   assert.match(body, /body\.style in DRAFT_STYLES/);
-  for (const style of ["shorter", "friendlier", "formal", "arabic"]) assert.match(ROUTE, new RegExp(`  ${style}: "`));
+  for (const style of ["shorter", "friendlier", "formal", "arabic"]) assert.match(CONVERSATIONS, new RegExp(`  ${style}: "`));
 });
 
 test("Copilot never sends: a draft goes to the reply box, and nothing runs without a tap", () => {
@@ -89,9 +92,10 @@ test("the dock and the page share one thread hook, so a message is never sent tw
 });
 
 test("typing: nothing stored, only from someone who may write, and throttled", () => {
-  const ROUTE = read("apps", "api", "src", "routes", "team-chat.ts");
-  const at = ROUTE.indexOf('teamChatRoute.post("/threads/:id/typing"');
-  const body = ROUTE.slice(at, ROUTE.indexOf("\n});", at));
+  const TEAM_ROUTE = read("apps", "api", "src", "routes", "team-chat.ts");
+  const at = TEAM_ROUTE.indexOf('teamChatRoute.post("/threads/:id/typing"');
+  assert.ok(at >= 0, "the typing route exists");
+  const body = TEAM_ROUTE.slice(at, TEAM_ROUTE.indexOf("\n});", at));
   assert.match(body, /teamAccess\(thread, who\.viewer\)\.post/);
   assert.doesNotMatch(body, /postTeamMessage|withTenant/);
   const HOOK = read("apps", "web", "lib", "use-team-thread.ts");

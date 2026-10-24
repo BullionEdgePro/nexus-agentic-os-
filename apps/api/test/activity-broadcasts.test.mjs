@@ -774,7 +774,10 @@ test("every rail item is named, not just drawn", () => {
   // which on a touch screen means never. "Needs attention" and "Follow-ups"
   // are not recognisable from a triangle and a checklist.
   const SHELL = read("apps", "web", "app", "console-shell.tsx");
-  assert.match(SHELL, /<span className="rail-label">\{item\.label\}<\/span>/);
+  // Through labelFor since 24 Oct: staff read "My queue" where the admin reads
+  // "Inbox" — still a name on every item, falling back to the item's own label.
+  assert.match(SHELL, /<span className="rail-label">\{labelFor\(item\)\}<\/span>/);
+  assert.match(SHELL, /\(role === "employee" && item\.staffLabel\) \|\| item\.label/);
   assert.match(SHELL, /className="rail-brand"/);
   // Labels are dropped on narrow screens rather than truncated to nothing, so
   // every destination stays reachable on a phone.
