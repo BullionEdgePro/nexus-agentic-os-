@@ -10,6 +10,7 @@ import { AskColleague } from "./ask-colleague";
 import { SnoozeMenu } from "./snooze-menu";
 import { Copilot } from "./copilot";
 import { TeamDock } from "./team-dock";
+import { SwipeRow } from "./swipe-row";
 import { ShortcutSheet, useInboxShortcuts } from "./shortcuts";
 import { clearCommandActions, setCommandActions } from "@/lib/command-actions";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
@@ -668,6 +669,13 @@ export default function InboxPage() {
 
   // ---- Focus workspace: keys and the command bar (24 Oct 2026) ----
   const [keysOpen, setKeysOpen] = useState(false);
+  // After a swipe on a phone: what happened, and the way back, for six seconds.
+  const [undo, setUndo] = useState<{ label: string; run: () => void } | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 6_000);
+    return () => clearTimeout(timer);
+  }, [undo]);
   // Team chat docked where the customer panel is (Focus workspace).
   const [teamOpen, setTeamOpen] = useState(false);
   const toggleTeam = () => {
@@ -1024,6 +1032,20 @@ export default function InboxPage() {
           </div>
         ) : null}
         {keysOpen ? <ShortcutSheet onClose={() => setKeysOpen(false)} /> : null}
+        {undo ? (
+          <div className="ibx-undo" role="status">
+            <span>{undo.label}</span>
+            <button
+              type="button"
+              onClick={() => {
+                undo.run();
+                setUndo(null);
+              }}
+            >
+              Undo
+            </button>
+          </div>
+        ) : null}
 
         {searchOpen ? (
           <input
@@ -1114,6 +1136,17 @@ export default function InboxPage() {
                 const name = contactLabel(conversation);
                 return (
                   <li key={conversation.id}>
+                    <SwipeRow
+                      disabled={!myEmployeeId}
+                      onResolve={() => {
+                        void setStatus(conversation.id, "resolved");
+                        setUndo({ label: `Resolved ${name}`, run: () => void setStatus(conversation.id, "open") });
+                      }}
+                      onSnooze={() => {
+                        void setSnooze(conversation.id, new Date(Date.now() + 3 * 3_600_000));
+                        setUndo({ label: `Snoozed ${name} for 3 hours`, run: () => void setSnooze(conversation.id, null) });
+                      }}
+                    >
                     <button
                       onClick={() => selectConversation(conversation.id)}
                       className={`ibx-convo${selectedConversationId === conversation.id ? " on" : ""}${
@@ -1187,6 +1220,7 @@ export default function InboxPage() {
                         ) : null}
                       </span>
                     </button>
+                    </SwipeRow>
                   </li>
                 );
               })}

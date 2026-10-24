@@ -99,3 +99,24 @@ test("typing: nothing stored, only from someone who may write, and throttled", (
   assert.match(HOOK, /TYPING_SHOWN_MS = 5_000/);
   assert.match(read("apps", "web", "app", "team-chat-alerts.tsx"), /if \(event\.type === "team_typing"\) return;/);
 });
+
+// ---- §6 Phone ----------------------------------------------------------------
+
+test("a swipe needs a finger and 96px, never fires on a scroll, and can be undone", () => {
+  const SWIPE = read("apps", "web", "app", "inbox", "swipe-row.tsx");
+  assert.match(SWIPE, /SWIPE_ACTION_PX = 96/);
+  assert.match(SWIPE, /if \(e\.pointerType !== "touch"\) return;/);
+  assert.match(SWIPE, /horizontal\.current = Math\.abs\(x\) > Math\.abs\(y\)/);
+  assert.match(SWIPE, /onClickCapture/);
+  const src = INBOX();
+  assert.match(src, /setTimeout\(\(\) => setUndo\(null\), 6_000\)/);
+  assert.match(src, /run: \(\) => void setStatus\(conversation\.id, "open"\)/);
+  assert.match(src, /run: \(\) => void setSnooze\(conversation\.id, null\)/);
+});
+
+test("staff get Queue, Team, Follow-ups and Me at the bottom of a phone", () => {
+  const TABS = read("apps", "web", "app", "mobile-tabs.tsx");
+  for (const label of ["Queue", "Team", "Follow-ups", "Me"]) assert.match(TABS, new RegExp(`label: "${label}"`));
+  assert.match(read("apps", "web", "app", "mobile-tabs.css"), /@media \(max-width: 759px\)/);
+  assert.match(read("apps", "web", "app", "console-shell.tsx"), /role === "employee" \? <MobileTabs \/> : null/);
+});

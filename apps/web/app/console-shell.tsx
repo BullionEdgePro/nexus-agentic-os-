@@ -8,6 +8,7 @@ import { Assistant } from "./assistant";
 import { CommandPalette } from "./command-palette";
 import { AssignmentAlerts } from "./assignment-alerts";
 import { TeamChatAlerts, TeamChatBadge } from "./team-chat-alerts";
+import { MobileTabs } from "./mobile-tabs";
 import { InstallBanner } from "./install-app";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
@@ -200,6 +201,8 @@ export function ConsoleShell({
       {/* "New chat for you" — wherever a staff member is in the product. */}
       {/* Team chat's unread count and @mention alerts, both roles. */}
       <TeamChatAlerts employeeId={role === "employee" ? (me?.employeeId ?? null) : null} />
+      {/* A staff member's phone: Queue, Team, Follow-ups, Me at the bottom. */}
+      {role === "employee" ? <MobileTabs /> : null}
       {role === "employee" && me ? (
         <AssignmentAlerts employeeId={me.employeeId} organizationSlug={me.organizationSlug} />
       ) : null}

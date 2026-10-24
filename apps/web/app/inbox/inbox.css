@@ -1836,3 +1836,21 @@
 .ibx-dock .tc-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px; }
 .tc-dot-inline { width: 8px; height: 8px; border-radius: 50%; background: var(--hairline-strong); display: inline-block; }
 .tc-dot-inline.on { background: var(--good); }
+
+/* Swipe a chat on a phone: right resolves, left snoozes (Focus workspace). */
+.ibx-swipe { position: relative; overflow: hidden; border-radius: 12px; touch-action: pan-y; }
+.ibx-swipe-top { position: relative; z-index: 1; background: var(--paper); transition: transform .18s var(--ease-out); }
+.ibx-swipe.right .ibx-swipe-top, .ibx-swipe.left .ibx-swipe-top { transition: none; }
+.ibx-swipe-under { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding: 0 18px; font-size: 13px; font-weight: 600; color: var(--marble); opacity: 0; }
+.ibx-swipe-resolve { left: 0; right: 0; background: var(--good); }
+.ibx-swipe-snooze { left: 0; right: 0; justify-content: flex-end; background: var(--signal); }
+.ibx-swipe.right .ibx-swipe-resolve { opacity: 1; }
+.ibx-swipe.left .ibx-swipe-snooze { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .ibx-swipe-top { transition: none; } }
+
+.ibx-undo {
+  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 70;
+  display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 14px;
+  background: var(--ink); color: var(--marble); font-size: 13px; box-shadow: var(--lift); max-width: calc(100vw - 32px);
+}
+.ibx-undo button { font: inherit; font-weight: 700; color: var(--signal-on-dark); background: none; border: 0; cursor: pointer; min-height: 32px; }
