@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { InboxSocketEvent } from "@nexus/shared";
 import { conversationViewers, conversationVisibleTo } from "@nexus/db";
 import { subscribeToInboxEvents } from "../lib/pubsub.js";
+import { subscribeToTeamEvents, type TeamEvent } from "../lib/team-events.js";
 import { verifySessionToken, readCookie, SESSION_COOKIE } from "../lib/session.js";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
@@ -21,9 +22,16 @@ interface Client {
   organizationSlug: string | null;
   /** Set for a staff member: they receive events for their own conversations only. */
   employeeId: string | null;
+  /**
+   * Which stream this socket asked for (24 Oct 2026): the inbox at /ws, team
+   * chat at /ws/team. Kept apart so a team message never rides the inbox
+   * stream, nor a customer's message the team one.
+   */
+  stream: "inbox" | "team";
 }
 
 const WS_PATH = "/ws";
+const TEAM_PATH = "/ws/team";
 
 /**
  * Attaches the Unified Inbox WebSocket endpoint to the API's HTTP server and
@@ -37,7 +45,7 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
 
   httpServer.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url ?? "", "http://internal");
-    if (url.pathname !== WS_PATH) {
+    if (url.pathname !== WS_PATH && url.pathname !== TEAM_PATH) {
       socket.destroy();
       return;
     }
@@ -57,10 +65,11 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
       }
 
       wss.handleUpgrade(request, socket, head, (ws) => {
+        const stream = url.pathname === TEAM_PATH ? "team" : "inbox";
         const client: Client =
           session.role === "operator"
-            ? { socket: ws, organizationSlug: url.searchParams.get("org"), employeeId: null }
-            : { socket: ws, organizationSlug: session.organizationSlug ?? "", employeeId: session.employeeId ?? "" };
+            ? { socket: ws, organizationSlug: url.searchParams.get("org"), employeeId: null, stream }
+            : { socket: ws, organizationSlug: session.organizationSlug ?? "", employeeId: session.employeeId ?? "", stream };
         clients.add(client);
         ws.on("close", () => clients.delete(client));
         ws.on("error", () => clients.delete(client));
@@ -72,7 +81,9 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
     void (async () => {
       const payload = JSON.stringify(event);
       const listening = [...clients].filter(
-        (client) => !client.organizationSlug || client.organizationSlug === event.organizationSlug
+        (client) =>
+          client.stream !== "team" &&
+          (!client.organizationSlug || client.organizationSlug === event.organizationSlug)
       );
       // Asked once per event, and only when a staff member is listening.
       const viewers = listening.some((client) => client.employeeId)
@@ -85,10 +96,31 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
     })();
   });
 
-  logger.info(`Unified Inbox WebSocket endpoint attached at ${WS_PATH}`);
+  // TEAM CHAT. A staff socket hears its own business's room and the direct
+  // chats it is one of the two people in; the admin hears every business, or
+  // the one named with ?org.
+  const unsubscribeTeam = subscribeToTeamEvents((event: TeamEvent) => {
+    const payload = JSON.stringify(event);
+    for (const client of clients) {
+      if (client.stream !== "inbox" && hearsTeamEvent(client, event) && client.socket.readyState === WebSocket.OPEN) {
+        client.socket.send(payload);
+      }
+    }
+  });
+
+  logger.info(`Unified Inbox WebSocket endpoint attached at ${WS_PATH} (team chat at ${TEAM_PATH})`);
 
   return () => {
     unsubscribe();
+    unsubscribeTeam();
     wss.close();
   };
+}
+
+function hearsTeamEvent(client: Client, event: TeamEvent): boolean {
+  if (!client.employeeId) return !client.organizationSlug || client.organizationSlug === event.organizationSlug;
+  return (
+    client.organizationSlug === event.organizationSlug &&
+    (event.kind === "room" || event.members.includes(client.employeeId))
+  );
 }

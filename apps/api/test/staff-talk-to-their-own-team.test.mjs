@@ -135,3 +135,17 @@ test("database work runs inside the business's tenant scope, and the route is mo
   assert.ok((ROUTE().match(/withTenant\(/g) ?? []).length >= 5);
   assert.match(read("apps", "api", "src", "index.ts"), /app\.route\("\/api\/team-chat", teamChatRoute\)/);
 });
+
+// ---- Task 3: live delivery ---------------------------------------------------
+
+test("the live connection carries team chat on its own path, by the same rule", () => {
+  const HUB = read("apps", "api", "src", "ws", "inbox-hub.ts");
+  assert.match(HUB, /TEAM_PATH = "\/ws\/team"/);
+  assert.match(HUB, /subscribeToTeamEvents/);
+  // A staff socket hears its own business's room and its own direct chats only.
+  assert.match(HUB, /event\.kind === "room" \|\| event\.members\.includes\(client\.employeeId\)/);
+  assert.match(HUB, /client\.organizationSlug === event\.organizationSlug/);
+  // The inbox stream never carries team chat, nor team the inbox.
+  assert.match(HUB, /client\.stream !== "team"/);
+  assert.match(HUB, /client\.stream !== "inbox"/);
+});
