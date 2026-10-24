@@ -115,6 +115,11 @@
 .team-root .btn:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); }
 .team-root .btn:disabled { opacity: .45; cursor: default; }
 .team-root .btn.small { padding: 9px 14px; font-size: 10.5px; }
+/* A link styled as a button, and the quieter second action beside it. */
+.team-root a.btn { text-decoration: none; display: inline-block; }
+.team-root .btn.ghost { background: var(--paper); color: var(--ink); border-color: var(--hairline-strong); }
+.team-root .btn.ghost:hover:not(:disabled) { background: var(--pebble); border-color: var(--hairline-strong); }
+.team-root .cust-more { margin-top: 10px; }
 
 /* ---------- assigned customers ---------- */
 

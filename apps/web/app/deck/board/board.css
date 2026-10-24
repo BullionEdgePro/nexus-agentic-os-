@@ -10,6 +10,10 @@
 .bd {
   display: grid;
   gap: 18px;
+  /* The same centred column as every other page (24 Oct 2026). */
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 22px 64px;
 }
 
 .bd-head {
@@ -22,7 +26,8 @@
 
 .bd-head h1 {
   font-family: var(--display);
-  font-size: 22px;
+  font-size: clamp(26px, 4vw, 34px);
+  letter-spacing: -0.02em;
   font-weight: 600;
   color: var(--ink);
   margin: 0;

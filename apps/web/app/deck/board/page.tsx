@@ -53,6 +53,7 @@ import { COLUMNS, columnFor, dueDateFor, type ColumnKey } from "./columns";
 
 /** The view this browser last chose. Per machine, which is what localStorage means. */
 const VIEW_KEY = "nexus.board.view";
+import { useVisibleBusinesses } from "@/lib/business-tabs";
 import "./board.css";
 
 function whenLabel(task: TaskRecord): string {
@@ -68,6 +69,10 @@ function whenLabel(task: TaskRecord): string {
 }
 
 export default function BoardPage() {
+  // Staff see their own board (24 Oct 2026): no switcher across businesses
+  // they do not work for, and no rules — those, and their run history, are
+  // the owner's. Hidden until the role is known, never shown then withdrawn.
+  const { isOperator } = useVisibleBusinesses();
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [businesses, setBusinesses] = useState<Array<{ slug: BusinessSlug; name: string }>>([]);
   const [business, setBusiness] = useState<BusinessSlug | "">("");
@@ -149,8 +154,10 @@ export default function BoardPage() {
   }, []);
 
   const visible = useMemo(
-    () => (owner === "unassigned" ? tasks.filter((t) => !t.employeeId) : tasks),
-    [tasks, owner]
+    // The "Nobody yet" filter is the owner's; a remembered one must not leave a
+    // staff member looking at an empty board with no switch to undo it.
+    () => (owner === "unassigned" && isOperator ? tasks.filter((t) => !t.employeeId) : tasks),
+    [tasks, owner, isOperator]
   );
 
   const grouped = useMemo(() => {
@@ -208,10 +215,13 @@ export default function BoardPage() {
         <div>
           <h1>Workspace</h1>
           <p className="bd-sub">
-            Every follow-up this platform is holding, by when it is owed. Drag a card to move it.
+            {isOperator
+              ? "Every follow-up this platform is holding, by when it is owed. Drag a card to move it."
+              : "Your follow-ups, by when each is owed. Drag a card to move it."}
           </p>
         </div>
 
+        {isOperator ? (
         <div className="bd-view">
           <label>
             <span>Business</span>
@@ -232,6 +242,7 @@ export default function BoardPage() {
             </select>
           </label>
         </div>
+        ) : null}
       </header>
 
       {actionError ? <p className="bd-err">{actionError}</p> : null}
@@ -302,7 +313,7 @@ export default function BoardPage() {
       {/* Under the board rather than above it: the columns are what somebody
           came here for, and the rules are what they set up once and then leave
           alone. */}
-      <Automations business={business} team={team} />
+      {isOperator ? <Automations business={business} team={team} /> : null}
     </div>
   );
 }

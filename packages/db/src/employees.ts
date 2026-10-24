@@ -644,6 +644,8 @@ export interface AssignedConversation {
   isHumanHandoff: boolean;
   businessName: string;
   businessSlug: string;
+  /** whatsapp, email, instagram or facebook — what "reach them" means. */
+  channel: string;
 }
 
 /**
@@ -668,12 +670,17 @@ export async function listConversationsForEmployee(
     is_human_handoff: boolean;
     business_name: string;
     business_slug: string;
+    channel: string;
   }>(
+    // Real customers only, named, on their own channel (24 Oct 2026): a sender
+    // marked not a customer is not somebody's customer, an email sender's name
+    // is their address, and the preview is a line, not a whole HTML email.
     `select c.id              as conversation_id,
             ct.id             as contact_id,
             ct.wa_id,
-            ct.display_name   as contact_name,
-            lm.body           as last_message_preview,
+            coalesce(ct.display_name, ct.external_id) as contact_name,
+            left(regexp_replace(lm.body, '[[:space:]]+', ' ', 'g'), 240) as last_message_preview,
+            coalesce(c.channel, 'whatsapp')   as channel,
             lm.created_at     as last_message_at,
             c.is_human_handoff,
             o.name            as business_name,
@@ -688,6 +695,7 @@ export async function listConversationsForEmployee(
          limit 1
        ) lm on true
       where c.employee_id = $1
+        and ct.not_a_customer_at is null
       order by coalesce(lm.created_at, c.opened_at) desc
       limit 100`,
     [employeeId]
@@ -703,6 +711,7 @@ export async function listConversationsForEmployee(
     isHumanHandoff: row.is_human_handoff,
     businessName: row.business_name,
     businessSlug: row.business_slug,
+    channel: row.channel,
   }));
 }
 

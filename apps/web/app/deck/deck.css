@@ -1346,3 +1346,18 @@ html.nx-theme-fade .deck-root * {
    screen does: a soft wash and bold ink, not a solid blue block. */
 .deck-root:not(.shell) .rail a.on { background: var(--signal-soft); color: var(--ink); font-weight: 700; }
 .deck-root:not(.shell) .rail a.on .rail-icon { color: var(--signal); }
+
+/* ONE COLUMN FOR EVERY PAGE (24 Oct 2026). My clients, My campaigns and
+   Connections ran full width with a 22px heading, beside a product of centred
+   pages with a display heading — the staff member's own pages looked like the
+   unfinished ones. Same measure and heading as .act-root now. */
+.deck-root:has(> .mc-head) { max-width: 1120px; margin: 0 auto; padding: 28px 22px 64px; }
+.deck-root .mc-head { margin: 18px 0 22px; }
+.deck-root .mc-head h1 {
+  font-family: var(--display);
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+.deck-root .mc-head p { font-size: 14px; line-height: 1.55; }

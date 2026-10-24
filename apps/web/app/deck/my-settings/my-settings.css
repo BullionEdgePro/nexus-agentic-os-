@@ -9,7 +9,9 @@
   align-items: start;
 }
 @media (min-width: 860px) {
-  .set-grid { grid-template-columns: 1fr 1fr; }
+  /* auto then 1fr: the tall profile card's height goes to the SECOND row, so
+     the right column stacks without a gap under Social media (24 Oct 2026). */
+  .set-grid { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; }
   /* The profile card is the anchor — let it run down the left, socials +
      connections stack on the right. */
   .set-card:first-child { grid-row: span 2; }

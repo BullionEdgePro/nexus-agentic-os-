@@ -568,6 +568,8 @@ export interface AssignedConversation {
   isHumanHandoff: boolean;
   businessName: string;
   businessSlug: string;
+  /** whatsapp, email, instagram or facebook — what "reach them" means. */
+  channel: string;
   directContact: DirectContact | null;
 }
 

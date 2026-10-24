@@ -39,6 +39,23 @@ function scopeOf(c: { get: (k: string) => unknown }): SessionScope {
   return (c.get("scope") as SessionScope | undefined) ?? { sub: "unknown", role: "employee" };
 }
 
+const STAFF_ADVICE: Record<string, string> = {
+  "customer-waiting":
+    "Their last message has had no reply. Open the chat and answer — or, if it is a platform notice or a sales pitch, tap Not a customer and it leaves this list.",
+  "handover-abandoned":
+    "They were told a person would follow up, and nobody has yet. Open the chat and reply.",
+};
+
+function countsOf(findings: Array<{ severity: string; dismissedAt: string | null }>) {
+  const open = findings.filter((finding) => !finding.dismissedAt);
+  return {
+    urgent: open.filter((finding) => finding.severity === "urgent").length,
+    warn: open.filter((finding) => finding.severity === "warn").length,
+    info: open.filter((finding) => finding.severity === "info").length,
+    dismissed: findings.length - open.length,
+  };
+}
+
 operatorsRoute.get("/", async (c) => {
   const scope = scopeOf(c);
 
@@ -58,7 +75,7 @@ operatorsRoute.get("/", async (c) => {
     }
   }
 
-  const [allFindings, counts, lastSeen, heartbeats] = await Promise.all([
+  const [allFindings, businessCounts, lastSeen, heartbeats] = await Promise.all([
     listOpenFindings(organizationId),
     countOpenFindings(organizationId),
     lastSeenByOperator(organizationId),
@@ -85,15 +102,24 @@ operatorsRoute.get("/", async (c) => {
   // 2026): a finding names a customer and quotes their chat. Anything not
   // about a conversation of theirs is the admin's.
   let findings = allFindings;
+  let counts = businessCounts;
   if (scope.role !== "operator") {
-    const kept = [];
+    const kept: typeof allFindings = [];
     for (const finding of allFindings) {
       if (finding.subjectKind === "conversation" && finding.subjectId) {
         const viewers = await conversationViewers(finding.subjectId).catch(() => null);
-        if (viewers && conversationVisibleTo(viewers, scope.employeeId)) kept.push(finding);
+        if (viewers && conversationVisibleTo(viewers, scope.employeeId)) {
+          // In the staff member's words: what to do, not where the platform
+          // looked (24 Oct 2026 — "check the worker and the webhook" is the
+          // admin's to-do, read on a staff screen as a fault of theirs).
+          kept.push({ ...finding, detail: STAFF_ADVICE[finding.operator] ?? finding.detail });
+        }
       }
     }
     findings = kept;
+    // THEIR counts. The business-wide ones said "45 most serious of 50" about
+    // findings that were colleagues' to see.
+    counts = countsOf(kept);
   }
 
   return c.json({

@@ -112,7 +112,7 @@ export async function listContacts(
   const digitLike = digits.length >= 3 ? `%${digits}%` : null;
 
   const { rows } = await getPool().query<SummaryRow>(
-    `select ct.id, ct.wa_id, ct.display_name,
+    `select ct.id, ct.wa_id, coalesce(ct.display_name, ct.external_id) as display_name,
             ct.lead_score, ct.lead_priority, ct.lead_category,
             ct.last_message_at,
             ct.reengagement_opted_out as opted_out,
@@ -177,7 +177,7 @@ export async function getContact(
   const { rows } = await getPool().query<
     SummaryRow & { served_by: string[] | null }
   >(
-    `select ct.id, ct.wa_id, ct.display_name,
+    `select ct.id, ct.wa_id, coalesce(ct.display_name, ct.external_id) as display_name,
             ct.lead_score, ct.lead_priority, ct.lead_category,
             ct.last_message_at,
             ct.reengagement_opted_out as opted_out,

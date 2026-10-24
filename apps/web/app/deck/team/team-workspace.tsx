@@ -65,6 +65,15 @@ export interface LockedTo {
   fullName: string;
 }
 
+const ASSIGNED_SHOWN = 8;
+
+function channelName(channel: string): string {
+  if (channel === "email") return "Email";
+  if (channel === "instagram") return "Instagram";
+  if (channel === "facebook") return "Facebook";
+  return "WhatsApp";
+}
+
 export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
   const isOperator = !lockedTo;
   const [business, setBusiness] = useState<BusinessSlug>(lockedTo?.slug ?? "zipicka");
@@ -90,6 +99,9 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
     }
   }, []);
   const [assigned, setAssigned] = useState<AssignedConversation[]>([]);
+  // The front page shows the latest few; the rest are one tap away rather than
+  // a hundred cards between the person and the form below (24 Oct 2026).
+  const [showAllAssigned, setShowAllAssigned] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -644,31 +656,55 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
               direct line to the customer.
             </p>
           ) : (
+            <>
             <ul className="cust-list">
-              {assigned.map((conversation) => (
+              {(showAllAssigned ? assigned : assigned.slice(0, ASSIGNED_SHOWN)).map((conversation) => (
                 <li key={conversation.conversationId}>
                   <div className="cust-head">
-                    <span className="nm">{conversation.contactName ?? conversation.contactWaId}</span>
-                    <span className="biz">{conversation.businessName}</span>
+                    <span className="nm">
+                      {conversation.contactName ??
+                        (conversation.contactWaId ? `+${conversation.contactWaId}` : "Customer")}
+                    </span>
+                    <span className="biz">
+                      {conversation.channel === "whatsapp"
+                        ? conversation.businessName
+                        : `${channelName(conversation.channel)} · ${conversation.businessName}`}
+                    </span>
                   </div>
                   <p className="cust-last">{conversation.lastMessagePreview ?? "No messages yet"}</p>
                   <div className="cust-actions">
-                    <button
-                      type="button"
-                      className="btn small"
-                      disabled={busy || !conversation.directContact}
-                      onClick={() => onTakeOver(conversation)}
-                    >
-                      Message from my WhatsApp
-                    </button>
+                    {/* Every chat opens in the inbox, whatever it came in on. */}
+                    <a className="btn small" href={`/inbox?conversation=${conversation.conversationId}`}>
+                      Open chat
+                    </a>
+                    {/* WhatsApp from their own phone only for a WhatsApp customer:
+                        an email sender has no number, and a greyed button beside
+                        a red "not reachable" read as something broken. */}
+                    {conversation.channel === "whatsapp" && conversation.directContact ? (
+                      <button
+                        type="button"
+                        className="btn small ghost"
+                        disabled={busy}
+                        onClick={() => onTakeOver(conversation)}
+                      >
+                        Message from my WhatsApp
+                      </button>
+                    ) : null}
                     {conversation.isHumanHandoff && <span className="tag">AI paused</span>}
-                    {!conversation.directContact && (
-                      <span className="tag bad">Not reachable on WhatsApp</span>
-                    )}
                   </div>
                 </li>
               ))}
             </ul>
+            {assigned.length > ASSIGNED_SHOWN ? (
+              <button
+                type="button"
+                className="btn small ghost cust-more"
+                onClick={() => setShowAllAssigned((on) => !on)}
+              >
+                {showAllAssigned ? "Show fewer" : `Show all ${assigned.length}`}
+              </button>
+            ) : null}
+            </>
           )}
 
           {selected && (

@@ -227,7 +227,7 @@ export default function CustomersPage() {
             {contacts.map((contact) => (
               <li key={contact.id}>
                 <button type="button" className="cu-row" onClick={() => void open(contact)}>
-                  <span className="cu-name">{contact.displayName ?? `+${contact.waId}`}</span>
+                  <span className="cu-name">{contact.displayName ?? (contact.waId ? `+${contact.waId}` : "Customer")}</span>
                   <span className="cu-meta">
                     {contact.leadPriority ? (
                       <span className={`cu-pri ${contact.leadPriority}`}>
@@ -256,13 +256,13 @@ export default function CustomersPage() {
         {selected ? (
           <section className="cu-detail">
             <div className="cu-detail-head">
-              <h2>{selected.displayName ?? `+${selected.waId}`}</h2>
+              <h2>{selected.displayName ?? (selected.waId ? `+${selected.waId}` : "Customer")}</h2>
               <button type="button" className="cu-close" onClick={() => setSelected(null)}>
                 Close
               </button>
             </div>
             <p className="cu-detail-meta">
-              +{selected.waId}
+              {selected.waId ? `+${selected.waId}` : "Email"}
               {selected.servedBy.length > 1 ? (
                 // Worth saying out loud on a shared number: this person has
                 // dealt with more than one of the firms answering it. Only the

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BusinessTabs, useVisibleBusinesses } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
@@ -56,7 +56,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const { businesses: visibleBusinesses } = useVisibleBusinesses();
+  const { businesses: visibleBusinesses, myEmployeeId } = useVisibleBusinesses();
   const [draftBusiness, setDraftBusiness] = useState<BusinessSlug | "">("");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNotes, setDraftNotes] = useState("");
@@ -112,6 +112,23 @@ export default function TasksPage() {
     setDraftOwner("");
   }, [draftBusiness]);
 
+  // A staff member belongs to ONE business: it is already chosen, and a
+  // follow-up they write is theirs unless they hand it to someone (24 Oct 2026).
+  useEffect(() => {
+    if (visibleBusinesses.length === 1 && !draftBusiness) {
+      setDraftBusiness(visibleBusinesses[0]!.slug as BusinessSlug);
+    }
+  }, [visibleBusinesses, draftBusiness]);
+  // Once per team list, so choosing "Nobody yet" afterwards sticks.
+  const defaultedOwner = useRef<TeamMember[] | null>(null);
+  useEffect(() => {
+    if (defaultedOwner.current === team) return;
+    if (myEmployeeId && team.some((member) => member.id === myEmployeeId)) {
+      defaultedOwner.current = team;
+      setDraftOwner(myEmployeeId);
+    }
+  }, [myEmployeeId, team]);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!draftTitle.trim() || !draftBusiness) return;
@@ -132,7 +149,7 @@ export default function TasksPage() {
       setDraftTitle("");
       setDraftNotes("");
       setDraftDue("");
-      setDraftOwner("");
+      setDraftOwner(myEmployeeId && team.some((member) => member.id === myEmployeeId) ? myEmployeeId : "");
       await load(business, status);
     } catch (err) {
       setError(readableError(err));
