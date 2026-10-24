@@ -54,6 +54,9 @@ const CUSTOMERS = [
   "I want to order 3 more for my family, can you deliver to Sharjah?",
   "I added two items to my cart but the checkout keeps failing, can you help?",
   "Do you accept Tabby at checkout?",
+  // Verbatim, 24 Oct 2026: a $5,000 bulk order hidden as a pitch because its
+  // sign-off said "partnership". A buyer may hope for one; only a seller offers one.
+  "We are interested in purchasing original Bath & Body Works products in bulk, with an initial order budget of $5,000 USD.\n\nCould you please provide your wholesale price list, available products, minimum order quantity (MOQ), proof of authenticity, and shipping options to Russia?\n\nWe look forward to establishing a long-term business partnership.\n\nBest regards!",
 ];
 
 test("every store-growth pitch is recognised as a pitch", () => {

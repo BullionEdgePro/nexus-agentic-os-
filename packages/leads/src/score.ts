@@ -143,7 +143,11 @@ const PITCH_RULE: Rule = {
   phrases: [
     // Self-description — the sender introducing their own business.
     "we are a", "we provide", "we offer", "our company", "manufacturer",
-    "partnership", "collaborate", "seo", "web design", "lead generation",
+    // Not bare "partnership" (24 Oct 2026): a buyer's sign-off hoping for "a
+    // long-term business partnership" hid a $5,000 bulk order as a pitch. A
+    // seller OFFERS one; these are the phrasings that offer.
+    "partnership opportunity", "partnership proposal", "offer a partnership",
+    "offer you a partnership", "propose a partnership", "collaborate", "seo", "web design", "lead generation",
     "data provider", "years of experience", "b2b", "supplier", "we specialize",
     "we can provide", "we sell",
 
