@@ -115,3 +115,6 @@
   border-radius: 5px;
   color: var(--ink);
 }
+
+/* The key that does the same thing from the screen (Focus workspace). */
+.cmdp-key { margin-left: auto; font: inherit; font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--hairline-strong, #d1d5db); color: var(--slate, #4b5563); }

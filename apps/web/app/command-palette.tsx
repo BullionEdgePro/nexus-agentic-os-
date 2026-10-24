@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { NAV } from "@/lib/nav";
 import { getMyClients, type MyClient } from "@/lib/api";
+import { useCommandActions } from "@/lib/command-actions";
 import "./command-palette.css";
 
 /**
@@ -30,7 +31,9 @@ import "./command-palette.css";
 
 type ScreenHit = { kind: "screen"; href: string; label: string; icon: ReactNode };
 type ClientHit = { kind: "client"; href: string; label: string; sub: string | null };
-type Hit = ScreenHit | ClientHit;
+// The open screen's own actions, e.g. "For this chat · Feroz" (24 Oct 2026).
+type ActionHit = { kind: "action"; href: string; label: string; sub?: string; shortcut?: string; run: () => void };
+type Hit = ActionHit | ScreenHit | ClientHit;
 
 const clientHref = (c: MyClient) =>
   `/deck/my-clients?q=${encodeURIComponent(c.displayName || c.waId)}`;
@@ -92,7 +95,19 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
   );
 
   // One flat list so the arrow keys move through screens and people alike.
-  const items = useMemo<Hit[]>(() => [...screenHits, ...clientHits], [screenHits, clientHits]);
+  const registered = useCommandActions();
+  const actionHits = useMemo<ActionHit[]>(() => {
+    if (!registered) return [];
+    const query = q.trim().toLowerCase();
+    return registered.actions
+      .filter((a) => !query || a.label.toLowerCase().includes(query))
+      .map((a) => ({ kind: "action", href: `#${a.id}`, label: a.label, sub: a.sub, shortcut: a.shortcut, run: a.run }));
+  }, [registered, q]);
+
+  const items = useMemo<Hit[]>(
+    () => [...actionHits, ...screenHits, ...clientHits],
+    [actionHits, screenHits, clientHits]
+  );
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -140,6 +155,15 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
     window.location.href = href;
   };
 
+  const choose = (item: Hit) => {
+    if (item.kind === "action") {
+      setOpen(false);
+      item.run();
+      return;
+    }
+    go(item.href);
+  };
+
   return (
     <div
       className="cmdp-backdrop"
@@ -164,7 +188,7 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
             } else if (e.key === "Enter") {
               e.preventDefault();
               const item = items[active];
-              if (item) go(item.href);
+              if (item) choose(item);
             }
           }}
         />
@@ -176,7 +200,13 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
               // A quiet section label when the kind changes, so screens and
               // people read as two answers rather than one mixed pile.
               const heading =
-                i === 0 || items[i - 1].kind !== item.kind ? (item.kind === "client" ? "Clients" : "Screens") : null;
+                i === 0 || items[i - 1].kind !== item.kind
+                  ? item.kind === "action"
+                    ? registered?.title ?? "Actions"
+                    : item.kind === "client"
+                      ? "Clients"
+                      : "Screens"
+                  : null;
               return (
                 <li key={`${item.kind}:${item.href}`}>
                   {heading ? (
@@ -188,11 +218,15 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
                     type="button"
                     className={`cmdp-item${i === active ? " on" : ""}`}
                     onMouseEnter={() => setActive(i)}
-                    onClick={() => go(item.href)}
+                    onClick={() => choose(item)}
                   >
                     <span className="cmdp-ic">
                       {item.kind === "screen" ? (
                         item.icon
+                      ) : item.kind === "action" ? (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m13 3-8 11h6l-1 7 8-11h-6l1-7Z" />
+                        </svg>
                       ) : (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="8" r="3.4" />
@@ -202,10 +236,11 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
                     </span>
                     <span className="cmdp-text">
                       <span className="cmdp-label">{item.label}</span>
-                      {item.kind === "client" && item.sub ? (
+                      {(item.kind === "client" || item.kind === "action") && item.sub ? (
                         <span className="cmdp-sub">{item.sub}</span>
                       ) : null}
                     </span>
+                    {item.kind === "action" && item.shortcut ? <kbd className="cmdp-key">{item.shortcut}</kbd> : null}
                   </button>
                 </li>
               );

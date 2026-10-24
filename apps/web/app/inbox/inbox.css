@@ -1791,3 +1791,16 @@
   margin-left: auto; font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 11px;
   border-radius: var(--r-pill); border: 1px solid var(--hairline-strong); background: var(--paper); color: var(--ink); cursor: pointer;
 }
+
+/* The shortcut sheet ("?"). */
+.ibx-keys-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(17, 24, 39, .28); display: grid; place-items: center; padding: 16px; }
+.ibx-keys { width: min(380px, 100%); background: var(--paper); border-radius: 18px; box-shadow: var(--lift); padding: 18px 20px; color: var(--ink); }
+.ibx-keys-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ibx-keys-head h2 { margin: 0; font-size: 16px; }
+.ibx-keys-head button { border: 0; background: none; font-size: 20px; color: var(--slate); cursor: pointer; }
+.ibx-keys dl { margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.ibx-keys dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.ibx-keys dt { color: var(--ink); }
+.ibx-keys dd { margin: 0; }
+.ibx-keys kbd { font: inherit; font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--hairline-strong); background: var(--marble); }
+.ibx-keys p { margin: 14px 0 0; font-size: 12.5px; color: var(--slate); }

@@ -20,6 +20,13 @@ export function AskColleague({ conversationId, customerName }: { conversationId:
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
 
+  // "A" in the inbox, or the command bar, opens it (Focus workspace).
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("nexus:ask-colleague", show);
+    return () => window.removeEventListener("nexus:ask-colleague", show);
+  }, []);
+
   useEffect(() => {
     if (!open || colleagues) return;
     getTeamThreads()

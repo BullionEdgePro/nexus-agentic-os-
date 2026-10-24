@@ -8,6 +8,8 @@ import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { AskColleague } from "./ask-colleague";
 import { SnoozeMenu } from "./snooze-menu";
+import { ShortcutSheet, useInboxShortcuts } from "./shortcuts";
+import { clearCommandActions, setCommandActions } from "@/lib/command-actions";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
@@ -660,6 +662,70 @@ export default function InboxPage() {
     if (focusId) setTimeout(() => document.getElementById(focusId)?.focus(), 60);
   }
 
+  const isResolved = activeConversation?.status === "resolved" || activeConversation?.status === "closed";
+
+  // ---- Focus workspace: keys and the command bar (24 Oct 2026) ----
+  const [keysOpen, setKeysOpen] = useState(false);
+  const step = (by: 1 | -1) => {
+    if (visibleConversations.length === 0) return;
+    const at = visibleConversations.findIndex((c) => c.id === selectedConversationId);
+    const next = visibleConversations[Math.min(Math.max(at + by, 0), visibleConversations.length - 1)];
+    if (next) void selectConversation(next.id);
+  };
+  const resolveOpen = () => {
+    if (activeConversation) void setStatus(activeConversation.id, isResolved ? "open" : "resolved");
+  };
+  const askColleague = () => window.dispatchEvent(new Event("nexus:ask-colleague"));
+  const notACustomerToggle = () => {
+    if (activeConversation) void setNotACustomer(activeConversation.id, !activeConversation.notACustomer);
+  };
+  useInboxShortcuts({
+    j: () => step(1),
+    k: () => step(-1),
+    r: () => composerRef.current?.focus(),
+    e: resolveOpen,
+    s: () => activeConversation && !isResolved && setSnoozeOpen(true),
+    a: () => myEmployeeId && activeConversation && askColleague(),
+    x: notACustomerToggle,
+    "?": () => setKeysOpen((open) => !open),
+  });
+
+  useEffect(() => {
+    if (!activeConversation) {
+      clearCommandActions();
+      return;
+    }
+    const name = activeConversation.contactName ?? "this chat";
+    setCommandActions(`For this chat · ${name}`, [
+      { id: "draft", label: "Draft a reply", sub: "Copilot writes it from the chat; you send it", run: () => void handleSuggest() },
+      {
+        id: "resolve",
+        label: isResolved ? "Reopen this chat" : "Resolve this chat",
+        shortcut: "E",
+        run: () => void setStatus(activeConversation.id, isResolved ? "open" : "resolved"),
+      },
+      ...(isResolved
+        ? []
+        : [
+            {
+              id: "snooze3",
+              label: "Snooze 3 hours",
+              shortcut: "S",
+              run: () => void setSnooze(activeConversation.id, new Date(Date.now() + 3 * 3_600_000)),
+            },
+          ]),
+      ...(myEmployeeId ? [{ id: "ask", label: "Ask a colleague", shortcut: "A", run: askColleague }] : []),
+      {
+        id: "notcust",
+        label: activeConversation.notACustomer ? "Count them as a customer again" : "Not a customer",
+        shortcut: "X",
+        run: () => void setNotACustomer(activeConversation.id, !activeConversation.notACustomer),
+      },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversation?.id, activeConversation?.notACustomer, activeConversation?.contactName, isResolved, myEmployeeId]);
+  useEffect(() => () => clearCommandActions(), []);
+
   const contactLabel = (c: ConversationSummary): string =>
     c.contactName ?? (c.contactWaId ? `+${c.contactWaId}` : `${channelLabel(c.channel)} customer`);
 
@@ -672,7 +738,6 @@ export default function InboxPage() {
     activeConversation.lastMessageAt
       ? now - new Date(activeConversation.lastMessageAt).getTime()
       : null;
-  const isResolved = activeConversation?.status === "resolved" || activeConversation?.status === "closed";
   const businessName = businesses.find((b) => b.slug === selectedOrg)?.name ?? "";
 
   return (
@@ -935,6 +1000,7 @@ export default function InboxPage() {
             ))}
           </div>
         ) : null}
+        {keysOpen ? <ShortcutSheet onClose={() => setKeysOpen(false)} /> : null}
 
         {searchOpen ? (
           <input
