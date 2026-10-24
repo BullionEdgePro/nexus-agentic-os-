@@ -6,6 +6,7 @@ import type { ConversationSummary, ConversationChannel, MessageDto, TimelineItem
 import { suggestReply, polishText, syncGmailInbox, readableError, attachmentUrl } from "@/lib/api";
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
+import { AskColleague } from "./ask-colleague";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
@@ -1151,6 +1152,16 @@ export default function InboxPage() {
                     <span>Not a customer</span>
                   </button>
                 )}
+                {/* Staff only: the admin is not on a team to ask (24 Oct 2026). */}
+                {myEmployeeId ? (
+                  <AskColleague
+                    conversationId={activeConversation.id}
+                    customerName={
+                      activeConversation.contactName ??
+                      (activeConversation.contactWaId ? `+${activeConversation.contactWaId}` : "this customer")
+                    }
+                  />
+                ) : null}
                 {/* The switch shows one boolean; six things in the platform can
                     set it, and migration 062 records which — "Who has had this?"
                     in the customer panel reads that history. */}

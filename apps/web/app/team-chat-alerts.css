@@ -1,0 +1,37 @@
+/* Team chat, on every signed-in screen (24 Oct 2026). */
+
+/* The sidebar's unread count beside "Team chat". */
+.rail-badge {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--marble);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.rail-badge.hot { background: var(--signal); }
+
+/* "Someone mentioned you" — wherever the person is in Nexus. */
+.tc-toast {
+  position: fixed;
+  right: 22px;
+  bottom: 86px;
+  z-index: 60;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  max-width: 360px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, .16);
+  font-size: 13px;
+  color: var(--ink);
+}
+.tc-toast a { color: var(--signal-text); font-weight: 600; white-space: nowrap; }
+.tc-toast button { border: 0; background: none; font-size: 16px; color: var(--mist); cursor: pointer; }

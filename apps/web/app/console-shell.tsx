@@ -7,6 +7,7 @@ import { ViewAsStaff } from "./view-as-staff";
 import { Assistant } from "./assistant";
 import { CommandPalette } from "./command-palette";
 import { AssignmentAlerts } from "./assignment-alerts";
+import { TeamChatAlerts, TeamChatBadge } from "./team-chat-alerts";
 import { InstallBanner } from "./install-app";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
@@ -75,6 +76,7 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
     >
       <span className="rail-icon">{item.icon}</span>
       <span className="rail-label">{item.label}</span>
+      {item.href === "/deck/team-chat" ? <TeamChatBadge /> : null}
     </a>
   );
 
@@ -194,6 +196,8 @@ export function ConsoleShell({
       {/* ⌘K / Ctrl-K from anywhere signed in. Role-filtered like the rail. */}
       <CommandPalette role={role} />
       {/* "New chat for you" — wherever a staff member is in the product. */}
+      {/* Team chat's unread count and @mention alerts, both roles. */}
+      <TeamChatAlerts employeeId={role === "employee" ? (me?.employeeId ?? null) : null} />
       {role === "employee" && me ? (
         <AssignmentAlerts employeeId={me.employeeId} organizationSlug={me.organizationSlug} />
       ) : null}

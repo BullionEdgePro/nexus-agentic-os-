@@ -149,3 +149,42 @@ test("the live connection carries team chat on its own path, by the same rule", 
   assert.match(HUB, /client\.stream !== "team"/);
   assert.match(HUB, /client\.stream !== "inbox"/);
 });
+
+// ---- Task 4: the screen ------------------------------------------------------
+
+const PAGE = () => read("apps", "web", "app", "deck", "team-chat", "page.tsx");
+
+test("staff are told, on the screen, that the admin can read team chats", () => {
+  assert.match(PAGE(), /Your admin can read team chats\./);
+});
+
+test("a message that fails says so and resends with the same id", () => {
+  const src = PAGE();
+  assert.match(src, /crypto\.randomUUID\(\)/);
+  assert.match(src, /Not sent · Retry/);
+  assert.match(src, /function retry\(pending: Pending\)[\s\S]{0,300}pending\.clientId/);
+});
+
+test("nothing missed while offline is lost: re-read on reconnect, and every 15 seconds without a socket", () => {
+  const src = PAGE();
+  assert.match(src, /onReconnect/);
+  assert.match(src, /15_000/);
+  assert.match(read("apps", "web", "lib", "use-team-socket.ts"), /\/ws\/team/);
+});
+
+test("the admin reads a direct chat without a composer", () => {
+  assert.match(PAGE(), /Read only — between/);
+});
+
+test("Team chat is in the sidebar, and the inbox can hand a customer to a colleague", () => {
+  const NAV = read("apps", "web", "lib", "nav.tsx");
+  assert.match(NAV, /href: "\/deck\/team-chat",\s*label: "Team chat"/);
+  const INBOX = read("apps", "web", "app", "inbox", "page.tsx");
+  assert.match(INBOX, /<AskColleague/);
+  assert.match(read("apps", "web", "app", "inbox", "ask-colleague.tsx"), /Gives \{/);
+});
+
+test("the customer exports are offered to the admin only", () => {
+  const CU = read("apps", "web", "app", "deck", "customers", "page.tsx");
+  assert.match(CU, /isOperator \? \(\s*<div className="cu-export">/);
+});

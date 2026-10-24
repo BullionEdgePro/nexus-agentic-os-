@@ -63,6 +63,18 @@ export const NAV: NavItem[] = [
     ),
   },
   {
+    // Staff of one business talking to each other (24 Oct 2026). Both roles:
+    // staff talk to their own team, the admin reads every business's.
+    href: "/deck/team-chat",
+    label: "Team chat",
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M17 9h2a2 2 0 0 1 2 2v8l-3-2h-6a2 2 0 0 1-2-2v-1" />
+        <path d="M3 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7l-4 3V5Z" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/operators",
     label: "Needs attention",
     icon: (
@@ -378,7 +390,7 @@ export const NAV: NavItem[] = [
 // Labels are deliberately unchanged: findings name screens by their headings
 // ("on the How we answer screen"), and a renamed door would break that promise.
 export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
-  { title: "Home", hrefs: ["/", "/inbox", "/deck/operators"] },
+  { title: "Home", hrefs: ["/", "/inbox", "/deck/team-chat", "/deck/operators"] },
   { title: "Work", hrefs: ["/deck/tasks", "/deck/bookings", "/deck/board"] },
   { title: "People", hrefs: ["/deck/activity", "/deck/team", "/deck/customers", "/deck/my-clients"] },
   { title: "Grow", hrefs: ["/deck/broadcasts", "/deck/my-campaigns", "/deck/links"] },

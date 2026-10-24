@@ -3145,3 +3145,86 @@ export function saveHqOrgNode(slug: string, nodeId: string, input: { reportsTo: 
 export function removeHqOrgMember(slug: string, nodeId: string): Promise<{ ok: boolean }> {
   return request(`/api/hq/${slug}/org/${encodeURIComponent(nodeId)}`, { method: "DELETE" });
 }
+
+// ============================================================
+// Team chat — staff of one business talking to each other (24 Oct 2026)
+// ============================================================
+
+export interface TeamThreadSummary {
+  id: string;
+  organizationId: string;
+  kind: "room" | "direct";
+  memberA: string | null;
+  memberB: string | null;
+  memberAName: string | null;
+  memberBName: string | null;
+  lastMessage: { authorName: string; body: string; createdAt: string; removed: boolean } | null;
+  unread: number;
+  mentioned: number;
+}
+
+export interface TeamColleague {
+  id: string;
+  fullName: string;
+  jobTitle: string | null;
+  avatarUrl: string | null;
+  onShift: boolean;
+}
+
+export interface TeamChatMessage {
+  id: string;
+  threadId: string;
+  authorEmployeeId: string | null;
+  authorName: string;
+  authorIsAdmin: boolean;
+  body: string;
+  clientId: string;
+  mentions: string[];
+  sharedConversationId: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+  share: { conversationId: string; name: string; channel: string } | null;
+}
+
+export interface TeamThreadsResponse {
+  business: { slug: string; name: string };
+  me: { employeeId: string | null; isAdmin: boolean; name: string };
+  threads: TeamThreadSummary[];
+  colleagues: TeamColleague[];
+}
+
+export function getTeamThreads(business?: string): Promise<TeamThreadsResponse> {
+  return request(`/api/team-chat/threads${business ? `?business=${encodeURIComponent(business)}` : ""}`);
+}
+
+export function openDirectChat(employeeId: string): Promise<{ thread: { id: string } }> {
+  return request("/api/team-chat/direct", { method: "POST", body: JSON.stringify({ employeeId }) });
+}
+
+export function getTeamMessages(
+  threadId: string,
+  before?: string
+): Promise<{ messages: TeamChatMessage[]; canPost: boolean; seenByOther: string | null }> {
+  return request(
+    `/api/team-chat/threads/${threadId}/messages${before ? `?before=${encodeURIComponent(before)}` : ""}`
+  );
+}
+
+export function sendTeamMessage(
+  threadId: string,
+  input: { clientId: string; body: string; mentions?: string[]; shareConversationId?: string }
+): Promise<{ message: TeamChatMessage }> {
+  return request(`/api/team-chat/threads/${threadId}/messages`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function markTeamThreadRead(threadId: string): Promise<{ ok: true }> {
+  return request(`/api/team-chat/threads/${threadId}/read`, { method: "POST" });
+}
+
+export function removeTeamChatMessage(id: string): Promise<{ message: TeamChatMessage }> {
+  return request(`/api/team-chat/messages/${id}`, { method: "DELETE" });
+}
+
+export function getTeamUnread(): Promise<{ unread: number; mentioned: number }> {
+  return request("/api/team-chat/unread");
+}

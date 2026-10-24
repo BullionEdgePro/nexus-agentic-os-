@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BusinessTabs } from "@/lib/business-tabs";
+import { BusinessTabs, useVisibleBusinesses } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   downloadExport,
@@ -53,6 +53,9 @@ import "./customers.css";
  * this platform inferred on its own account goes.
  */
 export default function CustomersPage() {
+  // The exports are the admin's (the API answers staff "Not found"), so staff
+  // are not offered them (24 Oct 2026).
+  const { isOperator } = useVisibleBusinesses();
   const [business, setBusiness] = useState<BusinessSlug>("zipicka");
   const [contacts, setContacts] = useState<ContactSummary[]>([]);
   const [search, setSearch] = useState("");
@@ -188,6 +191,7 @@ export default function CustomersPage() {
           onImported={() => void load(business, "")}
         />
 
+        {isOperator ? (
         <div className="cu-export">
           <span>Take your data</span>
           <button
@@ -205,6 +209,7 @@ export default function CustomersPage() {
             Every message (CSV)
           </button>
         </div>
+        ) : null}
 
         {notice ? <p className="cu-notice">{notice}</p> : null}
         {error ? <p className="cu-err">{error}</p> : null}
