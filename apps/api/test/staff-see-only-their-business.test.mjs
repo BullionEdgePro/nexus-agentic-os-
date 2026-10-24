@@ -74,6 +74,9 @@ const TAB_API = {
   // Staff-only like the rest of the book: it edits the person's own employee
   // row, and the socials endpoint under /api/my refuses an operator.
   "/deck/my-settings": "/api/my/social-accounts",
+  // Team chat (24 Oct 2026). Both roles: staff talk to their own business's
+  // team, scoped inside the handlers like /api/tasks; the admin reads all.
+  "/deck/team-chat": "/api/team-chat/threads",
   // Customers. Addressed per organization deliberately rather than through a
   // bare /api/contacts scoped in the handler: every row is a real person, so
   // the :slug puts requireTenantScope in front of the read rather than
