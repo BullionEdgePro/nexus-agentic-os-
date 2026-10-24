@@ -31,6 +31,8 @@ import {
   type CallLog,
   type CustodyEvent,
   getInboundMediaRef,
+  markNotACustomer,
+  clearNotACustomer,
 } from "@nexus/db";
 import type { ConversationEvent, TimelineItem } from "@nexus/shared";
 import { completeText } from "@nexus/agents";
@@ -203,6 +205,39 @@ conversationsRoute.post("/:id/read", async (c) => {
  * as done. A customer who writes again reopens it (migration 090 trigger), so
  * "resolved" cannot silently swallow a new message.
  */
+/**
+ * "Not a customer" (24 Oct 2026). Marks the SENDER — a platform, a cold pitch —
+ * so they are out of every waiting count even when they write again, and files
+ * this chat as done. Nothing is sent and nothing is deleted; the undo below
+ * puts the sender back among the customers. Behind requireConversationScope,
+ * so a staff member can only mark a chat that is theirs.
+ */
+conversationsRoute.post("/:id/not-a-customer", async (c) => {
+  const conversationId = c.req.param("id");
+  const conversation = await findConversationById(conversationId);
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  const actor = await actorOf(c);
+  await markNotACustomer(conversation.contactId, "marked", actor.name ?? actor.id ?? "someone");
+  await setConversationStatus(conversationId, "resolved", actor.id, actor.name);
+
+  await publishInboxEvent({
+    type: "status_changed",
+    organizationId: conversation.organizationId,
+    organizationSlug: conversation.organizationSlug,
+    conversationId,
+    status: "resolved",
+  });
+  return c.json({ ok: true });
+});
+
+conversationsRoute.delete("/:id/not-a-customer", async (c) => {
+  const conversation = await findConversationById(c.req.param("id"));
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+  await clearNotACustomer(conversation.contactId);
+  return c.json({ ok: true });
+});
+
 conversationsRoute.patch("/:id/status", async (c) => {
   const conversationId = c.req.param("id");
   const body = await c.req.json<{ status?: unknown }>().catch(() => null);

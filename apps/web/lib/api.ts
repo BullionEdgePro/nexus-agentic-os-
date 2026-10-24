@@ -270,6 +270,16 @@ export function markConversationRead(conversationId: string): Promise<{ ok: true
   return request(`/api/conversations/${conversationId}/read`, { method: "POST" });
 }
 
+/** Mark this chat's sender as not a customer (a platform, a pitch) and close it. */
+export function markNotACustomer(conversationId: string): Promise<{ ok: true }> {
+  return request(`/api/conversations/${conversationId}/not-a-customer`, { method: "POST" });
+}
+
+/** The undo: the sender counts as a customer again. */
+export function unmarkNotACustomer(conversationId: string): Promise<{ ok: true }> {
+  return request(`/api/conversations/${conversationId}/not-a-customer`, { method: "DELETE" });
+}
+
 /** Resolve a conversation, or open it again. */
 export function setConversationStatus(
   conversationId: string,

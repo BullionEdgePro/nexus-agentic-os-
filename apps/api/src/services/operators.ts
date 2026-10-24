@@ -352,6 +352,9 @@ export async function unansweredConversations(
         -- this "waiting" rather than "quiet".
         and last.sender_type = 'contact'
         and last.created_at < now() - ($2 || ' hours')::interval
+        -- A sender marked not a customer (a platform, a pitch) never waits —
+        -- 24 Oct 2026; see only-real-customers-are-waiting.
+        and ct.not_a_customer_at is null
         -- Cold pitches are not customers kept waiting.
         --
         -- The lead scorer already classifies "somebody selling TO us" as

@@ -71,6 +71,8 @@ interface InboxState {
   setHumanHandoff: (conversationId: string, isHumanHandoff: boolean) => Promise<void>;
   applyHandoffChange: (conversationId: string, isHumanHandoff: boolean) => void;
   setStatus: (conversationId: string, status: "resolved" | "open") => Promise<void>;
+  /** Mark (or unmark) the sender as not a customer; every chat from them follows. */
+  setNotACustomer: (conversationId: string, on: boolean) => Promise<void>;
   applyStatusChange: (conversationId: string, status: ConversationSummary["status"]) => void;
   setTags: (conversationId: string, tags: string[]) => Promise<void>;
   /**
@@ -282,6 +284,27 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     } catch (err) {
       get().applyStatusChange(conversationId, previous);
       set({ sendError: readableError(err, status === "resolved" ? "Could not resolve this." : "Could not reopen this.") });
+    }
+  },
+
+  setNotACustomer: async (conversationId, on) => {
+    // The mark is on the SENDER, so every chat from them changes together.
+    const target = get().conversations.find((c) => c.id === conversationId);
+    if (!target) return;
+    const before = get().conversations;
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.contactId === target.contactId
+          ? { ...c, notACustomer: on, status: on && c.id === conversationId ? "resolved" : c.status }
+          : c
+      ),
+    }));
+    try {
+      if (on) await api.markNotACustomer(conversationId);
+      else await api.unmarkNotACustomer(conversationId);
+      void get().refreshTimeline(conversationId);
+    } catch (err) {
+      set({ conversations: before, sendError: readableError(err, on ? "Could not mark this sender." : "Could not undo that.") });
     }
   },
 

@@ -579,6 +579,23 @@
 .ibx-resolve.reopen:hover { color: var(--signal-deep); border-color: var(--sky); background: var(--sky-soft); }
 .ibx-resolve .ibx-ic { width: 15px; height: 15px; }
 
+/* Not a customer (24 Oct 2026): quieter than Resolve, it is a filing decision. */
+.ibx-notcust {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--slate);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .16s, color .16s;
+}
+.ibx-notcust:hover { background: var(--pebble); color: var(--ink); }
+.ibx-notcust.on { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+
 /* The handoff: a real checkbox, drawn as a switch. */
 .ibx-handoff {
   position: relative;

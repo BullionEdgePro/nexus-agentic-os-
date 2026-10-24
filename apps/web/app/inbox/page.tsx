@@ -140,6 +140,8 @@ function tintOf(seed: string): number {
 }
 
 function isLate(c: ConversationSummary, slaMinutes: number, now: number): boolean {
+  // A sender marked not a customer is never late (24 Oct 2026).
+  if (c.notACustomer) return false;
   if (c.lastMessageDirection !== "inbound" || !c.lastMessageAt) return false;
   return now - new Date(c.lastMessageAt).getTime() > slaMinutes * 60_000;
 }
@@ -160,7 +162,8 @@ function matchesFolder(
       return Number(c.unreadCount ?? 0) > 0;
     case "awaiting":
       // The customer spoke last and nobody has answered.
-      return c.lastMessageDirection === "inbound";
+      // Not a sender marked not a customer: a platform or a pitch never waits.
+      return c.lastMessageDirection === "inbound" && !c.notACustomer;
     case "late":
       return isLate(c, slaMinutes, now);
     case "followup":
@@ -266,6 +269,7 @@ export default function InboxPage() {
   const closeConversation = useInboxStore((s) => s.closeConversation);
   const setHumanHandoff = useInboxStore((s) => s.setHumanHandoff);
   const setStatus = useInboxStore((s) => s.setStatus);
+  const setNotACustomer = useInboxStore((s) => s.setNotACustomer);
   const setTags = useInboxStore((s) => s.setTags);
   const sendMessage = useInboxStore((s) => s.sendMessage);
   const messagesByConversation = useInboxStore((s) => s.messagesByConversation);
@@ -1121,6 +1125,28 @@ export default function InboxPage() {
                   <Icon name={isResolved ? "reopen" : "check"} />
                   <span>{isResolved ? "Reopen" : "Resolve"}</span>
                 </button>
+                {/* One tap for a platform notice or a cold pitch: the SENDER is
+                    out of every waiting count, even if they write again, and
+                    the chat closes. Nothing is sent or deleted; Undo reverses it. */}
+                {activeConversation.notACustomer ? (
+                  <button
+                    type="button"
+                    className="ibx-notcust on"
+                    onClick={() => void setNotACustomer(activeConversation.id, false)}
+                    title="This sender is not counted as a customer. Undo puts them back."
+                  >
+                    <span>Not a customer · Undo</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="ibx-notcust"
+                    onClick={() => void setNotACustomer(activeConversation.id, true)}
+                    title="A platform notice or a sales pitch: never counted as a customer waiting"
+                  >
+                    <span>Not a customer</span>
+                  </button>
+                )}
                 {/* The switch shows one boolean; six things in the platform can
                     set it, and migration 062 records which — "Who has had this?"
                     in the customer panel reads that history. */}

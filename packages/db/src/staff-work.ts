@@ -185,6 +185,7 @@ export async function staffWorkOverview(
          ${LAST_MESSAGE}
         where c.status in ('open', 'pending')
           and lm.last_direction = 'inbound'
+          and ct.not_a_customer_at is null
           and ($1::uuid is null or coalesce(c.routed_organization_id, c.organization_id) = $1)`,
       [organizationId]
     );
@@ -231,7 +232,9 @@ export async function staffWorkOverview(
       `select o.slug, o.name, count(*) as n
          from conversations c
          join organizations o on o.id = coalesce(c.routed_organization_id, c.organization_id)
+         left join contacts ct on ct.id = c.contact_id
         where c.employee_id is null
+          and ct.not_a_customer_at is null
           and c.status in ('open', 'pending')
           and o.slug <> 'review-demo'
           and ($1::uuid is null or o.id = $1)

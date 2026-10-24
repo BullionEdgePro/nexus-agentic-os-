@@ -409,3 +409,35 @@ export async function exportContactRecord(
     messages,
   };
 }
+
+
+/**
+ * Mark a sender as not a customer (24 Oct 2026): a platform's notifications, a
+ * cold pitch. Out of every waiting count, still readable. On the contact, so a
+ * sender who writes again stays out. The first reason sticks: a platform mark
+ * is not overwritten by a later tap, and a tap is not overwritten by a sync.
+ */
+export async function markNotACustomer(
+  contactId: string,
+  reason: "platform" | "marked",
+  by: string
+): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update contacts
+        set not_a_customer_at = now(), not_a_customer_reason = $2, not_a_customer_by = $3, updated_at = now()
+      where id = $1 and not_a_customer_at is null`,
+    [contactId, reason, by.slice(0, 120)]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/** The undo: the sender counts as a customer again. */
+export async function clearNotACustomer(contactId: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update contacts
+        set not_a_customer_at = null, not_a_customer_reason = null, not_a_customer_by = null, updated_at = now()
+      where id = $1 and not_a_customer_at is not null`,
+    [contactId]
+  );
+  return (rowCount ?? 0) > 0;
+}

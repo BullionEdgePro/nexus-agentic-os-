@@ -3,6 +3,7 @@ import type { BusinessSlug, ConversationSummary, ConversationChannel } from "@ne
 
 interface ConversationSummaryRow {
   id: string;
+  not_a_customer: boolean;
   contact_id: string;
   wa_id: string;
   display_name: string | null;
@@ -24,6 +25,7 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
   return {
     id: row.id,
     contactId: row.contact_id,
+    notACustomer: Boolean(row.not_a_customer),
     contactWaId: row.wa_id,
     contactName: row.display_name,
     status: row.status,
@@ -66,6 +68,7 @@ export async function getConversationsForOrganization(
        c.contact_id,
        ct.wa_id,
        ct.display_name,
+       ct.not_a_customer_at is not null as not_a_customer,
        c.status,
        c.is_human_handoff,
        c.employee_id as assigned_employee_id,

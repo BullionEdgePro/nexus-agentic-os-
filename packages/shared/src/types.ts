@@ -166,6 +166,8 @@ export interface ConversationSummary {
    * built from. Null only when a conversation has no messages yet.
    */
   lastMessageDirection: MessageDirection | null;
+  /** The sender is marked not a customer (a platform, a pitch): never counted as waiting. */
+  notACustomer?: boolean;
   /** Free-text labels on the conversation, for finding and filtering it. */
   tags: string[];
   /** True when this conversation has an open follow-up task whose time has passed. */

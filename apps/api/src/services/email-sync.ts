@@ -36,6 +36,7 @@ import {
   refreshStoredAccessToken,
   withAllTenants,
   withTenant,
+  markNotACustomer,
 } from "@nexus/db";
 import {
   fetchRecentInboxMailFull,
@@ -47,6 +48,7 @@ import {
 import { fetchRecentMailImap, sendEmailImap } from "../lib/imap-email.js";
 import { emailsIn, isAutomatedMail, senderName } from "../lib/mail-filter.js";
 import { logger } from "../lib/logger.js";
+import { isPlatformSender } from "../lib/platform-senders.js";
 
 /** Whose mailbox — an (org, employee) pair. Gmail is always a person's here. */
 export interface MailboxOwner {
@@ -188,6 +190,11 @@ async function storeInboxMail(
         receivedAt: m.receivedAt,
       });
       if (inserted) newMessages += 1;
+      // A platform's own mail (Shopify, noon, Amazon, Google, Carrefour
+      // Marketplace) is kept and readable, but never a customer waiting.
+      if (isPlatformSender(fromEmail)) {
+        await markNotACustomer(contactId, "platform", "platform mail");
+      }
     }
     return { newMessages, threads: touched.size, skippedAutomated };
   });
