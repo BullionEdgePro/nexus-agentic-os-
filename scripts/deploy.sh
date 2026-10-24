@@ -25,7 +25,14 @@ GIT_COMMIT=$(git rev-parse --short HEAD)
 export GIT_COMMIT
 echo "Building $GIT_COMMIT"
 
-$COMPOSE build api worker web || { echo "Build failed."; exit 1; }
+# Retried (24 Oct 2026): a Google Fonts outage can fail the web build outright,
+# not just fall back, and the next run a minute later builds cleanly.
+for build_attempt in 1 2 3; do
+  $COMPOSE build api worker web && break
+  [ "$build_attempt" = 3 ] && { echo "Build failed three times."; exit 1; }
+  echo "Build failed (attempt $build_attempt of 3) -- retrying in 30 seconds."
+  sleep 30
+done
 
 # FONTS ARE CHECKED, NOT ASSUMED (22 Oct 2026). next/font downloads the
 # typefaces from Google at build time and, when that download fails, quietly

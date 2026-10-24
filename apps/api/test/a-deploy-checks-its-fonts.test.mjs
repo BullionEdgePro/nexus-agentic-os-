@@ -30,3 +30,11 @@ test("a build without fonts is rebuilt uncached, three tries at most, before any
 test("a web build that never gets its fonts is not deployed", () => {
   assert.match(DEPLOY, /still has no fonts after 3 tries/);
 });
+
+test("a build that FAILS on a font download is retried, not abandoned", () => {
+  // 24 Oct 2026: the same Google Fonts outage that usually falls back
+  // silently failed the web build outright ("Build failed because of webpack
+  // errors"); a second run a minute later built cleanly.
+  assert.match(DEPLOY, /for build_attempt in 1 2 3; do/);
+  assert.match(DEPLOY, /\$COMPOSE build api worker web && break/);
+});
