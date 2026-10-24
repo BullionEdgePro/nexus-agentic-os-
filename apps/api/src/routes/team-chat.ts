@@ -146,6 +146,17 @@ async function withCards(messages: TeamMessage[]) {
   });
 }
 
+/**
+ * Belt and braces for the id routes: on top of teamAccess, a staff member's
+ * thread must belong to their own business, compared against the session
+ * itself (the repo's rule for every route that takes a bare id).
+ */
+function sameBusiness(c: Context, organizationId: string): boolean {
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!scope) return false;
+  return scope.role === "operator" || scope.organizationId === organizationId;
+}
+
 teamChatRoute.get("/threads", async (c) => {
   const who = await viewerOf(c);
   if (!who) return c.json(NOT_FOUND, 404);
@@ -202,7 +213,10 @@ teamChatRoute.get("/threads/:id/messages", async (c) => {
   const who = await viewerOf(c);
   if (!who) return c.json(NOT_FOUND, 404);
   const thread = await readableThread(who, c.req.param("id"));
-  if (!thread) return c.json(NOT_FOUND, 404);
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
 
   const beforeRaw = c.req.query("before");
   const before = beforeRaw && !Number.isNaN(Date.parse(beforeRaw)) ? new Date(beforeRaw).toISOString() : null;
@@ -227,7 +241,10 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
   const who = await viewerOf(c);
   if (!who) return c.json(NOT_FOUND, 404);
   const thread = await readableThread(who, c.req.param("id"));
-  if (!thread) return c.json(NOT_FOUND, 404);
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
   const access = teamAccess(thread, who.viewer);
   // The admin reads a direct chat between two staff; it is not theirs to write in.
   if (!access.post) return c.json(NOT_FOUND, 404);
@@ -299,7 +316,10 @@ teamChatRoute.post("/threads/:id/read", async (c) => {
   const who = await viewerOf(c);
   if (!who) return c.json(NOT_FOUND, 404);
   const thread = await readableThread(who, c.req.param("id"));
-  if (!thread) return c.json(NOT_FOUND, 404);
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
   const reader = readerKey(who.viewer);
   await withTenant(thread.organizationId, () => markTeamRead(thread, reader));
   await publish(await eventFor(thread, "team_read", { reader }));
@@ -311,6 +331,8 @@ teamChatRoute.delete("/messages/:id", async (c) => {
   if (!who || who.role !== "staff") return c.json(NOT_FOUND, 404);
   const id = c.req.param("id");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json(NOT_FOUND, 404);
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!scope || scope.role !== "employee" || scope.organizationId !== who.organizationId) return c.json(NOT_FOUND, 404);
   const removed = await withTenant(who.organizationId, () => removeTeamMessage(id, who.viewer.employeeId));
   if (!removed) return c.json(NOT_FOUND, 404);
   const thread = await findThread(removed.threadId);
