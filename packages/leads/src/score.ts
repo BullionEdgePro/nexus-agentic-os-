@@ -176,6 +176,18 @@ const PITCH_RULE: Rule = {
     "shop owner", "store owner", "checkout configuration", "technical consultant",
     "black friday",
 
+    // The next wave, verbatim from the business mailbox (24 Oct 2026), each of
+    // which Staff work listed as a customer waiting for weeks. Again only the
+    // sender talking about what THEY will do for our shop; the customer
+    // phrasings that share words ("share a photo", "confirm my email address",
+    // "came across your product") are pinned as customers in the same test.
+    "ur shp", "would you work with me", "generate consistent orders",
+    "collaboration idea", "email address is active", "active and monitored",
+    "potential opportunity", "revenue for your store", "customer acquisition",
+    "customer-acquisition", "your shopify store", "ugc",
+    "mutual business growth", "potential buyers", "abandoned carts",
+    "no recovery email", "still don't buy", "still don’t buy", "chat button on the store",
+
     // Arabic equivalents. "نحن شركة" (we are a company) and "نقدم خدمات" (we
     // offer services) are the standard openings of an Arabic cold pitch, and
     // "هل تحتاج" / "هل ترغب" (do you need / would you like) carry the same
@@ -184,6 +196,16 @@ const PITCH_RULE: Rule = {
     "عرض خاص", "افضل سعر", "تواصل معنا", "خدماتنا", "لدينا قاعده بيانات",
   ],
 };
+
+/**
+ * Decorative "font" letters: Unicode Mathematical Alphanumeric Symbols, the
+ * bold and italic a cold-email tool pastes in to stand out (24 Oct 2026). A
+ * customer typing on a phone or keyboard does not produce them. Structural,
+ * like the caps and header checks, so it outlives this week's vocabulary.
+ */
+function hasStyledLetters(original: string): boolean {
+  return /[\u{1D400}-\u{1D7FF}]/u.test(original);
+}
 
 /**
  * WhatsApp bold (*like this*) wrapping the opening line.
@@ -251,7 +273,11 @@ function matchPhrases(haystack: string, phrases: string[]): string[] {
  */
 export function scoreLead(input: ScoreInput): LeadAssessment {
   // Both sides compared in the same normal form — see normalizeForMatch.
-  const text = normalizeForMatch(input.text);
+  // NFKC first (24 Oct 2026): decorative "bold italic" letters are separate
+  // Unicode code points, so no phrase could match them until they are folded
+  // back to plain letters. Kept here rather than in the shared normaliser,
+  // which also drives routing.
+  const text = normalizeForMatch(input.text.normalize("NFKC"));
   const signals: LeadSignal[] = [];
 
   let score = 0;
@@ -285,6 +311,7 @@ export function scoreLead(input: ScoreInput): LeadAssessment {
   const pitchMatches = matchPhrases(text, normalizedPhrases(PITCH_RULE));
   if (looksLikeBroadcast(input.text)) pitchMatches.push("shouted/broadcast formatting");
   if (hasBroadcastHeader(input.text)) pitchMatches.push("bolded broadcast header");
+  if (hasStyledLetters(input.text)) pitchMatches.push("decorative unicode letters");
 
   if (pitchMatches.length > 0) {
     // Negative weight grows with evidence too: several pitch markers together
