@@ -91,3 +91,8 @@ test("every waiting count leaves a marked sender out", () => {
   assert.match(INBOX, /c\.lastMessageDirection === "inbound" && !c\.notACustomer/);
   assert.match(INBOX, /if \(c\.notACustomer\) return false;/);
 });
+
+test("FOUND ON SCREEN: a marked sender's chat shows no 'response delayed' banner", () => {
+  const INBOX = read("apps", "web", "app", "inbox", "page.tsx");
+  assert.match(INBOX, /activeConversation\?\.lastMessageDirection === "inbound" &&\s*!activeConversation\.notACustomer/);
+});

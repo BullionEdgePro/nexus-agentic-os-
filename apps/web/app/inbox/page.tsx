@@ -619,7 +619,11 @@ export default function InboxPage() {
     c.contactName ?? (c.contactWaId ? `+${c.contactWaId}` : `${channelLabel(c.channel)} customer`);
 
   const waitingMs =
-    activeConversation?.lastMessageDirection === "inbound" && activeConversation.lastMessageAt
+    // Not for a sender marked not a customer: nobody is waiting on a platform
+    // notice or a pitch (24 Oct 2026).
+    activeConversation?.lastMessageDirection === "inbound" &&
+    !activeConversation.notACustomer &&
+    activeConversation.lastMessageAt
       ? now - new Date(activeConversation.lastMessageAt).getTime()
       : null;
   const isResolved = activeConversation?.status === "resolved" || activeConversation?.status === "closed";
