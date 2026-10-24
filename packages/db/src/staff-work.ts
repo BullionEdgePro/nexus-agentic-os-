@@ -84,9 +84,20 @@ const LAST_MESSAGE = `
      limit 1
   ) lm on true`;
 
+/**
+ * Whether an unanswered chat is somebody selling TO us rather than a customer.
+ *
+ * Passed in by the caller — the API's looksLikeAnInboundPitch, the same rule
+ * the customer-waiting operator uses — because this package cannot import the
+ * lead scorer. Found on the first live render (22 Oct 2026): store-growth
+ * pitches in a staff mailbox were listed as customers waiting 24 days.
+ */
+export type PitchCheck = (row: { is_pitch: boolean; has_assessment: boolean; last_body: string | null }) => boolean;
+
 /** Everyone's work, for one business or all of them (null). */
 export async function staffWorkOverview(
   organizationId: string | null,
+  isPitch: PitchCheck = () => false,
   now: Date = new Date()
 ): Promise<{ people: StaffWorkPerson[]; attention: StaffWorkAttention }> {
   return withAllTenants("staff work: the admin looks across every staff member", async () => {
@@ -105,8 +116,6 @@ export async function staffWorkOverview(
       connections: string[] | null;
       chats: string;
       by_channel: Record<string, number> | null;
-      waiting: string;
-      oldest_waiting_at: string | null;
       replies_today: string;
       replies_week: string;
       last_reply_at: string | null;
@@ -130,12 +139,6 @@ export async function staffWorkOverview(
               (select json_object_agg(x.channel, x.n)
                  from (select coalesce(conv.channel, 'whatsapp') as channel, count(*) as n
                          from conv where conv.employee_id = e.id group by 1) x) as by_channel,
-              (select count(*) from conv
-                where conv.employee_id = e.id and conv.status in ('open', 'pending')
-                  and conv.last_direction = 'inbound') as waiting,
-              (select min(conv.last_at) from conv
-                where conv.employee_id = e.id and conv.status in ('open', 'pending')
-                  and conv.last_direction = 'inbound') as oldest_waiting_at,
               (select count(*) from messages m
                 where m.sender_type = 'human_agent' and (m.employee_id = e.id or m.sender_id = e.id::text)
                   and m.created_at >= (date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai')) as replies_today,
@@ -160,8 +163,39 @@ export async function staffWorkOverview(
       [organizationId]
     );
 
+    const candidates = await db.query<{
+      id: string;
+      employee_id: string;
+      full_name: string;
+      slug: string;
+      display_name: string | null;
+      last_at: string;
+      last_body: string | null;
+      has_assessment: boolean;
+      is_pitch: boolean;
+    }>(
+      `select c.id, c.employee_id, e.full_name, o.slug, ct.display_name, lm.last_at, left(lm.last_body, 2000) as last_body,
+              exists (select 1 from lead_assessments la where la.conversation_id = c.id) as has_assessment,
+              exists (select 1 from lead_assessments la
+                       where la.conversation_id = c.id and la.category = 'inbound_pitch') as is_pitch
+         from conversations c
+         join employees e on e.id = c.employee_id
+         join organizations o on o.id = coalesce(c.routed_organization_id, c.organization_id)
+         left join contacts ct on ct.id = c.contact_id
+         ${LAST_MESSAGE}
+        where c.status in ('open', 'pending')
+          and lm.last_direction = 'inbound'
+          and ($1::uuid is null or coalesce(c.routed_organization_id, c.organization_id) = $1)`,
+      [organizationId]
+    );
+    // A customer waiting is the last word theirs AND not a sales pitch.
+    const waiting = candidates.rows.filter((row) => !isPitch(row));
+    const waitingFor = (employeeId: string) => waiting.filter((row) => row.employee_id === employeeId);
+
     const people: StaffWorkPerson[] = rows.map((r) => {
-      const seen = [r.last_seen_at, r.last_reply_at].filter(Boolean) as string[];
+      // Signing in counts as activity: "active never" for somebody who signed
+      // in yesterday was wrong (seen on screen, 22 Oct 2026).
+      const seen = [r.last_seen_at, r.last_reply_at, r.last_login_at].filter(Boolean) as string[];
       const lastActiveAt = seen.length ? seen.sort().at(-1)! : null;
       return {
         employeeId: r.id,
@@ -174,8 +208,8 @@ export async function staffWorkOverview(
         connections: (r.connections ?? []).filter(Boolean),
         chats: Number(r.chats),
         chatsByChannel: r.by_channel ?? {},
-        waiting: Number(r.waiting),
-        oldestWaitingAt: r.oldest_waiting_at,
+        waiting: waitingFor(r.id).length,
+        oldestWaitingAt: waitingFor(r.id).map((row) => row.last_at).sort()[0] ?? null,
         repliesToday: Number(r.replies_today),
         repliesWeek: Number(r.replies_week),
         openTasks: Number(r.open_tasks),
@@ -188,28 +222,10 @@ export async function staffWorkOverview(
       };
     });
 
-    const waitingLong = await db.query<{
-      id: string;
-      display_name: string | null;
-      full_name: string;
-      slug: string;
-      last_at: string;
-      total: string;
-    }>(
-      `select c.id, ct.display_name, e.full_name, o.slug, lm.last_at, count(*) over () as total
-         from conversations c
-         join employees e on e.id = c.employee_id
-         join organizations o on o.id = coalesce(c.routed_organization_id, c.organization_id)
-         left join contacts ct on ct.id = c.contact_id
-         ${LAST_MESSAGE}
-        where c.status in ('open', 'pending')
-          and lm.last_direction = 'inbound'
-          and lm.last_at < now() - interval '2 hours'
-          and ($1::uuid is null or coalesce(c.routed_organization_id, c.organization_id) = $1)
-        order by lm.last_at asc
-        limit 10`,
-      [organizationId]
-    );
+    const cutoff = now.getTime() - 2 * 60 * 60_000;
+    const waitingLong = waiting
+      .filter((row) => new Date(row.last_at).getTime() < cutoff)
+      .sort((a, b) => (a.last_at < b.last_at ? -1 : 1));
 
     const unowned = await db.query<{ slug: string; name: string; n: string }>(
       `select o.slug, o.name, count(*) as n
@@ -227,14 +243,14 @@ export async function staffWorkOverview(
     return {
       people,
       attention: {
-        waitingLong: waitingLong.rows.map((r) => ({
+        waitingLong: waitingLong.slice(0, 10).map((r) => ({
           conversationId: r.id,
           contactName: r.display_name,
           employeeName: r.full_name,
           businessSlug: r.slug,
           since: r.last_at,
         })),
-        waitingLongTotal: Number(waitingLong.rows[0]?.total ?? 0),
+        waitingLongTotal: waitingLong.length,
         unowned: unowned.rows.map((r) => ({ businessSlug: r.slug, businessName: r.name, count: Number(r.n) })),
         staffWithoutNumber: people.filter((p) => !p.whatsappNumber).length,
         pausedCampaigns: people.reduce((sum, p) => sum + p.pausedCampaigns, 0),
@@ -254,6 +270,8 @@ export interface StaffConversation {
   lastAt: string | null;
   lastBody: string | null;
   waiting: boolean;
+  /** Somebody selling to us — shown as such, never as a customer waiting. */
+  pitch: boolean;
 }
 
 export interface StaffTimelineItem {
@@ -264,7 +282,7 @@ export interface StaffTimelineItem {
 }
 
 /** One person's chats on every channel, and what they did, newest first. */
-export async function staffMemberWork(employeeId: string): Promise<{
+export async function staffMemberWork(employeeId: string, isPitch: PitchCheck = () => false): Promise<{
   conversations: StaffConversation[];
   timeline: StaffTimelineItem[];
 } | null> {
@@ -286,9 +304,14 @@ export async function staffMemberWork(employeeId: string): Promise<{
       last_direction: string | null;
       last_at: string | null;
       last_body: string | null;
+      has_assessment: boolean;
+      is_pitch: boolean;
     }>(
       `select c.id, o.slug, ct.display_name, ct.wa_id, c.channel, c.status,
-              lm.last_direction, lm.last_at, left(lm.last_body, 160) as last_body
+              lm.last_direction, lm.last_at, left(lm.last_body, 2000) as last_body,
+              exists (select 1 from lead_assessments la where la.conversation_id = c.id) as has_assessment,
+              exists (select 1 from lead_assessments la
+                       where la.conversation_id = c.id and la.category = 'inbound_pitch') as is_pitch
          from conversations c
          join organizations o on o.id = coalesce(c.routed_organization_id, c.organization_id)
          left join contacts ct on ct.id = c.contact_id
@@ -390,7 +413,9 @@ export async function staffMemberWork(employeeId: string): Promise<{
       .slice(0, 80);
 
     return {
-      conversations: conversations.rows.map((r) => ({
+      conversations: conversations.rows.map((r) => {
+        const pitch = r.last_direction === "inbound" && isPitch(r);
+        return {
         id: r.id,
         businessSlug: r.slug,
         contactName: r.display_name,
@@ -399,9 +424,11 @@ export async function staffMemberWork(employeeId: string): Promise<{
         status: r.status,
         lastDirection: r.last_direction,
         lastAt: r.last_at,
-        lastBody: r.last_body,
-        waiting: (r.status === "open" || r.status === "pending") && r.last_direction === "inbound",
-      })),
+        lastBody: r.last_body ? r.last_body.slice(0, 160) : null,
+        waiting: (r.status === "open" || r.status === "pending") && r.last_direction === "inbound" && !pitch,
+        pitch,
+      };
+      }),
       timeline,
     };
   });
