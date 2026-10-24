@@ -46,7 +46,8 @@ import {
   sendGmail,
 } from "../lib/gmail.js";
 import { fetchRecentMailImap, sendEmailImap } from "../lib/imap-email.js";
-import { emailsIn, isAutomatedMail, senderName } from "../lib/mail-filter.js";
+import { emailsIn, freshPartOfEmail, isAutomatedMail, senderName } from "../lib/mail-filter.js";
+import { scoreLead, recordLeadAssessment } from "@nexus/leads";
 import { logger } from "../lib/logger.js";
 import { isPlatformSender } from "../lib/platform-senders.js";
 
@@ -194,6 +195,22 @@ async function storeInboxMail(
       // Marketplace) is kept and readable, but never a customer waiting.
       if (isPlatformSender(fromEmail)) {
         await markNotACustomer(contactId, "platform", "platform mail");
+      }
+      // WHY IT MATTERS, scored like a WhatsApp message (24 Oct 2026): a new
+      // email from a person gets a lead assessment, so My queue can say
+      // "Wants to buy" or "Complaint" for email too. Only the part they wrote
+      // this time — not the history quoted under it. Best effort: a scoring
+      // failure never loses the mail.
+      if (inserted && !isPlatformSender(fromEmail)) {
+        const fresh = freshPartOfEmail(m.body || m.snippet || "");
+        if (fresh) {
+          try {
+            const assessment = scoreLead({ text: fresh });
+            await recordLeadAssessment({ ...assessment, organizationId: owner.organizationId, contactId, conversationId });
+          } catch (err) {
+            logger.warn({ err, conversationId }, "Email lead scoring failed (non-fatal)");
+          }
+        }
       }
     }
     return { newMessages, threads: touched.size, skippedAutomated };

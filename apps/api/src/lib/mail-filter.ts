@@ -58,3 +58,25 @@ export function senderName(headerValue: string | null | undefined): string | nul
   const name = m?.[1]?.trim();
   return name && !name.includes("@") ? name : null;
 }
+
+/**
+ * The part of an email the sender actually wrote this time (24 Oct 2026).
+ *
+ * A reply carries the whole conversation under it — "On Sat … wrote:" and
+ * ">"-quoted lines, or Outlook's "-----Original Message-----". Scoring that
+ * would judge the customer by our own earlier replies. Stops at the first such
+ * marker, drops quoted lines, and keeps at most 2,000 characters.
+ */
+export function freshPartOfEmail(body: string): string {
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!.trim();
+    const withNext = `${line} ${(lines[i + 1] ?? "").trim()}`;
+    if (/^On .{3,200}wrote:$/.test(line) || /^On .{3,200}wrote:$/.test(withNext)) break;
+    if (/^-{2,}\s*Original Message\s*-{2,}$/i.test(line) || /^_{8,}$/.test(line)) break;
+    if (line.startsWith(">")) continue;
+    kept.push(lines[i]!);
+  }
+  return kept.join("\n").trim().slice(0, 2000);
+}

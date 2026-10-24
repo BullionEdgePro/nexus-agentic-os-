@@ -167,6 +167,8 @@ const REASON: Record<string, { label: string; tone: "hot" | "good" | "warn" | "p
   legal_inquiry: { label: "Legal question", tone: "plain" },
   complaint: { label: "Complaint", tone: "hot" },
   inbound_pitch: { label: "Sales pitch", tone: "warn" },
+  // The scorer's default: an ordinary question. Quiet, but never blank.
+  general_inquiry: { label: "Question", tone: "plain" },
 };
 
 function isLate(c: ConversationSummary, slaMinutes: number, now: number): boolean {
