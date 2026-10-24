@@ -8,6 +8,7 @@ import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { AskColleague } from "./ask-colleague";
 import { SnoozeMenu } from "./snooze-menu";
+import { Copilot } from "./copilot";
 import { ShortcutSheet, useInboxShortcuts } from "./shortcuts";
 import { clearCommandActions, setCommandActions } from "@/lib/command-actions";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
@@ -1555,6 +1556,9 @@ export default function InboxPage() {
       <aside className="ibx-details" aria-label="Customer">
         {activeConversation ? (
           <>
+            {/* COPILOT first (24 Oct 2026, Focus workspace): what they want,
+                and a draft in the reply box. Never sends anything itself. */}
+            <Copilot key={`copilot-${activeConversation.id}`} conversationId={activeConversation.id} onDraft={setDraft} />
             <DetailsPanel
               key={activeConversation.id}
               conversationId={activeConversation.id}

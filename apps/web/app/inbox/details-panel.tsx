@@ -242,7 +242,6 @@ export function DetailsPanel({
             </p>
           </section>
 
-          <SummaryBlock conversationId={conversationId} />
 
           <section className="dp-block">
             <h4 className="dp-h">Assigned to</h4>
@@ -405,7 +404,7 @@ export function DetailsPanel({
  * are read by someone who has just scrolled them. Not stored either, so it is
  * always about the thread as it is now; "Refresh" re-reads after new messages.
  */
-function SummaryBlock({ conversationId }: { conversationId: string }) {
+export function SummaryBlock({ conversationId }: { conversationId: string }) {
   const [summary, setSummary] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

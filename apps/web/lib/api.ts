@@ -818,8 +818,13 @@ export function setConversationCollaborators(
 }
 
 /** Ask the AI to draft the next reply from the conversation so far. Never sends. */
-export function suggestReply(conversationId: string): Promise<{ suggestion: string }> {
-  return request(`/api/conversations/${conversationId}/suggest`, { method: "POST" });
+export type DraftStyle = "shorter" | "friendlier" | "formal" | "arabic";
+
+export function suggestReply(conversationId: string, style?: DraftStyle): Promise<{ suggestion: string }> {
+  return request(`/api/conversations/${conversationId}/suggest`, {
+    method: "POST",
+    body: JSON.stringify(style ? { style } : {}),
+  });
 }
 
 /** Fix the spelling and grammar of a draft without changing what it says. */

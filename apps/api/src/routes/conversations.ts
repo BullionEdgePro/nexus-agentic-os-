@@ -592,6 +592,14 @@ conversationsRoute.delete("/:id/calls/:callId", async (c) => {
  * discipline the auto-reply path keeps, because a suggestion a tired person
  * sends unread is an auto-reply by another name.
  */
+/** How Copilot may vary a draft. Each one is a voice or a language, not new facts. */
+const DRAFT_STYLES: Record<string, string> = {
+  shorter: "Keep it to one or two short sentences.",
+  friendlier: "Make it warmer and more personal, still professional.",
+  formal: "Make it formal and courteous.",
+  arabic: "Write the reply in Arabic (Modern Standard Arabic, or the customer's own dialect if they wrote in Arabic).",
+};
+
 conversationsRoute.post("/:id/suggest", async (c) => {
   const conversationId = c.req.param("id");
   const conversation = await findConversationById(conversationId);
@@ -604,9 +612,15 @@ conversationsRoute.post("/:id/suggest", async (c) => {
     .join("\n");
   if (!transcript) return c.json({ error: "Nothing to reply to yet." }, 400);
 
+  // Copilot's variations (24 Oct 2026, Focus workspace). A style changes the
+  // voice or the language, never the rule above it: no invented facts.
+  const body = await c.req.json<{ style?: unknown }>().catch(() => null);
+  const style = typeof body?.style === "string" && body.style in DRAFT_STYLES ? body.style : null;
+
   const suggestion = await completeText({
     system:
-      "You draft the next reply for a business's support team, in a customer messaging thread (WhatsApp, email, Messenger or Instagram). Write one concise, warm, professional message answering the customer's latest point, using the conversation so far. NEVER invent facts, prices, availability, dates or promises — if the answer is not in the conversation, write a short holding reply a colleague can finish. Return ONLY the reply text, with no preamble, labels or quotation marks.",
+      "You draft the next reply for a business's support team, in a customer messaging thread (WhatsApp, email, Messenger or Instagram). Write one concise, warm, professional message answering the customer's latest point, using the conversation so far. NEVER invent facts, prices, availability, dates or promises — if the answer is not in the conversation, write a short holding reply a colleague can finish. Return ONLY the reply text, with no preamble, labels or quotation marks." +
+      (style ? ` ${DRAFT_STYLES[style]}` : ""),
     prompt: `Conversation so far:\n${transcript}\n\nDraft the next reply from Us.`,
     maxTokens: 400,
   });

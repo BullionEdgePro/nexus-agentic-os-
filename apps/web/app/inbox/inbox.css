@@ -1804,3 +1804,16 @@
 .ibx-keys dd { margin: 0; }
 .ibx-keys kbd { font: inherit; font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--hairline-strong); background: var(--marble); }
 .ibx-keys p { margin: 14px 0 0; font-size: 12.5px; color: var(--slate); }
+
+/* Copilot (Focus workspace): what they want, and a reply to read and send. */
+.ibx-copilot { margin: 12px 12px 4px; padding: 12px 14px; border: 1px solid var(--hairline); border-radius: 14px; background: var(--paper); display: flex; flex-direction: column; gap: 6px; }
+.ibx-copilot-head { display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--ink); }
+.ibx-copilot-head svg { width: 17px; height: 17px; color: var(--signal); }
+.ibx-copilot-head span { margin-left: auto; font-size: 11.5px; color: var(--slate); }
+.ibx-copilot .dp-summary { margin: 0; }
+.ibx-copilot-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.ibx-copilot-row button { font: inherit; font-size: 12.5px; padding: 6px 11px; border-radius: var(--r-pill); border: 1px solid var(--hairline-strong); background: var(--paper); color: var(--ink); cursor: pointer; }
+.ibx-copilot-row button.primary { background: var(--signal); border-color: transparent; color: var(--marble); font-weight: 600; }
+.ibx-copilot-row button:disabled { opacity: .55; cursor: progress; }
+.ibx-copilot-done { margin: 6px 0 0; font-size: 12.5px; color: var(--good); }
+.ibx-copilot-error { margin: 6px 0 0; font-size: 12.5px; color: var(--crit); }

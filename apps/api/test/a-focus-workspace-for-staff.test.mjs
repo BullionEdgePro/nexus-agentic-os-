@@ -54,3 +54,22 @@ test("the command bar offers the open chat's actions first, and clears them when
   assert.match(src, /setCommandActions\(`For this chat · \$\{name\}`/);
   assert.match(src, /useEffect\(\(\) => \(\) => clearCommandActions\(\), \[\]\)/);
 });
+
+// ---- §4 Copilot --------------------------------------------------------------
+
+test("a draft's style changes the voice or language, never the no-invented-facts rule", () => {
+  const ROUTE = read("apps", "api", "src", "routes", "conversations.ts");
+  const at = ROUTE.indexOf('conversationsRoute.post("/:id/suggest"');
+  const body = ROUTE.slice(at, ROUTE.indexOf("\n});", at));
+  assert.match(body, /NEVER invent facts, prices, availability, dates or promises/);
+  assert.match(body, /\(style \? ` \$\{DRAFT_STYLES\[style\]\}` : ""\)/);
+  assert.match(body, /body\.style in DRAFT_STYLES/);
+  for (const style of ["shorter", "friendlier", "formal", "arabic"]) assert.match(ROUTE, new RegExp(`  ${style}: "`));
+});
+
+test("Copilot never sends: a draft goes to the reply box, and nothing runs without a tap", () => {
+  const COPILOT = read("apps", "web", "app", "inbox", "copilot.tsx");
+  assert.match(COPILOT, /onDraft\(suggestion\)/);
+  assert.doesNotMatch(COPILOT, /sendMessage|useEffect/);
+  assert.match(INBOX(), /<Copilot key=\{`copilot-\$\{activeConversation\.id\}`\} conversationId=\{activeConversation\.id\} onDraft=\{setDraft\} \/>/);
+});
