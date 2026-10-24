@@ -35,6 +35,7 @@ import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
 import { hqRoute } from "./routes/hq.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
+import { teamChatRoute } from "./routes/team-chat.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import {
   requireTenantScope,
@@ -366,6 +367,9 @@ app.route("/api/operators", operatorsRoute);
 // handlers, because neither path carries a :slug for requireTenantScope.
 app.route("/api/search", searchRoute);
 app.route("/api/me", meRoute);
+// Team chat: staff of one business talking to each other. Scoped inside the
+// handlers like /api/tasks — the path carries no :slug (24 Oct 2026).
+app.route("/api/team-chat", teamChatRoute);
 // Business HQ: admins only, guarded before the route is mounted.
 app.use("/api/hq", operatorOnly);
 app.use("/api/hq/*", operatorOnly);

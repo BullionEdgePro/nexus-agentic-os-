@@ -312,3 +312,23 @@ export async function teamUnread(organizationId: string, viewer: TeamViewer): Pr
     mentioned: threads.reduce((sum, t) => sum + t.mentioned, 0),
   };
 }
+
+/**
+ * The customer behind each handed-over chat: name and channel, for the card.
+ * Read cross-tenant, like findConversationById — on a shared number a chat is
+ * owned by the number's business and served by another, and the caller has
+ * already settled who may see it.
+ */
+export async function sharedConversationCards(
+  ids: string[]
+): Promise<Map<string, { name: string; channel: string }>> {
+  if (ids.length === 0) return new Map();
+  const { rows } = await getPool().query<{ id: string; name: string | null; channel: string }>(
+    `select c.id, coalesce(ct.display_name, ct.external_id, '+' || ct.wa_id) as name,
+            coalesce(c.channel, 'whatsapp') as channel
+       from conversations c join contacts ct on ct.id = c.contact_id
+      where c.id = any($1::uuid[])`,
+    [ids]
+  );
+  return new Map(rows.map((row) => [row.id, { name: row.name ?? "Customer", channel: row.channel }]));
+}

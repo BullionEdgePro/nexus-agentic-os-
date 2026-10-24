@@ -76,3 +76,62 @@ test("a retried send lands once", () => {
   const DB = read("packages", "db", "src", "team-chat.ts");
   assert.match(DB, /on conflict \(thread_id, client_id\) do nothing/);
 });
+
+// ---- Task 2: the route -------------------------------------------------------
+
+const ROUTE = () => read("apps", "api", "src", "routes", "team-chat.ts");
+const handler = (src, signature) => {
+  const at = src.indexOf(signature);
+  assert.ok(at >= 0, `missing ${signature}`);
+  const rest = src.slice(at);
+  return rest.slice(0, rest.indexOf("\n});") + 4);
+};
+
+test("a staff member removed from the team is refused on the next request", () => {
+  const src = ROUTE();
+  const viewer = src.slice(src.indexOf("async function viewerOf"));
+  assert.match(viewer.slice(0, viewer.indexOf("\n}\n")), /!employee\.isActive/);
+});
+
+test("a direct chat opens only with an active colleague of the same business, never yourself", () => {
+  const body = handler(ROUTE(), 'teamChatRoute.post("/direct"');
+  assert.match(body, /colleague\.organizationId !== /);
+  assert.match(body, /!colleague\.isActive/);
+  assert.match(body, /=== who\.viewer\.employeeId/);
+});
+
+test("a retried send answers with the first message, 200 not 201", () => {
+  const body = handler(ROUTE(), 'teamChatRoute.post("/threads/:id/messages"');
+  assert.match(body, /created \? 201 : 200/);
+  assert.match(body, /clientId/);
+});
+
+test("mentions are kept only for people of the thread's business", () => {
+  const src = ROUTE();
+  const fn = src.slice(src.indexOf("function validMentions"));
+  assert.match(fn.slice(0, fn.indexOf("\n}\n")), /isActive/);
+});
+
+test("a customer chat is handed over only in a direct chat, by someone who can see it", () => {
+  const body = handler(ROUTE(), 'teamChatRoute.post("/threads/:id/messages"');
+  assert.match(body, /thread\.kind !== "direct"/);
+  assert.match(body, /conversationVisibleTo\(viewers, who\.viewer\.employeeId\)/);
+  assert.match(body, /setConversationCollaborators/);
+});
+
+test("the admin cannot post into a direct chat", () => {
+  const body = handler(ROUTE(), 'teamChatRoute.post("/threads/:id/messages"');
+  assert.match(body, /!access\.post/);
+});
+
+test("the event goes out after the message is saved", () => {
+  const body = handler(ROUTE(), 'teamChatRoute.post("/threads/:id/messages"');
+  const published = body.indexOf('publish(await eventFor(thread, "team_message"');
+  assert.ok(published > 0, "the message is published");
+  assert.ok(body.indexOf("postTeamMessage(") < published);
+});
+
+test("database work runs inside the business's tenant scope, and the route is mounted", () => {
+  assert.ok((ROUTE().match(/withTenant\(/g) ?? []).length >= 5);
+  assert.match(read("apps", "api", "src", "index.ts"), /app\.route\("\/api\/team-chat", teamChatRoute\)/);
+});
