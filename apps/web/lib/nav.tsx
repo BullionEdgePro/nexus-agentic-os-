@@ -30,6 +30,8 @@ export interface NavItem {
    * it is not theirs, which is a worse answer than not offering it.
    */
   staffOnly?: boolean;
+  /** What staff call the same screen, when it differs (Inbox is "My queue"). */
+  staffLabel?: string;
 }
 
 const stroke = {
@@ -56,6 +58,8 @@ export const NAV: NavItem[] = [
   {
     href: "/inbox",
     label: "Inbox",
+    // Focus workspace (24 Oct 2026): for staff, the inbox is their queue.
+    staffLabel: "My queue",
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" />

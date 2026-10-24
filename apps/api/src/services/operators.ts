@@ -1,5 +1,6 @@
 import {
   getPool,
+  NOT_SNOOZED_SQL,
   listOrganizations,
   findOrganizationById,
   reconcileFindings,
@@ -355,6 +356,8 @@ export async function unansweredConversations(
         -- A sender marked not a customer (a platform, a pitch) never waits —
         -- 24 Oct 2026; see only-real-customers-are-waiting.
         and ct.not_a_customer_at is null
+        -- Put aside by a person until a time, and not written to since.
+        and ${NOT_SNOOZED_SQL}
         -- Cold pitches are not customers kept waiting.
         --
         -- The lead scorer already classifies "somebody selling TO us" as

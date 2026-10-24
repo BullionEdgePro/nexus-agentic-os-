@@ -7,6 +7,7 @@ import { suggestReply, polishText, syncGmailInbox, readableError, attachmentUrl 
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { AskColleague } from "./ask-colleague";
+import { SnoozeMenu } from "./snooze-menu";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
 import { ConversationTasks } from "./conversation-tasks";
 import { ConversationCustody } from "./conversation-custody";
@@ -43,6 +44,7 @@ type FolderKey =
   | "awaiting"
   | "late"
   | "followup"
+  | "snoozed"
   | "unassigned"
   | "human"
   | "open"
@@ -140,9 +142,33 @@ function tintOf(seed: string): number {
   return tint + 1;
 }
 
+/**
+ * Snoozed (24 Oct 2026, Focus workspace): put aside until a time, and the
+ * customer has not written since. The server reads the same rule
+ * (NOT_SNOOZED_SQL); here it also wakes the moment the time passes on screen.
+ */
+function isSnoozed(c: ConversationSummary, now: number): boolean {
+  if (!c.snoozedUntil || new Date(c.snoozedUntil).getTime() <= now) return false;
+  const wokenByCustomer =
+    c.lastMessageDirection === "inbound" && !!c.lastMessageAt && !!c.snoozedAt && c.lastMessageAt > c.snoozedAt;
+  return !wokenByCustomer;
+}
+
+/** Why a chat matters, from its latest lead assessment: the queue's reason tag. */
+const REASON: Record<string, { label: string; tone: "hot" | "good" | "warn" | "plain" }> = {
+  purchase_intent: { label: "Wants to buy", tone: "good" },
+  high_value: { label: "High value", tone: "good" },
+  booking_intent: { label: "Booking", tone: "plain" },
+  legal_inquiry: { label: "Legal question", tone: "plain" },
+  complaint: { label: "Complaint", tone: "hot" },
+  inbound_pitch: { label: "Sales pitch", tone: "warn" },
+};
+
 function isLate(c: ConversationSummary, slaMinutes: number, now: number): boolean {
   // A sender marked not a customer is never late (24 Oct 2026).
   if (c.notACustomer) return false;
+  // Nor is a chat somebody put aside on purpose.
+  if (isSnoozed(c, now)) return false;
   if (c.lastMessageDirection !== "inbound" || !c.lastMessageAt) return false;
   return now - new Date(c.lastMessageAt).getTime() > slaMinutes * 60_000;
 }
@@ -164,11 +190,13 @@ function matchesFolder(
     case "awaiting":
       // The customer spoke last and nobody has answered.
       // Not a sender marked not a customer: a platform or a pitch never waits.
-      return c.lastMessageDirection === "inbound" && !c.notACustomer;
+      return c.lastMessageDirection === "inbound" && !c.notACustomer && !isSnoozed(c, now);
     case "late":
       return isLate(c, slaMinutes, now);
     case "followup":
       return c.hasOverdueFollowup;
+    case "snoozed":
+      return isSnoozed(c, now);
     case "unassigned":
       return c.assignedEmployeeId == null;
     case "human":
@@ -195,10 +223,20 @@ function queueFolders(slaMinutes: number): { key: FolderKey; label: string; icon
     { key: "mine", label: "My chats", icon: "person" },
     { key: "late", label: "SLA breached", icon: "timer", hint: `Waiting longer than the ${slaLabel(slaMinutes)} reply-time target` },
     { key: "followup", label: "Follow-up due", icon: "bell" },
+    { key: "snoozed", label: "Snoozed", icon: "moon", hint: "Put aside until a time; back when it comes or the customer writes" },
     { key: "unassigned", label: "Unassigned", icon: "nobody" },
     { key: "human", label: "Human-held", icon: "hand" },
   ];
 }
+
+/** My queue's chips for staff (24 Oct 2026, Focus workspace). */
+const QUEUE_CHIPS: [FolderKey, string][] = [
+  ["awaiting", "Waiting"],
+  ["snoozed", "Snoozed"],
+  ["followup", "Follow-ups"],
+  ["mine", "All mine"],
+];
+const QUEUE_KEYS: FolderKey[] = QUEUE_CHIPS.map(([key]) => key);
 
 const FOLDER_TITLE: Record<FolderKey, string> = {
   mine: "My chats",
@@ -207,6 +245,7 @@ const FOLDER_TITLE: Record<FolderKey, string> = {
   awaiting: "Awaiting reply",
   late: "SLA breached",
   followup: "Follow-up due",
+  snoozed: "Snoozed",
   unassigned: "Unassigned",
   human: "Human-held",
   open: "Open chats",
@@ -254,7 +293,10 @@ export default function InboxPage() {
   useEffect(() => {
     if (folderChosen.current) return;
     if (myEmployeeId) {
-      setFolder("mine");
+      // MY QUEUE (24 Oct 2026, Focus workspace): who is waiting on me,
+      // longest waiting first.
+      setFolder("awaiting");
+      setOldestFirst(true);
       folderChosen.current = true;
     } else if (known && !myEmployeeId) {
       folderChosen.current = true;
@@ -271,6 +313,8 @@ export default function InboxPage() {
   const setHumanHandoff = useInboxStore((s) => s.setHumanHandoff);
   const setStatus = useInboxStore((s) => s.setStatus);
   const setNotACustomer = useInboxStore((s) => s.setNotACustomer);
+  const setSnooze = useInboxStore((s) => s.setSnooze);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
   const setTags = useInboxStore((s) => s.setTags);
   const sendMessage = useInboxStore((s) => s.sendMessage);
   const messagesByConversation = useInboxStore((s) => s.messagesByConversation);
@@ -624,6 +668,7 @@ export default function InboxPage() {
     // notice or a pitch (24 Oct 2026).
     activeConversation?.lastMessageDirection === "inbound" &&
     !activeConversation.notACustomer &&
+    !isSnoozed(activeConversation, now) &&
     activeConversation.lastMessageAt
       ? now - new Date(activeConversation.lastMessageAt).getTime()
       : null;
@@ -842,7 +887,7 @@ export default function InboxPage() {
       <section className="ibx-listcol" aria-label="Conversations">
         <header className="ibx-list-head">
           <h2 className="ibx-list-title">
-            {FOLDER_TITLE[folder]}
+            {myEmployeeId && QUEUE_KEYS.includes(folder) ? "My queue" : FOLDER_TITLE[folder]}
             <span className="ibx-list-count">{visibleConversations.length}</span>
           </h2>
           <button
@@ -869,6 +914,27 @@ export default function InboxPage() {
             <Icon name="sort" />
           </button>
         </header>
+
+        {/* MY QUEUE's views, one tap each (24 Oct 2026, Focus workspace). */}
+        {myEmployeeId ? (
+          <div className="ibx-chips" role="tablist" aria-label="My queue">
+            {QUEUE_CHIPS.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={folder === key}
+                className={`ibx-chip${folder === key ? " on" : ""}`}
+                onClick={() => {
+                  setFolder(key);
+                  if (key === "awaiting") setOldestFirst(true);
+                }}
+              >
+                {label} <span>{counts[key] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {searchOpen ? (
           <input
@@ -996,12 +1062,18 @@ export default function InboxPage() {
                           <span className="ibx-preview">{conversation.lastMessagePreview ?? "No messages yet"}</span>
                           <span className="ibx-convo-time">{rowTime(conversation.lastMessageAt, now)}</span>
                         </span>
-                        {conversation.isHumanHandoff ||
+                        {(conversation.leadCategory && REASON[conversation.leadCategory]) ||
+                        conversation.isHumanHandoff ||
                         isResolvedStatus(conversation) ||
                         conversation.hasOverdueFollowup ||
                         conversation.leadStage ||
                         conversation.tags.length ? (
                           <span className="ibx-convo-meta">
+                            {conversation.leadCategory && REASON[conversation.leadCategory] ? (
+                              <span className={`ibx-reason ${REASON[conversation.leadCategory]!.tone}`}>
+                                {REASON[conversation.leadCategory]!.label}
+                              </span>
+                            ) : null}
                             {conversation.leadStage ? (
                               <span className="ibx-row-stage">{conversation.leadStage}</span>
                             ) : null}
@@ -1119,6 +1191,13 @@ export default function InboxPage() {
                   </span>
                   <Icon name="chevron" />
                 </button>
+                {!isResolved ? (
+                  <SnoozeMenu
+                    open={snoozeOpen}
+                    onOpenChange={setSnoozeOpen}
+                    onSnooze={(until) => void setSnooze(activeConversation.id, until)}
+                  />
+                ) : null}
                 {/* Resolve files the thread as done; a customer writing again
                     reopens it by itself, so nothing new can be swallowed. */}
                 <button
@@ -1233,6 +1312,20 @@ export default function InboxPage() {
 
             {/* The customer is waiting — say for how long, and whether that is
                 past the business's reply-time target. */}
+            {activeConversation && isSnoozed(activeConversation, now) ? (
+              <p className="ibx-snoozed" role="status">
+                Snoozed until{" "}
+                {new Date(activeConversation.snoozedUntil!).toLocaleString(undefined, {
+                  weekday: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                . It comes back then, or as soon as the customer writes.
+                <button type="button" onClick={() => void setSnooze(activeConversation.id, null)}>
+                  Wake now
+                </button>
+              </p>
+            ) : null}
             {waitingMs != null && !isResolved ? (
               <p className={`ibx-sla${waitingMs > sla * 60_000 ? " late" : ""}`} role="status">
                 <Icon name="timer" />
@@ -1533,13 +1626,15 @@ type IconName =
   | "send"
   | "back"
   | "expand"
-  | "collapse";
+  | "collapse"
+  | "moon";
 
 const ICON_PATHS: Record<IconName, string> = {
   inbox: "M4 13h4l1.5 3h5L16 13h4M5.5 5h13L21 13v6H3v-6l2.5-8Z",
   chevron: "m6 9 6 6 6-6",
   person: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0",
   timer: "M12 8v5l3 2M9 2h6M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z",
+  moon: "M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z",
   bell: "M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2Zm4 4h4",
   nobody: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 11.5-5.4M3 3l18 18",
   hand: "M8 13V5.5a1.5 1.5 0 0 1 3 0V12m0-7.5a1.5 1.5 0 0 1 3 0V12m0-5.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.8-2.4L3.6 15a1.5 1.5 0 0 1 2.3-1.9L8 15",

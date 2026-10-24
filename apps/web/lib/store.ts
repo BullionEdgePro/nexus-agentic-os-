@@ -73,6 +73,8 @@ interface InboxState {
   setStatus: (conversationId: string, status: "resolved" | "open") => Promise<void>;
   /** Mark (or unmark) the sender as not a customer; every chat from them follows. */
   setNotACustomer: (conversationId: string, on: boolean) => Promise<void>;
+  /** Put a chat aside until a time, or (null) bring it back now. */
+  setSnooze: (conversationId: string, until: Date | null) => Promise<void>;
   applyStatusChange: (conversationId: string, status: ConversationSummary["status"]) => void;
   setTags: (conversationId: string, tags: string[]) => Promise<void>;
   /**
@@ -284,6 +286,21 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     } catch (err) {
       get().applyStatusChange(conversationId, previous);
       set({ sendError: readableError(err, status === "resolved" ? "Could not resolve this." : "Could not reopen this.") });
+    }
+  },
+
+  setSnooze: async (conversationId, until) => {
+    const before = get().conversations;
+    const snoozedUntil = until ? until.toISOString() : null;
+    const snoozedAt = until ? new Date().toISOString() : null;
+    set((state) => ({
+      conversations: state.conversations.map((c) => (c.id === conversationId ? { ...c, snoozedUntil, snoozedAt } : c)),
+    }));
+    try {
+      if (snoozedUntil) await api.snoozeConversation(conversationId, snoozedUntil);
+      else await api.wakeConversation(conversationId);
+    } catch (err) {
+      set({ conversations: before, sendError: readableError(err, until ? "Could not snooze this." : "Could not wake this.") });
     }
   },
 

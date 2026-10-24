@@ -57,6 +57,8 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
   // Both directions, for the same reason: a door that answers "this is not
   // yours" teaches that the product is broken rather than that the screen is
   // somebody else's.
+  const labelFor = (item: (typeof NAV)[number]) => (role === "employee" && item.staffLabel) || item.label;
+
   const visible =
     role === "operator"
       ? NAV.filter((item) => !item.staffOnly)
@@ -67,7 +69,7 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
     <a
       key={item.href}
       href={item.href}
-      title={item.label}
+      title={labelFor(item)}
       className={item.href === current ? "on" : undefined}
       // The current page is announced, not merely coloured. A rail whose
       // only "you are here" is a background swap says nothing to anyone
@@ -75,7 +77,7 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
       aria-current={item.href === current ? "page" : undefined}
     >
       <span className="rail-icon">{item.icon}</span>
-      <span className="rail-label">{item.label}</span>
+      <span className="rail-label">{labelFor(item)}</span>
       {item.href === "/deck/team-chat" ? <TeamChatBadge /> : null}
     </a>
   );

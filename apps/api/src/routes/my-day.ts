@@ -8,6 +8,7 @@ import {
   findOrganizationById,
   withTenant,
   getPool,
+  NOT_SNOOZED_SQL,
 } from "@nexus/db";
 import { deskOf } from "./my-desk.js";
 import { looksLikeAnInboundPitch } from "../services/operators.js";
@@ -233,6 +234,7 @@ async function waitingOnMe(organizationId: string, employeeId: string) {
         and c.status in ('open', 'pending')
         and m.direction = 'inbound'
         and ct.not_a_customer_at is null
+        and ${NOT_SNOOZED_SQL}
       order by m.created_at asc
       limit 500`,
     [organizationId, employeeId]

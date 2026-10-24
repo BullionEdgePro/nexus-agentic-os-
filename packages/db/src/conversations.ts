@@ -19,6 +19,49 @@ interface ConversationSummaryRow {
   channel: string | null;
   assigned_employee_name: string | null;
   unread_count: number | null;
+  snoozed_until?: string | null;
+  snoozed_at?: string | null;
+  lead_category?: string | null;
+}
+
+/**
+ * SNOOZED (24 Oct 2026, Focus workspace): put aside until a time, and the
+ * customer has not written since. Their next message wakes it; so does the
+ * time passing. Read where it is used — no job flips a flag. `c` is the
+ * conversations alias. Every waiting count adds `and ${NOT_SNOOZED_SQL}`.
+ */
+export const NOT_SNOOZED_SQL = `not (
+  c.snoozed_until is not null
+  and c.snoozed_until > now()
+  and not exists (
+    select 1 from messages ms
+     where ms.conversation_id = c.id and ms.direction = 'inbound' and ms.created_at > c.snoozed_at
+  )
+)`;
+
+/** Why a snooze time is refused, or null when it is fine: 5 minutes to 30 days ahead. */
+export function snoozeWindowError(until: string, now: number = Date.now()): string | null {
+  const at = Date.parse(until);
+  if (Number.isNaN(at)) return "That is not a time.";
+  if (at < now + 5 * 60_000) return "Snooze for at least 5 minutes.";
+  if (at > now + 30 * 86_400_000) return "Snooze for 30 days at most.";
+  return null;
+}
+
+/** Put a chat aside until a time. */
+export async function snoozeConversation(conversationId: string, until: string, by: string): Promise<void> {
+  await getPool().query(
+    `update conversations set snoozed_until = $2, snoozed_at = now(), snoozed_by = $3 where id = $1`,
+    [conversationId, until, by]
+  );
+}
+
+/** Bring it back now. */
+export async function wakeConversation(conversationId: string): Promise<void> {
+  await getPool().query(
+    `update conversations set snoozed_until = null, snoozed_at = null, snoozed_by = null where id = $1`,
+    [conversationId]
+  );
 }
 
 function toSummary(row: ConversationSummaryRow): ConversationSummary {
@@ -40,6 +83,9 @@ function toSummary(row: ConversationSummaryRow): ConversationSummary {
     channel: (row.channel ?? "whatsapp") as ConversationChannel,
     assignedEmployeeName: row.assigned_employee_name,
     unreadCount: row.unread_count ?? 0,
+    snoozedUntil: row.snoozed_until ?? null,
+    snoozedAt: row.snoozed_at ?? null,
+    leadCategory: row.lead_category ?? null,
   };
 }
 
@@ -79,6 +125,12 @@ export async function getConversationsForOrganization(
        c.tags,
        ct.lead_stage,
        c.channel,
+       c.snoozed_until,
+       c.snoozed_at,
+       -- Why this chat matters, for the queue's reason tag (24 Oct 2026).
+       (select la.category from lead_assessments la
+         where la.conversation_id = c.id
+         order by la.created_at desc limit 1) as lead_category,
        -- UNREAD FOR THIS READER: customer messages after their last look. A
        -- thread they have never opened counts from our last reply instead, so
        -- old history does not arrive as 40 unread.

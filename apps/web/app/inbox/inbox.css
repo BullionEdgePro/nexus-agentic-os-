@@ -1751,3 +1751,43 @@
 .ibx-ask-row button.primary { background: var(--signal); border-color: transparent; color: #fff; }
 .ibx-ask-row button:disabled { opacity: .5; }
 .ibx-ask-error { color: var(--crit); font-size: 12.5px; margin-top: 6px !important; }
+
+/* ---- Focus workspace (24 Oct 2026) ---------------------------------- */
+
+/* My queue's views for staff. */
+.ibx-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 14px 10px; }
+.ibx-chip {
+  font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--hairline-strong); background: var(--paper); color: var(--ink); cursor: pointer;
+}
+.ibx-chip span { color: var(--slate); font-weight: 600; margin-left: 2px; }
+.ibx-chip.on { background: var(--ink); border-color: var(--ink); color: var(--marble); font-weight: 600; }
+.ibx-chip.on span { color: var(--marble); }
+
+/* Why a chat matters. */
+.ibx-reason { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: var(--r-pill); background: var(--pebble); color: var(--slate); }
+.ibx-reason.hot { background: var(--crit-soft); color: var(--crit); }
+.ibx-reason.good { background: var(--good-soft); color: var(--good); }
+.ibx-reason.warn { background: var(--warn-soft); color: var(--warn); }
+
+/* Snooze. */
+.ibx-snooze { position: relative; }
+.ibx-snooze-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; min-width: 240px; padding: 6px;
+  border: 1px solid var(--hairline); border-radius: 14px; background: var(--paper); box-shadow: var(--lift);
+  display: flex; flex-direction: column;
+}
+.ibx-snooze-pop button {
+  display: flex; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 0; border-radius: 9px;
+  background: none; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; text-align: left;
+}
+.ibx-snooze-pop button:hover, .ibx-snooze-pop button:focus-visible { background: var(--pebble); }
+.ibx-snooze-pop small { color: var(--slate); font-size: 12px; }
+.ibx-snoozed {
+  margin: 10px 16px 0; padding: 8px 12px; border-radius: 10px; background: var(--signal-soft);
+  color: var(--ink); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+.ibx-snoozed button {
+  margin-left: auto; font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 11px;
+  border-radius: var(--r-pill); border: 1px solid var(--hairline-strong); background: var(--paper); color: var(--ink); cursor: pointer;
+}

@@ -33,6 +33,9 @@ import {
   getInboundMediaRef,
   markNotACustomer,
   clearNotACustomer,
+  snoozeConversation,
+  snoozeWindowError,
+  wakeConversation,
 } from "@nexus/db";
 import type { ConversationEvent, TimelineItem } from "@nexus/shared";
 import { completeText } from "@nexus/agents";
@@ -235,6 +238,28 @@ conversationsRoute.delete("/:id/not-a-customer", async (c) => {
   const conversation = await findConversationById(c.req.param("id"));
   if (!conversation) return c.json({ error: "Conversation not found" }, 404);
   await clearNotACustomer(conversation.contactId);
+  return c.json({ ok: true });
+});
+
+// SNOOZE (24 Oct 2026, Focus workspace). Put a chat aside until a time; it
+// leaves every waiting count until then or until the customer writes again.
+// Behind requireConversationScope, so staff snooze only their own chats.
+conversationsRoute.post("/:id/snooze", async (c) => {
+  const conversation = await findConversationById(c.req.param("id"));
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+  const body = await c.req.json<{ until?: unknown }>().catch(() => null);
+  const until = typeof body?.until === "string" ? body.until : "";
+  const problem = snoozeWindowError(until);
+  if (problem) return c.json({ error: problem }, 400);
+  const actor = await actorOf(c);
+  await snoozeConversation(conversation.id, new Date(until).toISOString(), actor.name ?? actor.id ?? "someone");
+  return c.json({ ok: true, snoozedUntil: new Date(until).toISOString() });
+});
+
+conversationsRoute.delete("/:id/snooze", async (c) => {
+  const conversation = await findConversationById(c.req.param("id"));
+  if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+  await wakeConversation(conversation.id);
   return c.json({ ok: true });
 });
 

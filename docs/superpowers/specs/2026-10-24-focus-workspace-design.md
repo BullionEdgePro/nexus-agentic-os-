@@ -21,8 +21,8 @@ The calm palette stays. Admin screens are untouched except where shared.
   (same page, `/inbox`; NavItem gains `staffLabel`).
 - Staff open on the **Waiting** view, sorted **longest waiting first**.
 - A chip row above the list for staff: **Waiting · Snoozed · Follow-ups · All
-  mine**, each with its count; the folder column starts collapsed for staff
-  (the existing collapse control still opens it).
+  mine**, each with its count. The folder column stays: it also holds the
+  tag, channel and date filters (found while building, 24 Oct).
 - Each row shows a **reason tag** from the conversation's latest lead
   assessment: purchase_intent "Wants to buy", booking_intent "Booking",
   legal_inquiry "Legal question", complaint "Complaint", high_value "High

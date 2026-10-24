@@ -1,4 +1,5 @@
 import { getPool, withAllTenants } from "./client.js";
+import { NOT_SNOOZED_SQL } from "./conversations.js";
 
 /**
  * Staff work — the admin's view of everything each staff member does in Nexus
@@ -186,6 +187,7 @@ export async function staffWorkOverview(
         where c.status in ('open', 'pending')
           and lm.last_direction = 'inbound'
           and ct.not_a_customer_at is null
+          and ${NOT_SNOOZED_SQL}
           and ($1::uuid is null or coalesce(c.routed_organization_id, c.organization_id) = $1)`,
       [organizationId]
     );

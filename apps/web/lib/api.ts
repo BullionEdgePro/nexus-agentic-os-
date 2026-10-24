@@ -280,6 +280,16 @@ export function unmarkNotACustomer(conversationId: string): Promise<{ ok: true }
   return request(`/api/conversations/${conversationId}/not-a-customer`, { method: "DELETE" });
 }
 
+/** Put a chat aside until a time (Focus workspace, 24 Oct 2026). */
+export function snoozeConversation(conversationId: string, until: string): Promise<{ ok: true; snoozedUntil: string }> {
+  return request(`/api/conversations/${conversationId}/snooze`, { method: "POST", body: JSON.stringify({ until }) });
+}
+
+/** Bring a snoozed chat back now. */
+export function wakeConversation(conversationId: string): Promise<{ ok: true }> {
+  return request(`/api/conversations/${conversationId}/snooze`, { method: "DELETE" });
+}
+
 /** Resolve a conversation, or open it again. */
 export function setConversationStatus(
   conversationId: string,

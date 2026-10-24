@@ -197,6 +197,12 @@ export interface ConversationSummary {
    * claiming 40 unread.
    */
   unreadCount?: number;
+  /** Put aside until this time (Focus workspace, 24 Oct 2026); null when not snoozed. */
+  snoozedUntil?: string | null;
+  /** When it was snoozed: a customer message after this wakes it. */
+  snoozedAt?: string | null;
+  /** The latest lead assessment's category — the queue's reason tag. */
+  leadCategory?: string | null;
 }
 
 /** Something that happened to a thread, as opposed to something said in it. */
