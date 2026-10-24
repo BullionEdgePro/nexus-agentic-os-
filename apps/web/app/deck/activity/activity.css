@@ -1,3 +1,254 @@
+/* Shared by ten deck pages (act-*), restored 22 Oct 2026 after the Staff
+   work rewrite removed them; calmed like every other stylesheet. */
+
+/* ============================================================
+   Employee activity — the operator's view of who is doing what.
+   Inherits the routing-plate tokens from deck.css; everything
+   here is scoped under .act-root.
+
+   Laid out as a ledger rather than a dashboard: rows of people
+   with their numbers in fixed columns, because the question this
+   answers is comparative ("who is carrying the load") and a grid
+   of cards makes comparison harder than a table does.
+   ============================================================ */
+
+.act-root { max-width: 1120px; margin: 0 auto; padding: 28px 22px 64px; }
+
+.act-back {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--slate);
+  text-decoration: none;
+}
+.act-back:hover { color: var(--signal-text); }
+
+.act-head { margin: 18px 0 6px; }
+.act-head h1 {
+  font-family: var(--display);
+  font-size: clamp(26px, 4vw, 34px);
+  letter-spacing: -0.02em;
+}
+.act-lede { font-size: 14px; color: var(--slate); max-width: 62ch; line-height: 1.55; }
+
+.act-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0 16px; }
+.act-tabs button {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 7px 12px;
+  border-radius: 100px;
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+.act-tabs button[aria-pressed="true"] {
+  background: var(--signal);
+  border-color: var(--ink);
+  color: var(--marble);
+}
+
+/* --- the roll of people --- */
+
+.act-table {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  background: var(--paper);
+  overflow-x: auto;
+}
+.act-table table { width: 100%; border-collapse: collapse; min-width: 700px; }
+
+.act-table th {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--mist);
+  text-align: right;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.act-table th:first-child, .act-table td:first-child { text-align: left; }
+
+.act-table td {
+  padding: 13px 14px;
+  font-size: 13.5px;
+  text-align: right;
+  border-bottom: 1px solid var(--hairline);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.act-table tbody tr:last-child td { border-bottom: 0; }
+.act-table tbody tr:hover { background: var(--pebble); }
+
+.act-who { display: flex; flex-direction: column; gap: 2px; }
+.act-name { font-weight: 600; }
+.act-sub { font-family: var(--mono); font-size: 10px; color: var(--mist); letter-spacing: .04em; }
+
+/* Zero is not the same as a number, and should not read like one. */
+.act-zero { color: var(--mist); }
+
+.act-flag {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 3px 7px;
+  border-radius: 100px;
+  border: 1px solid var(--hairline-strong);
+  color: var(--slate);
+}
+.act-flag.warn { border-color: rgba(196, 52, 42, .4); color: var(--crit); background: rgba(196, 52, 42, .06); }
+
+/* --- the timeline --- */
+
+.act-sub-head {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--signal-text);
+  margin: 34px 0 12px;
+}
+
+.act-feed { display: flex; flex-direction: column; gap: 1px; }
+.act-event {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  padding: 11px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  font-size: 13px;
+}
+.act-when { font-family: var(--mono); font-size: 10.5px; color: var(--mist); font-variant-numeric: tabular-nums; }
+.act-detail { color: var(--slate); }
+.act-detail b { color: var(--ink); font-weight: 600; }
+.act-score { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.act-empty {
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--r);
+  padding: 26px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--slate);
+}
+
+.act-msg {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--crit);
+  border: 1px solid rgba(196, 52, 42, .4);
+  background: rgba(196, 52, 42, .07);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+}
+
+.act-caveat {
+  margin-top: 30px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 14px;
+  font-size: 12.5px;
+  color: var(--mist);
+  line-height: 1.6;
+  max-width: 70ch;
+}
+
+@media (max-width: 620px) {
+  .act-event { grid-template-columns: 1fr; gap: 4px; }
+}
+
+/* The business switcher, shared by every screen that has one. */
+.deck-root .act-tabs .bt-only {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 6px 2px;
+}
+
+/* Drawn empty until we know who is asking — see BusinessTabs. Holds the row's
+   height so the page below does not jump when the answer arrives. */
+.deck-root .act-tabs.bt-waiting { min-height: 34px; }
+
+/* ---------- response times (Clear Sky) ---------- */
+.rt { margin-top: 30px; }
+.rt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rt-head .act-sub-head { margin: 0; }
+.rt-periods { display: inline-flex; padding: 3px; border-radius: var(--r-pill); background: var(--pebble); }
+.rt-period {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--slate);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .16s, color .16s;
+}
+.rt-period.on { background: var(--paper); color: var(--signal-deep); box-shadow: var(--lift-sm); }
+.rt-lede { margin: 8px 0 14px; max-width: 70ch; font-size: 13.5px; line-height: 1.55; color: var(--slate); }
+.rt-star {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  background: var(--sky-soft);
+  color: var(--ink);
+  font-size: 13px;
+}
+.rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.rt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--r);
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--lift-sm);
+  animation: nx-pop .4s var(--ease-out) both;
+}
+.rt-card.muted { background: var(--marble); box-shadow: none; }
+.rt-card header { display: flex; align-items: center; gap: 10px; }
+.rt-av {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--btn-grad);
+  color: var(--on-accent);
+  font-weight: 800;
+}
+.rt-card.muted .rt-av { background: var(--pebble); color: var(--slate); }
+.rt-who { display: flex; flex-direction: column; min-width: 0; }
+.rt-who b { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-who small { font-size: 11.5px; color: var(--mist); }
+.rt-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.rt-card dl > div { padding: 8px 10px; border-radius: 10px; background: var(--marble); }
+.rt-card dt { font-size: 11px; font-weight: 600; color: var(--slate); }
+.rt-card dd { margin: 2px 0 0; font-family: var(--display); font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rt-card dd small { font-family: var(--sans); font-size: 11px; font-weight: 600; color: var(--mist); }
+.rt-bar { position: relative; height: 22px; border-radius: var(--r-pill); background: var(--pebble); overflow: hidden; }
+.rt-bar span { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-pill); transition: width .6s var(--ease-out); }
+.rt-bar span.good { background: linear-gradient(90deg, rgba(15, 122, 86, .35), rgba(15, 122, 86, .55)); }
+.rt-bar span.ok { background: linear-gradient(90deg, var(--sky-wash), var(--sky)); }
+.rt-bar span.bad { background: linear-gradient(90deg, rgba(196, 52, 42, .25), rgba(196, 52, 42, .45)); }
+.rt-bar em { position: relative; display: block; padding: 0 10px; font-style: normal; font-size: 11.5px; font-weight: 700; line-height: 22px; color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .rt-card { animation: none; } }
+
 /* Staff work (22 Oct 2026) — calm cards on the deck tokens. */
 .sw { max-width: 1240px; margin: 0 auto; padding: 36px 32px 64px; display: flex; flex-direction: column; gap: 24px; }
 .sw-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
@@ -82,103 +333,3 @@ a.sw-tile:hover { outline: 2px solid var(--hairline-strong); }
   .sw { padding: 24px 16px 48px; }
   .sw-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-/* Kept for the response-times section below. */
-.act-sub-head {
-  font-family: var(--sans);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--signal-text);
-  margin: 34px 0 12px;
-}
-
-.act-empty {
-  border: 1px dashed var(--hairline-strong);
-  border-radius: var(--r);
-  padding: 26px;
-  text-align: center;
-  font-size: 13.5px;
-  color: var(--slate);
-}
-
-.act-msg {
-  margin-top: 14px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--crit);
-  border: 1px solid rgba(196, 52, 42, .4);
-  background: rgba(196, 52, 42, .07);
-  border-radius: var(--r-sm);
-  padding: 10px 12px;
-}
-
-.rt { margin-top: 30px; }
-.rt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.rt-head .act-sub-head { margin: 0; }
-.rt-periods { display: inline-flex; padding: 3px; border-radius: var(--r-pill); background: var(--pebble); }
-.rt-period {
-  padding: 6px 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--slate);
-  font-family: var(--sans);
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background .16s, color .16s;
-}
-.rt-period.on { background: var(--paper); color: var(--signal-deep); box-shadow: var(--lift-sm); }
-.rt-lede { margin: 8px 0 14px; max-width: 70ch; font-size: 13.5px; line-height: 1.55; color: var(--slate); }
-.rt-star {
-  display: inline-flex;
-  gap: 4px;
-  margin: 0 0 12px;
-  padding: 8px 14px;
-  border-radius: var(--r-pill);
-  background: var(--sky-soft);
-  color: var(--ink);
-  font-size: 13px;
-}
-.rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.rt-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-radius: var(--r);
-  background: var(--paper);
-  border: 1px solid var(--hairline);
-  box-shadow: var(--lift-sm);
-  animation: nx-pop .4s var(--ease-out) both;
-}
-.rt-card.muted { background: var(--marble); box-shadow: none; }
-.rt-card header { display: flex; align-items: center; gap: 10px; }
-.rt-av {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--btn-grad);
-  color: var(--on-accent);
-  font-weight: 800;
-}
-.rt-card.muted .rt-av { background: var(--pebble); color: var(--slate); }
-.rt-who { display: flex; flex-direction: column; min-width: 0; }
-.rt-who b { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rt-who small { font-size: 11.5px; color: var(--mist); }
-.rt-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
-.rt-card dl > div { padding: 8px 10px; border-radius: 10px; background: var(--marble); }
-.rt-card dt { font-size: 11px; font-weight: 600; color: var(--slate); }
-.rt-card dd { margin: 2px 0 0; font-family: var(--display); font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-.rt-card dd small { font-family: var(--sans); font-size: 11px; font-weight: 600; color: var(--mist); }
-.rt-bar { position: relative; height: 22px; border-radius: var(--r-pill); background: var(--pebble); overflow: hidden; }
-.rt-bar span { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-pill); transition: width .6s var(--ease-out); }
-.rt-bar span.good { background: linear-gradient(90deg, rgba(15, 122, 86, .35), rgba(15, 122, 86, .55)); }
-.rt-bar span.ok { background: linear-gradient(90deg, var(--sky-wash), var(--sky)); }
-.rt-bar span.bad { background: linear-gradient(90deg, rgba(196, 52, 42, .25), rgba(196, 52, 42, .45)); }
-.rt-bar em { position: relative; display: block; padding: 0 10px; font-style: normal; font-size: 11.5px; font-weight: 700; line-height: 22px; color: var(--ink); }
-@media (prefers-reduced-motion: reduce) { .rt-card { animation: none; } }
