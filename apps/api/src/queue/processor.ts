@@ -554,6 +554,7 @@ async function handleStaffNumberMessage(
   // Null messageId means the webhook retried a message already recorded — the
   // first delivery already routed it, so there is nothing to redo.
   if (!result.messageId) return;
+  const messageId = result.messageId;
 
   await withTenant(employee.organizationId, async () => {
     await assignConversationToEmployee(result.conversationId, employee.id);
@@ -569,6 +570,15 @@ async function handleStaffNumberMessage(
     // Human custody: the twin must never answer on a person's own number. The
     // conversation is theirs to work, the way a handed-over one is.
     await setConversationHandoff(result.conversationId, true, "taken_by_employee", employee.id);
+    // Why it matters (24 Oct 2026): scored like a message on the shared line,
+    // so My queue's reason tag is there for a person's own clients too.
+    await scoreLeadBestEffort({
+      organizationId: employee.organizationId,
+      contactId: result.contactId,
+      conversationId: result.conversationId,
+      messageId,
+      text: text.body,
+    });
   });
 
   const organization = await findOrganizationById(employee.organizationId);

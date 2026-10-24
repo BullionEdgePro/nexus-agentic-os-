@@ -39,3 +39,13 @@ test("a new email from a person is scored as it arrives; platform mail is not", 
 test("every scored chat shows a reason, the plain question included", () => {
   assert.match(read("apps", "web", "app", "inbox", "page.tsx"), /general_inquiry: \{ label: "Question", tone: "plain" \}/);
 });
+
+test("a message to a staff member's own WhatsApp number is scored too", () => {
+  // Found the same day: Ralph's chats arrive on his own number, which went
+  // through its own handler and never reached the scorer.
+  const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
+  const at = PROCESSOR.indexOf("async function handleStaffNumberMessage");
+  assert.ok(at >= 0, "the own-number handler exists");
+  const body = PROCESSOR.slice(at, PROCESSOR.indexOf("\n}\n", at));
+  assert.match(body, /await scoreLeadBestEffort\(\{[\s\S]{0,300}conversationId: result\.conversationId/);
+});
