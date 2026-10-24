@@ -1736,7 +1736,7 @@
 .ibx-ask-pop li button:hover { background: var(--pebble); }
 .ibx-ask-pop li small { margin-left: auto; color: var(--mist); font-size: 11.5px; }
 .ibx-ask-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hairline-strong); }
-.ibx-ask-dot.on { background: #12805c; }
+.ibx-ask-dot.on { background: var(--good); }
 .ibx-ask-pop textarea {
   width: 100%; box-sizing: border-box; resize: vertical; font: inherit; font-size: 13px; padding: 8px 10px;
   border: 1px solid var(--hairline-strong); border-radius: 10px; background: var(--marble); color: var(--ink);
@@ -1750,4 +1750,4 @@
 }
 .ibx-ask-row button.primary { background: var(--signal); border-color: transparent; color: #fff; }
 .ibx-ask-row button:disabled { opacity: .5; }
-.ibx-ask-error { color: #b42318; font-size: 12.5px; margin-top: 6px !important; }
+.ibx-ask-error { color: var(--crit); font-size: 12.5px; margin-top: 6px !important; }
