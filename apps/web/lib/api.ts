@@ -3232,6 +3232,11 @@ export function sendTeamMessage(
   return request(`/api/team-chat/threads/${threadId}/messages`, { method: "POST", body: JSON.stringify(input) });
 }
 
+/** "I am typing" — nothing stored; colleagues looking now see it for 5 seconds. */
+export function sendTeamTyping(threadId: string): Promise<{ ok: true }> {
+  return request(`/api/team-chat/threads/${threadId}/typing`, { method: "POST" });
+}
+
 export function markTeamThreadRead(threadId: string): Promise<{ ok: true }> {
   return request(`/api/team-chat/threads/${threadId}/read`, { method: "POST" });
 }

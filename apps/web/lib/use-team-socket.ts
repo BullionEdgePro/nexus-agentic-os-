@@ -5,7 +5,7 @@ import type { TeamChatMessage } from "./api";
 
 /** What the API publishes on /ws/team (apps/api/src/lib/team-events.ts). */
 export interface TeamSocketEvent {
-  type: "team_message" | "team_message_removed" | "team_read";
+  type: "team_message" | "team_message_removed" | "team_read" | "team_typing";
   organizationId: string;
   organizationSlug: string;
   threadId: string;
@@ -13,6 +13,8 @@ export interface TeamSocketEvent {
   members: string[];
   message?: TeamChatMessage;
   reader?: string;
+  /** The typer's name, for team_typing. */
+  name?: string;
 }
 
 export type TeamSocketStatus = "off" | "connecting" | "open" | "closed";

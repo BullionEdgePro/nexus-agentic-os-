@@ -55,6 +55,9 @@ export function TeamChatAlerts({ employeeId }: { employeeId: string | null }) {
 
   const onEvent = useCallback(
     (event: TeamSocketEvent) => {
+      // Typing changes no count; re-reading the badge on every keystroke would
+      // ask the server every 3 seconds per person typing.
+      if (event.type === "team_typing") return;
       window.dispatchEvent(new Event(UNREAD_EVENT));
       const message = event.message;
       if (

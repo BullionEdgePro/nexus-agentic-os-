@@ -11,7 +11,7 @@ import { logger } from "./logger.js";
 export const TEAM_EVENTS_CHANNEL = "nexus:team-events";
 
 export interface TeamEvent {
-  type: "team_message" | "team_message_removed" | "team_read";
+  type: "team_message" | "team_message_removed" | "team_read" | "team_typing";
   organizationId: string;
   organizationSlug: string;
   threadId: string;
@@ -19,8 +19,10 @@ export interface TeamEvent {
   /** The two people in a direct chat; empty for a room. */
   members: string[];
   message?: TeamMessage;
-  /** Who read, for team_read. */
+  /** Who read (team_read) or is typing (team_typing). */
   reader?: string;
+  /** The typer's name, for "<name> is typing". */
+  name?: string;
 }
 
 function client(): Redis {

@@ -159,10 +159,13 @@ test("staff are told, on the screen, that the admin can read team chats", () => 
 });
 
 test("a message that fails says so and resends with the same id", () => {
-  const src = PAGE();
-  assert.match(src, /crypto\.randomUUID\(\)/);
-  assert.match(src, /Not sent · Retry/);
-  assert.match(src, /function retry\(pending: Pending\)[\s\S]{0,300}pending\.clientId/);
+  // Since 24 Oct (Focus workspace) these rules live in one hook and one list,
+  // shared by the Team chat page and the dock beside the inbox.
+  const HOOK = read("apps", "web", "lib", "use-team-thread.ts");
+  assert.match(HOOK, /crypto\.randomUUID\(\)/);
+  assert.match(HOOK, /function retry\(pending: PendingMessage\)[\s\S]{0,300}pending\.clientId/);
+  assert.match(read("apps", "web", "app", "team-chat-thread.tsx"), /Not sent · Retry/);
+  assert.match(PAGE(), /useTeamThread\(/);
 });
 
 test("nothing missed while offline is lost: re-read on reconnect, and every 15 seconds without a socket", () => {

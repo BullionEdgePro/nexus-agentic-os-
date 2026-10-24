@@ -326,6 +326,22 @@ teamChatRoute.post("/threads/:id/read", async (c) => {
   return c.json({ ok: true });
 });
 
+// "<name> is typing" (24 Oct 2026, Focus workspace). Nothing is stored: the
+// event goes to whoever is looking now, and screens send it at most every 3
+// seconds. Only someone who may write in the thread can say they are typing.
+teamChatRoute.post("/threads/:id/typing", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("id"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  if (!teamAccess(thread, who.viewer).post) return c.json(NOT_FOUND, 404);
+  await publish(await eventFor(thread, "team_typing", { reader: readerKey(who.viewer), name: who.name }));
+  return c.json({ ok: true });
+});
+
 teamChatRoute.delete("/messages/:id", async (c) => {
   const who = await viewerOf(c);
   if (!who || who.role !== "staff") return c.json(NOT_FOUND, 404);

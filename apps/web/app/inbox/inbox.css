@@ -1817,3 +1817,22 @@
 .ibx-copilot-row button:disabled { opacity: .55; cursor: progress; }
 .ibx-copilot-done { margin: 6px 0 0; font-size: 12.5px; color: var(--good); }
 .ibx-copilot-error { margin: 6px 0 0; font-size: 12.5px; color: var(--crit); }
+
+/* Team chat docked beside the work (Focus workspace). */
+.ibx-dock { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--paper); }
+.ibx-dock-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
+.ibx-dock-head span { color: var(--slate); font-size: 12.5px; }
+.ibx-dock-head a { margin-left: auto; font-size: 12.5px; color: var(--signal-text); }
+.ibx-dock-head button { border: 0; background: none; font-size: 18px; color: var(--slate); cursor: pointer; }
+.ibx-dock-tabs { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--hairline); overflow-x: auto; }
+.ibx-dock-tabs button {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font: inherit; font-size: 12.5px;
+  padding: 6px 10px; border-radius: var(--r-pill); border: 1px solid var(--hairline-strong); background: var(--paper); color: var(--ink); cursor: pointer;
+}
+.ibx-dock-tabs button.on { background: var(--ink); border-color: var(--ink); color: var(--marble); }
+.ibx-dock-tabs button span { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: var(--r-pill); background: var(--ink); color: var(--marble); }
+.ibx-dock-tabs button span.hot { background: var(--signal); }
+.ibx-dock-tabs button.on span { background: var(--marble); color: var(--ink); }
+.ibx-dock .tc-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px; }
+.tc-dot-inline { width: 8px; height: 8px; border-radius: 50%; background: var(--hairline-strong); display: inline-block; }
+.tc-dot-inline.on { background: var(--good); }

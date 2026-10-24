@@ -9,6 +9,7 @@ import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { AskColleague } from "./ask-colleague";
 import { SnoozeMenu } from "./snooze-menu";
 import { Copilot } from "./copilot";
+import { TeamDock } from "./team-dock";
 import { ShortcutSheet, useInboxShortcuts } from "./shortcuts";
 import { clearCommandActions, setCommandActions } from "@/lib/command-actions";
 import { useInboxSocket } from "@/lib/use-inbox-socket";
@@ -667,6 +668,14 @@ export default function InboxPage() {
 
   // ---- Focus workspace: keys and the command bar (24 Oct 2026) ----
   const [keysOpen, setKeysOpen] = useState(false);
+  // Team chat docked where the customer panel is (Focus workspace).
+  const [teamOpen, setTeamOpen] = useState(false);
+  const toggleTeam = () => {
+    setTeamOpen((open) => {
+      if (!open) setDetailsOpen(true);
+      return !open;
+    });
+  };
   const step = (by: 1 | -1) => {
     if (visibleConversations.length === 0) return;
     const at = visibleConversations.findIndex((c) => c.id === selectedConversationId);
@@ -688,6 +697,7 @@ export default function InboxPage() {
     s: () => activeConversation && !isResolved && setSnoozeOpen(true),
     a: () => myEmployeeId && activeConversation && askColleague(),
     x: notACustomerToggle,
+    t: () => myEmployeeId && toggleTeam(),
     "?": () => setKeysOpen((open) => !open),
   });
 
@@ -969,6 +979,18 @@ export default function InboxPage() {
           >
             <Icon name="search" />
           </button>
+          {myEmployeeId ? (
+            <button
+              type="button"
+              className={`ibx-iconbtn${teamOpen ? " on" : ""}`}
+              title="Team chat beside the work (T)"
+              aria-label="Team chat"
+              aria-pressed={teamOpen}
+              onClick={toggleTeam}
+            >
+              <Icon name="team" />
+            </button>
+          ) : null}
           <button
             type="button"
             className={`ibx-iconbtn${oldestFirst ? " on" : ""}`}
@@ -1553,8 +1575,10 @@ export default function InboxPage() {
 
       {/* ---- the customer panel: Details / Calls / Notes, then follow-ups and
           custody. Folds away from the sidebar's panel button. ---- */}
-      <aside className="ibx-details" aria-label="Customer">
-        {activeConversation ? (
+      <aside className="ibx-details" aria-label={teamOpen ? "Team chat" : "Customer"}>
+        {teamOpen ? (
+          <TeamDock onClose={() => setTeamOpen(false)} />
+        ) : activeConversation ? (
           <>
             {/* COPILOT first (24 Oct 2026, Focus workspace): what they want,
                 and a draft in the reply box. Never sends anything itself. */}
@@ -1697,7 +1721,8 @@ type IconName =
   | "back"
   | "expand"
   | "collapse"
-  | "moon";
+  | "moon"
+  | "team";
 
 const ICON_PATHS: Record<IconName, string> = {
   inbox: "M4 13h4l1.5 3h5L16 13h4M5.5 5h13L21 13v6H3v-6l2.5-8Z",
@@ -1705,6 +1730,7 @@ const ICON_PATHS: Record<IconName, string> = {
   person: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0",
   timer: "M12 8v5l3 2M9 2h6M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z",
   moon: "M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z",
+  team: "M17 9h2a2 2 0 0 1 2 2v8l-3-2h-6a2 2 0 0 1-2-2v-1M3 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7l-4 3V5Z",
   bell: "M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2Zm4 4h4",
   nobody: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 11.5-5.4M3 3l18 18",
   hand: "M8 13V5.5a1.5 1.5 0 0 1 3 0V12m0-7.5a1.5 1.5 0 0 1 3 0V12m0-5.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.8-2.4L3.6 15a1.5 1.5 0 0 1 2.3-1.9L8 15",
