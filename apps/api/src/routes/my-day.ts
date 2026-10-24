@@ -10,6 +10,7 @@ import {
   getPool,
 } from "@nexus/db";
 import { deskOf } from "./my-desk.js";
+import { looksLikeAnInboundPitch } from "../services/operators.js";
 
 /**
  * What one person has to do today.
@@ -81,6 +82,7 @@ myDayRoute.get("/day", async (c) => {
     ]
   );
 
+  const waitingTotal = waiting.length;
   const overdue = tasks.filter((task) => task.isOverdue);
   const neverSpoken = clients.filter((client) => !client.hasSpoken);
 
@@ -141,7 +143,8 @@ myDayRoute.get("/day", async (c) => {
       businessName: organization.name,
       whatsappNumber: employee.whatsappNumber,
     },
-    waiting,
+    // The ten who have waited longest are listed; the COUNT is all of them.
+    waiting: waiting.slice(0, 10),
     tasks: tasks.slice(0, 8).map((task) => ({
       id: task.id,
       title: task.title,
@@ -161,7 +164,7 @@ myDayRoute.get("/day", async (c) => {
       contactName: booking.contactName,
     })),
     counts: {
-      waiting: waiting.length,
+      waiting: waitingTotal,
       openTasks: tasks.length,
       overdue: overdue.length,
       appointments: bookings.length,
@@ -194,19 +197,29 @@ async function waitingOnMe(organizationId: string, employeeId: string) {
   const { rows } = await getPool().query<{
     conversation_id: string;
     contact_name: string | null;
-    wa_id: string;
+    wa_id: string | null;
     last_at: Date;
     hours: string;
+    last_body: string | null;
+    has_assessment: boolean;
+    is_pitch: boolean;
   }>(
+    // The same customers Staff work counts for this person (24 Oct 2026): not a
+    // sender marked "not a customer", not a cold pitch. Nameless email senders
+    // show their address.
     `select c.id                                   as conversation_id,
-            ct.display_name                        as contact_name,
+            coalesce(ct.display_name, ct.external_id) as contact_name,
             ct.wa_id,
             m.created_at                           as last_at,
-            extract(epoch from (now() - m.created_at)) / 3600 as hours
+            extract(epoch from (now() - m.created_at)) / 3600 as hours,
+            m.last_body,
+            exists (select 1 from lead_assessments la where la.conversation_id = c.id) as has_assessment,
+            exists (select 1 from lead_assessments la
+                     where la.conversation_id = c.id and la.category = 'inbound_pitch') as is_pitch
        from conversations c
        join contacts ct on ct.id = c.contact_id
        join lateral (
-         select direction, created_at
+         select direction, created_at, left(body, 2000) as last_body
            from messages
           where conversation_id = c.id
           -- Outbound first on a tie (a same-transaction reply shares the
@@ -219,14 +232,15 @@ async function waitingOnMe(organizationId: string, employeeId: string) {
         and coalesce(c.routed_organization_id, c.organization_id) = $1
         and c.status in ('open', 'pending')
         and m.direction = 'inbound'
+        and ct.not_a_customer_at is null
       order by m.created_at asc
-      limit 10`,
+      limit 500`,
     [organizationId, employeeId]
   );
 
-  return rows.map((row) => ({
+  return rows.filter((row) => !looksLikeAnInboundPitch(row)).map((row) => ({
     conversationId: row.conversation_id,
-    contactName: row.contact_name,
+    contactName: row.contact_name ?? (row.wa_id ? `+${row.wa_id}` : null),
     waId: row.wa_id,
     waitingHours: Math.round(Number(row.hours) * 10) / 10,
   }));

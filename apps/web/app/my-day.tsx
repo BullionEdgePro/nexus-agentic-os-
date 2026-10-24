@@ -167,7 +167,7 @@ export function MyDay() {
                 </h2>
                 <ul className="day-list">
                   {day.waiting.map((row) => {
-                    const name = row.contactName ?? `+${row.waId}`;
+                    const name = row.contactName ?? "Customer";
                     return (
                       <li key={row.conversationId}>
                         <a href={`/inbox?conversation=${row.conversationId}`}>
