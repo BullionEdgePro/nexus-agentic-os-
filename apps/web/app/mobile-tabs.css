@@ -31,4 +31,19 @@
   .mtabs .rail-badge { position: absolute; top: 4px; left: calc(50% + 6px); margin: 0; }
   /* Room for the tabs under every page's last line. */
   .deck-root.shell .shell-main { padding-bottom: 72px; }
+
+  /* Everything else pinned to the bottom of the screen sits above the tabs,
+     never on top of them: the Ask button covered "Me" (26 Oct 2026). */
+  body:has(.mtabs) {
+    --mtabs-h: calc(62px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.mtabs) .as-open { bottom: calc(var(--mtabs-h) + 12px); }
+  body:has(.mtabs) .as {
+    bottom: calc(var(--mtabs-h) + 8px);
+    max-height: calc(100vh - var(--mtabs-h) - 24px);
+  }
+  body:has(.mtabs) .deck-root .asg-stack,
+  body:has(.mtabs) .ibx-offline { bottom: calc(var(--mtabs-h) + 12px); }
+  body:has(.mtabs) .ibx-undo,
+  body:has(.mtabs) .tc-toast { bottom: calc(var(--mtabs-h) + 64px); }
 }

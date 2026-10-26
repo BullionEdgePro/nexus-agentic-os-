@@ -124,3 +124,13 @@ test("staff get Queue, Team, Follow-ups and Me at the bottom of a phone", () => 
   assert.match(read("apps", "web", "app", "mobile-tabs.css"), /@media \(max-width: 759px\)/);
   assert.match(read("apps", "web", "app", "console-shell.tsx"), /role === "employee" \? <MobileTabs \/> : null/);
 });
+
+test("nothing pinned to the bottom of a phone covers the tabs", () => {
+  const css = read("apps", "web", "app", "mobile-tabs.css");
+  const phone = css.slice(css.indexOf("@media (max-width: 759px)"));
+  for (const pinned of [".as-open", ".as ", ".asg-stack", ".ibx-offline", ".ibx-undo", ".tc-toast"]) {
+    const at = phone.indexOf(pinned);
+    assert.ok(at >= 0, `${pinned} is lifted on a phone`);
+    assert.match(phone.slice(at, phone.indexOf("}", at)), /bottom: calc\(var\(--mtabs-h\)/);
+  }
+});
