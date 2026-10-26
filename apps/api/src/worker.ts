@@ -1,9 +1,11 @@
 import { Worker } from "bullmq";
-import type { InboundWebhookJob, BroadcastSendJob } from "@nexus/shared";
+import type { InboundWebhookJob, BroadcastSendJob, EmailBroadcastSendJob } from "@nexus/shared";
 import { INBOUND_WEBHOOK_QUEUE, getRedisConnection } from "./queue/queue.js";
 import { processInboundWebhookJob } from "./queue/processor.js";
 import { BROADCAST_SEND_QUEUE } from "./queue/broadcast-queue.js";
 import { processBroadcastSendJob } from "./queue/broadcast-processor.js";
+import { EMAIL_BROADCAST_QUEUE } from "./queue/email-broadcast-queue.js";
+import { processEmailBroadcastJob } from "./queue/email-broadcast-processor.js";
 import { KNOWLEDGE_REINDEX_QUEUE, scheduleKnowledgeReindex } from "./queue/reindex-queue.js";
 import { processKnowledgeReindexJob } from "./queue/reindex-processor.js";
 import { TEMPLATE_SYNC_QUEUE, scheduleTemplateSync } from "./queue/template-sync-queue.js";
@@ -63,6 +65,18 @@ const broadcastWorker = new Worker<BroadcastSendJob>(BROADCAST_SEND_QUEUE, proce
   concurrency: 5,
   limiter: { max: 20, duration: 1000 },
 });
+
+// Email campaigns (26 Oct 2026): one at a time, one every three seconds across
+// every mailbox — a pace Gmail and Hostinger read as a person sending, not a
+// spammer. The daily limit per mailbox is applied when the campaign is queued.
+const emailBroadcastWorker = new Worker<EmailBroadcastSendJob>(EMAIL_BROADCAST_QUEUE, processEmailBroadcastJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+  limiter: { max: 1, duration: 3000 },
+});
+emailBroadcastWorker.on("failed", (job, err) =>
+  logger.error({ jobId: job?.id, err }, "Failed to process email campaign job")
+);
 
 // Concurrency 1: a refresh cycle is embedding-bound, and running cycles in
 // parallel would multiply spend against a rate-limited quota for no gain.
@@ -263,6 +277,7 @@ async function shutdown() {
   await Promise.all([
     inboundWorker.close(),
     broadcastWorker.close(),
+    emailBroadcastWorker.close(),
     reindexWorker.close(),
     templateSyncWorker.close(),
     calendarSyncWorker.close(),

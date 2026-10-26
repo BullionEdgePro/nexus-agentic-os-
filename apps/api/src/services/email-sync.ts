@@ -37,7 +37,13 @@ import {
   withAllTenants,
   withTenant,
   markNotACustomer,
+  recordEmailBounce,
+  optOutOfEmailCampaigns,
+  pauseBroadcastIfFailing,
+  withAllTenants as withEveryTenant,
 } from "@nexus/db";
+import { looksLikeAnOptOut } from "@nexus/agents";
+import { bounceAddresses } from "../lib/campaign-email.js";
 import {
   fetchRecentInboxMailFull,
   fetchGmailProfile,
@@ -134,6 +140,8 @@ interface FetchedMail {
   from: string | null;
   body: string;
   snippet?: string | null;
+  /** Read only to recognise a bounce; the inbox does not store it. */
+  subject?: string | null;
   threadId?: string | null;
   receivedAt: string | null;
   /** True when no person wrote it: lists, bulk, no-reply, auto-replies. */
@@ -168,6 +176,23 @@ async function storeInboxMail(
     for (const m of messages) {
       const fromEmail = emailsIn(m.from)[0] ?? "";
       if (!fromEmail || fromEmail === ownerAddress) continue;
+      // A BOUNCE, read before automated mail is dropped (26 Oct 2026). A
+      // campaign email this mailbox sent that came back "address not found"
+      // marks that person failed and the address is never tried again. Matched
+      // against what was actually sent, so an address merely quoted changes
+      // nothing. Best effort: a bounce that cannot be read is still just mail.
+      for (const address of bounceAddresses({ from: m.from, subject: m.subject ?? null, body: m.body || m.snippet || "" })) {
+        try {
+          const hit = await recordEmailBounce(ownerAddress, address);
+          if (hit) {
+            await withEveryTenant("email bounce: the breaker for the campaign it came from", () =>
+              pauseBroadcastIfFailing(hit.broadcastId)
+            );
+          }
+        } catch (err) {
+          logger.warn({ err }, "A bounce could not be recorded (non-fatal)");
+        }
+      }
       if (m.automated) {
         skippedAutomated += 1;
         continue;
@@ -191,6 +216,13 @@ async function storeInboxMail(
         receivedAt: m.receivedAt,
       });
       if (inserted) newMessages += 1;
+      // "Unsubscribe" or "stop" in reply to a campaign email: no more campaign
+      // emails. The mail itself is kept like any other — a person wrote it.
+      if (inserted && looksLikeAnOptOut(freshPartOfEmail(m.body || m.snippet || ""))) {
+        await optOutOfEmailCampaigns(contactId).catch((err) =>
+          logger.warn({ err, contactId }, "Email opt-out could not be recorded (non-fatal)")
+        );
+      }
       // A platform's own mail (Shopify, noon, Amazon, Google, Carrefour
       // Marketplace) is kept and readable, but never a customer waiting.
       if (isPlatformSender(fromEmail)) {
@@ -233,6 +265,7 @@ export async function runEmailSync(
       from: m.from,
       body: m.body,
       snippet: m.snippet,
+      subject: m.subject,
       threadId: m.threadId,
       receivedAt: m.receivedAt,
       automated: isAutomatedMail({

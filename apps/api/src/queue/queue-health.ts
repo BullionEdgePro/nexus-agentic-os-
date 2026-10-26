@@ -1,6 +1,7 @@
 import { Queue } from "bullmq";
 import { getRedisConnection, INBOUND_WEBHOOK_QUEUE } from "./queue.js";
 import { BROADCAST_SEND_QUEUE } from "./broadcast-queue.js";
+import { EMAIL_BROADCAST_QUEUE } from "./email-broadcast-queue.js";
 import { FORECAST_QUEUE } from "./forecast-queue.js";
 import { OPERATORS_QUEUE } from "./operators-queue.js";
 import { PROCEDURE_INFERENCE_QUEUE } from "./procedures-queue.js";
@@ -54,6 +55,7 @@ const QUEUES = [
   INBOUND_WEBHOOK_QUEUE,
   SOCIAL_INBOUND_QUEUE,
   BROADCAST_SEND_QUEUE,
+  EMAIL_BROADCAST_QUEUE,
   OPERATORS_QUEUE,
   QUALITY_ROLLUP_QUEUE,
   TEMPLATE_SYNC_QUEUE,

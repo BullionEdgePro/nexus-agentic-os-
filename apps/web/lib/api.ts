@@ -1084,10 +1084,19 @@ export interface BroadcastTemplate {
   createdAt: string;
 }
 
+export type CampaignStatus = "draft" | "scheduled" | "sending" | "completed" | "failed" | "paused" | "stopped";
+
 export interface BroadcastSummary {
   id: string;
-  templateName: string;
-  status: "draft" | "scheduled" | "sending" | "completed" | "failed";
+  /** Null for an email campaign, which has no Meta template. */
+  templateName: string | null;
+  status: CampaignStatus;
+  /** Which door it left by (26 Oct 2026). */
+  channel: "whatsapp" | "email";
+  emailSubject: string | null;
+  fromMailbox: string | null;
+  /** Never tried: stopped or paused before reaching them. */
+  notSent: number;
   recipients: number;
   /** Accepted by Meta. A 2xx means it took the message, not that anybody got it. */
   sent: number;
@@ -1107,11 +1116,23 @@ export interface BroadcastSummary {
   createdAt: string;
 }
 
+/** How an email campaign would go out — said before anything is sent. */
+export interface EmailCampaignSide {
+  /** People who can be emailed: an address, not unsubscribed, not bounced. */
+  reachable: number;
+  /** The mailbox it would leave from, or null with fromError saying why. */
+  from: string | null;
+  fromError: string | null;
+  /** People per day, today first: [61], or [300, 120]. */
+  plan: number[];
+}
+
 export function getBroadcasts(orgSlug: BusinessSlug): Promise<{
   templates: BroadcastTemplate[];
   broadcasts: BroadcastSummary[];
   reachable: number;
   canSend: boolean;
+  email: EmailCampaignSide;
 }> {
   return request(`/api/broadcasts/${orgSlug}`);
 }
@@ -1141,6 +1162,21 @@ export function sendBroadcast(id: string): Promise<{ broadcastId: string; enqueu
   // the body carries only an optional audience filter. Sent as `{}` rather than
   // omitted because the route parses JSON from it.
   return request(`/api/broadcasts/${id}/send`, { method: "POST", body: "{}" });
+}
+
+/** An email campaign to everyone the business can email, from the business mailbox. */
+export function sendBusinessEmailCampaign(
+  orgSlug: BusinessSlug,
+  input: { subject: string; body: string }
+): Promise<{ broadcastId: string; enqueued: number; plan: number[]; from: string }> {
+  return request(`/api/broadcasts/${orgSlug}/email`, { method: "POST", body: JSON.stringify(input) });
+}
+
+/** An owner's Resume / Stop on any campaign. Two literal paths, so each is checkable. */
+export function controlBroadcast(id: string, action: "resume" | "stop"): Promise<{ ok: true; requeued?: number }> {
+  return action === "resume"
+    ? request(`/api/broadcasts/${id}/resume`, { method: "POST", body: "{}" })
+    : request(`/api/broadcasts/${id}/stop`, { method: "POST", body: "{}" });
 }
 
 // ============================================================
@@ -2699,6 +2735,10 @@ export interface MyCampaign {
   status: string;
   createdAt: string;
   templateName: string | null;
+  channel: "whatsapp" | "email";
+  emailSubject: string | null;
+  /** Never tried: stopped or paused before reaching them. */
+  notSent: number;
   sent: number;
   /** Of `sent`, confirmed on the phone by WhatsApp (a read counts). */
   delivered: number;
@@ -2729,6 +2769,13 @@ export interface MyCampaignsView {
   sendsFrom: string;
   audience: Array<{ displayName: string | null; waId: string }>;
   templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;
+  /** The email side of the same book (26 Oct 2026). */
+  email: EmailCampaignSide & {
+    /** True when it leaves from their own mailbox, false for the business one. */
+    fromOwn: boolean;
+    audience: Array<{ displayName: string | null; email: string }>;
+    senderName: string;
+  };
 }
 
 export function getMyCampaigns(): Promise<MyCampaignsView> {
@@ -2749,6 +2796,35 @@ export function getCampaignReadiness(
 /** One copy of a message to one number, through the campaign's own send. Leaves no campaign behind. */
 export function sendMyCampaignTest(templateId: string, to: string): Promise<{ ok: true; messageId: string | null }> {
   return request("/api/my/campaigns/test", { method: "POST", body: JSON.stringify({ templateId, to }) });
+}
+
+/** Send an email campaign to everyone in your book who can be emailed. */
+export function sendMyEmailCampaign(input: {
+  subject: string;
+  body: string;
+}): Promise<{ broadcastId: string; enqueued: number; plan: number[]; from: string }> {
+  return request("/api/my/campaigns/email", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** The same email, to one address you type. Leaves no campaign behind. */
+export function sendMyEmailCampaignTest(input: {
+  subject: string;
+  body: string;
+  to: string;
+}): Promise<{ ok: true; from: string }> {
+  return request("/api/my/campaigns/email/test", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Tidy a campaign email's wording; {name} is kept as written. */
+export function polishCampaignText(text: string): Promise<{ text: string }> {
+  return request("/api/my/campaigns/polish", { method: "POST", body: JSON.stringify({ text }) });
+}
+
+/** Resume or stop one of your own campaigns. */
+export function controlMyCampaign(id: string, action: "resume" | "stop"): Promise<{ ok: true; requeued?: number }> {
+  return action === "resume"
+    ? request(`/api/my/campaigns/${id}/resume`, { method: "POST", body: "{}" })
+    : request(`/api/my/campaigns/${id}/stop`, { method: "POST", body: "{}" });
 }
 
 export function claimMyNumber(phoneNumberId: string): Promise<{ ok: true }> {

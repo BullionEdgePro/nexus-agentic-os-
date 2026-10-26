@@ -455,18 +455,29 @@ export async function sendGmail(
     threadId?: string | null;
     inReplyTo?: string | null;
     references?: string | null;
+    /** A campaign email's HTML version; sent as multipart/alternative with the text. */
+    html?: string | null;
+    /** Extra headers — a campaign's List-Unsubscribe pair. */
+    headers?: Record<string, string>;
   }
 ): Promise<string> {
   // Folded per RFC 2047 so a non-ASCII subject is not mangled. Bodies are
   // base64 anyway, so only the subject needs it.
   const subject = `=?UTF-8?B?${Buffer.from(input.subject, "utf8").toString("base64")}?=`;
-  const lines = [
-    `To: ${input.to}`,
-    `Subject: ${subject}`,
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
-  ];
+  const lines = [`To: ${input.to}`, `Subject: ${subject}`, "MIME-Version: 1.0"];
+  for (const [name, value] of Object.entries(input.headers ?? {})) {
+    // A header name of letters and dashes, a value on one line: nothing a
+    // caller passes can start a header of its own.
+    if (/^[A-Za-z-]+$/.test(name) && !/[\r\n]/.test(value)) lines.push(`${name}: ${value}`);
+  }
+  // A campaign carries its HTML beside the text, so a client that shows only
+  // text still shows all of it. A reply stays the single text part it always was.
+  const boundary = input.html ? `nx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}` : null;
+  if (boundary) {
+    lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+  } else {
+    lines.push('Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64");
+  }
   // In-Reply-To names the single message being answered; References is the whole
   // chain a strict client walks. With only one id to hand, both carry it — which
   // is valid and is what threads the reply for the recipient.
@@ -474,11 +485,24 @@ export async function sendGmail(
     lines.push(`In-Reply-To: ${input.inReplyTo}`);
     lines.push(`References: ${input.references || input.inReplyTo}`);
   }
-  const mime = [
-    ...lines,
-    "",
-    Buffer.from(input.body, "utf8").toString("base64"),
-  ].join("\r\n");
+  const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
+  const mime = boundary
+    ? [
+        ...lines,
+        "",
+        `--${boundary}`,
+        'Content-Type: text/plain; charset="UTF-8"',
+        "Content-Transfer-Encoding: base64",
+        "",
+        b64(input.body),
+        `--${boundary}`,
+        'Content-Type: text/html; charset="UTF-8"',
+        "Content-Transfer-Encoding: base64",
+        "",
+        b64(input.html ?? ""),
+        `--${boundary}--`,
+      ].join("\r\n")
+    : [...lines, "", b64(input.body)].join("\r\n");
 
   const body: Record<string, unknown> = { raw: Buffer.from(mime, "utf8").toString("base64url") };
   // Gmail rejects a threadId whose subject does not match the thread, so the

@@ -540,7 +540,20 @@ export interface CreateBroadcastInput {
   scheduledAt?: string;
 }
 
-export type BroadcastStatus = "draft" | "scheduled" | "sending" | "completed" | "failed" | "paused";
+export type BroadcastStatus = "draft" | "scheduled" | "sending" | "completed" | "failed" | "paused" | "stopped";
+
+/** Which door a campaign leaves by (migration 103). One campaign, one channel. */
+export type BroadcastChannel = "whatsapp" | "email";
+
+/**
+ * Job payload for one email of a campaign. Ids only: the processor reads the
+ * campaign, the address and the opt-out state fresh, so an unsubscribe between
+ * queueing and sending is honoured.
+ */
+export interface EmailBroadcastSendJob {
+  broadcastId: string;
+  recipientId: string;
+}
 
 /** Job payload for the per-recipient broadcast-send queue. */
 export interface BroadcastSendJob {

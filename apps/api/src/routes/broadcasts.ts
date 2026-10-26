@@ -14,12 +14,18 @@ import {
   getSegment,
   segmentContacts,
   isWhatsAppNumberRetired,
+  businessEmailAudience,
 } from "@nexus/db";
+import { resolveCampaignMailbox } from "../services/campaign-mailbox.js";
+import { planEmailCampaign, queueEmailCampaign } from "../services/email-campaign-send.js";
+import { resumeCampaign, stopCampaign } from "../services/campaign-control.js";
+import { emailContentRefusal } from "./my-campaigns.js";
 import type { AudienceFilter } from "@nexus/shared";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { syncTemplatesForOrganization } from "../services/template-sync.js";
 import { logger } from "../lib/logger.js";
+import { explainSendError } from "../lib/send-errors.js";
 
 export const broadcastsRoute = new Hono();
 
@@ -32,11 +38,14 @@ broadcastsRoute.get("/:slug", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
-  const [templates, broadcasts, reachable] = await Promise.all([
+  const [templates, broadcasts, reachable, emailAudience, mailbox] = await Promise.all([
     listBroadcastTemplates(organization.id, organization.whatsappBusinessAccountId),
     listBroadcasts(organization.id),
     countReachableContacts(organization.id),
+    businessEmailAudience(organization.id),
+    resolveCampaignMailbox(organization.id, null),
   ]);
+  const mailboxAddress = "error" in mailbox ? null : mailbox.address;
 
   // Every template on the shared WhatsApp account arrives under every business,
   // so the list is annotated rather than trusted. "own" and "unattributed" are
@@ -54,8 +63,20 @@ broadcastsRoute.get("/:slug", async (c) => {
 
   return c.json({
     templates: annotated,
-    broadcasts,
+    // Meta's raw error bodies, in words — the staff history already did this.
+    broadcasts: broadcasts.map((broadcast) => ({
+      ...broadcast,
+      failureReasons: [...new Set(broadcast.failureReasons.map(explainSendError))],
+    })),
     reachable,
+    // The email side (26 Oct 2026): everyone the business can email, from the
+    // business mailbox, paced as it would actually go.
+    email: {
+      reachable: emailAudience.length,
+      from: mailboxAddress,
+      fromError: "error" in mailbox ? mailbox.error : null,
+      plan: await planEmailCampaign(emailAudience.length, mailboxAddress),
+    },
     // Approved is not enough on its own. This used to read `some(isApproved)`,
     // which was true for every business on this deployment the moment any
     // template anywhere on the account was approved — including four belonging
@@ -84,6 +105,47 @@ broadcastsRoute.post("/:slug/sync", async (c) => {
     logger.error({ slug: organization.slug, err }, "Manual template sync failed");
     return c.json({ error: "Could not reach Meta. Try again shortly." }, 502);
   }
+});
+
+// An email campaign to everyone the business can reach by email (26 Oct 2026).
+// Sent at once — there is no draft step, because there is no Meta approval to
+// wait for — from the business mailbox, never from one employee's own address.
+broadcastsRoute.post("/:slug/email", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const refused = emailContentRefusal(body.subject, body.body);
+  if (refused) return c.json({ error: refused }, 400);
+
+  const audience = await businessEmailAudience(organization.id);
+  if (audience.length === 0) {
+    return c.json({ error: "Nobody this business serves can be emailed — no addresses, or everyone unsubscribed." }, 422);
+  }
+  const mailbox = await resolveCampaignMailbox(organization.id, null);
+  if ("error" in mailbox) return c.json({ error: mailbox.error }, 409);
+
+  const queued = await queueEmailCampaign({
+    organizationId: organization.id,
+    employeeId: null,
+    subject: body.subject.trim(),
+    body: body.body.trim(),
+    audience,
+    mailbox,
+  });
+  return c.json({ ...queued, enqueued: audience.length, from: mailbox.address });
+});
+
+// Resume or stop any campaign of any business — an owner's controls, behind
+// operatorOnly at the mount like everything under /api/broadcasts.
+broadcastsRoute.post("/:id/resume", async (c) => {
+  const result = await resumeCampaign(c.req.param("id"));
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+broadcastsRoute.post("/:id/stop", async (c) => {
+  const result = await stopCampaign(c.req.param("id"));
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
 });
 
 // Creates a broadcast in draft/scheduled state. Actually sending happens via

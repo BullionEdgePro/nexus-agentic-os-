@@ -6,6 +6,7 @@ export * from "./conversations.js";
 export * from "./evaluations.js";
 export * from "./metrics.js";
 export * from "./broadcasts.js";
+export * from "./email-campaigns.js";
 export * from "./employees.js";
 export * from "./calendars.js";
 export * from "./routing.js";

@@ -10,6 +10,10 @@ import {
   releaseMyNumber,
   sendMyCampaign,
   sendMyCampaignTest,
+  sendMyEmailCampaign,
+  sendMyEmailCampaignTest,
+  polishCampaignText,
+  controlMyCampaign,
   type MyCampaignsView,
   type MyChannel,
   type ReadinessCheck,
@@ -18,6 +22,7 @@ import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../my-clients/my-clients.css";
 import "./my-campaigns.css";
+import { CampaignControls, EmailCampaignForm } from "./email-campaign";
 
 /**
  * Messaging your whole book at once, and the number it leaves from.
@@ -41,7 +46,8 @@ const STATUS_WORDS: Record<string, string> = {
   sending: "Sending",
   completed: "Finished",
   failed: "Failed — nothing was delivered",
-  paused: "Paused — most messages were refused",
+  paused: "Paused — most were refused, or the mailbox stopped working",
+  stopped: "Stopped",
 };
 
 export default function MyCampaignsPage() {
@@ -57,6 +63,9 @@ export default function MyCampaignsPage() {
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  // WhatsApp or email (26 Oct 2026): one campaign, one channel, never both.
+  const [tab, setTab] = useState<"whatsapp" | "email">("whatsapp");
+  const [emailSubject, setEmailSubject] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
     try {
@@ -85,6 +94,7 @@ export default function MyCampaignsPage() {
   }
 
   const audience = view?.audience ?? [];
+  const email = view?.email;
   const ready = (view?.readiness ?? []).every((check) => check.ok === true);
   const template = view?.templates.find((candidate) => candidate.id === chosen);
 
@@ -95,20 +105,52 @@ export default function MyCampaignsPage() {
         <p>One message to everyone in your own book. Not the business&rsquo;s customers — yours.</p>
       </header>
 
-      <NumberPanel channel={channel} onChanged={load} />
+      <div className="ecf-tabs" role="tablist" aria-label="Send by">
+        <button type="button" role="tab" aria-selected={tab === "whatsapp"} className={tab === "whatsapp" ? "on" : ""} onClick={() => setTab("whatsapp")}>
+          WhatsApp<b>{audience.length}</b>
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "email"} className={tab === "email" ? "on" : ""} onClick={() => setTab("email")}>
+          Email<b>{email?.reachable ?? 0}</b>
+        </button>
+      </div>
 
-      {view?.readiness ? <Readiness checks={view.readiness} /> : null}
+      {tab === "email" ? (
+        view && !view.canBroadcast ? (
+          <p className="cmp-blocked">Campaigns are switched off for your account — ask the owner.</p>
+        ) : email ? (
+          <section className="cmp-compose">
+            <h2>Send one by email</h2>
+            <EmailCampaignForm
+              key={emailSubject ?? "blank"}
+              side={email}
+              audienceLabel="your book"
+              audience={email.audience}
+              sampleName={email.audience[0]?.displayName ?? null}
+              initialSubject={emailSubject}
+              defaultTestTo={email.fromOwn && email.from ? email.from : ""}
+              onSend={(input) => sendMyEmailCampaign(input)}
+              onTest={(input) => sendMyEmailCampaignTest(input)}
+              onPolish={async (text) => (await polishCampaignText(text)).text}
+              onSent={() => void load()}
+            />
+          </section>
+        ) : null
+      ) : null}
 
-      {view && !view.canBroadcast ? (
+      {tab === "whatsapp" ? <NumberPanel channel={channel} onChanged={load} /> : null}
+
+      {tab === "whatsapp" && view?.readiness ? <Readiness checks={view.readiness} /> : null}
+
+      {tab === "whatsapp" && view && !view.canBroadcast ? (
         <p className="cmp-blocked">
           Campaigns are switched off for your account. They are on by default, so somebody has
           turned this one off deliberately — ask the owner.
         </p>
       ) : null}
 
-      {view?.canBroadcast ? (
+      {tab === "whatsapp" && view?.canBroadcast ? (
         <section className="cmp-compose">
-          <h2>Send one</h2>
+          <h2>Send one on WhatsApp</h2>
 
           <p className="cmp-facts">
             <strong>{audience.length}</strong>{" "}
@@ -276,6 +318,24 @@ export default function MyCampaignsPage() {
               WhatsApp confirms it — a message accepted is not yet a message delivered.
             </p>
           ) : null}
+          {/* The other half of the book. A WhatsApp campaign never reaches the
+              people who only ever emailed — say so, and make the email one a click. */}
+          {sent !== null && email && email.reachable > 0 && !email.fromError ? (
+            <p className="ecf-nudge">
+              {email.reachable} {email.reachable === 1 ? "client" : "clients"} in your book can be reached by
+              email. Send them an email version?
+              <button
+                type="button"
+                className="cmp-link"
+                onClick={() => {
+                  setEmailSubject(`A message from ${email.senderName.split(/\s+/)[0] ?? "us"}`);
+                  setTab("email");
+                }}
+              >
+                Write the email
+              </button>
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -286,6 +346,7 @@ export default function MyCampaignsPage() {
             <thead>
               <tr>
                 <th scope="col">When</th>
+                <th scope="col">By</th>
                 <th scope="col">Message</th>
                 <th scope="col">Sent</th>
                 <th scope="col">Delivered</th>
@@ -297,9 +358,13 @@ export default function MyCampaignsPage() {
               {view.campaigns.map((campaign) => (
                 <tr key={campaign.id}>
                   <td>{new Date(campaign.createdAt).toLocaleString()}</td>
-                  <td>{campaign.templateName ?? "—"}</td>
+                  <td className="ecf-channel">{campaign.channel === "email" ? "Email" : "WhatsApp"}</td>
+                  <td>{campaign.channel === "email" ? campaign.emailSubject : campaign.templateName ?? "—"}</td>
                   <td className="mc-num">
                     {campaign.sent} of {campaign.total}
+                    {campaign.notSent && (campaign.status === "stopped" || campaign.status === "paused") ? (
+                      <span className="ecf-channel"> · {campaign.notSent} not sent</span>
+                    ) : null}
                   </td>
                   <td className="mc-num">{campaign.delivered || "—"}</td>
                   <td className="mc-num">
@@ -314,7 +379,14 @@ export default function MyCampaignsPage() {
                       </ul>
                     ) : null}
                   </td>
-                  <td>{STATUS_WORDS[campaign.status] ?? campaign.status}</td>
+                  <td>
+                    {STATUS_WORDS[campaign.status] ?? campaign.status}
+                    <CampaignControls
+                      status={campaign.status}
+                      act={(action) => controlMyCampaign(campaign.id, action)}
+                      onDone={() => void load()}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

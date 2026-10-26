@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import type { SessionScope } from "../lib/session.js";
 import {
   findEmployeeById,
   findOrganizationById,
@@ -16,7 +17,16 @@ import {
   updateBroadcastStatus,
   isWhatsAppNumberRetired,
   isWaIdOptedOut,
+  myClientsForEmailCampaign,
+  campaignForControl,
 } from "@nexus/db";
+import { completeText } from "@nexus/agents";
+import { renderCampaignEmail, explainEmailSendError } from "../lib/campaign-email.js";
+import { apiBaseUrl } from "../lib/public-urls.js";
+import { unsubscribeUrl } from "./unsubscribe.js";
+import { resolveCampaignMailbox, sendFromMailbox } from "../services/campaign-mailbox.js";
+import { planEmailCampaign, queueEmailCampaign } from "../services/email-campaign-send.js";
+import { resumeCampaign, stopCampaign } from "../services/campaign-control.js";
 import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { listWabaNumbers, readNumberStanding, sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
@@ -176,9 +186,26 @@ myCampaignsRoute.get("/campaigns", async (c) => {
 
   const readiness = await campaignReadiness(desk.employeeId, desk.organizationId);
 
+  // THE EMAIL SIDE (26 Oct 2026): who in the book can be emailed, from which
+  // mailbox, and how the list would be paced — said before anything is written.
+  const emailAudience = await withTenant(desk.organizationId, () =>
+    myClientsForEmailCampaign(desk.organizationId, desk.employeeId)
+  );
+  const mailbox = await resolveCampaignMailbox(desk.organizationId, desk.employeeId);
+  const mailboxAddress = "error" in mailbox ? null : mailbox.address;
+
   return c.json({
     campaigns,
     readiness,
+    email: {
+      reachable: emailAudience.length,
+      from: mailboxAddress,
+      fromOwn: "error" in mailbox ? false : mailbox.employeeId !== null,
+      fromError: "error" in mailbox ? mailbox.error : null,
+      plan: await planEmailCampaign(emailAudience.length, mailboxAddress),
+      audience: emailAudience.map((person) => ({ displayName: person.displayName, email: person.email })),
+      senderName: employee.fullName,
+    },
     canBroadcast: employee.canBroadcast ?? false,
     allowance,
     dailyCeiling: ceiling,
@@ -404,6 +431,140 @@ myCampaignsRoute.post("/campaigns", async (c) => {
     healthWarning,
   });
 });
+
+// ============================================================
+// Email campaigns (26 Oct 2026)
+// ============================================================
+
+const EMAIL_SUBJECT_MAX = 200;
+const EMAIL_BODY_MAX = 10_000;
+
+/** Subject and message as typed, or why not. Too long is refused, never cut short. */
+export function emailContentRefusal(subject: unknown, body: unknown): string | null {
+  if (typeof subject !== "string" || !subject.trim()) return "Write a subject.";
+  if (typeof body !== "string" || !body.trim()) return "Write the message.";
+  if (subject.trim().length > EMAIL_SUBJECT_MAX) return `Keep the subject under ${EMAIL_SUBJECT_MAX} characters.`;
+  if (body.trim().length > EMAIL_BODY_MAX) return "Keep the message under 10,000 characters.";
+  return null;
+}
+
+export const looksLikeAnEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+
+/** Send an email campaign to everybody in your book who can be emailed. */
+myCampaignsRoute.post("/campaigns/email", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const refused = emailContentRefusal(body.subject, body.body);
+  if (refused) return c.json({ error: refused }, 400);
+
+  const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
+  if (!employee) return c.json({ error: "Account not found." }, 404);
+  if (!employee.canBroadcast) return c.json({ error: "Campaigns are not switched on for you." }, 403);
+
+  const audience = await withTenant(desk.organizationId, () =>
+    myClientsForEmailCampaign(desk.organizationId, desk.employeeId)
+  );
+  if (audience.length === 0) {
+    return c.json({ error: "Nobody in your book can be emailed — no addresses, or everyone unsubscribed." }, 422);
+  }
+  const mailbox = await resolveCampaignMailbox(desk.organizationId, desk.employeeId);
+  if ("error" in mailbox) return c.json({ error: mailbox.error }, 409);
+
+  const queued = await queueEmailCampaign({
+    organizationId: desk.organizationId,
+    employeeId: desk.employeeId,
+    subject: body.subject.trim(),
+    body: body.body.trim(),
+    audience,
+    mailbox,
+  });
+  return c.json({ ...queued, enqueued: audience.length, from: mailbox.address });
+});
+
+/**
+ * Try the email on yourself first. The same renderer and the same mailbox as
+ * the campaign, to one address, and nothing written: no campaign row, no
+ * recipient, nothing counted. The unsubscribe link in it goes nowhere real.
+ */
+myCampaignsRoute.post("/campaigns/email/test", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const refused = emailContentRefusal(body.subject, body.body);
+  if (refused) return c.json({ error: refused }, 400);
+  const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
+  if (!looksLikeAnEmail(to)) return c.json({ error: "Which email address should the test go to?" }, 400);
+
+  const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
+  const organization = await withTenant(desk.organizationId, () => findOrganizationById(desk.organizationId));
+  if (!employee || !organization) return c.json({ error: "Account not found." }, 404);
+  if (!employee.canBroadcast) return c.json({ error: "Campaigns are not switched on for you." }, 403);
+  const mailbox = await resolveCampaignMailbox(desk.organizationId, desk.employeeId);
+  if ("error" in mailbox) return c.json({ error: mailbox.error }, 409);
+  if (!takeTestSend(desk.employeeId)) {
+    return c.json({ error: `That is ${TEST_SENDS_PER_HOUR} tests this hour — try again later.` }, 429);
+  }
+
+  const mail = renderCampaignEmail({
+    subject: `[Test] ${body.subject.trim()}`,
+    body: body.body.trim(),
+    displayName: employee.fullName,
+    unsubscribeUrl: unsubscribeUrl(apiBaseUrl(), "test"),
+    businessName: organization.name,
+    fromAddress: mailbox.address,
+  });
+  try {
+    await sendFromMailbox(desk.organizationId, mailbox, { to, ...mail });
+    return c.json({ ok: true, from: mailbox.address });
+  } catch (err) {
+    logger.warn({ employeeId: desk.employeeId, err }, "Email campaign test refused");
+    return c.json({ error: explainEmailSendError(err) }, 502);
+  }
+});
+
+/** The instruction for polishing a campaign email: {name} survives, nothing is added. */
+export const CAMPAIGN_POLISH_PROMPT =
+  "You fix spelling, grammar and clarity in a short marketing email a business is sending to its own customers. Keep the meaning, the tone, and every specific fact, name, price, date, link and number exactly as written. Keep {name} exactly as written wherever it appears — it is filled in later. Do not add offers, claims or information, and do not add a greeting or sign-off that is not there. Return ONLY the corrected text, with no preamble or quotation marks.";
+
+/** Tidy the wording of a campaign email. */
+myCampaignsRoute.post("/campaigns/polish", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+  const body = await c.req.json<{ text?: unknown }>().catch(() => null);
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "Nothing to polish." }, 400);
+  if (text.length > 2000) return c.json({ error: "That is longer than the polisher takes at once." }, 413);
+  const polished = await completeText({ system: CAMPAIGN_POLISH_PROMPT, prompt: text, maxTokens: 900 });
+  if (!polished) return c.json({ error: "The polisher is not available right now." }, 503);
+  return c.json({ text: polished });
+});
+
+/**
+ * Resume or stop one of your own campaigns. Whose campaign is compared to the
+ * person signed in, literally: another person's campaign id answers 404, the
+ * same as an id that does not exist.
+ */
+async function controlOwnCampaign(c: Context, action: "resume" | "stop") {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+  // Read straight from the session as well as through deskOf, so the check is
+  // visible where the id arrives: a staff member, of this business, owning it.
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!scope || scope.role !== "employee" || scope.organizationId !== desk.organizationId) {
+    return c.json({ error: "Campaign not found." }, 404);
+  }
+  const campaign = await withTenant(desk.organizationId, () => campaignForControl(c.req.param("id") ?? ""));
+  if (!campaign || campaign.employeeId !== desk.employeeId || campaign.organizationId !== desk.organizationId) {
+    return c.json({ error: "Campaign not found." }, 404);
+  }
+  const result = action === "resume" ? await resumeCampaign(campaign.id) : await stopCampaign(campaign.id);
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+}
+
+myCampaignsRoute.post("/campaigns/:id/resume", (c) => controlOwnCampaign(c, "resume"));
+myCampaignsRoute.post("/campaigns/:id/stop", (c) => controlOwnCampaign(c, "stop"));
 
 /**
  * Whether this template may go out from this sender — the checks a campaign and

@@ -21,6 +21,7 @@ import { adminAuthRoute } from "./routes/admin-auth.js";
 import { activityRoute } from "./routes/activity.js";
 import { qualityRoute } from "./routes/quality.js";
 import { linksRoute, publicLinksRoute } from "./routes/links.js";
+import { unsubscribeRoute } from "./routes/unsubscribe.js";
 import { automationsRoute } from "./routes/automations.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { quickRepliesRoute } from "./routes/quick-replies.js";
@@ -283,6 +284,9 @@ app.route("/auth", adminAuthRoute);
 // will never have an operator account. See routes/links.ts for why this is
 // public-facing material by definition rather than by concession.
 app.route("/links", publicLinksRoute);
+// The unsubscribe link in every campaign email (26 Oct 2026): public, outside
+// /api, for a customer who is signed in to nothing.
+app.route("/unsubscribe", unsubscribeRoute);
 app.route("/api/organizations", organizationsRoute);
 // Same mount point: knowledge is addressed per organization
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.

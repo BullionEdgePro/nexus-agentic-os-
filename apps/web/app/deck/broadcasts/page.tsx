@@ -9,6 +9,9 @@ import {
   sendBroadcast,
   syncTemplates,
   listCustomerLists,
+  sendBusinessEmailCampaign,
+  controlBroadcast,
+  type EmailCampaignSide,
   type CustomerList,
   type BroadcastTemplate,
   type BroadcastSummary, readableError } from "@/lib/api";
@@ -18,6 +21,17 @@ import "../deck.css";
 import "../activity/activity.css";
 import "./broadcasts.css";
 import { CustomerLists, describe } from "./customer-lists";
+import { CampaignControls, EmailCampaignForm } from "../my-campaigns/email-campaign";
+
+const STATUS_WORDS: Record<string, string> = {
+  sending: "sending",
+  completed: "finished",
+  failed: "failed",
+  paused: "paused",
+  stopped: "stopped",
+  draft: "draft",
+  scheduled: "scheduled",
+};
 
 /**
  * Bulk WhatsApp messaging.
@@ -40,6 +54,9 @@ export default function BroadcastsPage() {
   const [broadcasts, setBroadcasts] = useState<BroadcastSummary[]>([]);
   const [reachable, setReachable] = useState(0);
   const [canSend, setCanSend] = useState(false);
+  // WhatsApp or email (26 Oct 2026): one campaign, one channel.
+  const [tab, setTab] = useState<"whatsapp" | "email">("whatsapp");
+  const [emailSide, setEmailSide] = useState<EmailCampaignSide | null>(null);
   const [templateId, setTemplateId] = useState("");
   // The audience: everyone reachable ("") or one saved customer list.
   const [lists, setLists] = useState<CustomerList[]>([]);
@@ -69,6 +86,7 @@ export default function BroadcastsPage() {
       setBroadcasts(data.broadcasts);
       setReachable(data.reachable);
       setCanSend(data.canSend);
+      setEmailSide(data.email);
       // From the SENDABLE set. Picking the first approved row defaulted four of
       // the five businesses to somebody else's template, pre-selected.
       setTemplateId(
@@ -158,8 +176,8 @@ export default function BroadcastsPage() {
           <h1>Campaigns</h1>
         </header>
         <p className="act-lede">
-          Send one approved WhatsApp template to every contact of a business at once. Everything
-          goes out from the shared number, so a customer sees the same sender they already know.
+          One message to every customer of a business — on WhatsApp, as an approved template from the
+          shared number, or by email from the business mailbox. Each campaign goes on one channel.
         </p>
 
         <BusinessTabs
@@ -173,6 +191,16 @@ export default function BroadcastsPage() {
           includeAll={false}
         />
 
+        <div className="ecf-tabs" role="tablist" aria-label="Send by">
+          <button type="button" role="tab" aria-selected={tab === "whatsapp"} className={tab === "whatsapp" ? "on" : ""} onClick={() => setTab("whatsapp")}>
+            WhatsApp<b>{reachable}</b>
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "email"} className={tab === "email" ? "on" : ""} onClick={() => setTab("email")}>
+            Email<b>{emailSide?.reachable ?? 0}</b>
+          </button>
+        </div>
+
+        {tab === "whatsapp" ? (
         <div className="bc-syncbar">
           <button className="bc-sync" onClick={handleSync} disabled={busy}>
             {busy ? "Checking…" : "Check Meta for updates"}
@@ -183,6 +211,7 @@ export default function BroadcastsPage() {
               : "Never checked"}
           </span>
         </div>
+        ) : null}
 
         {loading ? (
           <div className="act-empty">Loading…</div>
@@ -199,6 +228,23 @@ export default function BroadcastsPage() {
            * the only question this screen exists to answer.
            */
           <p className="act-msg">{loadError}</p>
+        ) : tab === "email" ? (
+          <>
+            <section className="bc-compose">
+              <h2 className="act-sub-head">Compose an email</h2>
+              {emailSide ? (
+                <EmailCampaignForm
+                  key={business}
+                  side={emailSide}
+                  audienceLabel={label(business)}
+                  sampleName={null}
+                  onSend={(input) => sendBusinessEmailCampaign(business, input)}
+                  onSent={() => void load(business)}
+                />
+              ) : null}
+            </section>
+            <PastSends broadcasts={broadcasts} onChanged={() => void load(business)} />
+          </>
         ) : (
           <>
             {!canSend ? (
@@ -349,75 +395,85 @@ export default function BroadcastsPage() {
               </p>
             ) : null}
 
-            <h2 className="act-sub-head">Past sends</h2>
-            {broadcasts.length === 0 ? (
-              <div className="act-empty">Nothing sent yet.</div>
-            ) : (
-              <div className="act-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Template</th>
-                      <th>Status</th>
-                      <th>Recipients</th>
-                      {/* ACCEPTED AND DELIVERED ARE TWO COLUMNS BECAUSE THEY ARE
-                          TWO FACTS. This table had one, headed "Delivered", and
-                          the number under it counted recipients marked 'sent' —
-                          which is set the moment the Graph API returns 2xx, and
-                          2xx means Meta took the message. Nothing had ever
-                          written 'delivered' at all until migration 051, so the
-                          column was a claim about receipt built entirely from
-                          evidence of acceptance. */}
-                      <th>Accepted</th>
-                      <th>Delivered</th>
-                      <th>Failed</th>
-                      <th>Sent on</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {broadcasts.map((broadcast) => (
-                      <tr key={broadcast.id}>
-                        <td>{broadcast.templateName}</td>
-                        <td>
-                          <span className={`act-flag${broadcast.status === "failed" ? " warn" : ""}`}>
-                            {broadcast.status}
-                          </span>
-                        </td>
-                        <td>{broadcast.recipients}</td>
-                        <td>{broadcast.sent}</td>
-                        {/* An em dash rather than 0 where no receipt could have
-                            been recorded. A campaign sent before 051 has a
-                            genuine zero in the column and an unknown in
-                            reality, and printing the zero would turn a gap in
-                            the record into a statement that nobody received it. */}
-                        <td className={broadcast.delivered ? "" : "act-zero"}>
-                          {broadcast.sent > 0 && broadcast.delivered === 0 ? "—" : broadcast.delivered}
-                        </td>
-                        {/* WHY, under the count. "3 failed" sends somebody to
-                            read logs they do not have; the vendor's own sentence
-                            is the whole answer and it was being written to a log
-                            line and nowhere else. */}
-                        <td className={broadcast.failed ? "" : "act-zero"}>
-                          {broadcast.failed}
-                          {broadcast.failed > 0 && broadcast.failureReasons.length > 0 ? (
-                            <span className="bc-why">
-                              {broadcast.failureReasons.map((reason) => (
-                                <em key={reason}>{reason}</em>
-                              ))}
-                            </span>
-                          ) : null}
-                        </td>
-                        <td>{new Date(broadcast.createdAt).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <PastSends broadcasts={broadcasts} onChanged={() => void load(business)} />
           </>
         )}
       </div>
     </div>
+  );
+}
+
+/** Every campaign of this business, either channel, with Resume / Stop where it applies. */
+function PastSends({ broadcasts, onChanged }: { broadcasts: BroadcastSummary[]; onChanged: () => void }) {
+  return (
+    <>
+      <h2 className="act-sub-head">Past sends</h2>
+      {broadcasts.length === 0 ? (
+        <div className="act-empty">Nothing sent yet.</div>
+      ) : (
+        <div className="act-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Message</th>
+                <th>By</th>
+                <th>Status</th>
+                <th>Recipients</th>
+                {/* ACCEPTED AND DELIVERED ARE TWO COLUMNS BECAUSE THEY ARE TWO
+                    FACTS: 'sent' is set when WhatsApp or the mail server takes
+                    it, 'delivered' only by a receipt (migration 051). */}
+                <th>Accepted</th>
+                <th>Delivered</th>
+                <th>Failed</th>
+                <th>Sent on</th>
+              </tr>
+            </thead>
+            <tbody>
+              {broadcasts.map((broadcast) => (
+                <tr key={broadcast.id}>
+                  <td>{broadcast.channel === "email" ? broadcast.emailSubject : broadcast.templateName}</td>
+                  <td className="ecf-channel">{broadcast.channel === "email" ? "Email" : "WhatsApp"}</td>
+                  <td>
+                    <span className={`act-flag${broadcast.status === "failed" || broadcast.status === "paused" ? " warn" : ""}`}>
+                      {STATUS_WORDS[broadcast.status] ?? broadcast.status}
+                    </span>
+                    <CampaignControls
+                      status={broadcast.status}
+                      act={(action) => controlBroadcast(broadcast.id, action)}
+                      onDone={onChanged}
+                    />
+                  </td>
+                  <td>
+                    {broadcast.recipients}
+                    {broadcast.notSent && (broadcast.status === "stopped" || broadcast.status === "paused") ? (
+                      <span className="ecf-channel"> · {broadcast.notSent} not sent</span>
+                    ) : null}
+                  </td>
+                  <td>{broadcast.sent}</td>
+                  {/* No receipt — an email campaign never gets one, and a campaign
+                      sent before 051 has none either: an em dash, not a zero that
+                      claims nobody got it. */}
+                  <td className={broadcast.delivered ? "" : "act-zero"}>
+                    {broadcast.sent > 0 && broadcast.delivered === 0 ? "—" : broadcast.delivered}
+                  </td>
+                  <td className={broadcast.failed ? "" : "act-zero"}>
+                    {broadcast.failed}
+                    {broadcast.failed > 0 && broadcast.failureReasons.length > 0 ? (
+                      <span className="bc-why">
+                        {broadcast.failureReasons.map((reason) => (
+                          <em key={reason}>{reason}</em>
+                        ))}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td>{new Date(broadcast.createdAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   );
 }
 

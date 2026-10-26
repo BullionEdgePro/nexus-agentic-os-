@@ -11,7 +11,7 @@ import {
 import { sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { isUpstreamUnavailable } from "../scripts/upstream.js";
 import { logger } from "../lib/logger.js";
-import { explainSendError } from "../lib/send-errors.js";
+import { explainSendError, NO_WHATSAPP_NUMBER } from "../lib/send-errors.js";
 
 /**
  * Delivering one message of a campaign.
@@ -55,7 +55,16 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
     // every send: the jobs were all queued up front, so the pause has to be
     // honoured here, one recipient at a time. The recipient stays 'pending' —
     // nothing was tried for them.
-    if ((await broadcastStatus(broadcastId)) === "paused") return;
+    const current = await broadcastStatus(broadcastId);
+    if (current === "paused" || current === "stopped") return;
+
+    // NOBODY TO SEND TO (26 Oct 2026). An empty number used to go to Meta, which
+    // answered "The parameter to is required" fourteen times on 22 Oct. The
+    // audience already excludes these; this is the last line if it ever doesn't.
+    if (!contactWaId?.trim()) {
+      await updateBroadcastRecipientStatus(recipientId, "failed", null, NO_WHATSAPP_NUMBER);
+      return;
+    }
 
     let failure: string | null = null;
     try {
@@ -118,7 +127,7 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
     // Finishing never un-pauses: a paused campaign keeps pending recipients and
     // so is never "done", but a race between its last jobs must not overwrite
     // the pause either.
-    if (outcome.done && (await broadcastStatus(broadcastId)) !== "paused") {
+    if (outcome.done && (await broadcastStatus(broadcastId)) === "sending") {
       const status = outcome.sent === 0 && outcome.failed > 0 ? "failed" : "completed";
       await updateBroadcastStatus(broadcastId, status);
       logger.info({ broadcastId, ...outcome, status }, "Broadcast finished");

@@ -398,7 +398,14 @@ export async function listBroadcastTemplates(
 }
 
 export interface BroadcastSummary extends BroadcastRow {
-  templateName: string;
+  /** Null for an email campaign, which has no Meta template. */
+  templateName: string | null;
+  /** Migration 103: which door it left by, and an email campaign's subject. */
+  channel: "whatsapp" | "email";
+  emailSubject: string | null;
+  fromMailbox: string | null;
+  /** Never tried: a campaign stopped or paused before reaching them. */
+  notSent: number;
   /**
    * Distinct reasons recipients failed, capped at three.
    *
@@ -440,7 +447,11 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     audience_filter: AudienceFilter;
     scheduled_at: string | null;
     created_at: string;
-    template_name: string;
+    template_name: string | null;
+    channel: "whatsapp" | "email";
+    email_subject: string | null;
+    from_mailbox: string | null;
+    not_sent: string;
     recipients: string;
     sent: string;
     delivered: string;
@@ -448,8 +459,9 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     failure_reasons: string[] | null;
   }>(
     `select b.id, b.organization_id, b.template_id, b.status, b.audience_filter,
-            b.scheduled_at, b.created_at,
+            b.scheduled_at, b.created_at, b.channel, b.email_subject, b.from_mailbox,
             t.meta_template_name                              as template_name,
+            count(r.id) filter (where r.status = 'pending')::text as not_sent,
             count(r.id)::text                                 as recipients,
             count(r.id) filter (where r.status in ('sent', 'delivered'))::text as sent,
             count(r.id) filter (where r.status = 'delivered')::text          as delivered,
@@ -464,7 +476,9 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
             (array_agg(distinct r.delivery_error)
                filter (where r.delivery_error is not null))[1:3] as failure_reasons
        from broadcasts b
-       join message_templates t on t.id = b.template_id
+       -- LEFT: an email campaign has no template (migration 103), and an inner
+       -- join would hide it from the history altogether.
+       left join message_templates t on t.id = b.template_id
        left join broadcast_recipients r on r.broadcast_id = b.id
       where b.organization_id = $1
       group by b.id, t.meta_template_name
@@ -482,6 +496,10 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     scheduledAt: row.scheduled_at,
     createdAt: row.created_at,
     templateName: row.template_name,
+    channel: row.channel,
+    emailSubject: row.email_subject,
+    fromMailbox: row.from_mailbox,
+    notSent: Number(row.not_sent),
     recipients: Number(row.recipients),
     sent: Number(row.sent),
     delivered: Number(row.delivered),

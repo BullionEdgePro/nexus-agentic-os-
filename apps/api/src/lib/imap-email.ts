@@ -200,7 +200,16 @@ export async function fetchClientMailImap(
 export async function sendEmailImap(
   email: string,
   password: string,
-  input: { to: string; subject: string; body: string; inReplyTo?: string | null }
+  input: {
+    to: string;
+    subject: string;
+    body: string;
+    inReplyTo?: string | null;
+    /** A campaign email's HTML version, sent alongside the text. */
+    html?: string | null;
+    /** Extra headers — a campaign's List-Unsubscribe pair. */
+    headers?: Record<string, string>;
+  }
 ): Promise<string> {
   const transporter = nodemailer.createTransport({
     host: smtpHost(email),
@@ -213,6 +222,8 @@ export async function sendEmailImap(
     to: input.to,
     subject: input.subject,
     text: input.body,
+    html: input.html || undefined,
+    headers: input.headers,
     inReplyTo: input.inReplyTo || undefined,
     references: input.inReplyTo || undefined,
   });

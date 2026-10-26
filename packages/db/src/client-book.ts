@@ -506,6 +506,11 @@ export async function listMyBroadcasts(
     status: string;
     createdAt: string;
     templateName: string | null;
+    /** Migration 103: which door it left by, and an email campaign's subject. */
+    channel: "whatsapp" | "email";
+    emailSubject: string | null;
+    /** Never tried: the campaign was stopped or paused before reaching them. */
+    notSent: number;
     sent: number;
     /** Of `sent`, the ones WhatsApp confirmed reached the phone (a read counts). */
     delivered: number;
@@ -520,6 +525,9 @@ export async function listMyBroadcasts(
     status: string;
     created_at: string;
     template_name: string | null;
+    channel: "whatsapp" | "email";
+    email_subject: string | null;
+    not_sent: string;
     sent: string;
     delivered: string;
     failed: string;
@@ -527,6 +535,8 @@ export async function listMyBroadcasts(
     top_failures: Array<{ reason: string; count: number }> | null;
   }>(
     `select b.id, b.status, b.created_at, t.meta_template_name as template_name,
+            b.channel, b.email_subject,
+            count(r.id) filter (where r.status = 'pending') as not_sent,
             count(r.id) filter (where r.status in ('sent', 'delivered')) as sent,
             count(r.id) filter (where r.status = 'delivered') as delivered,
             count(r.id) filter (where r.status = 'failed') as failed,
@@ -550,6 +560,9 @@ export async function listMyBroadcasts(
     status: row.status,
     createdAt: row.created_at,
     templateName: row.template_name,
+    channel: row.channel,
+    emailSubject: row.email_subject,
+    notSent: Number(row.not_sent),
     sent: Number(row.sent),
     delivered: Number(row.delivered),
     failed: Number(row.failed),

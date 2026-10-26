@@ -16,7 +16,13 @@ const EXPLAINED: Record<number, string> = {
   131056: "Too many messages to this person in a short time.",
 };
 
+/** A campaign recipient with no WhatsApp number — an email-only customer. */
+export const NO_WHATSAPP_NUMBER = "This customer has no WhatsApp number (email only).";
+
 export function explainSendError(raw: string): string {
+  // Meta's generic code 100 says only "invalid parameter"; this one is the empty
+  // recipient the 22 Oct campaign met fourteen times, so it is matched by text.
+  if (/The parameter to is required/i.test(raw)) return NO_WHATSAPP_NUMBER;
   const code = /"code"\s*:\s*(\d+)/.exec(raw);
   if (code) {
     const explained = EXPLAINED[Number(code[1])];

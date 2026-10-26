@@ -56,6 +56,8 @@ const REACHED_ELSEWHERE = {
   "POST /auth/admin": "the operator sign-in page posts it directly",
   "GET /auth/admin/bootstrap": "asked once at first-run, before any session exists",
   "GET /links": "the public links page is server-rendered",
+  "GET /unsubscribe": "the unsubscribe link at the foot of every campaign email, opened by the customer",
+  "POST /unsubscribe": "the button on that page, and Gmail's one-click List-Unsubscribe-Post",
   "GET /api/connections/tiktok/callback":
     "TikTok redirects the browser here after consent — it is reached by the platform, not by our client",
   "GET /api/connections/gmail/callback":

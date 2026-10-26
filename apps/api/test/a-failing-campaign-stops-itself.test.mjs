@@ -58,7 +58,7 @@ test("a tripped campaign is paused and says why, and finishing never un-pauses i
   // with the delivery-receipt path since the review; the worker logs the why.
   assert.match(PROCESSOR, /pauseBroadcastIfFailing\(/);
   assert.match(PROCESSOR, /explainSendError\(/);
-  assert.match(PROCESSOR, /outcome\.done && \(await broadcastStatus\(broadcastId\)\) !== "paused"/);
+  assert.match(PROCESSOR, /outcome\.done && \(await broadcastStatus\(broadcastId\)\) === "sending"/);
 });
 
 test("the daily limit is read from the number the campaign goes out from", () => {
