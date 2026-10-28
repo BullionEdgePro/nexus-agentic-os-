@@ -131,3 +131,88 @@ export function describeWrongTemplate(metaTemplateName: string, attemptedBySlug:
     `it says nothing about who it is for.`
   );
 }
+
+// ============================================================
+// A staff member's own templates (28 Oct 2026)
+// ============================================================
+//
+// Staff write their own campaign messages and submit them to Meta from My
+// campaigns. Each one is that person's alone: nobody else in the business, and
+// no other business on the shared account, is offered it.
+//
+// THE OWNER IS IN THE NAME, not only in a column. The template sync writes one
+// row per business for everything on the shared WhatsApp account, under
+// whichever business it is syncing, and knows nothing about who wrote what. A
+// column set at creation would exist on one of those rows and be missing from
+// the other four. The name is the one thing every copy carries, so
+// `staff_<first 8 hex of the employee id>_<label>` makes the owner readable
+// from any row, on any account, after any sync.
+
+const STAFF_TEMPLATE_NAME = /^staff_([0-9a-f]{8})_/;
+
+/** The name prefix every template written by this employee carries. */
+export function staffTemplatePrefix(employeeId: string): string {
+  return `staff_${employeeId.replace(/-/g, "").slice(0, 8).toLowerCase()}_`;
+}
+
+/** Meta's template name for a staff member's label: lowercase, a-z 0-9 and _. */
+export function staffTemplateName(employeeId: string, label: string): string {
+  const words =
+    label
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 48)
+      .replace(/_+$/g, "") || "message";
+  return staffTemplatePrefix(employeeId) + words;
+}
+
+/** Whether a template was written by a staff member at all. */
+export function isStaffTemplate(metaTemplateName: string): boolean {
+  return STAFF_TEMPLATE_NAME.test(metaTemplateName);
+}
+
+/**
+ * Whether `employeeId` may see and send this template: any template that is
+ * not a staff member's, and their own.
+ */
+export function staffMayUseTemplate(metaTemplateName: string, employeeId: string): boolean {
+  return !isStaffTemplate(metaTemplateName) || metaTemplateName.startsWith(staffTemplatePrefix(employeeId));
+}
+
+/** The label a staff member typed, read back out of the name. */
+export function staffTemplateLabel(metaTemplateName: string): string {
+  return metaTemplateName.replace(STAFF_TEMPLATE_NAME, "").replace(/_/g, " ");
+}
+
+export const STAFF_TEMPLATE_BODY_MAX = 1024;
+
+/**
+ * A staff member's message turned into what Meta accepts, or why not.
+ *
+ * `{name}` is the one placeholder, filled with the recipient's first name at
+ * send time (see staffTemplateParams). Meta refuses a body that starts or ends
+ * with a placeholder, and any other `{{…}}` would be a parameter nobody fills.
+ * Said in sentences for the form, because Meta's own refusal arrives in English
+ * after a wait and names a rule rather than the line.
+ */
+export function staffTemplateBody(
+  text: string
+): { body: string; paramCount: number; example: string[] } | { error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { error: "Write the message." };
+  if (trimmed.length > STAFF_TEMPLATE_BODY_MAX) {
+    return { error: `Keep the message under ${STAFF_TEMPLATE_BODY_MAX} characters.` };
+  }
+  if (/\{\{|\}\}/.test(trimmed)) return { error: "Use {name} for the client's name — no other placeholders." };
+  const names = trimmed.match(/\{name\}/gi) ?? [];
+  if (names.length > 1) return { error: "Use {name} once." };
+  const stray = trimmed.replace(/\{name\}/gi, "");
+  if (/[{}]/.test(stray)) return { error: "Use {name} for the client's name — no other placeholders." };
+  if (/^\{name\}/i.test(trimmed) || /\{name\}[\s.!?,]*$/i.test(trimmed)) {
+    return { error: "WhatsApp will not approve a message that starts or ends with {name}. Add words before and after it." };
+  }
+  if (names.length === 0) return { body: trimmed, paramCount: 0, example: [] };
+  return { body: trimmed.replace(/\{name\}/i, "{{1}}"), paramCount: 1, example: ["Sara"] };
+}

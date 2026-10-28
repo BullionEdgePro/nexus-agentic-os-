@@ -143,62 +143,78 @@ export async function syncStaffNumberTemplates(): Promise<SyncResult[]> {
   const results: SyncResult[] = [];
   for (const account of accounts) {
     try {
-      const secret = await withTenant(account.organizationId, () =>
-        connectionSecret(account.organizationId, account.employeeId, "whatsapp")
-      );
-      if (!secret) {
-        logger.warn(
-          { organization: account.organizationSlug, wabaId: account.wabaId, employeeId: account.employeeId },
-          "A staff number's account has no stored WhatsApp token — its templates cannot be read or created"
-        );
-        continue;
-      }
-      const templates = await listMetaTemplates(account.wabaId, secret.accessToken);
-
-      // TEMPLATES FOLLOW THE NUMBER. A number connected on a fresh account holds
-      // no templates, and without one it cannot start a single conversation —
-      // Keshav Arora's SFS number on 22 Oct 2026. Whatever the business's
-      // catalogue has that this account lacks is submitted here, every cycle,
-      // so it needs nobody to run a script and a failed submission is simply
-      // tried again in half an hour. New ones arrive PENDING on the next read.
-      for (const spec of missingCampaignTemplates(account.organizationSlug, templates.map((t) => t.name))) {
-        const created = await createMetaTemplate(account.wabaId, spec, secret.accessToken);
-        if (created.ok || /already exists|duplicate/i.test(created.error ?? "")) {
-          logger.info(
-            { organization: account.organizationSlug, wabaId: account.wabaId, template: spec.name, status: created.status },
-            "Submitted a campaign template to a staff number's account"
-          );
-        } else {
-          logger.warn(
-            { organization: account.organizationSlug, wabaId: account.wabaId, template: spec.name, err: created.error },
-            "Could not submit a campaign template to a staff number's account — retrying next cycle"
-          );
-        }
-      }
-      let approved = 0;
-      const seen: string[] = [];
-      const retired = await withTenant(account.organizationId, async () => {
-        for (const template of templates) {
-          if (!template.id || isHiddenTemplate(template.name)) continue;
-          seen.push(template.id);
-          if (template.status === "APPROVED") approved++;
-          await upsertTemplateFromMeta({
-            organizationId: account.organizationId,
-            whatsappBusinessAccountId: account.wabaId,
-            metaTemplateId: template.id,
-            name: template.name,
-            language: template.language,
-            category: template.category,
-            status: template.status,
-            bodyParamCount: template.bodyParamCount,
-          });
-        }
-        return templates.length > 0 ? await retireMissingTemplates(account.organizationId, seen, account.wabaId) : 0;
-      });
-      results.push({ organizationSlug: `${account.organizationSlug} (staff account ${account.wabaId})`, synced: seen.length, approved, retired });
+      const result = await syncStaffAccountTemplates(account);
+      if (result) results.push(result);
     } catch (err) {
       logger.error({ wabaId: account.wabaId, err }, "Template sync failed for a staff number's account");
     }
   }
   return results;
+}
+
+/**
+ * One staff number's account: what the half-hourly pass does for each, and what
+ * a staff member's "Check again" does for theirs alone (28 Oct 2026). Null when
+ * the account has no stored token. Throws when Meta does — the caller decides
+ * whether that is a log line or a sentence on screen.
+ */
+export async function syncStaffAccountTemplates(account: {
+  wabaId: string;
+  organizationId: string;
+  organizationSlug: string;
+  employeeId: string;
+}): Promise<SyncResult | null> {
+  const secret = await withTenant(account.organizationId, () =>
+    connectionSecret(account.organizationId, account.employeeId, "whatsapp")
+  );
+  if (!secret) {
+    logger.warn(
+      { organization: account.organizationSlug, wabaId: account.wabaId, employeeId: account.employeeId },
+      "A staff number's account has no stored WhatsApp token — its templates cannot be read or created"
+    );
+    return null;
+  }
+  const templates = await listMetaTemplates(account.wabaId, secret.accessToken);
+
+  // TEMPLATES FOLLOW THE NUMBER. A number connected on a fresh account holds
+  // no templates, and without one it cannot start a single conversation —
+  // Keshav Arora's SFS number on 22 Oct 2026. Whatever the business's
+  // catalogue has that this account lacks is submitted here, every cycle,
+  // so it needs nobody to run a script and a failed submission is simply
+  // tried again in half an hour. New ones arrive PENDING on the next read.
+  for (const spec of missingCampaignTemplates(account.organizationSlug, templates.map((t) => t.name))) {
+    const created = await createMetaTemplate(account.wabaId, spec, secret.accessToken);
+    if (created.ok || /already exists|duplicate/i.test(created.error ?? "")) {
+      logger.info(
+        { organization: account.organizationSlug, wabaId: account.wabaId, template: spec.name, status: created.status },
+        "Submitted a campaign template to a staff number's account"
+      );
+    } else {
+      logger.warn(
+        { organization: account.organizationSlug, wabaId: account.wabaId, template: spec.name, err: created.error },
+        "Could not submit a campaign template to a staff number's account — retrying next cycle"
+      );
+    }
+  }
+  let approved = 0;
+  const seen: string[] = [];
+  const retired = await withTenant(account.organizationId, async () => {
+    for (const template of templates) {
+      if (!template.id || isHiddenTemplate(template.name)) continue;
+      seen.push(template.id);
+      if (template.status === "APPROVED") approved++;
+      await upsertTemplateFromMeta({
+        organizationId: account.organizationId,
+        whatsappBusinessAccountId: account.wabaId,
+        metaTemplateId: template.id,
+        name: template.name,
+        language: template.language,
+        category: template.category,
+        status: template.status,
+        bodyParamCount: template.bodyParamCount,
+      });
+    }
+    return templates.length > 0 ? await retireMissingTemplates(account.organizationId, seen, account.wabaId) : 0;
+  });
+  return { organizationSlug: `${account.organizationSlug} (staff account ${account.wabaId})`, synced: seen.length, approved, retired };
 }

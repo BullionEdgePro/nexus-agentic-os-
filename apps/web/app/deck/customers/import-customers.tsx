@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { parseCsv, findColumns } from "@/lib/csv-parse";
 import { getTeam, importContacts, readableError, type ImportedContact } from "@/lib/api";
+import { readXlsxRows } from "@/lib/xlsx-read";
 
 /**
  * Bringing a customer list in.
@@ -30,13 +31,22 @@ export function ImportCustomers({
   business,
   businessName,
   onImported,
+  ownBook,
 }: {
   business: BusinessSlug;
   businessName: string;
   onImported: () => void;
+  /**
+   * A staff member filling their OWN book from My campaigns (28 Oct 2026):
+   * no picker, because the only book they may import into is theirs.
+   */
+  ownBook?: { employeeId: string };
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  // An Excel file arrives already as rows; CSV stays text so it can be edited.
+  const [fileGrid, setFileGrid] = useState<string[][] | null>(null);
+  const [fileName, setFileName] = useState("");
   const [nameCol, setNameCol] = useState<number | null>(null);
   const [numberCol, setNumberCol] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,10 +55,10 @@ export function ImportCustomers({
   // Whose book the list goes into. A staff campaign reaches only the people in
   // that person's book, so a list imported into nobody's cannot be campaigned to.
   const [team, setTeam] = useState<Array<{ id: string; fullName: string }>>([]);
-  const [assignTo, setAssignTo] = useState("");
+  const [assignTo, setAssignTo] = useState(ownBook?.employeeId ?? "");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || ownBook) return;
     let cancelled = false;
     getTeam(business)
       .then(({ employees }) => {
@@ -60,9 +70,9 @@ export function ImportCustomers({
     return () => {
       cancelled = true;
     };
-  }, [open, business]);
+  }, [open, business, ownBook]);
 
-  const grid = useMemo(() => (text.trim() ? parseCsv(text) : []), [text]);
+  const grid = useMemo(() => fileGrid ?? (text.trim() ? parseCsv(text) : []), [fileGrid, text]);
   const header = grid[0] ?? [];
   const guessed = useMemo(() => (header.length ? findColumns(header) : { name: -1, number: -1 }), [header]);
 
@@ -74,15 +84,44 @@ export function ImportCustomers({
   // can be pointed at the line a spreadsheet shows.
   const rows = useMemo(() => {
     if (numberIndex === null) return [];
-    return grid.slice(1).map((cells, i) => ({
-      line: i + 2,
-      waId: (cells[numberIndex] ?? "").trim(),
-      displayName: nameIndex === null ? null : (cells[nameIndex] ?? "").trim() || null,
-    }));
+    return grid
+      .slice(1)
+      .map((cells, i) => ({
+        line: i + 2,
+        waId: (cells[numberIndex] ?? "").trim(),
+        displayName: nameIndex === null ? null : (cells[nameIndex] ?? "").trim() || null,
+        blank: cells.every((cell) => !cell.trim()),
+      }))
+      // A blank line in a spreadsheet is not a client without a number.
+      .filter((row) => !row.blank)
+      .map(({ blank: _blank, ...row }) => row);
   }, [grid, numberIndex, nameIndex]);
 
   const usable = rows.filter((r) => r.waId.replace(/\D/g, "").length >= 8);
   const unusable = rows.length - usable.length;
+
+  /** A dropped or chosen file: Excel read into rows, CSV into the text box. */
+  async function load(file: File) {
+    setError("");
+    setNumberCol(null);
+    setNameCol(null);
+    setFileName(file.name);
+    try {
+      if (/\.xlsx$/i.test(file.name)) {
+        setText("");
+        setFileGrid(await readXlsxRows(await file.arrayBuffer()));
+      } else if (/\.xls$/i.test(file.name)) {
+        setFileGrid(null);
+        setError("That is the old Excel format. In Excel choose File → Save As → Excel Workbook (.xlsx) or CSV, then add that file.");
+      } else {
+        setFileGrid(null);
+        setText(await file.text());
+      }
+    } catch (err) {
+      setFileGrid(null);
+      setError(readableError(err));
+    }
+  }
 
   async function run() {
     setBusy(true);
@@ -105,7 +144,7 @@ export function ImportCustomers({
   if (!open) {
     return (
       <button type="button" className="cu-import-open" onClick={() => setOpen(true)}>
-        Import a customer list
+        {ownBook ? "Add clients from a file (Excel or CSV)" : "Import a customer list"}
       </button>
     );
   }
@@ -115,7 +154,7 @@ export function ImportCustomers({
   return (
     <div className="cu-import">
       <div className="cu-import-head">
-        <strong>Import customers into {businessName}</strong>
+        <strong>{ownBook ? "Add clients to your book" : `Import customers into ${businessName}`}</strong>
         <button
           type="button"
           className="cu-import-close"
@@ -123,6 +162,8 @@ export function ImportCustomers({
             setOpen(false);
             setResults(null);
             setText("");
+            setFileGrid(null);
+            setFileName("");
           }}
         >
           Close
@@ -174,7 +215,26 @@ export function ImportCustomers({
       ) : (
         <>
           <label className="cu-import-field">
-            <span>Paste the file, or drop it in</span>
+            <span>Choose a file — Excel (.xlsx) or CSV</span>
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void load(file);
+                event.target.value = "";
+              }}
+            />
+            {fileGrid ? (
+              <em className="cu-import-note">
+                {fileName}: {Math.max(0, fileGrid.length - 1)} rows under the header
+              </em>
+            ) : null}
+          </label>
+
+          {fileGrid ? null : (
+          <label className="cu-import-field">
+            <span>Or paste the file, or drop it in</span>
             <textarea
               rows={5}
               value={text}
@@ -184,10 +244,11 @@ export function ImportCustomers({
                 const file = event.dataTransfer.files?.[0];
                 if (!file) return;
                 event.preventDefault();
-                void file.text().then(setText);
+                void load(file);
               }}
             />
           </label>
+          )}
 
           {header.length > 0 ? (
             <div className="cu-import-cols">
@@ -226,7 +287,7 @@ export function ImportCustomers({
             </div>
           ) : null}
 
-          {team.length > 0 ? (
+          {!ownBook && team.length > 0 ? (
             <label className="cu-import-field">
               <span>Add to whose book</span>
               <select value={assignTo} onChange={(event) => setAssignTo(event.target.value)}>
@@ -262,7 +323,7 @@ export function ImportCustomers({
               </table>
               {rows.length > 4 ? <p className="cu-import-more">…and {rows.length - 4} more</p> : null}
             </div>
-          ) : text.trim() && numberIndex === null ? (
+          ) : (text.trim() || fileGrid) && numberIndex === null ? (
             <p className="cu-import-note bad">
               No column here looks like a WhatsApp number. Choose one above.
             </p>

@@ -19,6 +19,8 @@ import {
   isWaIdOptedOut,
   myClientsForEmailCampaign,
   campaignForControl,
+  connectionSecret,
+  upsertTemplateFromMeta,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
 import { renderCampaignEmail, explainEmailSendError } from "../lib/campaign-email.js";
@@ -27,9 +29,21 @@ import { unsubscribeUrl } from "./unsubscribe.js";
 import { resolveCampaignMailbox, sendFromMailbox } from "../services/campaign-mailbox.js";
 import { planEmailCampaign, queueEmailCampaign } from "../services/email-campaign-send.js";
 import { resumeCampaign, stopCampaign } from "../services/campaign-control.js";
-import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
+import {
+  attributeTemplate,
+  describeWrongTemplate,
+  isHiddenTemplate,
+  staffMayUseTemplate,
+  staffTemplateBody,
+  staffTemplateLabel,
+  staffTemplateName,
+  staffTemplatePrefix,
+} from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
-import { listWabaNumbers, readNumberStanding, sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
+import { createMetaTemplate, listWabaNumbers, readNumberStanding, sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
+import { noteTestSend, readTestSend } from "../lib/campaign-test-status.js";
+import { syncStaffAccountTemplates, syncTemplatesForOrganization } from "../services/template-sync.js";
+import { env } from "../config/env.js";
 import { deskOf, text } from "./my-desk.js";
 import { campaignReadiness, sendingAccountOf } from "../services/campaign-readiness.js";
 import { logger } from "../lib/logger.js";
@@ -225,6 +239,8 @@ myCampaignsRoute.get("/campaigns", async (c) => {
     templates: templates
       .filter((template) => template.isApproved)
       .filter((template) => !isHiddenTemplate(template.metaTemplateName))
+      // A colleague's own message is theirs alone (28 Oct 2026).
+      .filter((template) => staffMayUseTemplate(template.metaTemplateName, desk.employeeId))
       .filter(
         (template) =>
           attributeTemplate(template.metaTemplateName, organization.slug) !== "other-business"
@@ -235,6 +251,20 @@ myCampaignsRoute.get("/campaigns", async (c) => {
         language: template.language,
         bodyParamCount: template.bodyParamCount,
       })),
+    // The messages this person wrote, in every state — a message waiting for
+    // Meta or refused by it is the one they most need to see.
+    myTemplates: templates
+      .filter((template) => template.metaTemplateName.startsWith(staffTemplatePrefix(desk.employeeId)))
+      .map((template) => ({
+        id: template.id,
+        name: template.metaTemplateName,
+        label: staffTemplateLabel(template.metaTemplateName),
+        language: template.language,
+        status: template.status ?? "PENDING",
+        isApproved: template.isApproved,
+      })),
+    // What the client-list upload needs to put a file into THIS person's book.
+    book: { businessSlug: organization.slug, employeeId: desk.employeeId },
   });
 });
 
@@ -289,7 +319,7 @@ myCampaignsRoute.post("/campaigns", async (c) => {
 
   const template = await withTenant(desk.organizationId, () => getBroadcastTemplate(templateId));
   if (!template) return c.json({ error: "That message no longer exists." }, 404);
-  const refusal = templateRefusal(template, organization, sendingAccountOf(employee, organization));
+  const refusal = templateRefusal(template, organization, sendingAccountOf(employee, organization), desk.employeeId);
   if (refusal) return c.json({ error: refusal.error }, refusal.status);
 
   const audience = await withTenant(desk.organizationId, () =>
@@ -573,9 +603,13 @@ myCampaignsRoute.post("/campaigns/:id/stop", (c) => controlOwnCampaign(c, "stop"
 function templateRefusal(
   template: { isApproved: boolean; organizationId: string; whatsappBusinessAccountId: string | null; metaTemplateName: string },
   organization: { id: string; slug: string },
-  sendingAccount: string | null
+  sendingAccount: string | null,
+  employeeId: string
 ): { error: string; status: 403 | 422 } | null {
   if (!template.isApproved) return { error: "WhatsApp has not approved that message.", status: 422 };
+  if (!staffMayUseTemplate(template.metaTemplateName, employeeId)) {
+    return { error: "That message belongs to a colleague.", status: 403 };
+  }
   if (template.organizationId !== organization.id) {
     return { error: "That message belongs to a different business.", status: 403 };
   }
@@ -680,7 +714,7 @@ myCampaignsRoute.post("/campaigns/test", async (c) => {
 
   const template = await withTenant(desk.organizationId, () => getBroadcastTemplate(templateId));
   if (!template) return c.json({ error: "That message no longer exists." }, 404);
-  const refusal = templateRefusal(template, organization, sendingAccountOf(employee, organization));
+  const refusal = templateRefusal(template, organization, sendingAccountOf(employee, organization), desk.employeeId);
   if (refusal) return c.json({ error: refusal.error }, refusal.status);
 
   try {
@@ -691,13 +725,171 @@ myCampaignsRoute.post("/campaigns/test", async (c) => {
       template.language,
       staffTemplateParams(template.bodyParamCount, employee.fullName)
     );
-    logger.info({ employeeId: desk.employeeId, template: template.metaTemplateName, from }, "Campaign test sent");
+    logger.info({ employeeId: desk.employeeId, template: template.metaTemplateName, from, messageId }, "Campaign test sent");
+    // Accepted is not delivered: noted so the receipt has somewhere to land
+    // and the screen can say what WhatsApp actually did with it.
+    if (messageId) {
+      await noteTestSend(messageId, desk.employeeId).catch((err) =>
+        logger.warn({ err, messageId }, "Could not note a campaign test for its receipt")
+      );
+    }
     return c.json({ ok: true, messageId });
   } catch (err) {
     const reason = explainSendError(err instanceof Error ? err.message : String(err));
     logger.warn({ employeeId: desk.employeeId, template: template.metaTemplateName, from, reason }, "Campaign test refused");
     return c.json({ error: reason }, 502);
   }
+});
+
+/**
+ * What WhatsApp did with a test, once it has said. "accepted" until a receipt
+ * arrives; a failure carries Meta's reason in a sentence.
+ */
+myCampaignsRoute.get("/campaigns/test/:messageId", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+  // Read straight from the session as well, as controlOwnCampaign does: a staff
+  // member of this business, asking about their own test.
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!scope || scope.role !== "employee" || scope.organizationId !== desk.organizationId) {
+    return c.json({ error: "No such test." }, 404);
+  }
+  const status = await readTestSend(c.req.param("messageId")).catch(() => null);
+  // Somebody else's test reads as unknown, never as theirs.
+  if (!status || status.employeeId !== desk.employeeId) return c.json({ error: "No such test." }, 404);
+  return c.json({
+    state: status.state,
+    reason: status.reason ? explainSendError(status.reason) : null,
+    at: status.at,
+  });
+});
+
+// ============================================================
+// A staff member's own messages (28 Oct 2026)
+// ============================================================
+
+/**
+ * The WhatsApp account this person's messages are written to, with the token
+ * that may write there: their own number's account when they have one (read
+ * and written with that number's token, as the template sync does), the
+ * business's otherwise.
+ */
+async function templateAccountFor(desk: { organizationId: string; employeeId: string }) {
+  const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
+  const organization = await withTenant(desk.organizationId, () => findOrganizationById(desk.organizationId));
+  if (!employee || !organization) return { error: "Account not found.", status: 404 as const };
+  if (!employee.canBroadcast) return { error: "Campaigns are not switched on for you.", status: 403 as const };
+  const wabaId = sendingAccountOf(employee, organization);
+  if (!wabaId) return { error: "There is no WhatsApp account to write messages to yet.", status: 409 as const };
+  const own = Boolean(employee.whatsappPhoneNumberId) && wabaId !== organization.whatsappBusinessAccountId;
+  let token = env.metaAccessToken;
+  if (own) {
+    const secret = await withTenant(desk.organizationId, () =>
+      connectionSecret(desk.organizationId, desk.employeeId, "whatsapp")
+    );
+    if (!secret) {
+      return {
+        error: "Your WhatsApp connection has no stored key, so messages cannot be written to it. Reconnect it in Connections.",
+        status: 409 as const,
+      };
+    }
+    token = secret.accessToken;
+  }
+  return { employee, organization, wabaId, own, token };
+}
+
+/**
+ * Write a message of your own and send it to WhatsApp for approval.
+ *
+ * MARKETING, always: a campaign to a client book is marketing whatever it says,
+ * and a message submitted as utility is reclassified by Meta anyway. The opt-out
+ * button is the same one the business's own marketing templates carry, for the
+ * same reason — the number's quality rating is what a spam report spends.
+ */
+myCampaignsRoute.post("/templates", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  const label = text(body.label, 60);
+  if (!label) return c.json({ error: "Give the message a short name, like \"November offer\"." }, 400);
+  const language = body.language === "ar" ? "ar" : "en";
+  const content = staffTemplateBody(typeof body.text === "string" ? body.text : "");
+  if ("error" in content) return c.json({ error: content.error }, 400);
+
+  const account = await templateAccountFor(desk);
+  if ("error" in account) return c.json({ error: account.error }, account.status);
+
+  const name = staffTemplateName(desk.employeeId, label);
+  const created = await createMetaTemplate(
+    account.wabaId,
+    {
+      name,
+      language,
+      category: "MARKETING",
+      body: content.body,
+      example: content.example,
+      buttons: [language === "ar" ? "إيقاف" : "Stop"],
+    },
+    account.token
+  );
+  if (!created.ok || !created.id) {
+    const reason = created.error ?? "WhatsApp did not accept it.";
+    logger.warn({ employeeId: desk.employeeId, name, reason }, "Staff template refused by Meta");
+    return c.json(
+      {
+        error: /already exists|duplicate/i.test(reason)
+          ? "You already have a message with that name in this language. Choose another name."
+          : `WhatsApp did not accept it: ${reason}`,
+      },
+      422
+    );
+  }
+
+  // Mirrored now rather than at the next half-hourly sync, so it is on the
+  // screen as "waiting for WhatsApp" the moment it was sent.
+  await withTenant(desk.organizationId, () =>
+    upsertTemplateFromMeta({
+      organizationId: desk.organizationId,
+      whatsappBusinessAccountId: account.wabaId,
+      metaTemplateId: created.id!,
+      name,
+      language,
+      category: "MARKETING",
+      status: created.status ?? "PENDING",
+      bodyParamCount: content.paramCount,
+    })
+  );
+  logger.info({ employeeId: desk.employeeId, name, status: created.status }, "Staff template submitted to Meta");
+  return c.json({ ok: true, name, status: created.status ?? "PENDING" });
+});
+
+/** Ask WhatsApp again what it decided about this person's messages. */
+myCampaignsRoute.post("/templates/refresh", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+  const account = await templateAccountFor(desk);
+  if ("error" in account) return c.json({ error: account.error }, account.status);
+  try {
+    if (account.own) {
+      await syncStaffAccountTemplates({
+        wabaId: account.wabaId,
+        organizationId: desk.organizationId,
+        organizationSlug: account.organization.slug,
+        employeeId: desk.employeeId,
+      });
+    } else {
+      await syncTemplatesForOrganization({
+        id: account.organization.id,
+        slug: account.organization.slug,
+        whatsappBusinessAccountId: account.wabaId,
+      });
+    }
+  } catch (err) {
+    logger.warn({ employeeId: desk.employeeId, err }, "Staff template refresh failed");
+    return c.json({ error: "WhatsApp could not be reached. Try again in a minute." }, 502);
+  }
+  return c.json({ ok: true });
 });
 
 /**

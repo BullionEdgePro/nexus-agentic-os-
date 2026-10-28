@@ -6,7 +6,7 @@ import {
   myClientsForBroadcast,
   withTenant,
 } from "@nexus/db";
-import { attributeTemplate, isHiddenTemplate } from "@nexus/shared";
+import { attributeTemplate, isHiddenTemplate, staffMayUseTemplate } from "@nexus/shared";
 
 /**
  * What stands between a staff member and a campaign.
@@ -131,6 +131,7 @@ export async function campaignReadiness(employeeId: string, organizationId: stri
   const usable = (await withTenant(organizationId, () => listBroadcastTemplates(organizationId, account))).filter(
     (template) =>
       !isHiddenTemplate(template.metaTemplateName) &&
+      staffMayUseTemplate(template.metaTemplateName, employeeId) &&
       attributeTemplate(template.metaTemplateName, organization.slug) !== "other-business"
   );
   const clients = await withTenant(organizationId, () => myClientsForBroadcast(organizationId, employeeId));

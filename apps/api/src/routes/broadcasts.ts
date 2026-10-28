@@ -21,7 +21,7 @@ import { planEmailCampaign, queueEmailCampaign } from "../services/email-campaig
 import { resumeCampaign, stopCampaign } from "../services/campaign-control.js";
 import { emailContentRefusal } from "./my-campaigns.js";
 import type { AudienceFilter } from "@nexus/shared";
-import { attributeTemplate, describeWrongTemplate, isHiddenTemplate } from "@nexus/shared";
+import { attributeTemplate, describeWrongTemplate, isHiddenTemplate, isStaffTemplate } from "@nexus/shared";
 import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { syncTemplatesForOrganization } from "../services/template-sync.js";
 import { logger } from "../lib/logger.js";
@@ -56,6 +56,9 @@ broadcastsRoute.get("/:slug", async (c) => {
     // Another system's templates, suppressed by name — never offered and never
     // counted towards canSend. A row may linger until the next sync retires it.
     .filter((template) => !isHiddenTemplate(template.metaTemplateName))
+    // A staff member's own message is theirs alone, not the business's
+    // (28 Oct 2026) — it goes out under their name, from My campaigns.
+    .filter((template) => !isStaffTemplate(template.metaTemplateName))
     .map((template) => ({
       ...template,
       attribution: attributeTemplate(template.metaTemplateName, organization.slug),
@@ -182,6 +185,9 @@ broadcastsRoute.post("/", async (c) => {
   if (template.organizationId !== organization.id) {
     return c.json({ error: "That template belongs to a different business." }, 403);
   }
+  if (isStaffTemplate(template.metaTemplateName)) {
+    return c.json({ error: "That message belongs to one staff member and is sent from My campaigns." }, 403);
+  }
   // A business broadcast goes out from the business's number, so its template
   // must be on the business's own WhatsApp account, not a staff number's
   // (migration 096). Meta would refuse it for every recipient otherwise.
@@ -267,6 +273,9 @@ broadcastsRoute.post("/:id/send", async (c) => {
   // only thing standing between that row and a customer's phone.
   if (template.organizationId !== organization.id) {
     return c.json({ error: "That template belongs to a different business." }, 403);
+  }
+  if (isStaffTemplate(template.metaTemplateName)) {
+    return c.json({ error: "That message belongs to one staff member and is sent from My campaigns." }, 403);
   }
   // A business broadcast goes out from the business's number, so its template
   // must be on the business's own WhatsApp account, not a staff number's

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   claimMyNumber,
   getAvailableNumbers,
@@ -14,6 +14,8 @@ import {
   sendMyEmailCampaignTest,
   polishCampaignText,
   controlMyCampaign,
+  getMyCampaignTestStatus,
+  type CampaignTestStatus,
   type MyCampaignsView,
   type MyChannel,
   type ReadinessCheck,
@@ -23,6 +25,9 @@ import "../deck.css";
 import "../my-clients/my-clients.css";
 import "./my-campaigns.css";
 import { CampaignControls, EmailCampaignForm } from "./email-campaign";
+import { MyTemplates } from "./my-templates";
+import { ImportCustomers } from "../customers/import-customers";
+import "../customers/customers.css";
 
 /**
  * Messaging your whole book at once, and the number it leaves from.
@@ -63,6 +68,36 @@ export default function MyCampaignsPage() {
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  // Accepted is not delivered (28 Oct 2026): after a test, ask what WhatsApp did
+  // with it until there is an answer, instead of saying "Sent" and stopping.
+  const [testId, setTestId] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<CampaignTestStatus | null>(null);
+  const [testTimedOut, setTestTimedOut] = useState(false);
+  const testStarted = useRef(0);
+
+  useEffect(() => {
+    if (!testId) return;
+    let cancelled = false;
+    testStarted.current = Date.now();
+    setTestTimedOut(false);
+    const ask = async () => {
+      try {
+        const status = await getMyCampaignTestStatus(testId);
+        if (cancelled) return;
+        setTestStatus(status);
+        if (status.state === "delivered" || status.state === "read" || status.state === "failed") return;
+      } catch {
+        // Not known yet, or the receipt store is unreachable: keep asking.
+      }
+      if (!cancelled && Date.now() - testStarted.current < 120_000) timer = setTimeout(ask, 3000);
+      else if (!cancelled) setTestTimedOut(true);
+    };
+    let timer = setTimeout(ask, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [testId]);
   // WhatsApp or email (26 Oct 2026): one campaign, one channel, never both.
   const [tab, setTab] = useState<"whatsapp" | "email">("whatsapp");
   const [emailSubject, setEmailSubject] = useState<string | undefined>(undefined);
@@ -174,6 +209,17 @@ export default function MyCampaignsPage() {
 
           {view.healthWarning ? <p className="cmp-ceiling">{view.healthWarning}</p> : null}
 
+          {/* Clients come in from a file too (28 Oct 2026): straight into this
+              person's own book, which is exactly who a campaign reaches. */}
+          {view.book ? (
+            <ImportCustomers
+              business={view.book.businessSlug}
+              businessName=""
+              ownBook={{ employeeId: view.book.employeeId }}
+              onImported={() => void load()}
+            />
+          ) : null}
+
           {view.dailyCeiling ? (
             <p className="cmp-ceiling">
               WhatsApp lets this number start <strong>{view.dailyCeiling.limit}</strong> new
@@ -191,15 +237,22 @@ export default function MyCampaignsPage() {
               <option value="">Choose an approved message&hellip;</option>
               {view.templates.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
-                  {candidate.name} ({candidate.language})
+                  {messageName(candidate.name)} ({candidate.language})
                 </option>
               ))}
             </select>
             <em>
-              Only messages WhatsApp has approved for this business appear here. New wording has to
-              be approved by Meta before it can be sent to people who have not written in recently.
+              Only messages WhatsApp has approved appear here: the business&rsquo;s, and your own once
+              approved. New wording has to be approved by Meta before it can be sent to people who have
+              not written in recently.
             </em>
           </label>
+
+          <MyTemplates
+            templates={view.myTemplates ?? []}
+            sampleName={audience[0]?.displayName ?? null}
+            onChanged={() => void load()}
+          />
 
           {chosen ? (
             <div className="cmp-test">
@@ -213,6 +266,8 @@ export default function MyCampaignsPage() {
                   onChange={(event) => {
                     setTestTo(event.target.value);
                     setTestResult(null);
+                    setTestId(null);
+                    setTestStatus(null);
                   }}
                 />
               </label>
@@ -222,9 +277,12 @@ export default function MyCampaignsPage() {
                 onClick={async () => {
                   setTesting(true);
                   setTestResult(null);
+                  setTestId(null);
+                  setTestStatus(null);
                   try {
-                    await sendMyCampaignTest(chosen, testTo.trim());
-                    setTestResult({ ok: true, text: "Sent. Check that WhatsApp — it should arrive within a minute." });
+                    const { messageId } = await sendMyCampaignTest(chosen, testTo.trim());
+                    setTestResult({ ok: true, text: "WhatsApp accepted it. Waiting to hear whether it reached the phone…" });
+                    setTestId(messageId);
                   } catch (err) {
                     setTestResult({ ok: false, text: readableError(err) });
                   } finally {
@@ -234,8 +292,11 @@ export default function MyCampaignsPage() {
               >
                 {testing ? "Sending test…" : "Send a test"}
               </button>
-              {testResult ? (
+              {testResult && !(testResult.ok && (testTimedOut || (testStatus && testStatus.state !== "accepted"))) ? (
                 <p className={testResult.ok ? "cmp-test-ok" : "mc-error"}>{testResult.text}</p>
+              ) : null}
+              {testResult?.ok && (testStatus || testTimedOut) ? (
+                <TestOutcome status={testStatus ?? { state: "accepted", reason: null, at: "" }} timedOut={testTimedOut} />
               ) : null}
               <em>One copy to that number only. Nobody in your book gets it, and it is not counted anywhere.</em>
             </div>
@@ -243,7 +304,8 @@ export default function MyCampaignsPage() {
 
           {audience.length === 0 ? (
             <p className="mc-empty">
-              Nobody to send to yet. Add clients in <a href="/deck/my-clients">My clients</a> first.
+              Nobody to send to yet. Add clients from a file above, or one at a time in{" "}
+              <a href="/deck/my-clients">My clients</a>.
             </p>
           ) : !confirming ? (
             <button
@@ -272,7 +334,7 @@ export default function MyCampaignsPage() {
                 ))}
               </ul>
               <p className="cmp-final">
-                Sending <strong>{template?.name}</strong> from <strong>{view.sendsFrom}</strong>.
+                Sending <strong>{template ? messageName(template.name) : null}</strong> from <strong>{view.sendsFrom}</strong>.
                 This cannot be recalled once it starts.
               </p>
               {view.dailyCeiling ? (
@@ -359,7 +421,7 @@ export default function MyCampaignsPage() {
                 <tr key={campaign.id}>
                   <td>{new Date(campaign.createdAt).toLocaleString()}</td>
                   <td className="ecf-channel">{campaign.channel === "email" ? "Email" : "WhatsApp"}</td>
-                  <td>{campaign.channel === "email" ? campaign.emailSubject : campaign.templateName ?? "—"}</td>
+                  <td>{campaign.channel === "email" ? campaign.emailSubject : campaign.templateName ? messageName(campaign.templateName) : "—"}</td>
                   <td className="mc-num">
                     {campaign.sent} of {campaign.total}
                     {campaign.notSent && (campaign.status === "stopped" || campaign.status === "paused") ? (
@@ -396,6 +458,44 @@ export default function MyCampaignsPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * A staff member's own message by the name they gave it, not Meta's. The same
+ * rule as staffTemplateLabel in @nexus/shared, which the console can only
+ * import types from.
+ */
+function messageName(metaName: string): string {
+  const own = /^staff_[0-9a-f]{8}_/;
+  return own.test(metaName) ? `Yours: ${metaName.replace(own, "").replace(/_/g, " ")}` : metaName;
+}
+
+/** What WhatsApp did with the test, in words. */
+function TestOutcome({ status, timedOut }: { status: CampaignTestStatus; timedOut: boolean }) {
+  if (status.state === "failed") {
+    return (
+      <p className="mc-error">
+        WhatsApp did not deliver it: {status.reason ?? "no reason given."} Nothing reached that phone, and a
+        campaign with this message would fail the same way.
+      </p>
+    );
+  }
+  if (status.state === "delivered" || status.state === "read") {
+    return <p className="cmp-test-ok">{status.state === "read" ? "Delivered and read." : "Delivered to that WhatsApp."}</p>;
+  }
+  if (timedOut) {
+    return (
+      <p className="cmp-ceiling">
+        WhatsApp accepted it but has not confirmed delivery after two minutes. The phone may be off or offline; if
+        it is on and nothing came, WhatsApp is holding it back — send the test once more to see its reason.
+      </p>
+    );
+  }
+  return (
+    <p className="cmp-test-ok">
+      {status.state === "sent" ? "On its way — waiting for the phone to receive it…" : "WhatsApp accepted it. Waiting to hear whether it reached the phone…"}
+    </p>
   );
 }
 

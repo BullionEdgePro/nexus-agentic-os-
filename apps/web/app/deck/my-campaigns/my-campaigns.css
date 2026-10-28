@@ -261,3 +261,111 @@
   margin: 0;
   color: var(--good);
 }
+
+/* A staff member's own messages (28 Oct 2026). */
+.mt-own {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.mt-own h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.mt-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.mt-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+.mt-name em {
+  font-style: normal;
+  color: var(--slate);
+}
+.mt-status {
+  font-size: 0.8rem;
+}
+.mt-ok {
+  color: var(--good);
+}
+.mt-wait {
+  color: var(--slate);
+}
+.mt-no {
+  color: var(--warn);
+}
+.mt-hint {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--slate);
+}
+.mt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+}
+.mt-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.mt-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--slate);
+}
+.mt-form input,
+.mt-form select,
+.mt-form textarea {
+  width: 100%;
+  max-width: 560px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.mt-form em {
+  font-style: normal;
+  font-size: 0.78rem;
+}
+.mt-preview {
+  max-width: 420px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--marble);
+  color: var(--ink);
+}
+.mt-preview span {
+  font-size: 0.72rem;
+  color: var(--slate);
+}
+.mt-preview p {
+  margin: 4px 0 8px;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+}
+.mt-preview button {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--signal-text);
+  pointer-events: none;
+}

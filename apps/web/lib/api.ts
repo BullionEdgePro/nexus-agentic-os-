@@ -2769,6 +2769,10 @@ export interface MyCampaignsView {
   sendsFrom: string;
   audience: Array<{ displayName: string | null; waId: string }>;
   templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;
+  /** Messages this person wrote, in every state Meta has them in (28 Oct 2026). */
+  myTemplates: MyTemplate[];
+  /** Where an uploaded client list goes: this person's own book. */
+  book: { businessSlug: BusinessSlug; employeeId: string };
   /** The email side of the same book (26 Oct 2026). */
   email: EmailCampaignSide & {
     /** True when it leaves from their own mailbox, false for the business one. */
@@ -2796,6 +2800,41 @@ export function getCampaignReadiness(
 /** One copy of a message to one number, through the campaign's own send. Leaves no campaign behind. */
 export function sendMyCampaignTest(templateId: string, to: string): Promise<{ ok: true; messageId: string | null }> {
   return request("/api/my/campaigns/test", { method: "POST", body: JSON.stringify({ templateId, to }) });
+}
+
+/** What WhatsApp did with a test once it has said; "accepted" until then. */
+export interface CampaignTestStatus {
+  state: "accepted" | "sent" | "delivered" | "read" | "failed";
+  reason: string | null;
+  at: string;
+}
+
+export function getMyCampaignTestStatus(messageId: string): Promise<CampaignTestStatus> {
+  return request(`/api/my/campaigns/test/${encodeURIComponent(messageId)}`);
+}
+
+export interface MyTemplate {
+  id: string;
+  name: string;
+  label: string;
+  language: string;
+  /** Meta's word: APPROVED, PENDING, REJECTED, PAUSED, DISABLED… */
+  status: string;
+  isApproved: boolean;
+}
+
+/** Write a message of your own and send it to WhatsApp for approval. */
+export function createMyTemplate(input: {
+  label: string;
+  language: "en" | "ar";
+  text: string;
+}): Promise<{ ok: true; name: string; status: string }> {
+  return request("/api/my/templates", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Ask WhatsApp again what it decided about your messages. */
+export function refreshMyTemplates(): Promise<{ ok: true }> {
+  return request("/api/my/templates/refresh", { method: "POST" });
 }
 
 /** Send an email campaign to everyone in your book who can be emailed. */

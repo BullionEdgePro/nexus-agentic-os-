@@ -69,6 +69,7 @@ import { publishInboxEvent } from "../lib/pubsub.js";
 import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
 import { explainSendError } from "../lib/send-errors.js";
+import { recordTestSendReceipt } from "../lib/campaign-test-status.js";
 import { withConversationLock } from "./conversation-lock.js";
 import { describeInboundMessage } from "../lib/inbound-media.js";
 
@@ -461,6 +462,16 @@ async function processDeliveryStatuses(
             { ...paused, reason: errorText ? explainSendError(errorText) : null },
             "Campaign paused: most of its messages were refused"
           );
+        }
+      }
+
+      // A campaign TEST has no row in either table, so its receipt landed nowhere
+      // and its failure reason was lost — the screen said "Sent" for a message
+      // WhatsApp refused (28 Oct 2026). See campaign-test-status.ts.
+      if (!moved && status.status !== "queued") {
+        const wasTest = await recordTestSendReceipt(status.id, status.status, errorText);
+        if (wasTest && status.status === "failed") {
+          logger.warn({ waMessageId: status.id, errorText }, "WhatsApp did not deliver a campaign test");
         }
       }
     } catch (err) {
