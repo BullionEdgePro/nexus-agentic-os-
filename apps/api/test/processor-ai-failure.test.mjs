@@ -126,6 +126,8 @@ mock.module("@nexus/db", {
     // declaration of everything it may use.
     wasAccountedFor: async () => true,
     recordOutboundEcho: async () => ({ conversationId: "conv-1", contactId: "contact-1", message: null }),
+    importHistoryThread: async () => ({ conversationId: "conv-1", contactId: "contact-1", created: false, inserted: 0 }),
+    nameContactIfUnnamed: async () => {},
     recordInboundMessage: async () => ({
       conversationId: "conv-1", contactId: "contact-1", messageId: "msg-1",
       isHumanHandoff: false, aiPausedUntil: null,
@@ -227,6 +229,7 @@ mock.module(new URL("../src/lib/whatsapp-client.ts", import.meta.url), {
   exports: {
     sendWhatsAppText: async (phoneNumberId, to, body) => { calls.sendWhatsAppText.push({ phoneNumberId, to, body }); },
     sendWhatsAppTemplate: async () => {},
+    requestSmbAppData: async () => ({ ok: true, requestId: null }),
   },
 });
 mock.module(new URL("../src/lib/pubsub.ts", import.meta.url), {

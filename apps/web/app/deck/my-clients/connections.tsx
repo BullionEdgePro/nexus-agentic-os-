@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   getConnections,
+  getWhatsAppHistory,
+  requestWhatsAppHistory,
+  type WhatsAppHistoryStatus,
   startGmailConnect,
   startFacebookConnect,
   startInstagramConnect,
@@ -404,6 +407,98 @@ function WhatsAppCard({
         <p className="cnx-needs">The stored connection can no longer be read — connect it again.</p>
       ) : null}
       {connection?.lastError ? <p className="cnx-needs">Last sync failed: {connection.lastError}</p> : null}
+      {connection ? (
+        <WhatsAppHistory />
+      ) : provider.configured ? (
+        <p className="cnx-offers">
+          When WhatsApp asks, leave <b>Share chat history</b> switched on — your past chats (up to 6 months) then
+          appear in Nexus.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The staff member's past chats, brought in from their WhatsApp Business app
+ * (28 Oct 2026). Said in every state, because "my old chats are missing" has
+ * three different answers and only one of them is "wait".
+ */
+function WhatsAppHistory() {
+  const [status, setStatus] = useState<WhatsAppHistoryStatus | null | undefined>(undefined);
+  const [asking, setAsking] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async () => {
+      const result = await getWhatsAppHistory().catch(() => null);
+      if (cancelled) return;
+      setStatus(result?.status ?? null);
+      // Keep the count moving while chunks are still arriving.
+      if (result?.status && (result.status.state === "requested" || result.status.state === "importing")) {
+        timer = setTimeout(load, 10_000);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  if (status === undefined) return null;
+
+  const reconnect = (
+    <>
+      To bring them in: on your phone open WhatsApp Business → Settings → Account → Business Platform and
+      disconnect Nexus, then press Connect WhatsApp here again and leave <b>Share chat history</b> on.
+    </>
+  );
+
+  let line: ReactNode;
+  if (!status) {
+    line = <>Your past chats from before you connected have not been imported.</>;
+  } else if (status.state === "requested") {
+    line = <>Asked WhatsApp for your past chats. They usually start arriving within a few minutes.</>;
+  } else if (status.state === "importing") {
+    line = (
+      <>
+        Importing your past chats — {status.progress}% · {status.imported} messages in {status.chats} chats so far.
+      </>
+    );
+  } else if (status.state === "done") {
+    line = (
+      <>
+        Your past chats are in: {status.imported} messages in {status.chats} chats. They are filed as resolved in your
+        conversations, so they do not crowd your queue.
+      </>
+    );
+  } else if (status.state === "declined") {
+    line = <>Chat history sharing was switched off when you connected, so WhatsApp sent none. {reconnect}</>;
+  } else {
+    line = <>WhatsApp would not send your past chats now — it only does within 24 hours of connecting. {reconnect}</>;
+  }
+
+  return (
+    <div className="cnx-history">
+      <strong>Your chat history</strong>
+      <p className={status?.state === "declined" || status?.state === "refused" ? "cnx-needs" : "cnx-offers"}>{line}</p>
+      {!status || status.state === "refused" ? (
+        <button
+          type="button"
+          className="cnx-go"
+          disabled={asking}
+          onClick={async () => {
+            setAsking(true);
+            const result = await requestWhatsAppHistory().catch(() => null);
+            setStatus(result?.status ?? null);
+            setAsking(false);
+          }}
+        >
+          {asking ? "Asking WhatsApp…" : "Ask WhatsApp for my past chats"}
+        </button>
+      ) : null}
     </div>
   );
 }

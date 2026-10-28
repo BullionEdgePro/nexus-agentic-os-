@@ -226,6 +226,124 @@ export async function insertOutboundMessage(input: InsertOutboundMessageInput): 
   };
 }
 
+export interface ImportHistoryThreadInput {
+  organizationId: string;
+  /** The customer this thread is with. */
+  contactWaId: string;
+  /** Their name from the staff member's phone book, when it was shared. */
+  contactName?: string | null;
+  /** The staff member's own number the history came from. */
+  onNumber: string;
+  employeeId: string;
+  messages: Array<{
+    waMessageId: string;
+    direction: "inbound" | "outbound";
+    messageType: string;
+    body: string;
+    /** When it was actually sent, on the phone. */
+    at: string;
+    status: "sent" | "delivered" | "read" | "failed";
+    rawPayload: unknown;
+  }>;
+}
+
+/**
+ * Write one thread of a staff member's past chats, imported from their
+ * WhatsApp Business app when they connected it (Coexistence history sync,
+ * 28 Oct 2026).
+ *
+ * HISTORY, NOT TRAFFIC. Each message keeps the time it was really sent, is
+ * deduped on its wamid like every other writer here (Meta resends chunks), and
+ * nothing is published or answered: the agent never sees these. A thread that
+ * has no conversation yet gets one filed as resolved, opened at its first
+ * message, so a few hundred old chats do not land in anybody's open queue — a
+ * new message from that customer reopens it the ordinary way. The contact's
+ * name is filled only where none is known; a name already typed in Nexus wins.
+ */
+export async function importHistoryThread(
+  input: ImportHistoryThreadInput
+): Promise<{ conversationId: string; contactId: string; created: boolean; inserted: number }> {
+  const times = input.messages.map((message) => message.at).sort();
+  const first = times[0] ?? new Date().toISOString();
+  const last = times[times.length - 1] ?? first;
+  return withTenant(input.organizationId, async () => {
+    const db = getPool();
+    const contact = await db.query<{ id: string }>(
+      `insert into contacts (organization_id, wa_id, display_name, last_message_at)
+       values ($1, $2, $3, $4)
+       on conflict (organization_id, wa_id)
+       do update set display_name = coalesce(contacts.display_name, excluded.display_name),
+                     last_message_at = greatest(contacts.last_message_at, excluded.last_message_at)
+       returning id`,
+      [input.organizationId, input.contactWaId, input.contactName?.trim() || null, last]
+    );
+    const contactId = contact.rows[0].id;
+
+    // The same find the inbound writer and the echo use, so history lands in
+    // the conversation a new message from this customer would.
+    const existing = await db.query<{ id: string }>(
+      `select id from conversations
+        where organization_id = $1 and contact_id = $2 and status in ('open', 'pending', 'resolved')
+          and (phone_number_id = $3 or phone_number_id is null)
+        order by (phone_number_id is not distinct from $3) desc, opened_at desc limit 1`,
+      [input.organizationId, contactId, input.onNumber]
+    );
+    let conversationId = existing.rows[0]?.id;
+    const created = !conversationId;
+    if (!conversationId) {
+      conversationId = (
+        await db.query<{ id: string }>(
+          `insert into conversations (organization_id, contact_id, phone_number_id, status, opened_at)
+           values ($1, $2, $3, 'resolved', $4) returning id`,
+          [input.organizationId, contactId, input.onNumber, first]
+        )
+      ).rows[0].id;
+    }
+
+    let inserted = 0;
+    for (const message of input.messages) {
+      const outbound = message.direction === "outbound";
+      const result = await db.query(
+        `insert into messages
+           (organization_id, conversation_id, contact_id, wa_message_id, direction, sender_type,
+            message_type, body, raw_payload, status, employee_id, created_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         on conflict (wa_message_id) where wa_message_id is not null do nothing`,
+        [
+          input.organizationId,
+          conversationId,
+          contactId,
+          message.waMessageId,
+          message.direction,
+          outbound ? "human_agent" : "contact",
+          message.messageType,
+          message.body,
+          JSON.stringify(message.rawPayload),
+          message.status,
+          outbound ? input.employeeId : null,
+          message.at,
+        ]
+      );
+      inserted += result.rowCount ?? 0;
+    }
+    return { conversationId, contactId, created, inserted };
+  });
+}
+
+/**
+ * A name from the staff member's phone book, for a contact Nexus knows by
+ * number only. Never overwrites a name already held.
+ */
+export async function nameContactIfUnnamed(organizationId: string, waId: string, name: string): Promise<void> {
+  await withTenant(organizationId, () =>
+    getPool().query(
+      `update contacts set display_name = $3
+        where organization_id = $1 and wa_id = $2 and (display_name is null or display_name = '')`,
+      [organizationId, waId, name.trim()]
+    )
+  );
+}
+
 export interface RecordOutboundEchoInput {
   organizationId: string;
   /** The customer the staff member messaged (the echo's `to`). */

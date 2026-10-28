@@ -56,6 +56,20 @@ export interface WhatsAppWebhookEntry {
        * signature rather than typed here, since it is Meta's shape, not ours.
        */
       message_echoes?: WhatsAppTextMessage[];
+      /**
+       * Coexistence only (field `history`, 28 Oct 2026): up to 180 days of the
+       * staff member's past one-to-one chats from their WhatsApp Business app,
+       * sent in chunks after Nexus asks for them on connect. A chunk carries
+       * `errors` instead of threads when the business turned sharing off.
+       */
+      history?: WhatsAppHistoryChunk[];
+      /** Coexistence only (field `smb_app_state_sync`): the app's contact book. */
+      state_sync?: Array<{
+        type?: string;
+        action?: string;
+        contact?: { full_name?: string; first_name?: string; phone_number?: string };
+        metadata?: { timestamp?: string };
+      }>;
       statuses?: Array<{
         id: string;
         status: MessageStatus;
@@ -78,6 +92,17 @@ export interface WhatsAppWebhookEntry {
       }>;
     };
   }>;
+}
+
+/** One chunk of a Coexistence history sync. Meta's shape, read defensively. */
+export interface WhatsAppHistoryChunk {
+  metadata?: { phase?: number; chunk_order?: number; progress?: number };
+  threads?: Array<{
+    /** The customer's WhatsApp number. */
+    id: string;
+    messages?: Array<WhatsAppTextMessage & { history_context?: { status?: string } }>;
+  }>;
+  errors?: Array<{ code?: number; title?: string; message?: string }>;
 }
 
 export interface WhatsAppWebhookPayload {

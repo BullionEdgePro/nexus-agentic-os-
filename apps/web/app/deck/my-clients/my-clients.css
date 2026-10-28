@@ -554,3 +554,20 @@
   .deck-root .soc-row { grid-template-columns: 1fr 1fr 30px; }
   .deck-root .soc-row select { grid-column: 1 / -1; }
 }
+
+/* A staff member's past WhatsApp chats, imported on connect (28 Oct 2026). */
+.deck-root .cnx-history {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.deck-root .cnx-history strong {
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+.deck-root .cnx-history p {
+  margin: 0;
+}

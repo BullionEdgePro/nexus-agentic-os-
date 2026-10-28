@@ -18,13 +18,50 @@ const here = dirname(fileURLToPath(import.meta.url));
 const ROUTE = readFileSync(join(here, "..", "src", "routes", "my-campaigns.ts"), "utf8");
 const EMPLOYEES = readFileSync(join(here, "..", "src", "routes", "employees.ts"), "utf8");
 
-const ready = { canBroadcast: true, ownNumber: true, numberRetired: true, approved: 2, pending: 0, clients: 56 };
+const ready = {
+  canBroadcast: true,
+  ownNumber: true,
+  numberRetired: true,
+  approved: 2,
+  pending: 0,
+  clients: 56,
+  health: { canSend: "AVAILABLE", problem: null },
+};
 const check = (checks, key) => checks.find((c) => c.key === key);
 
-test("everything in place: four green checks, in the order a person fixes them", () => {
+test("everything in place: five green checks, in the order a person fixes them", () => {
   const checks = readinessFrom(ready);
-  assert.deepEqual(checks.map((c) => c.key), ["allowed", "number", "message", "clients"]);
+  assert.deepEqual(checks.map((c) => c.key), ["allowed", "number", "account", "message", "clients"]);
   assert.ok(checks.every((c) => c.ok === true));
+});
+
+// 28 Oct 2026: 30 of 30 refused minutes after queueing with 131042, because
+// the sending account had no payment method. WhatsApp says so in advance.
+test("an account WhatsApp is blocking refuses the campaign, in WhatsApp's words", () => {
+  const c = check(
+    readinessFrom({
+      ...ready,
+      health: {
+        canSend: "BLOCKED",
+        problem: { code: 141006, description: "There was an error with your payment method.", solution: "Add a new payment method to the account." },
+      },
+    }),
+    "account"
+  );
+  assert.equal(c.ok, false);
+  assert.match(c.detail, /payment method/);
+  assert.equal(c.fix, "Add a new payment method to the account.");
+});
+
+test("WhatsApp not answering the health question does not stop every campaign", () => {
+  const c = check(readinessFrom({ ...ready, health: null }), "account");
+  assert.equal(c.ok, true);
+  assert.match(c.detail, /did not say/);
+});
+
+test("with no number to send from, there is no account to ask about", () => {
+  const checks = readinessFrom({ ...ready, ownNumber: false, numberRetired: true });
+  assert.equal(check(checks, "account"), undefined);
 });
 
 test("not allowed to send: the owner turns it on", () => {

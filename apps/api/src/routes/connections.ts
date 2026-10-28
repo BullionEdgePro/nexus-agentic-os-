@@ -10,8 +10,10 @@ import {
   recordSync,
   clientEmailAddresses,
   assignEmployeeWhatsAppNumber,
+  findEmployeeById,
   withTenant,
 } from "@nexus/db";
+import { readHistoryStatus, requestChatHistory } from "../lib/whatsapp-history.js";
 import {
   whatsappCoexistenceConfigured,
   whatsappEmbeddedConfig,
@@ -991,6 +993,36 @@ connectionsRoute.delete("/imap", async (c) => {
 // WhatsApp Business (Coexistence)
 // ============================================================
 
+/** The staff member's own connected number, or why there is none. */
+async function ownWhatsAppNumber(c: Parameters<typeof scopeOf>[0]) {
+  const owner = ownerOf(scopeOf(c));
+  if (!owner || !owner.employeeId) return { error: "Only a staff member has a WhatsApp history here." } as const;
+  const employeeId = owner.employeeId;
+  const employee = await withTenant(owner.organizationId, () => findEmployeeById(employeeId));
+  if (!employee?.whatsappPhoneNumberId) return { error: "Connect your WhatsApp Business number first." } as const;
+  return { phoneNumberId: employee.whatsappPhoneNumberId } as const;
+}
+
+/** How the import of this person's past WhatsApp chats is going. */
+connectionsRoute.get("/whatsapp/history", async (c) => {
+  const own = await ownWhatsAppNumber(c);
+  if ("error" in own) return c.json({ status: null, reason: own.error });
+  const status = await readHistoryStatus(own.phoneNumberId).catch(() => null);
+  return c.json({ status });
+});
+
+/**
+ * Ask again. Meta allows it within 24 hours of connecting and once; after that
+ * it refuses, and the answer on screen is how to disconnect and connect again.
+ */
+connectionsRoute.post("/whatsapp/history", async (c) => {
+  const own = await ownWhatsAppNumber(c);
+  if ("error" in own) return c.json({ error: own.error }, 409);
+  const status = await requestChatHistory(own.phoneNumberId);
+  return c.json({ status });
+});
+
+
 /**
  * Finish the Embedded Signup a staff member ran on their phone.
  *
@@ -1091,9 +1123,16 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
       { employeeId, phoneNumberId: connectedPhoneNumberId, wabaId: connectedWabaId },
       "WhatsApp Business number connected via coexistence"
     );
+
+    // THEIR PAST CHATS (28 Oct 2026). Meta sends the app's history only if asked,
+    // within 24 hours and once — so it is asked here, the moment the number is
+    // theirs, and imported as it arrives (lib/whatsapp-history.ts).
+    const history = await requestChatHistory(connectedPhoneNumberId, businessToken);
+
     return c.json({
       ok: true,
       number: details.displayNumber ?? details.verifiedName ?? "connected",
+      history: history.state,
     });
   } catch (err) {
     logger.error({ err, employeeId }, "WhatsApp coexistence connection failed");

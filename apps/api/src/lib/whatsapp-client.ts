@@ -562,3 +562,109 @@ export async function downloadWhatsAppMedia(
     mimeType: info.mime_type ?? file.headers.get("content-type") ?? "application/octet-stream",
   };
 }
+
+/**
+ * Ask Meta to send a Coexistence number's app data: its contact book
+ * ("smb_app_state_sync") or up to 180 days of its chats ("history").
+ *
+ * Only possible within 24 hours of connecting, and only once per connection;
+ * after that Meta's answer is that the business must disconnect and connect
+ * again. Success means the request was accepted, not that history was shared —
+ * that arrives, or is refused, by webhook.
+ */
+export async function requestSmbAppData(
+  phoneNumberId: string,
+  syncType: "smb_app_state_sync" | "history",
+  accessToken?: string
+): Promise<{ ok: true; requestId: string | null } | { ok: false; error: string }> {
+  try {
+    const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${phoneNumberId}/smb_app_data`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken ?? (await bearerFor(phoneNumberId))}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ messaging_product: "whatsapp", sync_type: syncType }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      request_id?: string;
+      error?: { message?: string; error_user_msg?: string; code?: number };
+    };
+    if (!response.ok) {
+      const e = payload.error;
+      return { ok: false, error: `${e?.code ?? response.status}: ${e?.error_user_msg ?? e?.message ?? "refused"}` };
+    }
+    return { ok: true, requestId: payload.request_id ?? null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface SendingHealth {
+  /** Meta's overall answer: AVAILABLE, LIMITED or BLOCKED. */
+  canSend: string;
+  /** The first reason a node is BLOCKED, in Meta's words, when it is. */
+  problem: { code: number | null; description: string; solution: string | null } | null;
+}
+
+/**
+ * Whether WhatsApp will let this number send at all, and why not.
+ *
+ * Asked before a campaign (28 Oct 2026) because Meta ACCEPTS a send from an
+ * account it will not bill and refuses it afterwards — 30 of 30 came back
+ * 131042, "payment issue", minutes after being queued. `health_status` covers
+ * the number, its WhatsApp account, the business and the app, and names the
+ * blocking reason, so the refusal can be said before anybody presses send.
+ * Separate from readNumberStanding so a field Meta rejects here can never cost
+ * the quality rating. null when Meta does not answer.
+ */
+export async function readSendingHealth(phoneNumberId: string): Promise<SendingHealth | null> {
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/${env.metaGraphApiVersion}/${phoneNumberId}?fields=health_status`,
+      { headers: { Authorization: `Bearer ${await bearerFor(phoneNumberId)}` } }
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
+      health_status?: {
+        can_send_message?: string;
+        entities?: Array<{
+          entity_type?: string;
+          can_send_message?: string;
+          errors?: Array<{ error_code?: number; error_description?: string; possible_solution?: string }>;
+        }>;
+      };
+    };
+    return healthFrom(json.health_status);
+  } catch {
+    return null;
+  }
+}
+
+/** Meta's health_status, reduced to what a sender needs. Exported for its test. */
+export function healthFrom(
+  health:
+    | {
+        can_send_message?: string;
+        entities?: Array<{
+          can_send_message?: string;
+          errors?: Array<{ error_code?: number; error_description?: string; possible_solution?: string }>;
+        }>;
+      }
+    | undefined
+): SendingHealth | null {
+  if (!health?.can_send_message) return null;
+  const blocked = (health.entities ?? []).find((entity) => entity.can_send_message === "BLOCKED" && entity.errors?.length);
+  const error = blocked?.errors?.[0];
+  return {
+    canSend: health.can_send_message,
+    problem:
+      health.can_send_message === "BLOCKED"
+        ? {
+            code: typeof error?.error_code === "number" ? error.error_code : null,
+            description: error?.error_description?.trim() || "WhatsApp is not letting this number send messages.",
+            solution: error?.possible_solution?.trim() || null,
+          }
+        : null,
+  };
+}

@@ -3087,6 +3087,26 @@ export function startInstagramConnect(): Promise<{ url: string }> {
   return request("/api/connections/instagram/start");
 }
 
+/** How the import of a staff member's past WhatsApp chats is going (28 Oct 2026). */
+export interface WhatsAppHistoryStatus {
+  state: "requested" | "importing" | "done" | "declined" | "refused";
+  requestedAt: string | null;
+  progress: number;
+  imported: number;
+  chats: number;
+  error: string | null;
+  updatedAt: string;
+}
+
+export function getWhatsAppHistory(): Promise<{ status: WhatsAppHistoryStatus | null; reason?: string }> {
+  return request("/api/connections/whatsapp/history");
+}
+
+/** Ask WhatsApp for the history again — it only agrees within 24 hours of connecting. */
+export function requestWhatsAppHistory(): Promise<{ status: WhatsAppHistoryStatus }> {
+  return request("/api/connections/whatsapp/history", { method: "POST" });
+}
+
 export function getClientMail(): Promise<{
   messages: ClientMail[];
   addressesSearched: number;

@@ -70,6 +70,7 @@ import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.j
 import { logger } from "../lib/logger.js";
 import { explainSendError } from "../lib/send-errors.js";
 import { recordTestSendReceipt } from "../lib/campaign-test-status.js";
+import { processAppSync } from "../lib/whatsapp-history.js";
 import { withConversationLock } from "./conversation-lock.js";
 import { describeInboundMessage } from "../lib/inbound-media.js";
 
@@ -305,6 +306,16 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
       const echoes = change.value.message_echoes ?? [];
       for (const echo of echoes) {
         await processMessageEcho(phoneNumberId, echo);
+      }
+
+      // Coexistence app sync (28 Oct 2026): the chats and contact book a staff
+      // member's WhatsApp Business app shares when they connect it. Isolated
+      // like the echoes: history is deduped, so a failure here is logged rather
+      // than retried, and must never cost the live messages beside it.
+      try {
+        await processAppSync(phoneNumberId, change);
+      } catch (err) {
+        logger.error({ err, phoneNumberId, field: change.field }, "Could not import WhatsApp app history");
       }
     }
   }

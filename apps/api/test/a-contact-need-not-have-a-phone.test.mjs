@@ -50,7 +50,9 @@ test("the WhatsApp identity is left exactly as it was — the change is additive
   // Proof the WhatsApp writers were not touched: all three still resolve on the
   // very same key, so existing behaviour is unchanged.
   const waConflicts = (s) => (s.match(/on conflict \(organization_id, wa_id\)/g) || []).length;
-  assert.equal(waConflicts(MESSAGES), 2, "both message-path upserts still key on wa_id");
+  // Three since 28 Oct 2026: the Coexistence history import (importHistoryThread)
+  // resolves its contact on the same key as the inbound writer and the echo.
+  assert.equal(waConflicts(MESSAGES), 3, "every message-path upsert still keys on wa_id");
   assert.equal(waConflicts(CONTACT_IDENTITY), 1, "the hand-capture upsert still keys on wa_id");
 });
 

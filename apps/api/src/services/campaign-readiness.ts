@@ -7,6 +7,7 @@ import {
   withTenant,
 } from "@nexus/db";
 import { attributeTemplate, isHiddenTemplate, staffMayUseTemplate } from "@nexus/shared";
+import { readSendingHealth, type SendingHealth } from "../lib/whatsapp-client.js";
 
 /**
  * What stands between a staff member and a campaign.
@@ -20,7 +21,7 @@ import { attributeTemplate, isHiddenTemplate, staffMayUseTemplate } from "@nexus
  * `ok: null` is "could not check", and is never treated as a pass.
  */
 export interface ReadinessCheck {
-  key: "allowed" | "number" | "message" | "clients";
+  key: "allowed" | "number" | "account" | "message" | "clients";
   ok: boolean | null;
   detail: string;
   fix: string | null;
@@ -36,6 +37,37 @@ export interface ReadinessFacts {
   /** The same, submitted and still waiting for WhatsApp's decision. */
   pending: number;
   clients: number;
+  /**
+   * What WhatsApp says about sending from the number (28 Oct 2026); null when
+   * it did not answer. A blocked account — most often no payment method, the
+   * 131042 that refused 30 of 30 — is refused here, before anything is queued.
+   */
+  health: SendingHealth | null;
+}
+
+/**
+ * The account check. Meta not answering is NOT a refusal, unlike `ok: null`
+ * elsewhere: the health call is one more round trip on the way into the screen,
+ * and a hiccup in it must not stop every campaign on the platform. The send's
+ * own receipt still reports a block afterwards, in words.
+ */
+function accountCheck(health: SendingHealth | null): ReadinessCheck {
+  if (health?.problem) {
+    return {
+      key: "account",
+      ok: false,
+      detail: `WhatsApp is blocking messages from this number: ${health.problem.description}`,
+      fix:
+        health.problem.solution ??
+        "Whoever owns this WhatsApp account fixes it in Meta Business Suite — for a payment problem, add a payment method at business.facebook.com/billing_hub.",
+    };
+  }
+  return {
+    key: "account",
+    ok: true,
+    detail: health ? "WhatsApp says this number can send." : "WhatsApp did not say whether this number can send just now.",
+    fix: null,
+  };
 }
 
 export function readinessFrom(facts: ReadinessFacts): ReadinessCheck[] {
@@ -62,6 +94,8 @@ export function readinessFrom(facts: ReadinessFacts): ReadinessCheck[] {
           detail: "You have no WhatsApp number of your own, and the shared company number is switched off.",
           fix: "Open Connections, then WhatsApp → Connect WhatsApp, and connect your WhatsApp Business number.",
         },
+    // Only once there is a number to ask about.
+    ...(hasNumber ? [accountCheck(facts.health)] : []),
     facts.approved > 0
       ? {
           key: "message",
@@ -124,7 +158,7 @@ export async function campaignReadiness(employeeId: string, organizationId: stri
     await findOrganizationById(organizationId),
   ] as const);
   if (!employee || !organization) {
-    return readinessFrom({ canBroadcast: false, ownNumber: false, numberRetired: true, approved: 0, pending: 0, clients: 0 });
+    return readinessFrom({ canBroadcast: false, ownNumber: false, numberRetired: true, approved: 0, pending: 0, clients: 0, health: null });
   }
 
   const account = sendingAccountOf(employee, organization);
@@ -135,13 +169,17 @@ export async function campaignReadiness(employeeId: string, organizationId: stri
       attributeTemplate(template.metaTemplateName, organization.slug) !== "other-business"
   );
   const clients = await withTenant(organizationId, () => myClientsForBroadcast(organizationId, employeeId));
+  const numberRetired = await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId);
+  // The number the campaign would go out from — the same choice the send makes.
+  const sendingNumber = employee.whatsappPhoneNumberId ?? (numberRetired ? null : organization.whatsappPhoneNumberId);
 
   return readinessFrom({
     canBroadcast: employee.canBroadcast ?? false,
     ownNumber: Boolean(employee.whatsappPhoneNumberId),
-    numberRetired: await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId),
+    numberRetired,
     approved: usable.filter((template) => template.isApproved).length,
     pending: usable.filter((template) => !template.isApproved && /PENDING|IN_APPEAL/i.test(template.status ?? "")).length,
     clients: clients.length,
+    health: sendingNumber ? await readSendingHealth(sendingNumber) : null,
   });
 }
