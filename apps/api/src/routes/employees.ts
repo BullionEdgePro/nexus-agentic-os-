@@ -7,6 +7,8 @@ import {
   findEmployeeById,
   createEmployee,
   deactivateEmployee,
+  listRemovedEmployees,
+  reactivateEmployee,
   assignConversationToEmployee,
   listConversationsForEmployee,
   setConversationHandoff,
@@ -205,7 +207,49 @@ employeesRoute.delete("/:slug/employees/:employeeId", async (c) => {
   }
 
   const changed = await deactivateEmployee(employee.id);
+  logger.info(
+    { organizationSlug: organization.slug, employeeId: employee.id, fullName: employee.fullName },
+    "Employee removed from the rota"
+  );
   return c.json({ deactivated: changed, employeeId: employee.id });
+});
+
+/**
+ * Who has been taken off this business's rota (29 Oct 2026). Owner only, like
+ * removing: a colleague has no reason to see who was let go.
+ */
+employeesRoute.get("/:slug/employees-removed", async (c) => {
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can see removed staff." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  return c.json({ employees: await listRemovedEmployees(organization.id) });
+});
+
+/**
+ * Put a removed person back (29 Oct 2026). Removal never deleted anything —
+ * their sign-in code, number, book and history are all still theirs — so this
+ * is the whole undo, and the only one that did not need the database.
+ */
+employeesRoute.post("/:slug/employees/:employeeId/restore", async (c) => {
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can restore staff." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const employee = await findEmployeeById(c.req.param("employeeId"));
+  if (!employee || employee.organizationId !== organization.id) {
+    return c.json({ error: "Employee not found" }, 404);
+  }
+
+  const restored = await reactivateEmployee(employee.id);
+  logger.info(
+    { organizationSlug: organization.slug, employeeId: employee.id, fullName: employee.fullName, restored },
+    "Employee restored to the rota"
+  );
+  return c.json({ restored, employeeId: employee.id });
 });
 
 /**

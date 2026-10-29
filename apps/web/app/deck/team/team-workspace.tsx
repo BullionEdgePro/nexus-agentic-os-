@@ -11,6 +11,9 @@ import {
   getTeam,
   addTeamMember,
   removeTeamMember,
+  getRemovedTeamMembers,
+  restoreTeamMember,
+  type RemovedTeamMember,
   getAssignedConversations,
   takeToOwnWhatsApp,
   issueAccessCode,
@@ -112,6 +115,8 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
   /** How the scorer has been doing, or the sentence saying why that cannot be said. */
   const [accuracy, setAccuracy] = useState<ScorerAccuracy | null>(null);
   const [leadForm, setLeadForm] = useState({ whatsappNumber: "", contactName: "", note: "" });
+  // People taken off the rota, so a removal can be undone here (29 Oct 2026).
+  const [removed, setRemoved] = useState<RemovedTeamMember[]>([]);
 
   const loadTeam = useCallback(
     async (slug: BusinessSlug) => {
@@ -119,6 +124,12 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
       try {
         const { employees } = await getTeam(slug);
         setTeam(employees);
+        // Owner only, and never allowed to blank the roster if it fails.
+        if (!lockedTo) {
+          getRemovedTeamMembers(slug)
+            .then(({ employees: gone }) => setRemoved(gone))
+            .catch(() => setRemoved([]));
+        }
         setSelected((current) => {
           // A signed-in employee is always looking at themselves. Falling back
           // to "nobody selected" would show them an empty page with no way to
@@ -257,11 +268,30 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
   }
 
   async function onRemove(member: TeamMember) {
+    // ASKED FIRST (29 Oct 2026). Removing was one click beside "Sign-in code",
+    // and two SFS staff went in the same minute with no way back.
+    if (!window.confirm(`Take ${member.fullName} off the rota? They can no longer sign in. You can restore them from "Removed staff" below.`)) {
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       await removeTeamMember(business, member.id);
-      setNotice(`${member.fullName} taken off the rota. Their message history is kept.`);
+      setNotice(`${member.fullName} taken off the rota. Their message history is kept — restore them below if this was a mistake.`);
+      await loadTeam(business);
+    } catch (err) {
+      setError(readable(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRestore(person: RemovedTeamMember) {
+    setBusy(true);
+    setError("");
+    try {
+      await restoreTeamMember(business, person.id);
+      setNotice(`${person.fullName} is back on the rota, with their sign-in, number and clients as they were.`);
       await loadTeam(business);
     } catch (err) {
       setError(readable(err));
@@ -593,6 +623,36 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
               ))}
             </ul>
           )}
+
+          {isOperator && removed.length > 0 ? (
+            <section className="team-removed" aria-label="Removed staff">
+              <h3>Removed staff</h3>
+              <p className="team-removed-note">
+                Taken off the rota and unable to sign in. Nothing of theirs was deleted — restoring puts them back as
+                they were.
+              </p>
+              <ul>
+                {removed.map((person) => (
+                  <li key={person.id}>
+                    <span>
+                      <strong>{person.fullName}</strong>
+                      {person.jobTitle ? ` · ${person.jobTitle}` : ""}
+                      {person.email ? <em> {person.email}</em> : null}
+                      <em> · removed {formatSignIn(person.removedAt)}</em>
+                    </span>
+                    <button
+                      type="button"
+                      className="team-remove alt"
+                      disabled={busy}
+                      onClick={() => onRestore(person)}
+                    >
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <form className="team-form" onSubmit={onAdd}>
             <h3>Add someone</h3>

@@ -601,6 +601,23 @@ export function removeTeamMember(orgSlug: BusinessSlug, employeeId: string): Pro
   return request(`/api/organizations/${orgSlug}/employees/${employeeId}`, { method: "DELETE" });
 }
 
+/** Someone taken off the rota — nothing of theirs was deleted (29 Oct 2026). */
+export interface RemovedTeamMember {
+  id: string;
+  fullName: string;
+  email: string | null;
+  jobTitle: string | null;
+  removedAt: string;
+}
+
+export function getRemovedTeamMembers(orgSlug: BusinessSlug): Promise<{ employees: RemovedTeamMember[] }> {
+  return request(`/api/organizations/${orgSlug}/employees-removed`);
+}
+
+export function restoreTeamMember(orgSlug: BusinessSlug, employeeId: string): Promise<{ restored: boolean }> {
+  return request(`/api/organizations/${orgSlug}/employees/${employeeId}/restore`, { method: "POST" });
+}
+
 /**
  * Issue a sign-in code for an employee.
  *

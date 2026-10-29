@@ -443,6 +443,48 @@ export async function deactivateEmployee(employeeId: string): Promise<boolean> {
 }
 
 /**
+ * The people taken off a business's rota, newest first (29 Oct 2026).
+ *
+ * Removing someone was one click with no way back: two SFS staff vanished in
+ * the same minute and the only route to restoring them was the database.
+ * Nothing about them was deleted, so they can be listed and put back.
+ */
+export async function listRemovedEmployees(
+  organizationId: string
+): Promise<Array<{ id: string; fullName: string; email: string | null; jobTitle: string | null; removedAt: string }>> {
+  return withServingTenant(organizationId, async () => {
+    const { rows } = await getPool().query<{
+      id: string;
+      full_name: string;
+      email: string | null;
+      job_title: string | null;
+      updated_at: string;
+    }>(
+      `select id, full_name, email, job_title, updated_at from employees
+        where organization_id = $1 and is_active = false
+        order by updated_at desc`,
+      [organizationId]
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      fullName: row.full_name,
+      email: row.email,
+      jobTitle: row.job_title,
+      removedAt: row.updated_at,
+    }));
+  });
+}
+
+/** Put a removed person back on the rota, as they were. */
+export async function reactivateEmployee(employeeId: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update employees set is_active = true, updated_at = now() where id = $1 and is_active = false`,
+    [employeeId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/**
  * Set an employee's working hours and breaks.
  *
  * THERE WAS NO WRITER FOR THESE COLUMNS AT ALL until 2026-08-14, and the gap was
