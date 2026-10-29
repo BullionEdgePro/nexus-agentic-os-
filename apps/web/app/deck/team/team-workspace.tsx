@@ -638,7 +638,7 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                       <strong>{person.fullName}</strong>
                       {person.jobTitle ? ` · ${person.jobTitle}` : ""}
                       {person.email ? <em> {person.email}</em> : null}
-                      <em> · removed {formatSignIn(person.removedAt)}</em>
+                      <em> · removed {formatSignIn(person.removedAt).replace(/^signed in /, "")}</em>
                     </span>
                     <button
                       type="button"
