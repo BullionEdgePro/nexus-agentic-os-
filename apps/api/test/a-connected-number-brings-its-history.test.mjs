@@ -87,6 +87,25 @@ test("a BLOCKED health answer names the reason; an available one has none", () =
 test("131042 reads as the payment problem it is, in both shapes Meta sends it", () => {
   const receipt =
     "131042: Business eligibility payment issue: Message failed to send because your WhatsApp Business account currency is not configured.";
-  assert.match(explainSendError(receipt), /no payment method/);
+  assert.match(explainSendError(receipt), /no currency or payment method/);
   assert.match(explainSendError('{"error":{"code":131042,"message":"Business eligibility payment issue"}}'), /billing_hub/);
+});
+
+// 29 Oct 2026: a card was on the account, and the next test still came back
+// 131042 — "errors related to your payment method". Saying "no payment method"
+// sent the owner looking for something already done.
+test("a card Meta cannot charge is not described as a missing card", () => {
+  const receipt =
+    "131042: Business eligibility payment issue: Message failed to send because there were one or more errors related to your payment method.";
+  const said = explainSendError(receipt);
+  assert.match(said, /could not charge the card/);
+  assert.doesNotMatch(said, /no currency/);
+});
+
+test("a payment refusal is remembered per number and cleared by the next delivery", () => {
+  const processor = src("queue", "processor.ts");
+  assert.match(processor, /isPaymentRefusal\(errorText\)\) \{\s*await notePaymentRefusal\(phoneNumberId, errorText\)/);
+  assert.match(processor, /status\.status === "delivered" \|\| status\.status === "read"\) \{\s*await clearPaymentRefusal\(phoneNumberId\)/);
+  assert.match(src("queue", "broadcast-processor.ts"), /isPaymentRefusal\(reason\)\) await notePaymentRefusal\(phoneNumberId, reason\)/);
+  assert.match(src("routes", "my-campaigns.ts"), /isPaymentRefusal\(raw\)\) await notePaymentRefusal\(from, raw\)/);
 });

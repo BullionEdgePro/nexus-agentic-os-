@@ -8,6 +8,7 @@ import {
 } from "@nexus/db";
 import { attributeTemplate, isHiddenTemplate, staffMayUseTemplate } from "@nexus/shared";
 import { readSendingHealth, type SendingHealth } from "../lib/whatsapp-client.js";
+import { readPaymentRefusal } from "../lib/payment-refusal.js";
 
 /**
  * What stands between a staff member and a campaign.
@@ -43,6 +44,12 @@ export interface ReadinessFacts {
    * 131042 that refused 30 of 30 — is refused here, before anything is queued.
    */
   health: SendingHealth | null;
+  /**
+   * The last time WhatsApp refused this number over payment, if nothing has
+   * been delivered from it since (29 Oct 2026). The health answer says only
+   * that a card exists; this says whether it can be charged.
+   */
+  paymentRefused?: { at: string; reason: string } | null;
 }
 
 /**
@@ -51,7 +58,18 @@ export interface ReadinessFacts {
  * and a hiccup in it must not stop every campaign on the platform. The send's
  * own receipt still reports a block afterwards, in words.
  */
-function accountCheck(health: SendingHealth | null): ReadinessCheck {
+function accountCheck(health: SendingHealth | null, paymentRefused: ReadinessFacts["paymentRefused"]): ReadinessCheck {
+  // A real refusal outranks a green health answer: it is what Meta actually
+  // did with the last message, not what it says about the account.
+  if (paymentRefused && !health?.problem) {
+    return {
+      key: "account",
+      ok: false,
+      detail: `WhatsApp refused the last message from this number over payment (${new Date(paymentRefused.at).toLocaleString("en-GB", { timeZone: "Asia/Dubai", dateStyle: "medium", timeStyle: "short" })}): Meta could not charge the card on its WhatsApp account.`,
+      fix:
+        "Whoever owns that WhatsApp account opens business.facebook.com/billing_hub, pays any outstanding Meta balance or adds a card that works, then sends a test here. A delivered test clears this.",
+    };
+  }
   if (health?.problem) {
     return {
       key: "account",
@@ -95,7 +113,7 @@ export function readinessFrom(facts: ReadinessFacts): ReadinessCheck[] {
           fix: "Open Connections, then WhatsApp → Connect WhatsApp, and connect your WhatsApp Business number.",
         },
     // Only once there is a number to ask about.
-    ...(hasNumber ? [accountCheck(facts.health)] : []),
+    ...(hasNumber ? [accountCheck(facts.health, facts.paymentRefused ?? null)] : []),
     facts.approved > 0
       ? {
           key: "message",
@@ -181,5 +199,6 @@ export async function campaignReadiness(employeeId: string, organizationId: stri
     pending: usable.filter((template) => !template.isApproved && /PENDING|IN_APPEAL/i.test(template.status ?? "")).length,
     clients: clients.length,
     health: sendingNumber ? await readSendingHealth(sendingNumber) : null,
+    paymentRefused: sendingNumber ? await readPaymentRefusal(sendingNumber) : null,
   });
 }

@@ -47,7 +47,8 @@ import { env } from "../config/env.js";
 import { deskOf, text } from "./my-desk.js";
 import { campaignReadiness, sendingAccountOf } from "../services/campaign-readiness.js";
 import { logger } from "../lib/logger.js";
-import { explainSendError } from "../lib/send-errors.js";
+import { explainSendError, isPaymentRefusal } from "../lib/send-errors.js";
+import { notePaymentRefusal } from "../lib/payment-refusal.js";
 
 /**
  * A staff member's own number, and campaigns to their own book.
@@ -735,7 +736,9 @@ myCampaignsRoute.post("/campaigns/test", async (c) => {
     }
     return c.json({ ok: true, messageId });
   } catch (err) {
-    const reason = explainSendError(err instanceof Error ? err.message : String(err));
+    const raw = err instanceof Error ? err.message : String(err);
+    const reason = explainSendError(raw);
+    if (isPaymentRefusal(raw)) await notePaymentRefusal(from, raw).catch(() => undefined);
     logger.warn({ employeeId: desk.employeeId, template: template.metaTemplateName, from, reason }, "Campaign test refused");
     return c.json({ error: reason }, 502);
   }

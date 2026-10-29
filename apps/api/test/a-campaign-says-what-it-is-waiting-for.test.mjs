@@ -53,6 +53,13 @@ test("an account WhatsApp is blocking refuses the campaign, in WhatsApp's words"
   assert.equal(c.fix, "Add a new payment method to the account.");
 });
 
+test("a refusal Meta actually sent outranks a green health answer", () => {
+  const c = check(readinessFrom({ ...ready, paymentRefused: { at: "2026-10-29T08:00:00Z", reason: "131042: payment" } }), "account");
+  assert.equal(c.ok, false);
+  assert.match(c.detail, /could not charge the card/);
+  assert.match(c.fix, /A delivered test clears this/);
+});
+
 test("WhatsApp not answering the health question does not stop every campaign", () => {
   const c = check(readinessFrom({ ...ready, health: null }), "account");
   assert.equal(c.ok, true);

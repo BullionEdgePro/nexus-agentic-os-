@@ -11,7 +11,8 @@ import {
 import { sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { isUpstreamUnavailable } from "../scripts/upstream.js";
 import { logger } from "../lib/logger.js";
-import { explainSendError, NO_WHATSAPP_NUMBER } from "../lib/send-errors.js";
+import { explainSendError, isPaymentRefusal, NO_WHATSAPP_NUMBER } from "../lib/send-errors.js";
+import { notePaymentRefusal } from "../lib/payment-refusal.js";
 
 /**
  * Delivering one message of a campaign.
@@ -83,6 +84,9 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
       await updateBroadcastRecipientStatus(recipientId, "sent", waMessageId);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
+      // Refused at send time over payment: remembered for the number, so the
+      // readiness screen says so before the next campaign (payment-refusal.ts).
+      if (isPaymentRefusal(reason)) await notePaymentRefusal(phoneNumberId, reason).catch(() => undefined);
 
       // `attemptsMade` counts the attempt that has just failed. On the last one
       // there is nothing left to wait for, so the row must be settled rather

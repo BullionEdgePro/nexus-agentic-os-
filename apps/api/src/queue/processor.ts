@@ -68,7 +68,8 @@ import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
-import { explainSendError } from "../lib/send-errors.js";
+import { explainSendError, isPaymentRefusal } from "../lib/send-errors.js";
+import { clearPaymentRefusal, notePaymentRefusal } from "../lib/payment-refusal.js";
 import { recordTestSendReceipt } from "../lib/campaign-test-status.js";
 import { processAppSync } from "../lib/whatsapp-history.js";
 import { withConversationLock } from "./conversation-lock.js";
@@ -484,6 +485,15 @@ async function processDeliveryStatuses(
         if (wasTest && status.status === "failed") {
           logger.warn({ waMessageId: status.id, errorText }, "WhatsApp did not deliver a campaign test");
         }
+      }
+
+      // WHETHER THIS NUMBER CAN ACTUALLY BE BILLED (29 Oct 2026). A payment
+      // refusal is remembered for the number, whatever the message was; the
+      // first delivery from it clears that. See payment-refusal.ts.
+      if (status.status === "failed" && errorText && isPaymentRefusal(errorText)) {
+        await notePaymentRefusal(phoneNumberId, errorText);
+      } else if (status.status === "delivered" || status.status === "read") {
+        await clearPaymentRefusal(phoneNumberId);
       }
     } catch (err) {
       logger.warn({ waMessageId: status.id, err }, "Could not record a delivery status");
