@@ -1,0 +1,49 @@
+/* What an approved message says, under the picker (29 Oct 2026). */
+.deck-root .tpl-text {
+  display: grid;
+  gap: 6px;
+  max-width: 440px;
+  margin: 8px 0 12px;
+}
+.deck-root .tpl-text-label {
+  font-size: 0.75rem;
+  color: var(--slate);
+}
+.deck-root .tpl-text-bubble {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--marble);
+  color: var(--ink);
+  display: grid;
+  gap: 6px;
+}
+.deck-root .tpl-text-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.deck-root .tpl-text-bubble small {
+  color: var(--slate);
+  font-size: 0.75rem;
+}
+.deck-root .tpl-text-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.deck-root .tpl-text-buttons span {
+  flex: 1 1 120px;
+  text-align: center;
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--signal-text);
+  font-size: 0.85rem;
+}
+.deck-root .tpl-text-note {
+  margin: 4px 0;
+  font-size: 0.78rem;
+  font-style: normal;
+  color: var(--slate);
+}

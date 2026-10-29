@@ -21,7 +21,12 @@ import {
   campaignForControl,
   connectionSecret,
   upsertTemplateFromMeta,
+  openWindowConversations,
+  insertOutboundMessage,
 } from "@nexus/db";
+import { sendReplyOnChannel } from "../lib/reply-dispatch.js";
+import { publishInboxEvent } from "../lib/pubsub.js";
+import { fetchTemplateText } from "../lib/template-text.js";
 import { completeText } from "@nexus/agents";
 import { renderCampaignEmail, explainEmailSendError } from "../lib/campaign-email.js";
 import { apiBaseUrl } from "../lib/public-urls.js";
@@ -266,7 +271,171 @@ myCampaignsRoute.get("/campaigns", async (c) => {
       })),
     // What the client-list upload needs to put a file into THIS person's book.
     book: { businessSlug: organization.slug, employeeId: desk.employeeId },
+    // Free-text messages, no approval (29 Oct 2026): only the clients who wrote
+    // to this person's own number in the last 24 hours. See quickMessageAudience.
+    quick: employee.whatsappPhoneNumberId
+      ? {
+          ownNumber: true,
+          people: (await quickMessageAudience(desk.organizationId, employee.whatsappPhoneNumberId, audience)).map(
+            (person) => ({ displayName: person.displayName, waId: person.waId, lastInboundAt: person.lastInboundAt })
+          ),
+        }
+      : { ownNumber: false, people: [] },
   });
+});
+
+// ============================================================
+// Quick message: free text inside WhatsApp's 24-hour window (29 Oct 2026)
+// ============================================================
+
+/**
+ * The people in this book a free-text message can reach right now.
+ *
+ * WhatsApp's rule, not ours: a business may send anything without an approved
+ * template only within 24 hours of the customer's last message to that number.
+ * Outside it Meta refuses (131047). So a quick message goes only to these,
+ * from the person's own number — on the shared line the window belongs to
+ * whichever business answered, which is not this person's to spend.
+ */
+async function quickMessageAudience(
+  organizationId: string,
+  phoneNumberId: string,
+  book: Array<{ id: string; waId: string; displayName: string | null }>
+) {
+  const open = await openWindowConversations(organizationId, phoneNumberId, book.map((person) => person.id));
+  const byId = new Map(book.map((person) => [person.id, person]));
+  return open.flatMap((window) => {
+    const person = byId.get(window.contactId);
+    return person ? [{ ...person, conversationId: window.conversationId, lastInboundAt: window.lastInboundAt }] : [];
+  });
+}
+
+const QUICK_MESSAGE_MAX = 4096;
+const QUICK_MESSAGE_RECIPIENTS_MAX = 200;
+
+/** {name} → the recipient's first name, or "there". Exported for its test. */
+export function personalise(text: string, displayName: string | null): string {
+  const first = displayName?.trim().split(/\s+/)[0] || "there";
+  return text.replace(/\{name\}/gi, first);
+}
+
+/**
+ * Send one free-text message to everyone in the window, now.
+ *
+ * Each goes out as an ordinary reply in that client's conversation — the same
+ * send and the same record as typing it in the inbox — so it shows in the
+ * thread, gets delivery receipts, and never touches the campaign tables (a
+ * WhatsApp campaign row must name a template). The window is re-read here, at
+ * send time, so a list on screen for an hour cannot reach people whose window
+ * has since closed. The AI's state is left alone: a broadcast is not a person
+ * taking one conversation over.
+ */
+myCampaignsRoute.post("/quick-message", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "Write the message." }, 400);
+  if (text.length > QUICK_MESSAGE_MAX) return c.json({ error: "Keep the message under 4,096 characters." }, 400);
+
+  const employee = await withTenant(desk.organizationId, () => findEmployeeById(desk.employeeId));
+  if (!employee) return c.json({ error: "Account not found." }, 404);
+  if (!employee.canBroadcast) return c.json({ error: "Campaigns are not switched on for you." }, 403);
+  const from = employee.whatsappPhoneNumberId;
+  if (!from) {
+    return c.json({ error: "Quick messages go from your own WhatsApp number. Connect it in Connections first." }, 409);
+  }
+
+  const book = await withTenant(desk.organizationId, () => myClientsForBroadcast(desk.organizationId, desk.employeeId));
+  const people = (await quickMessageAudience(desk.organizationId, from, book)).slice(0, QUICK_MESSAGE_RECIPIENTS_MAX);
+  if (people.length === 0) {
+    return c.json(
+      { error: "Nobody in your book has written to your WhatsApp in the last 24 hours, so a free message cannot reach anyone. Use an approved message instead." },
+      422
+    );
+  }
+
+  const organization = await withTenant(desk.organizationId, () => findOrganizationById(desk.organizationId));
+  const sent: string[] = [];
+  const failed: Array<{ name: string; reason: string }> = [];
+  for (const person of people) {
+    const message = personalise(text, person.displayName);
+    try {
+      const dispatched = await sendReplyOnChannel(
+        {
+          organizationId: desk.organizationId,
+          channel: "whatsapp",
+          phoneNumberId: from,
+          contactWaId: person.waId,
+          contactExternalId: null,
+          conversationId: person.conversationId,
+        },
+        message
+      );
+      const recorded = await withTenant(desk.organizationId, () =>
+        insertOutboundMessage({
+          organizationId: desk.organizationId,
+          conversationId: person.conversationId,
+          contactId: person.id,
+          senderType: "human_agent",
+          senderId: desk.employeeId,
+          employeeId: desk.employeeId,
+          body: message,
+          waMessageId: dispatched.waMessageId ?? undefined,
+        })
+      );
+      if (organization) {
+        await publishInboxEvent({
+          type: "message",
+          organizationId: desk.organizationId,
+          organizationSlug: organization.slug,
+          conversationId: person.conversationId,
+          message: { ...recorded, senderName: employee.fullName },
+        }).catch(() => undefined);
+      }
+      sent.push(person.displayName ?? `+${person.waId}`);
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      if (isPaymentRefusal(raw)) await notePaymentRefusal(from, raw).catch(() => undefined);
+      failed.push({ name: person.displayName ?? `+${person.waId}`, reason: explainSendError(raw) });
+    }
+  }
+
+  logger.info(
+    { employeeId: desk.employeeId, from, sent: sent.length, failed: failed.length },
+    "Quick message sent to clients inside the 24-hour window"
+  );
+  return c.json({ sent: sent.length, failed });
+});
+
+/**
+ * The words of an approved message, so a person can read what they are about
+ * to send before they send it (29 Oct 2026). Only a message this person may
+ * send, on the account they send from — the same checks the send makes.
+ */
+myCampaignsRoute.get("/templates/:id/text", async (c) => {
+  const desk = deskOf(c);
+  if ("error" in desk) return c.json({ error: desk.error }, 403);
+  // Read straight from the session as well, as controlOwnCampaign does.
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!scope || scope.role !== "employee" || scope.organizationId !== desk.organizationId) {
+    return c.json({ error: "Message not found." }, 404);
+  }
+  const template = await withTenant(desk.organizationId, () => getBroadcastTemplate(c.req.param("id")));
+  if (
+    !template ||
+    template.organizationId !== desk.organizationId ||
+    !staffMayUseTemplate(template.metaTemplateName, desk.employeeId)
+  ) {
+    return c.json({ error: "Message not found." }, 404);
+  }
+  const account = await templateAccountFor(desk);
+  if ("error" in account) return c.json({ error: account.error }, account.status);
+  if (template.whatsappBusinessAccountId !== account.wabaId) return c.json({ error: "Message not found." }, 404);
+  const text = await fetchTemplateText(account.wabaId, template.metaTemplateName, template.language, account.token);
+  if (!text) return c.json({ error: "WhatsApp did not return this message's wording just now." }, 502);
+  return c.json({ text, bodyParamCount: template.bodyParamCount });
 });
 
 /**

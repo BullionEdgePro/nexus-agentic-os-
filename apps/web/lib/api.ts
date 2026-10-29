@@ -2790,6 +2790,15 @@ export interface MyCampaignsView {
   myTemplates: MyTemplate[];
   /** Where an uploaded client list goes: this person's own book. */
   book: { businessSlug: BusinessSlug; employeeId: string };
+  /**
+   * Who a free-text quick message can reach now (29 Oct 2026): clients who wrote
+   * to this person's own number in the last 24 hours. Optional so an older API
+   * that does not send it leaves the panel hidden rather than broken.
+   */
+  quick?: {
+    ownNumber: boolean;
+    people: Array<{ displayName: string | null; waId: string; lastInboundAt: string }>;
+  };
   /** The email side of the same book (26 Oct 2026). */
   email: EmailCampaignSide & {
     /** True when it leaves from their own mailbox, false for the business one. */
@@ -2852,6 +2861,25 @@ export function createMyTemplate(input: {
 /** Ask WhatsApp again what it decided about your messages. */
 export function refreshMyTemplates(): Promise<{ ok: true }> {
   return request("/api/my/templates/refresh", { method: "POST" });
+}
+
+/** The words of an approved message, as the customer reads them (29 Oct 2026). */
+export interface TemplateWording {
+  text: { header: string | null; body: string; footer: string | null; buttons: string[] };
+  bodyParamCount: number;
+}
+
+export function getMyTemplateText(templateId: string): Promise<TemplateWording> {
+  return request(`/api/my/templates/${encodeURIComponent(templateId)}/text`);
+}
+
+export function getBusinessTemplateText(orgSlug: BusinessSlug, templateId: string): Promise<TemplateWording> {
+  return request(`/api/broadcasts/${orgSlug}/templates/${encodeURIComponent(templateId)}/text`);
+}
+
+/** Free text, now, to everyone who wrote in the last 24 hours (29 Oct 2026). */
+export function sendQuickMessage(text: string): Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }> {
+  return request("/api/my/quick-message", { method: "POST", body: JSON.stringify({ text }) });
 }
 
 /** Send an email campaign to everyone in your book who can be emailed. */

@@ -26,8 +26,33 @@ import { getBroadcastSendQueue } from "../queue/broadcast-queue.js";
 import { syncTemplatesForOrganization } from "../services/template-sync.js";
 import { logger } from "../lib/logger.js";
 import { explainSendError } from "../lib/send-errors.js";
+import { fetchTemplateText } from "../lib/template-text.js";
 
 export const broadcastsRoute = new Hono();
+
+/**
+ * The words of one of this business's approved messages (29 Oct 2026), so the
+ * owner reads what a campaign will say instead of choosing by Meta's name.
+ * Owner only (the /api/broadcasts mount), this business's row only, and only a
+ * message on the business's own WhatsApp account — the one it is sent from.
+ */
+broadcastsRoute.get("/:slug/templates/:id/text", async (c) => {
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  const template = await getBroadcastTemplate(c.req.param("id"));
+  if (
+    !template ||
+    template.organizationId !== organization.id ||
+    isStaffTemplate(template.metaTemplateName) ||
+    !template.whatsappBusinessAccountId ||
+    template.whatsappBusinessAccountId !== organization.whatsappBusinessAccountId
+  ) {
+    return c.json({ error: "Template not found" }, 404);
+  }
+  const text = await fetchTemplateText(template.whatsappBusinessAccountId, template.metaTemplateName, template.language);
+  if (!text) return c.json({ error: "WhatsApp did not return this message's wording just now." }, 502);
+  return c.json({ text, bodyParamCount: template.bodyParamCount });
+});
 
 // Everything a bulk send needs before one can be composed: the templates
 // registered for this business, past sends, and how many contacts are actually

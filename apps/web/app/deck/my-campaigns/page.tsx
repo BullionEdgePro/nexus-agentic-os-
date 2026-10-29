@@ -15,6 +15,7 @@ import {
   polishCampaignText,
   controlMyCampaign,
   getMyCampaignTestStatus,
+  getMyTemplateText,
   type CampaignTestStatus,
   type MyCampaignsView,
   type MyChannel,
@@ -26,6 +27,8 @@ import "../my-clients/my-clients.css";
 import "./my-campaigns.css";
 import { CampaignControls, EmailCampaignForm } from "./email-campaign";
 import { MyTemplates } from "./my-templates";
+import { QuickMessage } from "./quick-message";
+import { TemplateText } from "./template-text";
 import { ImportCustomers } from "../customers/import-customers";
 import "../customers/customers.css";
 
@@ -183,6 +186,17 @@ export default function MyCampaignsPage() {
         </p>
       ) : null}
 
+      {/* Free text to whoever wrote in the last 24 hours — WhatsApp's only
+          exception to approved messages (29 Oct 2026). */}
+      {tab === "whatsapp" && view?.canBroadcast && view.quick ? (
+        <QuickMessage
+          ownNumber={view.quick.ownNumber}
+          people={view.quick.people}
+          bookSize={audience.length}
+          onSent={() => void load()}
+        />
+      ) : null}
+
       {tab === "whatsapp" && view?.canBroadcast ? (
         <section className="cmp-compose">
           <h2>Send one on WhatsApp</h2>
@@ -247,6 +261,15 @@ export default function MyCampaignsPage() {
               not written in recently.
             </em>
           </label>
+
+          {/* The words, not just Meta's name for them (29 Oct 2026). */}
+          {chosen ? (
+            <TemplateText
+              loadKey={chosen}
+              load={() => getMyTemplateText(chosen)}
+              sampleName={audience[0]?.displayName ?? null}
+            />
+          ) : null}
 
           <MyTemplates
             templates={view.myTemplates ?? []}

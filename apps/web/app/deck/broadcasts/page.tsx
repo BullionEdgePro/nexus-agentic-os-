@@ -11,6 +11,7 @@ import {
   listCustomerLists,
   sendBusinessEmailCampaign,
   controlBroadcast,
+  getBusinessTemplateText,
   type EmailCampaignSide,
   type CustomerList,
   type BroadcastTemplate,
@@ -22,6 +23,7 @@ import "../activity/activity.css";
 import "./broadcasts.css";
 import { CustomerLists, describe } from "./customer-lists";
 import { CampaignControls, EmailCampaignForm } from "../my-campaigns/email-campaign";
+import { TemplateText } from "../my-campaigns/template-text";
 
 const STATUS_WORDS: Record<string, string> = {
   sending: "sending",
@@ -326,6 +328,14 @@ export default function BroadcastsPage() {
                   {busy ? "Sending…" : chosenList ? "Send to list" : "Send to all"}
                 </button>
               </div>
+              {/* The words, not just Meta's name for them (29 Oct 2026). */}
+              {templateId ? (
+                <TemplateText
+                  loadKey={`${business}:${templateId}`}
+                  load={() => getBusinessTemplateText(business, templateId)}
+                  sampleName={null}
+                />
+              ) : null}
               <p className="bc-warn">
                 {chosenList
                   ? `This goes to everyone on “${chosenList.name}” (${describe(chosenList.filter)}) at the moment you send — worked out fresh, so it may differ from the number shown if customers changed since — and cannot be recalled once queued.`

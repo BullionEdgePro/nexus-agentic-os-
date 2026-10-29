@@ -369,3 +369,26 @@
   color: var(--signal-text);
   pointer-events: none;
 }
+
+/* Quick message: free text inside the 24-hour window (29 Oct 2026). */
+.qm-field {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  font-size: 0.85rem;
+  color: var(--slate);
+}
+.qm-field textarea {
+  width: 100%;
+  max-width: 560px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.qm-field em {
+  font-style: normal;
+  font-size: 0.78rem;
+}

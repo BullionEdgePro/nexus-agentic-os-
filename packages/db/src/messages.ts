@@ -331,6 +331,44 @@ export async function importHistoryThread(
 }
 
 /**
+ * Which of these contacts wrote to this number recently enough to be messaged
+ * in free text (29 Oct 2026).
+ *
+ * WhatsApp lets a business send anything — no approved template — only inside
+ * the 24 hours after the customer's last message to that number. The window is
+ * read as 23h50m so a send that starts at the edge does not land outside it.
+ * Keyed on the number, not the business: a customer who wrote to the shared
+ * line has opened no window on a staff member's own number. Imported history
+ * keeps its original times, so it never opens a window.
+ */
+export async function openWindowConversations(
+  organizationId: string,
+  phoneNumberId: string,
+  contactIds: string[]
+): Promise<Array<{ contactId: string; conversationId: string; lastInboundAt: string }>> {
+  if (contactIds.length === 0) return [];
+  return withTenant(organizationId, async () => {
+    const { rows } = await getPool().query<{ contact_id: string; conversation_id: string; last_inbound_at: string }>(
+      `select distinct on (m.contact_id) m.contact_id, m.conversation_id, m.created_at as last_inbound_at
+         from messages m
+         join conversations c on c.id = m.conversation_id
+        where c.organization_id = $1
+          and c.phone_number_id = $2
+          and m.direction = 'inbound'
+          and m.created_at > now() - interval '23 hours 50 minutes'
+          and m.contact_id = any($3::uuid[])
+        order by m.contact_id, m.created_at desc`,
+      [organizationId, phoneNumberId, contactIds]
+    );
+    return rows.map((row) => ({
+      contactId: row.contact_id,
+      conversationId: row.conversation_id,
+      lastInboundAt: row.last_inbound_at,
+    }));
+  });
+}
+
+/**
  * A name from the staff member's phone book, for a contact Nexus knows by
  * number only. Never overwrites a name already held.
  */
