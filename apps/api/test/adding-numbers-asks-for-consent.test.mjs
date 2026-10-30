@@ -13,7 +13,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { internationalWaIdRefusal, rowFailure } from "../src/routes/admin-bulk-customers.ts";
+import { internationalWaIdRefusal } from "../src/routes/admin-bulk-customers.ts";
+import { rowFailure } from "../src/lib/row-failure.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");

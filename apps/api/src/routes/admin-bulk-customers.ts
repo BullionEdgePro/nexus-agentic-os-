@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { assignContactOwnerIfUnowned, ensureContactForServingBusiness, isWaIdOptedOut } from "@nexus/db";
 import { actorOf } from "../lib/actor.js";
 import { logger } from "../lib/logger.js";
+import { rowFailure } from "../lib/row-failure.js";
 import { resolve } from "./admin-bulk.js";
 
 /**
@@ -31,20 +32,6 @@ export function internationalWaIdRefusal(waId: string): string | null {
   if (waId.length < 8 || waId.length > 15) return "That is not a full international number.";
   if (waId.startsWith("0")) return "That is a local number. Add the country code.";
   return null;
-}
-
-/**
- * What one row's failure means for the rest.
- *
- * Our own refusals ("That does not look like a WhatsApp number") are thrown
- * before any SQL and cost nothing. A database error is different: the whole
- * request is one transaction, so after it Postgres refuses every later row and
- * rolls the request back at the end — rows already reported as "added"
- * included. Those errors carry a `code` (an SQLSTATE, or a connection error's).
- */
-export function rowFailure(err: unknown): { stop: boolean; reason: string } {
-  if (err instanceof Error) return { stop: typeof (err as { code?: unknown }).code === "string", reason: err.message };
-  return { stop: false, reason: "Could not add that number." };
 }
 
 adminBulkCustomersRoute.post("/:slug/customers", async (c) => {

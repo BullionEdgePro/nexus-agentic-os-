@@ -17,6 +17,7 @@ import {
   withServingTenant,
 } from "@nexus/db";
 import { logger } from "../lib/logger.js";
+import { rowFailure } from "../lib/row-failure.js";
 
 /**
  * Customers.
@@ -211,12 +212,18 @@ contactsRoute.post("/:slug/contacts/import", async (c) => {
         ...(reason ? { reason } : {}),
       });
     } catch (err) {
-      results.push({
-        line,
-        waId,
-        outcome: "refused",
-        reason: err instanceof Error ? err.message : "Could not add that customer.",
-      });
+      // A database error aborted this request's one transaction: every row
+      // before it is rolled back at the end, so saying "added" for them would
+      // be false (30 Oct 2026). Stop and say nothing was imported.
+      const failure = rowFailure(err);
+      if (failure.stop) {
+        logger.error({ slug: organization.slug, line, err }, "Customer import hit a database error; nothing was saved");
+        return c.json(
+          { error: `Nothing was imported: the database refused the number on line ${line ?? "?"}. Try again in a minute.` },
+          500
+        );
+      }
+      results.push({ line, waId, outcome: "refused", reason: failure.reason });
     }
   }
 
