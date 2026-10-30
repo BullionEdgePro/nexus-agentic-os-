@@ -58,6 +58,17 @@ export interface CompleteTextInput {
    * than discovered on a bill.
    */
   maxTokens?: number;
+  /**
+   * For the one caller that needs a different model (Bulk messaging's writer,
+   * 30 Oct 2026). Unset, every request is exactly what it was before.
+   */
+  model?: string;
+  /** Thinking depth on models that always think (Opus 5.5); sent only when set. */
+  effort?: "low" | "medium" | "high";
+  /** Let the API re-run a declined request on a fallback model, in the same call. */
+  fallback?: boolean;
+  /** Give up after this long, so a slow answer cannot outlive the proxy in front of the API. */
+  timeoutMs?: number;
 }
 
 /**
@@ -77,12 +88,24 @@ export async function completeText(input: CompleteTextInput): Promise<string | n
   if (!process.env.ANTHROPIC_API_KEY) return null;
 
   try {
-    const response = await getClient().messages.create({
-      model: TEXT_MODEL,
+    // The installed SDK (0.32.1) predates `output_config` and `fallbacks`, so
+    // they are added as plain body fields and the params cast once; the SDK
+    // sends the body as given. Absent options add nothing.
+    const params = {
+      model: input.model ?? TEXT_MODEL,
       max_tokens: input.maxTokens ?? 512,
       ...(input.system ? { system: input.system } : {}),
-      messages: [{ role: "user", content: input.prompt }],
-    });
+      messages: [{ role: "user" as const, content: input.prompt }],
+      ...(input.effort ? { output_config: { effort: input.effort } } : {}),
+      ...(input.fallback ? { fallbacks: "default" } : {}),
+    } as Anthropic.MessageCreateParamsNonStreaming;
+    // A timeout is final: the SDK retries a timed-out request by default, which
+    // would turn 45 seconds into three billed calls and well over two minutes.
+    const options = {
+      ...(input.fallback ? { headers: { "anthropic-beta": "server-side-fallback-2026-07-01" } } : {}),
+      ...(input.timeoutMs ? { timeout: input.timeoutMs, maxRetries: 0 } : {}),
+    };
+    const response = await getClient().messages.create(params, options);
 
     // `content` is a union. Narrowing to text blocks drops tool-use and
     // thinking blocks rather than stringifying them into the answer.

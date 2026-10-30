@@ -2923,6 +2923,19 @@ export interface BulkNumberView {
   dailyLimit: number | null;
   /** At least this many new conversations started today (a floor: campaigns only). */
   usedToday: number | null;
+  /** The admin's new approved messages still waiting for WhatsApp (30 Oct 2026). */
+  pending: BulkPendingMessage[];
+}
+
+export interface BulkPendingMessage {
+  id: string;
+  name: string;
+  label: string;
+  language: string;
+  status: string;
+  /** WhatsApp's reason in a sentence, once Check again has read it. */
+  reason: string | null;
+  createdAt: string;
 }
 
 export function getBulkNumber(orgSlug: BusinessSlug, phoneNumberId: string): Promise<BulkNumberView> {
@@ -2958,6 +2971,63 @@ export function sendBulkTest(
 
 export function getBulkTestStatus(messageId: string): Promise<CampaignTestStatus> {
   return request(`/api/bulk/test/${encodeURIComponent(messageId)}`);
+}
+
+// Adding numbers, AI writing and new approved messages (30 Oct 2026)
+
+export interface BulkCustomerResult {
+  line: number | null;
+  waId: string;
+  outcome: "added" | "already-known" | "refused";
+  reason?: string;
+  contactId?: string;
+}
+
+/** Numbers the page has already read into international form; refused whole without consent. */
+export function addBulkCustomers(
+  orgSlug: BusinessSlug,
+  input: { phoneNumberId: string; consent: true; rows: Array<{ waId: string; displayName?: string | null; line?: number }> }
+): Promise<{ results: BulkCustomerResult[]; added: number; alreadyKnown: number; refused: number }> {
+  return request(`/api/bulk/${orgSlug}/customers`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export type BulkMessageKind = "quick" | "approved";
+
+export interface BulkWriterBrief {
+  kind: BulkMessageKind;
+  brief: string;
+  tone?: "friendly" | "professional";
+  length?: "short" | "detailed";
+  language?: "en" | "ar";
+}
+
+export function writeBulkDrafts(orgSlug: BusinessSlug, input: BulkWriterBrief): Promise<{ drafts: string[] }> {
+  return request(`/api/bulk/${orgSlug}/write`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function rewriteBulkDraft(
+  orgSlug: BusinessSlug,
+  input: { kind: BulkMessageKind; text: string; change: "shorter" | "formal" | "arabic" | "fix"; reason?: string }
+): Promise<{ text: string }> {
+  return request(`/api/bulk/${orgSlug}/rewrite`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function submitBulkTemplate(
+  orgSlug: BusinessSlug,
+  phoneNumberId: string,
+  input: { label: string; language: "en" | "ar"; text: string }
+): Promise<{ name: string; status: string }> {
+  return request(`/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}/templates`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function refreshBulkTemplates(
+  orgSlug: BusinessSlug,
+  phoneNumberId: string
+): Promise<{ pending: BulkPendingMessage[]; templates: BulkNumberView["templates"] }> {
+  return request(`/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}/templates/refresh`, { method: "POST" });
 }
 
 /** Which Meta business staff should choose when connecting WhatsApp (30 Oct 2026). */

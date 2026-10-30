@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { BusinessTabs } from "@/lib/business-tabs";
 import {
@@ -9,6 +9,7 @@ import {
   getBulkTemplateText,
   getBulkTestStatus,
   readableError,
+  refreshBulkTemplates,
   sendBulk,
   sendBulkQuick,
   sendBulkTest,
@@ -19,6 +20,10 @@ import {
 } from "@/lib/api";
 import { standingOf } from "@/lib/client-filters";
 import { fontVariables } from "@/lib/fonts";
+import { tenantName } from "@/lib/tenants";
+import { AddNumbers } from "./add-numbers";
+import { AiWriter } from "./ai-writer";
+import { NewApproved } from "./new-approved";
 import { ClientsTab } from "../my-campaigns/clients-tab";
 import { QuickMessage } from "../my-campaigns/quick-message";
 import { TemplateText } from "../my-campaigns/template-text";
@@ -61,6 +66,8 @@ export default function BulkMessagingPage() {
   const [kind, setKind] = useState<"approved" | "quick">("approved");
   const [templateId, setTemplateId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [customersTab, setCustomersTab] = useState<"pick" | "add">("pick");
+  const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
   const compose = useRef<HTMLDivElement>(null);
 
   const loadOverview = useCallback(async (slug: BusinessSlug) => {
@@ -79,6 +86,7 @@ export default function BulkMessagingPage() {
     setNumbers(null);
     setView(null);
     setPicked(new Set());
+    setCustomersTab("pick");
     void loadOverview(business);
   }, [business, loadOverview]);
 
@@ -87,9 +95,20 @@ export default function BulkMessagingPage() {
     let cancelled = false;
     setView(null);
     setTemplateId("");
+    setJustAdded(new Set());
     getBulkNumber(business, numberId)
       .then((data) => {
-        if (!cancelled) setView(data);
+        if (cancelled) return;
+        setView(data);
+        // Messages waiting for WhatsApp: ask once, by itself, so a decision
+        // made while nobody was looking shows without pressing Check again.
+        if (data.pending?.length) {
+          void refreshBulkTemplates(business, numberId)
+            .then((fresh) => {
+              if (!cancelled) setView((current) => (current ? { ...current, pending: fresh.pending, templates: fresh.templates } : current));
+            })
+            .catch(() => undefined);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(readableError(err, "Could not read that number."));
@@ -104,6 +123,31 @@ export default function BulkMessagingPage() {
   const chosenIds = chosen.map((customer) => customer.id);
   const inWindow = chosen.filter((customer) => standingOf(customer.lastInboundAt) === "free");
   const number = numbers?.find((n) => n.phoneNumberId === numberId) ?? null;
+  const knownNumbers = useMemo(() => new Set((view?.customers ?? []).map((customer) => customer.waId)), [view]);
+  const newNeverWrote = chosen.filter((customer) => justAdded.has(customer.id) && !customer.lastInboundAt).length;
+
+  /** Numbers just added: reload the customers so they are listed, tick them, and point at approved messages. */
+  async function onNumbersAdded(ids: string[]) {
+    if (ids.length === 0) return;
+    try {
+      setView(await getBulkNumber(business, numberId));
+    } catch (err) {
+      setError(readableError(err, "Could not reload the customers."));
+    }
+    setPicked((current) => new Set([...current, ...ids]));
+    setJustAdded(new Set(ids));
+    setKind("approved");
+  }
+
+  /** After a new approved message is sent or checked: reload, and choose the one just approved. */
+  async function reloadNumber(approvedTemplateId?: string) {
+    try {
+      setView(await getBulkNumber(business, numberId));
+      if (approvedTemplateId) setTemplateId(approvedTemplateId);
+    } catch (err) {
+      setError(readableError(err, "Could not reload the number."));
+    }
+  }
 
   return (
     <div className={`deck-root ${fontVariables}`}>
@@ -154,17 +198,37 @@ export default function BulkMessagingPage() {
             <h2>
               <span>2</span> Customers
             </h2>
-            <ClientsTab
-              clients={customers}
-              selected={picked}
-              onChange={setPicked}
-              title={`${customers.length} customers of this business`}
-              where="this number"
-              onSend={(next) => {
-                setKind(next);
-                compose.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            />
+            <div className="ecf-tabs" role="tablist" aria-label="Choose or add customers">
+              <button type="button" role="tab" aria-selected={customersTab === "pick"} className={customersTab === "pick" ? "on" : ""} onClick={() => setCustomersTab("pick")}>
+                Pick customers<b>{customers.length}</b>
+              </button>
+              <button type="button" role="tab" aria-selected={customersTab === "add"} className={customersTab === "add" ? "on" : ""} onClick={() => setCustomersTab("add")}>
+                + Add numbers
+              </button>
+            </div>
+            {customersTab === "add" ? (
+              <AddNumbers
+                business={business}
+                businessName={tenantName(business)}
+                numberId={numberId}
+                known={knownNumbers}
+                onAdded={(ids) => void onNumbersAdded(ids)}
+                onShowList={() => setCustomersTab("pick")}
+              />
+            ) : (
+              <ClientsTab
+                clients={customers}
+                selected={picked}
+                onChange={setPicked}
+                title={`${customers.length} customers of this business`}
+                where="this number"
+                justAdded={justAdded}
+                onSend={(next) => {
+                  setKind(next);
+                  compose.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              />
+            )}
           </section>
 
           <section className="bk-step" ref={compose}>
@@ -175,6 +239,12 @@ export default function BulkMessagingPage() {
               <p className="mc-empty">Tick at least one customer above.</p>
             ) : (
               <>
+                {newNeverWrote > 0 ? (
+                  <p className="bk-note">
+                    These {newNeverWrote} have never written to this number, so WhatsApp lets them get an approved message
+                    only.
+                  </p>
+                ) : null}
                 <div className="ecf-tabs" role="tablist" aria-label="Kind of message">
                   <button type="button" role="tab" aria-selected={kind === "approved"} className={kind === "approved" ? "on" : ""} onClick={() => setKind("approved")}>
                     Approved message<b>{chosen.length}</b>
@@ -192,6 +262,15 @@ export default function BulkMessagingPage() {
                     where="this number"
                     send={(text) => sendBulkQuick(business, { phoneNumberId: numberId, text, contactIds: inWindow.map((c) => c.id) })}
                     onSent={() => void loadOverview(business)}
+                    assist={(put, current) => (
+                      <AiWriter
+                        business={business}
+                        kind="quick"
+                        sampleName={inWindow[0]?.displayName ?? null}
+                        current={current}
+                        onUse={put}
+                      />
+                    )}
                   />
                 ) : (
                   <ApprovedSend
@@ -204,6 +283,7 @@ export default function BulkMessagingPage() {
                     chosen={chosen}
                     chosenIds={chosenIds}
                     onSent={() => void loadOverview(business)}
+                    onTemplatesChanged={(id) => void reloadNumber(id)}
                   />
                 )}
               </>
@@ -269,6 +349,7 @@ function ApprovedSend({
   chosen,
   chosenIds,
   onSent,
+  onTemplatesChanged,
 }: {
   business: BusinessSlug;
   numberId: string;
@@ -279,6 +360,8 @@ function ApprovedSend({
   chosen: BulkNumberView["customers"];
   chosenIds: string[];
   onSent: () => void;
+  /** A new approved message was sent or checked; with an id, it was just approved. */
+  onTemplatesChanged: (approvedTemplateId?: string) => void;
 }) {
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
@@ -312,6 +395,14 @@ function ApprovedSend({
         </select>
         <em>Only messages WhatsApp approved on this number&rsquo;s account appear here.</em>
       </label>
+
+      <NewApproved
+        business={business}
+        numberId={numberId}
+        pending={view.pending ?? []}
+        sampleName={chosen[0]?.displayName ?? null}
+        onChanged={onTemplatesChanged}
+      />
 
       {templateId ? (
         <TemplateText

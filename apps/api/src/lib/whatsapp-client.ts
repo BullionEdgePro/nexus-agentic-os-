@@ -201,6 +201,53 @@ export async function listMetaTemplates(wabaId: string, accessToken: string = en
   return templates;
 }
 
+/** What WhatsApp decided about one template, with its reason when it refused. */
+export interface TemplateReview {
+  name: string;
+  language: string;
+  status: string;
+  /** Meta's code ("PROMOTIONAL", "INVALID_FORMAT", …); null when none was given. */
+  rejectedReason: string | null;
+}
+
+/**
+ * Every template's review on an account, reasons included (30 Oct 2026).
+ *
+ * The listing above asks for Meta's default fields, which do not carry
+ * `rejected_reason`; Bulk messaging needs it to say WHY a new approved message
+ * was refused. Paged the same way, for the same reason.
+ */
+export async function readTemplateReviews(
+  wabaId: string,
+  accessToken: string = env.metaAccessToken
+): Promise<TemplateReview[]> {
+  const reviews: TemplateReview[] = [];
+  let url =
+    `https://graph.facebook.com/${env.metaGraphApiVersion}/${wabaId}/message_templates` +
+    `?fields=name,language,status,rejected_reason&limit=100&access_token=${encodeURIComponent(accessToken)}`;
+  for (let page = 0; page < 20 && url; page++) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Reading template reviews failed (${response.status}): ${await response.text()}`);
+    }
+    const payload = (await response.json()) as {
+      data?: Array<Record<string, unknown>>;
+      paging?: { next?: string };
+    };
+    for (const row of payload.data ?? []) {
+      const reason = row.rejected_reason ? String(row.rejected_reason) : null;
+      reviews.push({
+        name: String(row.name ?? ""),
+        language: String(row.language ?? "en"),
+        status: String(row.status ?? "UNKNOWN"),
+        rejectedReason: reason && reason !== "NONE" ? reason : null,
+      });
+    }
+    url = payload.paging?.next ?? "";
+  }
+  return reviews;
+}
+
 export interface TemplateSpec {
   name: string;
   language: string;

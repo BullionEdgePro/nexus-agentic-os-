@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   initialsOf,
   matchesFilter,
@@ -49,6 +49,7 @@ export function ClientsTab({
   onSend,
   title = "Your clients",
   where = "you",
+  justAdded,
 }: {
   clients: PickableClient[];
   selected: Set<string>;
@@ -59,11 +60,19 @@ export function ClientsTab({
   title?: string;
   /** Who they wrote to: "you", or the chosen number. */
   where?: string;
+  /** Numbers the admin just added (30 Oct 2026): a chip shows only them, chosen when they arrive. */
+  justAdded?: Set<string>;
 }) {
-  const [filter, setFilter] = useState<ClientFilter>("all");
+  const [filter, setFilter] = useState<ClientFilter | "added">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"recent" | "name">("recent");
   const now = Date.now();
+
+  useEffect(() => {
+    if (justAdded?.size) setFilter("added");
+    else setFilter((current) => (current === "added" ? "all" : current));
+  }, [justAdded]);
+  const addedCount = justAdded?.size ? clients.filter((client) => justAdded.has(client.id)).length : 0;
 
   const counts = useMemo(() => {
     const out: Record<ClientFilter, number> = { all: 0, free: 0, week: 0, quiet: 0, never: 0 };
@@ -76,7 +85,9 @@ export function ClientsTab({
     const needle = search.trim().toLowerCase();
     const digits = needle.replace(/\D/g, "");
     return clients
-      .filter((client) => matchesFilter(filter, client.lastInboundAt, now))
+      .filter((client) =>
+        filter === "added" ? Boolean(justAdded?.has(client.id)) : matchesFilter(filter, client.lastInboundAt, now)
+      )
       .filter(
         (client) =>
           !needle ||
@@ -89,7 +100,7 @@ export function ClientsTab({
           : new Date(b.lastInboundAt ?? 0).getTime() - new Date(a.lastInboundAt ?? 0).getTime()
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clients, filter, search, sort]);
+  }, [clients, filter, search, sort, justAdded]);
 
   const chosen = clients.filter((client) => selected.has(client.id));
   const chosenFree = chosen.filter((client) => standingOf(client.lastInboundAt, now) === "free").length;
@@ -142,6 +153,18 @@ export function ClientsTab({
             <b>{counts[f.key]}</b>
           </button>
         ))}
+        {addedCount > 0 ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filter === "added"}
+            className={`ct-chip ct-chip-added ${filter === "added" ? "on" : ""}`}
+            onClick={() => setFilter("added")}
+          >
+            Just added
+            <b>{addedCount}</b>
+          </button>
+        ) : null}
       </div>
 
       <div className="ct-tools">

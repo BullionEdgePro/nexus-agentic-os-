@@ -82,6 +82,21 @@ export async function getOrganizationSettings(
   return rows[0] ? toSettings(rows[0]) : null;
 }
 
+/** What a business says about itself: the voice Bulk messaging's AI writes in (30 Oct 2026). */
+export interface BusinessVoice {
+  name: string;
+  tagline: string | null;
+  summary: string | null;
+}
+
+export async function getBusinessVoice(organizationId: string): Promise<BusinessVoice | null> {
+  const { rows } = await getPool().query<BusinessVoice>(
+    `select name, tagline, summary from organizations where id = $1`,
+    [organizationId]
+  );
+  return rows[0] ?? null;
+}
+
 /**
  * Keywords this business shares with another answering the same number.
  *

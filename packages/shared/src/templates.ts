@@ -97,7 +97,7 @@ const SLUG_BY_TEMPLATE: Readonly<Record<string, string>> = Object.freeze(
  * know", which the caller has to decide about rather than assume.
  */
 export function templateOwnerSlug(metaTemplateName: string): string | null {
-  return SLUG_BY_TEMPLATE[metaTemplateName] ?? null;
+  return SLUG_BY_TEMPLATE[metaTemplateName] ?? bulkTemplateOwnerSlug(metaTemplateName);
 }
 
 export type TemplateAttribution = "own" | "other-business" | "unattributed";
@@ -105,13 +105,15 @@ export type TemplateAttribution = "own" | "other-business" | "unattributed";
 /**
  * Whether `slug` may send under `metaTemplateName`.
  *
- * The only refusal is a template positively known to belong to someone else.
- * Nothing is refused for being unrecognised, because an unrecognised template
- * is a gap in what this file knows, not evidence about the template.
+ * A refusal is a template positively known to belong to someone else. Nothing
+ * is refused for being unrecognised, because an unrecognised template is a gap
+ * in what this file knows, not evidence about the template — with one
+ * exception: a `bulk_` name says an admin wrote it for ONE business, so one
+ * whose code nobody here owns is refused everywhere rather than offered to all.
  */
 export function attributeTemplate(metaTemplateName: string, slug: string): TemplateAttribution {
   const owner = templateOwnerSlug(metaTemplateName);
-  if (owner === null) return "unattributed";
+  if (owner === null) return isBulkTemplate(metaTemplateName) ? "other-business" : "unattributed";
   return owner === slug ? "own" : "other-business";
 }
 
@@ -155,17 +157,22 @@ export function staffTemplatePrefix(employeeId: string): string {
   return `staff_${employeeId.replace(/-/g, "").slice(0, 8).toLowerCase()}_`;
 }
 
-/** Meta's template name for a staff member's label: lowercase, a-z 0-9 and _. */
-export function staffTemplateName(employeeId: string, label: string): string {
-  const words =
+/** A typed label as Meta accepts it in a name: lowercase, a-z 0-9 and _. */
+function templateWords(label: string): string {
+  return (
     label
       .toLowerCase()
       .normalize("NFKD")
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .slice(0, 48)
-      .replace(/_+$/g, "") || "message";
-  return staffTemplatePrefix(employeeId) + words;
+      .replace(/_+$/g, "") || "message"
+  );
+}
+
+/** Meta's template name for a staff member's label: lowercase, a-z 0-9 and _. */
+export function staffTemplateName(employeeId: string, label: string): string {
+  return staffTemplatePrefix(employeeId) + templateWords(label);
 }
 
 /** Whether a template was written by a staff member at all. */
@@ -184,6 +191,52 @@ export function staffMayUseTemplate(metaTemplateName: string, employeeId: string
 /** The label a staff member typed, read back out of the name. */
 export function staffTemplateLabel(metaTemplateName: string): string {
   return metaTemplateName.replace(STAFF_TEMPLATE_NAME, "").replace(/_/g, " ");
+}
+
+// ============================================================
+// An admin's own approved messages (30 Oct 2026)
+// ============================================================
+//
+// Admins write new approved messages from Bulk messaging, one business at a
+// time. The owner is in the name for the same reason staff templates carry
+// theirs: a sync copies every template into every business on the account. A
+// short fixed code per business rather than the slug, because people read
+// these names and "bulk_juris_prime_legal_" would be half the label.
+
+export const BULK_TEMPLATE_CODE_BY_SLUG: Readonly<Record<string, string>> = Object.freeze({
+  zipicka: "zp",
+  "sfs-international": "sfs",
+  "juris-prime": "jp",
+  "juris-prime-legal": "jpl",
+  abr: "abr",
+});
+
+const SLUG_BY_BULK_CODE: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(Object.entries(BULK_TEMPLATE_CODE_BY_SLUG).map(([slug, code]) => [code, slug]))
+);
+
+const BULK_TEMPLATE_NAME = /^bulk_([a-z0-9]+)_/;
+
+/** Meta's template name for an admin's label in this business, or null when it has no code. */
+export function bulkTemplateName(slug: string, label: string): string | null {
+  const code = BULK_TEMPLATE_CODE_BY_SLUG[slug];
+  return code ? `bulk_${code}_${templateWords(label)}` : null;
+}
+
+/** Whether an admin wrote this template from Bulk messaging. */
+export function isBulkTemplate(metaTemplateName: string): boolean {
+  return BULK_TEMPLATE_NAME.test(metaTemplateName);
+}
+
+/** The label the admin typed, read back out of the name. */
+export function bulkTemplateLabel(metaTemplateName: string): string {
+  return metaTemplateName.replace(BULK_TEMPLATE_NAME, "").replace(/_/g, " ");
+}
+
+/** The business a `bulk_` name was written for; null for any other name or an unknown code. */
+function bulkTemplateOwnerSlug(metaTemplateName: string): string | null {
+  const code = BULK_TEMPLATE_NAME.exec(metaTemplateName)?.[1];
+  return code ? SLUG_BY_BULK_CODE[code] ?? null : null;
 }
 
 export const STAFF_TEMPLATE_BODY_MAX = 1024;

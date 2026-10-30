@@ -28,6 +28,7 @@ import { noteTestSend, readTestSend } from "../lib/campaign-test-status.js";
 import { readPaymentRefusal, notePaymentRefusal } from "../lib/payment-refusal.js";
 import { explainSendError, isPaymentRefusal } from "../lib/send-errors.js";
 import { actorOf } from "../lib/actor.js";
+import { pendingFrom } from "../lib/pending-templates.js";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 import {
@@ -55,7 +56,7 @@ import {
  */
 export const adminBulkRoute = new Hono();
 
-interface SendingNumber {
+export interface SendingNumber {
   phoneNumberId: string;
   label: string;
   /** The staff member whose number it is; null for the business's own number. */
@@ -92,7 +93,7 @@ async function numbersOf(organization: {
 }
 
 /** The organization and the chosen number, or why not. */
-async function resolve(c: Context, phoneNumberId: string | null) {
+export async function resolve(c: Context, phoneNumberId: string | null) {
   const organization = await findOrganizationBySlug(c.req.param("slug") ?? "");
   if (!organization) return { error: "Business not found.", status: 404 as const };
   const numbers = await numbersOf(organization);
@@ -103,7 +104,7 @@ async function resolve(c: Context, phoneNumberId: string | null) {
 }
 
 /** The token that may read templates on the number's account. */
-async function tokenFor(organizationId: string, number: SendingNumber, businessWaba: string | null): Promise<string> {
+export async function tokenFor(organizationId: string, number: SendingNumber, businessWaba: string | null): Promise<string> {
   if (number.ownerEmployeeId && number.wabaId && number.wabaId !== businessWaba) {
     const secret = await withTenant(organizationId, () =>
       connectionSecret(organizationId, number.ownerEmployeeId as string, "whatsapp")
@@ -121,7 +122,7 @@ async function customersFor(organizationId: string, phoneNumberId: string) {
 }
 
 /** Approved messages on the number's account that speak for this business. */
-async function templatesFor(organization: { id: string; slug: string }, wabaId: string | null) {
+export async function templatesFor(organization: { id: string; slug: string }, wabaId: string | null) {
   const templates = await withTenant(organization.id, () => listBroadcastTemplates(organization.id, wabaId));
   return templates
     .filter((template) => template.isApproved)
@@ -160,7 +161,7 @@ adminBulkRoute.get("/:slug/number/:phoneNumberId", async (c) => {
   const { organization, number } = resolved;
   if (!number) return c.json({ error: "Choose a number." }, 400);
 
-  const [templates, customers, health, refused, standing, usedToday] = await Promise.all([
+  const [templates, customers, health, refused, standing, usedToday, templateRows] = await Promise.all([
     templatesFor(organization, number.wabaId),
     customersFor(organization.id, number.phoneNumberId),
     readSendingHealth(number.phoneNumberId),
@@ -168,11 +169,16 @@ adminBulkRoute.get("/:slug/number/:phoneNumberId", async (c) => {
     readNumberStanding(number.phoneNumberId),
     // A floor: counted from campaign recipients only (see describeDailyCeiling).
     dailyReachUsed(number.phoneNumberId).catch(() => null),
+    // The admin's new messages still waiting for WhatsApp (30 Oct 2026). From
+    // the mirror, so opening a number costs no call to Meta; the page asks
+    // WhatsApp itself (Check again) only when something is waiting.
+    withTenant(organization.id, () => listBroadcastTemplates(organization.id, number.wabaId)),
   ]);
   const blocked = health?.problem?.description ?? (refused ? "WhatsApp refused this number's last message over payment — fix the card, then send a test." : null);
   return c.json({
     templates,
     customers,
+    pending: pendingFrom(templateRows, organization.slug),
     canSend: !blocked && standing?.quality !== "RED",
     blocked: blocked ?? (standing?.quality === "RED" ? "WhatsApp rates this number's quality as low (red)." : null),
     dailyLimit: standing?.dailyLimit ?? null,

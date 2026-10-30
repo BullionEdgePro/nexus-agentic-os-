@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { readableError, sendQuickMessage } from "@/lib/api";
 import { previewTemplate } from "./my-templates";
 
@@ -21,6 +21,7 @@ export function QuickMessage({
   onSent,
   send,
   where = "your WhatsApp",
+  assist,
 }: {
   ownNumber: boolean;
   people: Array<{ displayName: string | null; waId: string; lastInboundAt: string | null }>;
@@ -32,6 +33,8 @@ export function QuickMessage({
   send?: (text: string) => Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }>;
   /** What "written to …" refers to: "your WhatsApp", or the chosen number. */
   where?: string;
+  /** Help writing it, above the box (the admin page's AI writer, 30 Oct 2026): `put` replaces the text. */
+  assist?: (put: (text: string) => void, current: string) => ReactNode;
 }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -73,6 +76,13 @@ export function QuickMessage({
             </p>
           ) : (
             <>
+              {assist
+                ? assist((next) => {
+                    setText(next);
+                    setConfirming(false);
+                    setResult(null);
+                  }, text)
+                : null}
               <label className="qm-field">
                 <span>Your message</span>
                 <textarea
