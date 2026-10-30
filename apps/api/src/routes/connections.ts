@@ -14,15 +14,11 @@ import {
   withTenant,
 } from "@nexus/db";
 import { readHistoryStatus, requestChatHistory } from "../lib/whatsapp-history.js";
-import { getMainBusiness, wrongBusinessWarning } from "../lib/main-business.js";
-import { readSendingHealth } from "../lib/whatsapp-client.js";
+import { connectWhatsAppNumber } from "../services/whatsapp-connect.js";
+import { getMainBusiness } from "../lib/main-business.js";
 import {
   whatsappCoexistenceConfigured,
   whatsappEmbeddedConfig,
-  exchangeEmbeddedSignupCode,
-  subscribeAppToWaba,
-  fetchCoexistenceNumber,
-  discoverWabaAndNumber,
 } from "../lib/whatsapp-onboarding.js";
 import {
   tiktokConfigured,
@@ -1067,100 +1063,17 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
   // alone is enough: the server derives the WABA and number from the token it
   // exchanges (see discoverWabaAndNumber). When the popup did send them, they are
   // used as-is and save a round-trip.
-  let wabaId = body?.wabaId?.trim();
-  let phoneNumberId = body?.phoneNumberId?.trim();
+  const wabaId = body?.wabaId?.trim();
+  const phoneNumberId = body?.phoneNumberId?.trim();
   if (!code) {
     return c.json({ error: "That WhatsApp sign-in did not complete — please try again." }, 400);
   }
 
-  const employeeId = owner.employeeId;
-  try {
-    const businessToken = await exchangeEmbeddedSignupCode(code);
-    if (!wabaId || !phoneNumberId) {
-      const found = await discoverWabaAndNumber(businessToken);
-      wabaId = wabaId || found.wabaId;
-      phoneNumberId = phoneNumberId || found.phoneNumberId;
-    }
-    // discoverWabaAndNumber throws when it finds nothing, so both are set by here;
-    // this satisfies the type-checker and guards against an empty string slipping
-    // through from the request body.
-    if (!wabaId || !phoneNumberId) {
-      return c.json({ error: "That WhatsApp sign-in did not return a usable number." }, 502);
-    }
-    // Bind to consts: narrowing of the `let`s above does not survive into the
-    // withTenant closure below, where TS must still see them as plain strings.
-    const connectedWabaId = wabaId;
-    const connectedPhoneNumberId = phoneNumberId;
-    await subscribeAppToWaba(connectedWabaId, businessToken);
-    const details = await fetchCoexistenceNumber(connectedPhoneNumberId, businessToken);
-
-    await withTenant(owner.organizationId, async () => {
-      // The credential, encrypted at rest like every other connection. external_id
-      // is the phone_number_id — the thing the webhook router matches an inbound
-      // message on — so a connection can always be traced back to the number.
-      await saveConnection({
-        organizationId: owner.organizationId,
-        employeeId,
-        provider: "whatsapp",
-        externalId: connectedPhoneNumberId,
-        displayName: details.displayNumber ?? details.verifiedName ?? connectedPhoneNumberId,
-        avatarUrl: null,
-        accessToken: businessToken,
-        refreshToken: null,
-        // System-user tokens from this exchange are long-lived; there is no
-        // refresh dance, so no expiry is recorded rather than a guessed one.
-        expiresAt: null,
-        scopes: [],
-      });
-
-      // THE LINE THAT MAKES INBOUND ARRIVE ON THEIR DESK. It sets
-      // whatsapp_phone_number_id on the employee, which is what
-      // findEmployeeByPhoneNumberId reads in the queue processor to route a
-      // message on this number to this person (handleStaffNumberMessage). A
-      // number belongs to one person, and assigning frees it from anyone else.
-      await assignEmployeeWhatsAppNumber(employeeId, {
-        phoneNumberId: connectedPhoneNumberId,
-        displayNumber: details.displayNumber,
-        verifiedName: details.verifiedName,
-        // Its templates are the ones it can send (migration 096).
-        wabaId: connectedWabaId,
-      });
-    });
-
-    logger.info(
-      { employeeId, phoneNumberId: connectedPhoneNumberId, wabaId: connectedWabaId },
-      "WhatsApp Business number connected via coexistence"
-    );
-
-    // THEIR PAST CHATS (28 Oct 2026). Meta sends the app's history only if asked,
-    // within 24 hours and once — so it is asked here, the moment the number is
-    // theirs, and imported as it arrives (lib/whatsapp-history.ts).
-    const history = await requestChatHistory(connectedPhoneNumberId, businessToken);
-
-    // WHICH CARD WILL PAY (30 Oct 2026). Meta asks which business to put the
-    // number in, and a number outside the owner's main one cannot use the
-    // company card — said now, while undoing it is one reconnect.
-    const main = await getMainBusiness();
-    const health = main ? await readSendingHealth(connectedPhoneNumberId) : null;
-    const businessWarning = main ? wrongBusinessWarning(main, health?.businessId ?? null) : null;
-    if (businessWarning) {
-      logger.warn(
-        { employeeId, phoneNumberId: connectedPhoneNumberId, businessId: health?.businessId, main: main?.id },
-        "A staff number was connected outside the main business"
-      );
-    }
-
-    return c.json({
-      ok: true,
-      number: details.displayNumber ?? details.verifiedName ?? "connected",
-      history: history.state,
-      businessWarning,
-    });
-  } catch (err) {
-    logger.error({ err, employeeId }, "WhatsApp coexistence connection failed");
-    const message = err instanceof Error ? err.message.slice(0, 200) : "unknown error";
-    return c.json({ error: message }, 502);
-  }
+  // One function for both doors: the owner connects for a staff member from
+  // Team with the same steps (services/whatsapp-connect.ts).
+  const result = await connectWhatsAppNumber({ organizationId: owner.organizationId, employeeId: owner.employeeId }, { code, wabaId, phoneNumberId });
+  if ("error" in result) return c.json({ error: result.error }, 502);
+  return c.json(result);
 });
 
 connectionsRoute.delete("/whatsapp", async (c) => {

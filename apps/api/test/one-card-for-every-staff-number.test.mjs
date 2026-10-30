@@ -59,6 +59,7 @@ test("removing and restoring record who clicked", () => {
 });
 
 test("a connect outside the main business is warned about straight away", () => {
-  const connections = src("routes", "connections.ts");
+  // The connect steps live in one function since 30 Oct 2026 (staff and owner).
+  const connections = src("services", "whatsapp-connect.ts");
   assert.match(connections, /const businessWarning = main \? wrongBusinessWarning\(main, health\?\.businessId \?\? null\) : null;/);
 });

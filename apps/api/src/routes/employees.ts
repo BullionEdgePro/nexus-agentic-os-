@@ -35,6 +35,8 @@ import {
 import { getMainBusiness, setMainBusiness } from "../lib/main-business.js";
 import { readPaymentRefusal } from "../lib/payment-refusal.js";
 import { readHistoryStatus } from "../lib/whatsapp-history.js";
+import { whatsappCoexistenceConfigured, whatsappEmbeddedConfig } from "../lib/whatsapp-onboarding.js";
+import { connectWhatsAppNumber } from "../services/whatsapp-connect.js";
 import {
   buildDirectContact,
   normalizeWhatsAppNumber,
@@ -294,7 +296,15 @@ employeesRoute.get("/:slug/whatsapp-setup", async (c) => {
   for (const person of people) if (person.businessId) counts.set(person.businessId, (counts.get(person.businessId) ?? 0) + 1);
   const suggestedBusinessId = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
-  return c.json({ main, suggestedBusinessId, businesses: [...counts.keys()], people });
+  // Meta's public Embedded Signup settings, so Team can open the same window
+  // Connections does when the owner connects a number for somebody.
+  return c.json({
+    main,
+    suggestedBusinessId,
+    businesses: [...counts.keys()],
+    people,
+    signup: whatsappEmbeddedConfig(),
+  });
 });
 
 /** Name the main business — the one whose card pays for every staff number. */
@@ -311,6 +321,46 @@ employeesRoute.post("/:slug/whatsapp-setup/main-business", async (c) => {
   const main = await setMainBusiness(businessId, name, actor.name);
   logger.info({ businessId, name, by: actor.name }, "Main business for staff WhatsApp set");
   return c.json({ main });
+});
+
+/**
+ * Connect a staff member's WhatsApp Business app number, as the owner (30 Oct 2026).
+ *
+ * Connecting used to need the staff member's own Nexus sign-in, because only a
+ * staff session carries the person the number is filed under; the owner asked
+ * to stop signing in as somebody else just to run Meta's window for them. The
+ * owner runs the window, the staff member scans the QR code on their phone, and
+ * the number is filed under the person named in the ADDRESS — never the body —
+ * through the same function Connections uses.
+ */
+employeesRoute.post("/:slug/employees/:employeeId/whatsapp-connect", async (c) => {
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can connect a staff member's WhatsApp." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+  const employee = await findEmployeeById(c.req.param("employeeId"));
+  if (!employee || employee.organizationId !== organization.id) {
+    return c.json({ error: "Employee not found" }, 404);
+  }
+  if (!employee.isActive) return c.json({ error: "That person is not on the team any more." }, 400);
+  if (!whatsappCoexistenceConfigured()) {
+    return c.json({ error: "WhatsApp connecting is not enabled on this server yet." }, 503);
+  }
+
+  const body = await c.req.json<{ code?: string; wabaId?: string; phoneNumberId?: string }>().catch(() => null);
+  const code = body?.code?.trim();
+  if (!code) return c.json({ error: "That WhatsApp sign-in did not complete — please try again." }, 400);
+
+  const ids = { wabaId: body?.wabaId?.trim(), phoneNumberId: body?.phoneNumberId?.trim() };
+  const result = await connectWhatsAppNumber({ organizationId: organization.id, employeeId: employee.id }, { code, ...ids });
+  if ("error" in result) return c.json({ error: result.error }, 502);
+  const actor = await actorOf(c);
+  logger.info(
+    { organization: organization.slug, employeeId: employee.id, by: actor.name, byId: actor.id },
+    "Owner connected a staff member's WhatsApp"
+  );
+  return c.json(result);
 });
 
 employeesRoute.post("/:slug/employees/:employeeId/restore", async (c) => {

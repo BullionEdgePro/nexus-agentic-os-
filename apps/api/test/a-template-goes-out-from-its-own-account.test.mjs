@@ -29,6 +29,8 @@ const CLIENT = read("apps", "api", "src", "lib", "whatsapp-client.ts");
 const CAMPAIGNS = read("apps", "api", "src", "routes", "my-campaigns.ts");
 const BROADCASTS = read("apps", "api", "src", "routes", "broadcasts.ts");
 const CONNECTIONS = read("apps", "api", "src", "routes", "connections.ts");
+// The connect steps live in one function since 30 Oct 2026 (staff and owner).
+const CONNECT = read("apps", "api", "src", "services", "whatsapp-connect.ts");
 
 const fn = (src, name) => {
   const at = src.indexOf(`export async function ${name}(`);
@@ -66,7 +68,7 @@ test("a campaign offers and accepts only templates from the account it sends fro
 });
 
 test("connecting a number remembers its account", () => {
-  assert.match(CONNECTIONS, /wabaId: connectedWabaId,/);
+  assert.match(CONNECT, /wabaId: connectedWabaId,/);
   assert.match(fn(EMPLOYEES_DB, "assignEmployeeWhatsAppNumber"), /whatsapp_business_account_id = \$5/);
 });
 

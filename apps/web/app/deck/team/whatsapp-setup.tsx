@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
-import { getWhatsAppSetup, readableError, setMainBusiness, type WhatsAppSetup } from "@/lib/api";
+import { connectStaffWhatsApp, getWhatsAppSetup, readableError, setMainBusiness, type WhatsAppSetup } from "@/lib/api";
+import { launchWhatsAppSignup } from "@/lib/whatsapp-signup";
 
 /**
  * Every staff member's WhatsApp, and whose card pays for it (30 Oct 2026).
@@ -21,6 +22,33 @@ export function WhatsAppSetupPanel({ business }: { business: BusinessSlug }) {
   const [mainName, setMainName] = useState("");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [connectNote, setConnectNote] = useState<{ employeeId: string; ok: boolean; text: string } | null>(null);
+
+  /**
+   * Connect someone's WhatsApp Business app number for them (30 Oct 2026): the
+   * owner runs Meta's window here, the person scans the QR code on their phone,
+   * and the number is filed under them — no signing in as them.
+   */
+  async function connectFor(person: WhatsAppSetup["people"][number]) {
+    if (!setup) return;
+    setConnecting(person.employeeId);
+    setConnectNote(null);
+    try {
+      const signup = await launchWhatsAppSignup(setup.signup);
+      const result = await connectStaffWhatsApp(business, person.employeeId, signup);
+      setConnectNote({
+        employeeId: person.employeeId,
+        ok: !result.businessWarning,
+        text: result.businessWarning ?? `Connected ${result.number} for ${person.fullName}. Their past chats are asked for now.`,
+      });
+      await load();
+    } catch (err) {
+      setConnectNote({ employeeId: person.employeeId, ok: false, text: readableError(err, "The WhatsApp connection did not finish.") });
+    } finally {
+      setConnecting(null);
+    }
+  }
 
   const load = useCallback(async () => {
     setError(null);
@@ -147,10 +175,15 @@ export function WhatsAppSetupPanel({ business }: { business: BusinessSlug }) {
                 : "Past chats not imported",
             },
           ];
+          const first = person.fullName.split(" ")[0];
           const fix = !person.connected
-            ? `${person.fullName.split(" ")[0]} connects their WhatsApp Business number in Connections${
-                setup.main ? ` and chooses “${setup.main.name}”` : ""
-              }.`
+            ? setup.signup?.configured
+              ? `Press Connect WhatsApp with ${first}'s phone at hand: Meta shows a QR code to scan in WhatsApp Business${
+                  setup.main ? `. Choose “${setup.main.name}” as the business` : ""
+                }. Or ${first} connects it in Connections.`
+              : `${first} connects their WhatsApp Business number in Connections${
+                  setup.main ? ` and chooses “${setup.main.name}”` : ""
+                }.`
             : person.onMainBusiness === false
               ? `Disconnect in the WhatsApp Business app, then connect again in Nexus and choose “${setup.main?.name}”. Add them as a person in that Meta business first.`
               : person.canSend === "BLOCKED" || person.paymentRefusedAt
@@ -170,6 +203,19 @@ export function WhatsAppSetupPanel({ business }: { business: BusinessSlug }) {
                 ))}
               </ul>
               {fix ? <p className="ws-fix">{fix}</p> : null}
+              {!person.connected && setup.signup?.configured ? (
+                <button
+                  type="button"
+                  className="team-remove alt ws-connect"
+                  disabled={connecting !== null}
+                  onClick={() => void connectFor(person)}
+                >
+                  {connecting === person.employeeId ? "Waiting for Meta…" : "Connect WhatsApp"}
+                </button>
+              ) : null}
+              {connectNote?.employeeId === person.employeeId ? (
+                <p className={connectNote.ok ? "ws-connected" : "ws-fix"}>{connectNote.text}</p>
+              ) : null}
             </li>
           );
         })}

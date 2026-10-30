@@ -21,7 +21,8 @@ const src = (...path) => readFileSync(join(here, "..", "src", ...path), "utf8");
 const db = (...path) => readFileSync(join(here, "..", "..", "..", "packages", "db", "src", ...path), "utf8");
 
 test("the connect asks for the history the moment the number is theirs", () => {
-  const route = src("routes", "connections.ts");
+  // The connect steps live in one function since 30 Oct 2026 (staff and owner).
+  const route = src("services", "whatsapp-connect.ts");
   const connected = route.indexOf("assignEmployeeWhatsAppNumber(employeeId");
   const asked = route.indexOf("await requestChatHistory(connectedPhoneNumberId, businessToken)");
   assert.ok(connected > 0 && asked > connected, "history is requested after the number is assigned");

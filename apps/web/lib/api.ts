@@ -3056,6 +3056,20 @@ export interface WhatsAppSetup {
   suggestedBusinessId: string | null;
   businesses: string[];
   people: WhatsAppSetupPerson[];
+  /** Meta's public Embedded Signup settings, for connecting someone from Team (30 Oct 2026). */
+  signup: { configured: boolean; appId: string; configId: string; graphVersion: string };
+}
+
+/** Connect a staff member's WhatsApp Business app number from Team, as the owner (30 Oct 2026). */
+export function connectStaffWhatsApp(
+  orgSlug: BusinessSlug,
+  employeeId: string,
+  input: { code: string; wabaId?: string; phoneNumberId?: string }
+): Promise<{ ok: true; number: string; history: string; businessWarning: string | null }> {
+  return request(`/api/organizations/${orgSlug}/employees/${encodeURIComponent(employeeId)}/whatsapp-connect`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getWhatsAppSetup(orgSlug: BusinessSlug): Promise<WhatsAppSetup> {
