@@ -65,6 +65,25 @@ import { notePaymentRefusal } from "../lib/payment-refusal.js";
  */
 export const myCampaignsRoute = new Hono();
 
+/**
+ * BULK MESSAGING IS THE ADMINS' ALONE (30 Oct 2026). The owner moved every
+ * bulk send — campaigns, quick messages, tests, email campaigns, writing
+ * templates, claiming a number — to the two admin accounts (routes/admin-bulk.ts).
+ * Refused here, on the server, for every staff request that would change or
+ * send anything, so a hidden screen is not the only thing standing in the way.
+ * Reads stay open: they send nothing.
+ */
+export const STAFF_BULK_OFF = "Bulk messaging is done by the admins now. Chat with your clients one to one in the inbox.";
+// Named paths, never "*": this router is mounted at /api/my beside my-desk and
+// my-day, and a catch-all here would refuse their writes too.
+export const STAFF_BULK_PATHS = ["/channel/*", "/campaigns", "/campaigns/*", "/quick-message", "/templates", "/templates/*"];
+for (const path of STAFF_BULK_PATHS) {
+  myCampaignsRoute.use(path, async (c, next) => {
+    if (c.req.method !== "GET") return c.json({ error: STAFF_BULK_OFF }, 403);
+    await next();
+  });
+}
+
 // ============================================================
 // Claiming a number
 // ============================================================
@@ -1112,7 +1131,7 @@ myCampaignsRoute.post("/templates/refresh", async (c) => {
  * known about the person. An empty string counts as a MISSING parameter and
  * fails the whole send, which is why the filler is a character rather than "".
  */
-function staffTemplateParams(count: number, displayName: string | null): string[] {
+export function staffTemplateParams(count: number, displayName: string | null): string[] {
   if (count <= 0) return [];
   const first = displayName?.trim() || "there";
   return [first, ...Array.from({ length: count - 1 }, () => "-")];
@@ -1130,7 +1149,7 @@ function staffTemplateParams(count: number, displayName: string | null): string[
  * it is shown, because a precise-looking number that is quietly low is worse
  * than an honest approximation.
  */
-async function describeDailyCeiling(
+export async function describeDailyCeiling(
   audienceSize: number,
   fromPhoneNumberId: string | null
 ): Promise<{ tier: string | null; limit: number; usedToday: number; remainingToday: number } | null> {

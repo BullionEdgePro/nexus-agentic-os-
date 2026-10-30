@@ -1,0 +1,32 @@
+/* Bulk messaging, admins only (30 Oct 2026). */
+.deck-root .bk-step {
+  margin: 16px 0;
+}
+.deck-root .bk-step > h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: var(--ink);
+}
+.deck-root .bk-step > h2 span {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--marble);
+  color: var(--signal-text);
+  font-size: 0.8rem;
+}
+.deck-root .bk-select {
+  width: 100%;
+  max-width: 460px;
+  padding: 9px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}

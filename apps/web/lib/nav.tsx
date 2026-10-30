@@ -141,17 +141,18 @@ export const NAV: NavItem[] = [
     staffOnly: true,
   },
   {
-    href: "/deck/my-campaigns",
-    label: "My campaigns",
-    // A megaphone, but pointed at a small group: the same act as Broadcasts
-    // and a different audience. Staff-only for the same reason My clients is.
+    href: "/deck/bulk",
+    label: "Bulk messaging",
+    // ADMINS ONLY (30 Oct 2026). Staff used to send to their own book from "My
+    // campaigns"; the owner moved all bulk sending to the two admin accounts,
+    // who choose the number and the customers. Staff chat one to one.
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M4 10v4a1 1 0 0 0 1 1h2.5L14 19V5L7.5 9H5a1 1 0 0 0-1 1Z" />
         <path d="M17.5 9.5a3.5 3.5 0 0 1 0 5" />
       </svg>
     ),
-    staffOnly: true,
+    operatorOnly: true,
   },
   {
     href: "/deck/connections",
@@ -397,7 +398,7 @@ export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
   { title: "Home", hrefs: ["/", "/inbox", "/deck/team-chat", "/deck/operators"] },
   { title: "Work", hrefs: ["/deck/tasks", "/deck/bookings", "/deck/board"] },
   { title: "People", hrefs: ["/deck/activity", "/deck/team", "/deck/customers", "/deck/my-clients"] },
-  { title: "Grow", hrefs: ["/deck/broadcasts", "/deck/my-campaigns", "/deck/links"] },
+  { title: "Grow", hrefs: ["/deck/bulk", "/deck/broadcasts", "/deck/links"] },
   { title: "AI agent", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue"] },
   { title: "Insights", hrefs: ["/deck/forecast", "/deck/quality"] },
   // Two runs that never meet: an admin sees Admin, a staff member sees You.

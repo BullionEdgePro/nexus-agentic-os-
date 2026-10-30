@@ -2899,6 +2899,67 @@ export function sendQuickMessage(
   });
 }
 
+// ============================================================
+// Bulk messaging, admins only (30 Oct 2026)
+// ============================================================
+
+export interface BulkNumber {
+  phoneNumberId: string;
+  label: string;
+  isStaffNumber: boolean;
+}
+
+export function getBulkOverview(
+  orgSlug: BusinessSlug
+): Promise<{ numbers: BulkNumber[]; campaigns: BroadcastSummary[] }> {
+  return request(`/api/bulk/${orgSlug}`);
+}
+
+export interface BulkNumberView {
+  templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;
+  customers: Array<{ id: string; displayName: string | null; waId: string; lastInboundAt: string | null }>;
+  canSend: boolean;
+  blocked: string | null;
+  dailyLimit: number | null;
+  /** At least this many new conversations started today (a floor: campaigns only). */
+  usedToday: number | null;
+}
+
+export function getBulkNumber(orgSlug: BusinessSlug, phoneNumberId: string): Promise<BulkNumberView> {
+  return request(`/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}`);
+}
+
+export function getBulkTemplateText(orgSlug: BusinessSlug, phoneNumberId: string, templateId: string): Promise<TemplateWording> {
+  return request(
+    `/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}/templates/${encodeURIComponent(templateId)}/text`
+  );
+}
+
+export function sendBulk(
+  orgSlug: BusinessSlug,
+  input: { phoneNumberId: string; templateId: string; contactIds: string[] }
+): Promise<{ broadcastId: string; enqueued: number }> {
+  return request(`/api/bulk/${orgSlug}/send`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function sendBulkQuick(
+  orgSlug: BusinessSlug,
+  input: { phoneNumberId: string; text: string; contactIds: string[] }
+): Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }> {
+  return request(`/api/bulk/${orgSlug}/quick`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function sendBulkTest(
+  orgSlug: BusinessSlug,
+  input: { phoneNumberId: string; templateId: string; to: string }
+): Promise<{ ok: true; messageId: string | null }> {
+  return request(`/api/bulk/${orgSlug}/test`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getBulkTestStatus(messageId: string): Promise<CampaignTestStatus> {
+  return request(`/api/bulk/test/${encodeURIComponent(messageId)}`);
+}
+
 /** Which Meta business staff should choose when connecting WhatsApp (30 Oct 2026). */
 export function getMainBusinessForStaff(): Promise<{ main: { id: string; name: string } | null }> {
   return request("/api/connections/whatsapp/main-business");

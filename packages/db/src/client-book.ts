@@ -463,6 +463,38 @@ export async function createStaffBroadcast(input: {
 }
 
 /**
+ * A campaign an admin sent (30 Oct 2026), once bulk messaging became admin-only.
+ *
+ * The admin chooses the number and the clients; the row stamps both the number
+ * and whose it is (`employee_id`, null for a business number) so the history
+ * reads the same as before, and who pressed send goes in the audience filter —
+ * a jsonb that already describes how the audience was chosen.
+ */
+export async function createAdminBroadcast(input: {
+  organizationId: string;
+  templateId: string;
+  fromPhoneNumberId: string;
+  numberOwnerEmployeeId: string | null;
+  sentBy: string | null;
+  recipients: number;
+}): Promise<{ id: string }> {
+  const { rows } = await getPool().query<{ id: string }>(
+    `insert into broadcasts
+       (organization_id, template_id, audience_filter, status, employee_id, from_phone_number_id)
+     values ($1, $2, $3::jsonb, 'draft', $4, $5)
+     returning id`,
+    [
+      input.organizationId,
+      input.templateId,
+      JSON.stringify({ scope: "admin-bulk", sentBy: input.sentBy, chosen: input.recipients }),
+      input.numberOwnerEmployeeId,
+      input.fromPhoneNumberId,
+    ]
+  );
+  return { id: rows[0].id };
+}
+
+/**
  * Who a staff campaign would actually reach.
  *
  * ============================================================

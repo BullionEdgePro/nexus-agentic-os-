@@ -47,12 +47,18 @@ export function ClientsTab({
   selected,
   onChange,
   onSend,
+  title = "Your clients",
+  where = "you",
 }: {
   clients: PickableClient[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
   /** Go and send to the chosen clients: a quick message or an approved one. */
   onSend: (kind: "quick" | "approved") => void;
+  /** "Your clients" for a person's book; the admin page names the business's customers. */
+  title?: string;
+  /** Who they wrote to: "you", or the chosen number. */
+  where?: string;
 }) {
   const [filter, setFilter] = useState<ClientFilter>("all");
   const [search, setSearch] = useState("");
@@ -107,10 +113,10 @@ export function ClientsTab({
     <section className="ct" aria-label="Choose clients">
       <div className="ct-head">
         <div>
-          <h2>Your clients</h2>
+          <h2>{title}</h2>
           <p>
-            Tick who your next message is for. <strong>{counts.free}</strong> can get a free message right now — they wrote to
-            you in the last 24 hours.
+            Tick who the next message is for. <strong>{counts.free}</strong> can get a free message right now — they wrote to{" "}
+            {where} in the last 24 hours.
           </p>
         </div>
         <input
@@ -155,7 +161,7 @@ export function ClientsTab({
       {shown.length === 0 ? (
         <p className="mc-empty">
           {clients.length === 0
-            ? "No clients in your book yet. Add them from a file on the WhatsApp tab."
+            ? "Nobody to show yet."
             : "Nobody matches — try another filter or search."}
         </p>
       ) : (
@@ -175,7 +181,7 @@ export function ClientsTab({
                     <span>+{client.waId}</span>
                   </span>
                   <span className={`ct-when ct-when-${standing}`}>
-                    {sinceWrote(client.lastInboundAt, now)}
+                    {sinceWrote(client.lastInboundAt, now).replace("to you", where === "you" ? "to you" : "")}
                     {STANDING_WORDS[standing] ? <em>{STANDING_WORDS[standing]}</em> : null}
                   </span>
                 </label>

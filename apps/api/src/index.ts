@@ -11,6 +11,7 @@ import { assistantRoute } from "./routes/assistant.js";
 import { connectionsRoute } from "./routes/connections.js";
 import { conversationsRoute } from "./routes/conversations.js";
 import { broadcastsRoute } from "./routes/broadcasts.js";
+import { adminBulkRoute } from "./routes/admin-bulk.js";
 import { metricsRoute } from "./routes/metrics.js";
 import { knowledgeRoute } from "./routes/knowledge.js";
 import { contactsRoute } from "./routes/contacts.js";
@@ -108,6 +109,9 @@ app.use("/api/quality", operatorOnly);
 app.use("/api/quality/*", operatorOnly);
 app.use("/api/broadcasts", operatorOnly);
 app.use("/api/broadcasts/*", operatorOnly);
+// Bulk messaging is the admins' alone (30 Oct 2026).
+app.use("/api/bulk", operatorOnly);
+app.use("/api/bulk/*", operatorOnly);
 // The marketplace. Not because the catalogue is sensitive — it holds no
 // business's data at all, by construction — but because installing a pack
 // changes what every customer of that business is eventually told, and the
@@ -333,6 +337,7 @@ app.route("/api/conversations", conversationsRoute);
 // so they compose onto the same /api/conversations router.
 app.route("/api/conversations", conversationAssignmentRoute);
 app.route("/api/broadcasts", broadcastsRoute);
+app.route("/api/bulk", adminBulkRoute);
 app.route("/api/metrics", metricsRoute);
 app.route("/api/activity", activityRoute);
 app.route("/api/quality", qualityRoute);

@@ -19,13 +19,19 @@ export function QuickMessage({
   bookSize,
   contactIds,
   onSent,
+  send,
+  where = "your WhatsApp",
 }: {
   ownNumber: boolean;
-  people: Array<{ displayName: string | null; waId: string; lastInboundAt: string }>;
+  people: Array<{ displayName: string | null; waId: string; lastInboundAt: string | null }>;
   bookSize: number;
   /** The clients chosen in the Clients tab, when some were (30 Oct 2026). */
   contactIds?: string[];
   onSent: () => void;
+  /** How to send; the admin page sends from the number it chose (30 Oct 2026). */
+  send?: (text: string) => Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }>;
+  /** What "written to …" refers to: "your WhatsApp", or the chosen number. */
+  where?: string;
 }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -45,7 +51,7 @@ export function QuickMessage({
       ) : (
         <>
           <p className="cmp-facts">
-            <strong>{count}</strong> {count === 1 ? "client has" : "clients have"} written to your WhatsApp in the last 24
+            <strong>{count}</strong> {count === 1 ? "client has" : "clients have"} written to {where} in the last 24
             hours, so you can send them anything, right now, free.
             {others > 0 ? (
               <>
@@ -117,7 +123,7 @@ export function QuickMessage({
                         setBusy(true);
                         setResult(null);
                         try {
-                          const outcome = await sendQuickMessage(text.trim(), contactIds);
+                          const outcome = send ? await send(text.trim()) : await sendQuickMessage(text.trim(), contactIds);
                           setResult({
                             ok: outcome.failed.length === 0,
                             text: `Sent to ${outcome.sent} ${outcome.sent === 1 ? "person" : "people"}${

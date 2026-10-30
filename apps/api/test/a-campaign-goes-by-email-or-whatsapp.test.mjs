@@ -105,15 +105,16 @@ test("a staff member can resume or stop only their own campaign, and a test emai
   assert.match(read("apps", "api", "src", "index.ts"), /app\.use\("\/api\/broadcasts\/\*", operatorOnly\)/);
 });
 
-test("both campaign pages offer WhatsApp and Email, and say how a list will be paced", () => {
+test("the campaign page offers WhatsApp and Email, and says how a list will be paced", () => {
+  // Since 30 Oct 2026 bulk sending is the admins' alone: the staff page only
+  // says where it went, and the owner's Campaigns page carries both channels.
   const MINE = read("apps", "web", "app", "deck", "my-campaigns", "page.tsx");
   const OWNER = read("apps", "web", "app", "deck", "broadcasts", "page.tsx");
-  for (const page of [MINE, OWNER]) {
-    assert.match(page, /<EmailCampaignForm/);
-    assert.match(page, /className="ecf-tabs"/);
-    assert.match(page, /<CampaignControls/);
-  }
-  assert.match(MINE, /Send them an email version\?/);
+  assert.match(OWNER, /<EmailCampaignForm/);
+  assert.match(OWNER, /className="ecf-tabs"/);
+  assert.match(OWNER, /<CampaignControls/);
+  assert.match(MINE, /Bulk messaging is done by the admins now/);
+  assert.doesNotMatch(MINE, /<EmailCampaignForm|sendMyCampaign/);
   const FORM = read("apps", "web", "app", "deck", "my-campaigns", "email-campaign.tsx");
   assert.match(FORM, /`Email \$\{people\(side\.reachable\)\}`/);
   assert.match(FORM, /describePlan\(side\.plan\)/);

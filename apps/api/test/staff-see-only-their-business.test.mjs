@@ -63,9 +63,10 @@ const TAB_API = {
   // Broadcasts from staff -- a door that answers "not yours" is worse than no
   // door.
   "/deck/my-clients": "/api/my/clients",
-  // Campaigns to a staff member's own book. Staff-only like the book itself:
-  // the audience is "contacts owned by me", which for an operator is nobody.
-  "/deck/my-campaigns": "/api/my/campaigns",
+  // Bulk messaging (30 Oct 2026): the admins' alone. It replaced staff "My
+  // campaigns" in the rail; the admin chooses the number and the customers.
+  // Mounted flat at /api/bulk so `operatorOnly` guards the whole prefix.
+  "/deck/bulk": "/api/bulk",
   // A staff member's own channels — mailbox, WhatsApp Business, Facebook,
   // Instagram. Staff-only: /api/connections is a person's own accounts, which
   // an operator has none of (ownerOf returns null → 403).

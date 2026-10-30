@@ -97,7 +97,8 @@ const TAB_API = {
   "/deck/tasks": "/api/tasks",
   "/deck/bookings": "/api/bookings",
   "/deck/my-clients": "/api/my/clients",
-  "/deck/my-campaigns": "/api/my/campaigns",
+  // Bulk messaging replaced staff My campaigns in the rail (30 Oct 2026).
+  "/deck/bulk": "/api/bulk",
   "/deck/connections": "/api/connections",
   "/deck/my-settings": "/api/my/social-accounts",
   "/deck/customers": "/api/organizations",

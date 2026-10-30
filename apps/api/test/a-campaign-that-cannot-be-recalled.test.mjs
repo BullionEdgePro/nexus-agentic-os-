@@ -26,7 +26,9 @@ const read = (...p) => readFileSync(join(root, ...p), "utf8");
 
 const ROUTE = read("apps", "api", "src", "routes", "my-campaigns.ts");
 const BOOK = read("packages", "db", "src", "client-book.ts");
-const PAGE = read("apps", "web", "app", "deck", "my-campaigns", "page.tsx");
+// Bulk sending moved to the admins on 30 Oct 2026: the screen these rules
+// protect is now Bulk messaging, not the retired staff My campaigns page.
+const PAGE = read("apps", "web", "app", "deck", "bulk", "page.tsx");
 const INBOX = read("apps", "web", "app", "inbox", "page.tsx");
 const prose = PAGE.replace(/\s+/g, " ");
 
@@ -147,22 +149,25 @@ test("a template approved for another business is refused", () => {
 test("the audience is shown by name before anything sends", () => {
   // A count is what somebody clicks past. A list of names is one they check.
   assert.match(prose, /This will message/);
-  assert.match(PAGE, /audience\.map\(\(person\)/);
+  assert.match(PAGE, /chosen\.map\(\(person\)/);
 });
 
 test("the send control names the count rather than saying Send", () => {
-  assert.match(PAGE, /Message \$\{audience\.length\}/);
+  assert.match(PAGE, /Message \$\{chosen\.length\}/);
 });
 
 test("the screen says which number it will leave from", () => {
-  assert.match(prose, /sending from/i);
-  assert.match(prose, /Your clients see the company, not you/);
+  assert.match(prose, /Send from/);
+  assert.match(PAGE, /from <strong>\{numberLabel\}<\/strong>/);
 });
 
-test("the screen says a phone's WhatsApp cannot be connected", () => {
-  assert.match(prose, /has no way to be read by software/);
-  // And says what CAN be done instead, which is the actionable half.
-  assert.match(prose, /Meta Business Manager/);
+test("the number is chosen from the connected ones, never typed", () => {
+  // Since Coexistence (12 Oct 2026) a WhatsApp Business app number CAN be
+  // connected — so the old "your phone cannot be connected" sentence is gone.
+  // What stays true: a number nobody connected cannot send, so it is picked
+  // from the business's connected numbers and there is no box to type one.
+  assert.match(PAGE, /numbers\.map\(\(n\) =>/);
+  assert.doesNotMatch(PAGE, /setNumberId\(event\.target\.value\)[\s\S]{0,40}type="tel"/);
 });
 
 // ============================================================
@@ -240,9 +245,8 @@ test("the daily count is cross-tenant, because the ceiling belongs to the number
 test("the screen states the ceiling before the send, not only after", () => {
   // Somebody deciding whether to message four hundred people should see it
   // while they are deciding.
-  const PAGE = read("apps", "web", "app", "deck", "my-campaigns", "page.tsx");
-  assert.match(PAGE, /view\.dailyCeiling \? \(/);
-  assert.match(PAGE, /new\s+conversations a day/);
+  assert.match(PAGE, /new conversations a day/);
+  assert.match(PAGE, /view\.usedToday/);
   // And again at the point of no return.
   //
   // Anchored on the confirmation block's own class rather than on a phrase.
@@ -257,6 +261,5 @@ test("the used figure is described as a floor", () => {
   // Counted from our own queued recipients, so a template sent outside a
   // campaign is not in it. A precise-looking number that is quietly low is
   // worse than an honest approximation.
-  const PAGE = read("apps", "web", "app", "deck", "my-campaigns", "page.tsx");
   assert.match(PAGE, /at least/);
 });
