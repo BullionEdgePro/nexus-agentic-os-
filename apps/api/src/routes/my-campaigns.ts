@@ -22,6 +22,7 @@ import {
   connectionSecret,
   upsertTemplateFromMeta,
   openWindowConversations,
+  lastInboundByContact,
   insertOutboundMessage,
 } from "@nexus/db";
 import { sendReplyOnChannel } from "../lib/reply-dispatch.js";
@@ -237,7 +238,19 @@ myCampaignsRoute.get("/campaigns", async (c) => {
         : "the shared company number",
     // The names, not only the count. A number is the thing somebody clicks send
     // on without reading; a list of names is one they check first.
-    audience: audience.map((person) => ({ displayName: person.displayName, waId: person.waId })),
+    // With the id and when they last wrote (30 Oct 2026), so the Clients tab can
+    // pick and filter; a send can then name exactly who it is for.
+    audience: await (async () => {
+      const lastWrote = employee.whatsappPhoneNumberId
+        ? await lastInboundByContact(desk.organizationId, employee.whatsappPhoneNumberId, audience.map((p) => p.id))
+        : new Map<string, string>();
+      return audience.map((person) => ({
+        id: person.id,
+        displayName: person.displayName,
+        waId: person.waId,
+        lastInboundAt: lastWrote.get(person.id) ?? null,
+      }));
+    })(),
     // Approved, and speaking for THIS business. The same attribution check the
     // business broadcast route makes: on a shared WhatsApp account every
     // business holds a copy of every template, and Meta approving one says what
@@ -313,6 +326,16 @@ async function quickMessageAudience(
 const QUICK_MESSAGE_MAX = 4096;
 const QUICK_MESSAGE_RECIPIENTS_MAX = 200;
 
+/**
+ * The client ids a send was narrowed to, or null for "the whole book". At most
+ * 2,000, strings only — anything else in the list is dropped, never trusted.
+ * Exported for its test.
+ */
+export function chosenIds(raw: unknown): Set<string> | null {
+  if (!Array.isArray(raw)) return null;
+  return new Set(raw.filter((id): id is string => typeof id === "string" && id.length <= 64).slice(0, 2000));
+}
+
 /** {name} → the recipient's first name, or "there". Exported for its test. */
 export function personalise(text: string, displayName: string | null): string {
   const first = displayName?.trim().split(/\s+/)[0] || "there";
@@ -347,8 +370,18 @@ myCampaignsRoute.post("/quick-message", async (c) => {
     return c.json({ error: "Quick messages go from your own WhatsApp number. Connect it in Connections first." }, 409);
   }
 
-  const book = await withTenant(desk.organizationId, () => myClientsForBroadcast(desk.organizationId, desk.employeeId));
+  const wholeBook = await withTenant(desk.organizationId, () => myClientsForBroadcast(desk.organizationId, desk.employeeId));
+  // Chosen clients only, when the Clients tab named some (30 Oct 2026).
+  const chosen = chosenIds(body.contactIds);
+  if (chosen && chosen.size === 0) return c.json({ error: "Choose at least one client." }, 400);
+  const book = chosen ? wholeBook.filter((person) => chosen.has(person.id)) : wholeBook;
   const people = (await quickMessageAudience(desk.organizationId, from, book)).slice(0, QUICK_MESSAGE_RECIPIENTS_MAX);
+  if (people.length === 0 && chosen) {
+    return c.json(
+      { error: "None of the chosen clients has written to your WhatsApp in the last 24 hours. Send them an approved message instead." },
+      422
+    );
+  }
   if (people.length === 0) {
     return c.json(
       { error: "Nobody in your book has written to your WhatsApp in the last 24 hours, so a free message cannot reach anyone. Use an approved message instead." },
@@ -492,14 +525,21 @@ myCampaignsRoute.post("/campaigns", async (c) => {
   const refusal = templateRefusal(template, organization, sendingAccountOf(employee, organization), desk.employeeId);
   if (refusal) return c.json({ error: refusal.error }, refusal.status);
 
-  const audience = await withTenant(desk.organizationId, () =>
+  const wholeBook = await withTenant(desk.organizationId, () =>
     myClientsForBroadcast(desk.organizationId, desk.employeeId)
   );
+  // CHOSEN CLIENTS (30 Oct 2026): a send may name a subset, picked in the Clients
+  // tab. Only ever narrowed to people already in the book — an id from anywhere
+  // else is not somebody this person may message, so it is simply not in the list.
+  const chosen = chosenIds(body.contactIds);
+  if (chosen && chosen.size === 0) return c.json({ error: "Choose at least one client." }, 400);
+  const audience = chosen ? wholeBook.filter((person) => chosen.has(person.id)) : wholeBook;
   if (audience.length === 0) {
     return c.json(
       {
-        error:
-          "Nobody to send to. Either your book is empty, or everyone in it has asked not to be messaged.",
+        error: chosen
+          ? "None of the chosen clients can be messaged — they may have left your book or asked not to be messaged."
+          : "Nobody to send to. Either your book is empty, or everyone in it has asked not to be messaged.",
       },
       422
     );

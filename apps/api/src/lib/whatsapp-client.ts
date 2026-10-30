@@ -605,6 +605,13 @@ export interface SendingHealth {
   canSend: string;
   /** The first reason a node is BLOCKED, in Meta's words, when it is. */
   problem: { code: number | null; description: string; solution: string | null } | null;
+  /**
+   * The business portfolio the number's WhatsApp account belongs to — whose
+   * card pays for its campaigns (30 Oct 2026). Absent when Meta did not say.
+   */
+  businessId?: string | null;
+  /** The WhatsApp Business Account the number sits on. */
+  wabaId?: string | null;
 }
 
 /**
@@ -630,6 +637,7 @@ export async function readSendingHealth(phoneNumberId: string): Promise<SendingH
         can_send_message?: string;
         entities?: Array<{
           entity_type?: string;
+          id?: string;
           can_send_message?: string;
           errors?: Array<{ error_code?: number; error_description?: string; possible_solution?: string }>;
         }>;
@@ -647,6 +655,8 @@ export function healthFrom(
     | {
         can_send_message?: string;
         entities?: Array<{
+          entity_type?: string;
+          id?: string;
           can_send_message?: string;
           errors?: Array<{ error_code?: number; error_description?: string; possible_solution?: string }>;
         }>;
@@ -656,8 +666,11 @@ export function healthFrom(
   if (!health?.can_send_message) return null;
   const blocked = (health.entities ?? []).find((entity) => entity.can_send_message === "BLOCKED" && entity.errors?.length);
   const error = blocked?.errors?.[0];
+  const idOf = (type: string) => (health.entities ?? []).find((entity) => entity.entity_type === type)?.id ?? null;
   return {
     canSend: health.can_send_message,
+    businessId: idOf("BUSINESS"),
+    wabaId: idOf("WABA"),
     problem:
       health.can_send_message === "BLOCKED"
         ? {

@@ -53,8 +53,15 @@ test("somebody who asked not to be messaged is not in the audience", () => {
 test("the route resolves the audience itself and never takes one", () => {
   // An endpoint that accepts a recipient list is an endpoint for messaging
   // anybody. The audience is a property of who is asking, not of the request.
-  assert.ok(!/body\.(recipients|contactIds|audience)/.test(ROUTE));
+  assert.ok(!/body\.(recipients|audience)/.test(ROUTE));
   assert.match(ROUTE, /myClientsForBroadcast\(desk\.organizationId, desk\.employeeId\)/);
+  // Since 30 Oct 2026 a send may NARROW the book to clients ticked in the
+  // Clients tab — never widen it. Every use of the ids goes through chosenIds
+  // and is intersected with the book resolved from the session.
+  const uses = ROUTE.match(/body\.contactIds/g) ?? [];
+  assert.equal(uses.length, (ROUTE.match(/chosenIds\(body\.contactIds\)/g) ?? []).length);
+  assert.ok(!/contactIds\.map\(|for \(const \w+ of (body\.)?contactIds\)/.test(ROUTE), "ids are never sent to directly");
+  assert.match(ROUTE, /wholeBook\.filter\(\(person\) => chosen\.has\(person\.id\)\)/);
 });
 
 // ============================================================

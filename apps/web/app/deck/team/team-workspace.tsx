@@ -31,6 +31,7 @@ import {
 } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { RotaEditor } from "./rota-editor";
+import { WhatsAppSetupPanel } from "./whatsapp-setup";
 import { CalendarLink } from "./calendar-link";
 import "../deck.css";
 import "./team.css";
@@ -489,6 +490,9 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
 
           <WhatsAppReadiness team={team} business={business} />
 
+          {/* One card for every staff number (30 Oct 2026). */}
+          {isOperator ? <WhatsAppSetupPanel business={business} /> : null}
+
           {team.length === 0 ? (
             <p className="team-empty">Nobody added yet. The AI answers every conversation for this business.</p>
           ) : (
@@ -638,7 +642,7 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                       <strong>{person.fullName}</strong>
                       {person.jobTitle ? ` · ${person.jobTitle}` : ""}
                       {person.email ? <em> {person.email}</em> : null}
-                      <em> · removed {formatSignIn(person.removedAt).replace(/^signed in /, "")}</em>
+                      <em> · removed {formatSignIn(person.removedAt).replace(/^signed in /, "")}{person.removedBy ? ` by ${person.removedBy}` : ""}</em>
                     </span>
                     <button
                       type="button"

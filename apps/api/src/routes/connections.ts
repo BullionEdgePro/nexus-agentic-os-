@@ -14,6 +14,8 @@ import {
   withTenant,
 } from "@nexus/db";
 import { readHistoryStatus, requestChatHistory } from "../lib/whatsapp-history.js";
+import { getMainBusiness, wrongBusinessWarning } from "../lib/main-business.js";
+import { readSendingHealth } from "../lib/whatsapp-client.js";
 import {
   whatsappCoexistenceConfigured,
   whatsappEmbeddedConfig,
@@ -1003,6 +1005,12 @@ async function ownWhatsAppNumber(c: Parameters<typeof scopeOf>[0]) {
   return { phoneNumberId: employee.whatsappPhoneNumberId } as const;
 }
 
+/** Which Meta business to choose when connecting, so the company card pays (30 Oct 2026). */
+connectionsRoute.get("/whatsapp/main-business", async (c) => {
+  const main = await getMainBusiness();
+  return c.json({ main: main ? { id: main.id, name: main.name } : null });
+});
+
 /** How the import of this person's past WhatsApp chats is going. */
 connectionsRoute.get("/whatsapp/history", async (c) => {
   const own = await ownWhatsAppNumber(c);
@@ -1129,10 +1137,24 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
     // theirs, and imported as it arrives (lib/whatsapp-history.ts).
     const history = await requestChatHistory(connectedPhoneNumberId, businessToken);
 
+    // WHICH CARD WILL PAY (30 Oct 2026). Meta asks which business to put the
+    // number in, and a number outside the owner's main one cannot use the
+    // company card — said now, while undoing it is one reconnect.
+    const main = await getMainBusiness();
+    const health = main ? await readSendingHealth(connectedPhoneNumberId) : null;
+    const businessWarning = main ? wrongBusinessWarning(main, health?.businessId ?? null) : null;
+    if (businessWarning) {
+      logger.warn(
+        { employeeId, phoneNumberId: connectedPhoneNumberId, businessId: health?.businessId, main: main?.id },
+        "A staff number was connected outside the main business"
+      );
+    }
+
     return c.json({
       ok: true,
       number: details.displayNumber ?? details.verifiedName ?? "connected",
       history: history.state,
+      businessWarning,
     });
   } catch (err) {
     logger.error({ err, employeeId }, "WhatsApp coexistence connection failed");

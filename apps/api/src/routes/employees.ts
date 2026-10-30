@@ -30,7 +30,11 @@ import {
   requestNumberCode,
   verifyNumberCode,
   registerNumber,
+  readSendingHealth,
 } from "../lib/whatsapp-client.js";
+import { getMainBusiness, setMainBusiness } from "../lib/main-business.js";
+import { readPaymentRefusal } from "../lib/payment-refusal.js";
+import { readHistoryStatus } from "../lib/whatsapp-history.js";
 import {
   buildDirectContact,
   normalizeWhatsAppNumber,
@@ -54,6 +58,7 @@ import { assertPublicUrl } from "@nexus/knowledge";
 import type { SessionScope } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 import { actorOf } from "../lib/actor.js";
+import { readStaffChanges, recordStaffChange } from "../lib/staff-changes.js";
 import { alertAssignee } from "../services/assignment-alert.js";
 
 /** Who is asking. An unattributed calendar connection is one nobody owns. */
@@ -207,8 +212,11 @@ employeesRoute.delete("/:slug/employees/:employeeId", async (c) => {
   }
 
   const changed = await deactivateEmployee(employee.id);
+  // WHO CLICKED (30 Oct 2026): nothing said who removed two SFS staff on 29 Oct.
+  const actor = await actorOf(c);
+  if (changed) await recordStaffChange(employee.id, { action: "removed", byId: actor.id, byName: actor.name });
   logger.info(
-    { organizationSlug: organization.slug, employeeId: employee.id, fullName: employee.fullName },
+    { organizationSlug: organization.slug, employeeId: employee.id, fullName: employee.fullName, by: actor.name, byId: actor.id },
     "Employee removed from the rota"
   );
   return c.json({ deactivated: changed, employeeId: employee.id });
@@ -224,7 +232,14 @@ employeesRoute.get("/:slug/employees-removed", async (c) => {
   }
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
-  return c.json({ employees: await listRemovedEmployees(organization.id) });
+  const removed = await listRemovedEmployees(organization.id);
+  const changes = await readStaffChanges(removed.map((person) => person.id));
+  return c.json({
+    employees: removed.map((person) => {
+      const change = changes.get(person.id);
+      return { ...person, removedBy: change?.action === "removed" ? change.byName : null };
+    }),
+  });
 });
 
 /**
@@ -232,6 +247,72 @@ employeesRoute.get("/:slug/employees-removed", async (c) => {
  * their sign-in code, number, book and history are all still theirs — so this
  * is the whole undo, and the only one that did not need the database.
  */
+/**
+ * Every staff member's WhatsApp, on one screen (30 Oct 2026): connected or not,
+ * which Meta business it bills to, whether WhatsApp lets it send, and whether
+ * their past chats came in. Owner only. Asked of Meta fresh each time — a few
+ * people, opened rarely, and a stale "can send" is the expensive mistake.
+ */
+employeesRoute.get("/:slug/whatsapp-setup", async (c) => {
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can see the WhatsApp setup." }, 403);
+  }
+  const organization = await findOrganizationBySlug(c.req.param("slug"));
+  if (!organization) return c.json({ error: "Organization not found" }, 404);
+
+  const [employees, main] = await Promise.all([listEmployees(organization.id), getMainBusiness()]);
+  const people = await Promise.all(
+    employees.map(async (employee) => {
+      const number = employee.whatsappPhoneNumberId ?? null;
+      const [health, refused, history] = number
+        ? await Promise.all([
+            readSendingHealth(number),
+            readPaymentRefusal(number),
+            readHistoryStatus(number).catch(() => null),
+          ])
+        : [null, null, null];
+      return {
+        employeeId: employee.id,
+        fullName: employee.fullName,
+        jobTitle: employee.jobTitle ?? null,
+        connected: Boolean(number),
+        number: number ? employee.whatsappNumber ?? null : null,
+        businessId: health?.businessId ?? null,
+        wabaId: health?.wabaId ?? employee.whatsappBusinessAccountId ?? null,
+        canSend: health?.canSend ?? null,
+        problem: health?.problem?.description ?? null,
+        paymentRefusedAt: refused?.at ?? null,
+        history: history ? { state: history.state, imported: history.imported } : null,
+        onMainBusiness: main && health?.businessId ? health.businessId === main.id : null,
+      };
+    })
+  );
+
+  // The portfolio most connected numbers already sit in: the likely main one,
+  // offered when the owner has not chosen yet.
+  const counts = new Map<string, number>();
+  for (const person of people) if (person.businessId) counts.set(person.businessId, (counts.get(person.businessId) ?? 0) + 1);
+  const suggestedBusinessId = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  return c.json({ main, suggestedBusinessId, businesses: [...counts.keys()], people });
+});
+
+/** Name the main business — the one whose card pays for every staff number. */
+employeesRoute.post("/:slug/whatsapp-setup/main-business", async (c) => {
+  if (scopeOf(c).role !== "operator") {
+    return c.json({ error: "Only the owner can choose the main business." }, 403);
+  }
+  const body = await c.req.json<{ businessId?: unknown; name?: unknown }>().catch(() => null);
+  const businessId = typeof body?.businessId === "string" ? body.businessId.trim() : "";
+  const name = typeof body?.name === "string" ? body.name.trim().slice(0, 120) : "";
+  if (!/^\d{6,25}$/.test(businessId)) return c.json({ error: "That is not a Meta business ID." }, 400);
+  if (!name) return c.json({ error: "Write the business name staff will see in Meta." }, 400);
+  const actor = await actorOf(c);
+  const main = await setMainBusiness(businessId, name, actor.name);
+  logger.info({ businessId, name, by: actor.name }, "Main business for staff WhatsApp set");
+  return c.json({ main });
+});
+
 employeesRoute.post("/:slug/employees/:employeeId/restore", async (c) => {
   if (scopeOf(c).role !== "operator") {
     return c.json({ error: "Only the owner can restore staff." }, 403);
@@ -245,8 +326,10 @@ employeesRoute.post("/:slug/employees/:employeeId/restore", async (c) => {
   }
 
   const restored = await reactivateEmployee(employee.id);
+  const actor = await actorOf(c);
+  if (restored) await recordStaffChange(employee.id, { action: "restored", byId: actor.id, byName: actor.name });
   logger.info(
-    { organizationSlug: organization.slug, employeeId: employee.id, fullName: employee.fullName, restored },
+    { organizationSlug: organization.slug, employeeId: employee.id, fullName: employee.fullName, restored, by: actor.name, byId: actor.id },
     "Employee restored to the rota"
   );
   return c.json({ restored, employeeId: employee.id });

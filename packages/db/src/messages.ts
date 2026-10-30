@@ -369,6 +369,33 @@ export async function openWindowConversations(
 }
 
 /**
+ * When each of these contacts last wrote to this number, ever (30 Oct 2026) —
+ * for the client picker's "wrote this week" and "never wrote" filters. Contacts
+ * who never wrote are simply absent from the result.
+ */
+export async function lastInboundByContact(
+  organizationId: string,
+  phoneNumberId: string,
+  contactIds: string[]
+): Promise<Map<string, string>> {
+  if (contactIds.length === 0) return new Map();
+  return withTenant(organizationId, async () => {
+    const { rows } = await getPool().query<{ contact_id: string; last_inbound_at: string }>(
+      `select m.contact_id, max(m.created_at) as last_inbound_at
+         from messages m
+         join conversations c on c.id = m.conversation_id
+        where c.organization_id = $1
+          and c.phone_number_id = $2
+          and m.direction = 'inbound'
+          and m.contact_id = any($3::uuid[])
+        group by m.contact_id`,
+      [organizationId, phoneNumberId, contactIds]
+    );
+    return new Map(rows.map((row) => [row.contact_id, row.last_inbound_at]));
+  });
+}
+
+/**
  * A name from the staff member's phone book, for a contact Nexus knows by
  * number only. Never overwrites a name already held.
  */

@@ -937,3 +937,126 @@
   font-style: normal;
   color: var(--slate);
 }
+
+/* WhatsApp setup: one card for every staff number (30 Oct 2026). */
+.deck-root .ws {
+  margin: 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+.deck-root .ws-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+.deck-root .ws-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.deck-root .ws-head span {
+  font-size: 0.82rem;
+  color: var(--warn);
+}
+.deck-root .ws-head span.ws-all {
+  color: var(--good);
+}
+.deck-root .ws-main,
+.deck-root .ws-main-form p {
+  margin: 8px 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.deck-root .ws-main em {
+  font-style: normal;
+  color: var(--slate);
+}
+.deck-root .ws-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--signal-text);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+.deck-root .ws-main-form {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.deck-root .ws-main-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--slate);
+  max-width: 360px;
+}
+.deck-root .ws-main-form input,
+.deck-root .ws-main-form select {
+  padding: 7px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.deck-root .ws-actions {
+  display: flex;
+  gap: 8px;
+}
+.deck-root .ws-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.deck-root .ws-list > li {
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+}
+.deck-root .ws-person {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+.deck-root .ws-person em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+.deck-root .ws-steps {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.deck-root .ws-steps li {
+  font-size: 0.76rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--slate);
+}
+.deck-root .ws-steps li.ok {
+  color: var(--good);
+  border-color: currentColor;
+}
+.deck-root .ws-steps li.no {
+  color: var(--warn);
+  border-color: currentColor;
+}
+.deck-root .ws-fix {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--warn);
+}

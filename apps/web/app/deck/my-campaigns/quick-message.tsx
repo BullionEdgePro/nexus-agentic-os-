@@ -17,11 +17,14 @@ export function QuickMessage({
   ownNumber,
   people,
   bookSize,
+  contactIds,
   onSent,
 }: {
   ownNumber: boolean;
   people: Array<{ displayName: string | null; waId: string; lastInboundAt: string }>;
   bookSize: number;
+  /** The clients chosen in the Clients tab, when some were (30 Oct 2026). */
+  contactIds?: string[];
   onSent: () => void;
 }) {
   const [text, setText] = useState("");
@@ -114,7 +117,7 @@ export function QuickMessage({
                         setBusy(true);
                         setResult(null);
                         try {
-                          const outcome = await sendQuickMessage(text.trim());
+                          const outcome = await sendQuickMessage(text.trim(), contactIds);
                           setResult({
                             ok: outcome.failed.length === 0,
                             text: `Sent to ${outcome.sent} ${outcome.sent === 1 ? "person" : "people"}${

@@ -392,3 +392,206 @@
   font-style: normal;
   font-size: 0.78rem;
 }
+
+/* Clients tab: pick who the next message is for (30 Oct 2026). */
+.ct {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.ct-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10px 16px;
+}
+.ct-head h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: var(--ink);
+}
+.ct-head p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--slate);
+  max-width: 60ch;
+}
+.ct-search {
+  flex: 0 1 260px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.ct-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 8px;
+}
+.ct-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.ct-chip b {
+  font-weight: 600;
+  color: var(--slate);
+}
+.ct-chip.on {
+  border-color: var(--signal-text);
+  color: var(--signal-text);
+}
+.ct-chip-free::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+}
+.ct-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 8px;
+  font-size: 0.82rem;
+  color: var(--slate);
+}
+.ct-all,
+.ct-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ct-sort select {
+  padding: 4px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.ct-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+.ct-list li label {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.ct-list li:hover label {
+  background: var(--marble);
+}
+.ct-list li.on label {
+  background: var(--marble);
+  outline: 1px solid var(--hairline);
+}
+.ct-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--marble);
+  border: 2px solid var(--hairline);
+}
+.ct-avatar-free {
+  border-color: var(--good);
+}
+.ct-who {
+  display: grid;
+  min-width: 0;
+}
+.ct-who strong {
+  font-size: 0.9rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-who span {
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+.ct-when {
+  display: grid;
+  justify-items: end;
+  font-size: 0.78rem;
+  color: var(--slate);
+  text-align: right;
+}
+.ct-when em {
+  font-style: normal;
+  font-size: 0.72rem;
+}
+.ct-when-free em {
+  color: var(--good);
+}
+.ct-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: 0 -4px 16px color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+.ct-bar > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ct-banner {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--marble);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+@media (max-width: 520px) {
+  .ct-list li label {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+  .ct-when {
+    grid-column: 3;
+    justify-items: start;
+    text-align: left;
+  }
+}

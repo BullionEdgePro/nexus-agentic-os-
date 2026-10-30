@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   getConnections,
   getWhatsAppHistory,
+  getMainBusinessForStaff,
   requestWhatsAppHistory,
   type WhatsAppHistoryStatus,
   startGmailConnect,
@@ -351,6 +352,15 @@ function WhatsAppCard({
   onError: (m: string) => void;
   onChange: () => Promise<void>;
 }) {
+  // Which Meta business to choose, so the company card pays (30 Oct 2026).
+  const [mainBusiness, setMainBusiness] = useState<{ id: string; name: string } | null>(null);
+  const [businessWarning, setBusinessWarning] = useState<string | null>(null);
+  useEffect(() => {
+    getMainBusinessForStaff()
+      .then((result) => setMainBusiness(result.main))
+      .catch(() => setMainBusiness(null));
+  }, []);
+
   return (
     <div className="cnx-card">
       <div className="cnx-head">
@@ -382,8 +392,9 @@ function WhatsAppCard({
               onError("");
               try {
                 const result = await launchWhatsAppSignup(provider);
-                const { number } = await connectWhatsAppCoexistence(result);
-                onNotice(`WhatsApp connected — ${number}. Messages to it now appear in your conversations.`);
+                const connected = await connectWhatsAppCoexistence(result);
+                onNotice(`WhatsApp connected — ${connected.number}. Messages to it now appear in your conversations.`);
+                setBusinessWarning(connected.businessWarning ?? null);
                 await onChange();
               } catch (err) {
                 onError(readableError(err, "WhatsApp could not be connected."));
@@ -407,13 +418,22 @@ function WhatsAppCard({
         <p className="cnx-needs">The stored connection can no longer be read — connect it again.</p>
       ) : null}
       {connection?.lastError ? <p className="cnx-needs">Last sync failed: {connection.lastError}</p> : null}
+      {businessWarning ? <p className="cnx-needs">{businessWarning}</p> : null}
       {connection ? (
         <WhatsAppHistory />
       ) : provider.configured ? (
-        <p className="cnx-offers">
-          When WhatsApp asks, leave <b>Share chat history</b> switched on — your past chats (up to 6 months) then
-          appear in Nexus.
-        </p>
+        <>
+          {mainBusiness ? (
+            <p className="cnx-offers">
+              When WhatsApp asks which business, choose <b>{mainBusiness.name}</b> — that is the company account whose card
+              pays for your messages. If it is not in the list, ask the owner to add you to it in Meta first.
+            </p>
+          ) : null}
+          <p className="cnx-offers">
+            When WhatsApp asks, leave <b>Share chat history</b> switched on — your past chats (up to 6 months) then
+            appear in Nexus.
+          </p>
+        </>
       ) : null}
     </div>
   );

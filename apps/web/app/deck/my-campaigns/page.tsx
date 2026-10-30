@@ -28,6 +28,7 @@ import "./my-campaigns.css";
 import { CampaignControls, EmailCampaignForm } from "./email-campaign";
 import { MyTemplates } from "./my-templates";
 import { QuickMessage } from "./quick-message";
+import { ClientsTab } from "./clients-tab";
 import { TemplateText } from "./template-text";
 import { ImportCustomers } from "../customers/import-customers";
 import "../customers/customers.css";
@@ -102,7 +103,9 @@ export default function MyCampaignsPage() {
     };
   }, [testId]);
   // WhatsApp or email (26 Oct 2026): one campaign, one channel, never both.
-  const [tab, setTab] = useState<"whatsapp" | "email">("whatsapp");
+  // Clients (30 Oct 2026): pick who the next WhatsApp message is for.
+  const [tab, setTab] = useState<"clients" | "whatsapp" | "email">("whatsapp");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [emailSubject, setEmailSubject] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -131,7 +134,13 @@ export default function MyCampaignsPage() {
     );
   }
 
-  const audience = view?.audience ?? [];
+  const wholeBook = view?.audience ?? [];
+  // CHOSEN CLIENTS: when some are ticked in the Clients tab, every WhatsApp send
+  // below — the confirmation list, the count, the request — is for them alone.
+  const picking = picked.size > 0 && wholeBook.some((person) => person.id && picked.has(person.id));
+  const audience = picking ? wholeBook.filter((person) => person.id && picked.has(person.id)) : wholeBook;
+  const pickedIds = picking ? audience.map((person) => person.id as string) : undefined;
+  const pickedWaIds = new Set(audience.map((person) => person.waId));
   const email = view?.email;
   const ready = (view?.readiness ?? []).every((check) => check.ok === true);
   const template = view?.templates.find((candidate) => candidate.id === chosen);
@@ -144,6 +153,9 @@ export default function MyCampaignsPage() {
       </header>
 
       <div className="ecf-tabs" role="tablist" aria-label="Send by">
+        <button type="button" role="tab" aria-selected={tab === "clients"} className={tab === "clients" ? "on" : ""} onClick={() => setTab("clients")}>
+          Clients<b>{picking ? `${audience.length} of ${wholeBook.length}` : wholeBook.length}</b>
+        </button>
         <button type="button" role="tab" aria-selected={tab === "whatsapp"} className={tab === "whatsapp" ? "on" : ""} onClick={() => setTab("whatsapp")}>
           WhatsApp<b>{audience.length}</b>
         </button>
@@ -175,6 +187,28 @@ export default function MyCampaignsPage() {
         ) : null
       ) : null}
 
+      {tab === "clients" ? (
+        <ClientsTab
+          clients={wholeBook.filter((person): person is typeof person & { id: string } => Boolean(person.id))}
+          selected={picked}
+          onChange={setPicked}
+          onSend={() => setTab("whatsapp")}
+        />
+      ) : null}
+
+      {tab === "whatsapp" && picking ? (
+        <p className="ct-banner">
+          Sending only to the <strong>{audience.length}</strong> {audience.length === 1 ? "client" : "clients"} you chose.{" "}
+          <button type="button" className="cmp-link" onClick={() => setTab("clients")}>
+            Change
+          </button>{" "}
+          ·{" "}
+          <button type="button" className="cmp-link" onClick={() => setPicked(new Set())}>
+            Use my whole book
+          </button>
+        </p>
+      ) : null}
+
       {tab === "whatsapp" ? <NumberPanel channel={channel} onChanged={load} /> : null}
 
       {tab === "whatsapp" && view?.readiness ? <Readiness checks={view.readiness} /> : null}
@@ -191,8 +225,9 @@ export default function MyCampaignsPage() {
       {tab === "whatsapp" && view?.canBroadcast && view.quick ? (
         <QuickMessage
           ownNumber={view.quick.ownNumber}
-          people={view.quick.people}
+          people={picking ? view.quick.people.filter((person) => pickedWaIds.has(person.waId)) : view.quick.people}
           bookSize={audience.length}
+          contactIds={pickedIds}
           onSent={() => void load()}
         />
       ) : null}
@@ -203,7 +238,9 @@ export default function MyCampaignsPage() {
 
           <p className="cmp-facts">
             <strong>{audience.length}</strong>{" "}
-            {audience.length === 1 ? "person" : "people"} in your book
+            {picking
+              ? `chosen ${audience.length === 1 ? "client" : "clients"}`
+              : `${audience.length === 1 ? "person" : "people"} in your book`}
             {view.allowance.cap !== null ? (
               <>
                 {" "}
@@ -376,7 +413,7 @@ export default function MyCampaignsPage() {
                     setSending(true);
                     setRefused(null);
                     try {
-                      const result = await sendMyCampaign(chosen);
+                      const result = await sendMyCampaign(chosen, pickedIds);
                       setSent(result.enqueued);
                       setConfirming(false);
                       setChosen("");

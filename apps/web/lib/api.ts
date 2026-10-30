@@ -608,6 +608,8 @@ export interface RemovedTeamMember {
   email: string | null;
   jobTitle: string | null;
   removedAt: string;
+  /** Who clicked Remove, when it was recorded (from 30 Oct 2026). */
+  removedBy?: string | null;
 }
 
 export function getRemovedTeamMembers(orgSlug: BusinessSlug): Promise<{ employees: RemovedTeamMember[] }> {
@@ -2784,7 +2786,8 @@ export interface MyCampaignsView {
   /** WhatsApp's quality rating of the sending number, in words, when it is not green. */
   healthWarning: string | null;
   sendsFrom: string;
-  audience: Array<{ displayName: string | null; waId: string }>;
+  /** id and lastInboundAt since 30 Oct 2026, for the Clients tab; optional for an older API. */
+  audience: Array<{ id?: string; displayName: string | null; waId: string; lastInboundAt?: string | null }>;
   templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;
   /** Messages this person wrote, in every state Meta has them in (28 Oct 2026). */
   myTemplates: MyTemplate[];
@@ -2812,8 +2815,15 @@ export function getMyCampaigns(): Promise<MyCampaignsView> {
   return request("/api/my/campaigns");
 }
 
-export function sendMyCampaign(templateId: string): Promise<{ broadcastId: string; enqueued: number }> {
-  return request("/api/my/campaigns", { method: "POST", body: JSON.stringify({ templateId }) });
+export function sendMyCampaign(
+  templateId: string,
+  /** Only these clients, when some were chosen in the Clients tab (30 Oct 2026). */
+  contactIds?: string[]
+): Promise<{ broadcastId: string; enqueued: number }> {
+  return request("/api/my/campaigns", {
+    method: "POST",
+    body: JSON.stringify(contactIds ? { templateId, contactIds } : { templateId }),
+  });
 }
 
 /** The owner's view: every active person's four checks. */
@@ -2878,8 +2888,54 @@ export function getBusinessTemplateText(orgSlug: BusinessSlug, templateId: strin
 }
 
 /** Free text, now, to everyone who wrote in the last 24 hours (29 Oct 2026). */
-export function sendQuickMessage(text: string): Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }> {
-  return request("/api/my/quick-message", { method: "POST", body: JSON.stringify({ text }) });
+export function sendQuickMessage(
+  text: string,
+  /** Only these clients, when some were chosen in the Clients tab (30 Oct 2026). */
+  contactIds?: string[]
+): Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }> {
+  return request("/api/my/quick-message", {
+    method: "POST",
+    body: JSON.stringify(contactIds ? { text, contactIds } : { text }),
+  });
+}
+
+/** Which Meta business staff should choose when connecting WhatsApp (30 Oct 2026). */
+export function getMainBusinessForStaff(): Promise<{ main: { id: string; name: string } | null }> {
+  return request("/api/connections/whatsapp/main-business");
+}
+
+/** One staff member's WhatsApp, as the owner's setup checklist shows it. */
+export interface WhatsAppSetupPerson {
+  employeeId: string;
+  fullName: string;
+  jobTitle: string | null;
+  connected: boolean;
+  number: string | null;
+  businessId: string | null;
+  wabaId: string | null;
+  canSend: string | null;
+  problem: string | null;
+  paymentRefusedAt: string | null;
+  history: { state: string; imported: number } | null;
+  onMainBusiness: boolean | null;
+}
+
+export interface WhatsAppSetup {
+  main: { id: string; name: string; setBy: string | null; at: string } | null;
+  suggestedBusinessId: string | null;
+  businesses: string[];
+  people: WhatsAppSetupPerson[];
+}
+
+export function getWhatsAppSetup(orgSlug: BusinessSlug): Promise<WhatsAppSetup> {
+  return request(`/api/organizations/${orgSlug}/whatsapp-setup`);
+}
+
+export function setMainBusiness(orgSlug: BusinessSlug, businessId: string, name: string): Promise<{ main: WhatsAppSetup["main"] }> {
+  return request(`/api/organizations/${orgSlug}/whatsapp-setup/main-business`, {
+    method: "POST",
+    body: JSON.stringify({ businessId, name }),
+  });
 }
 
 /** Send an email campaign to everyone in your book who can be emailed. */
@@ -3192,7 +3248,7 @@ export function connectWhatsAppCoexistence(input: {
   code: string;
   wabaId?: string;
   phoneNumberId?: string;
-}): Promise<{ ok: true; number: string }> {
+}): Promise<{ ok: true; number: string; businessWarning?: string | null }> {
   return request("/api/connections/whatsapp/connect", {
     method: "POST",
     body: JSON.stringify(input),
