@@ -25,6 +25,10 @@ import { TemplateText } from "../my-campaigns/template-text";
 import "../deck.css";
 import "../my-clients/my-clients.css";
 import "../my-campaigns/my-campaigns.css";
+// The Approved / Quick tabs are styled here (ecf-tabs). The staff page used to
+// load it through EmailCampaignForm; this page never did, so the tabs ran
+// together as plain text.
+import "../my-campaigns/email-campaign.css";
 import "./bulk.css";
 
 /**

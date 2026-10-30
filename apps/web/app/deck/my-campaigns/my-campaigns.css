@@ -250,6 +250,19 @@
   background: var(--paper);
   color: var(--ink);
 }
+/* "Send a test" read as plain text beside the box (30 Oct 2026). */
+.cmp-test button {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.cmp-test button:hover:not(:disabled) { border-color: var(--ink); }
+.cmp-test button:disabled { opacity: 0.5; cursor: default; }
 .cmp-test em {
   flex-basis: 100%;
   font-style: normal;
