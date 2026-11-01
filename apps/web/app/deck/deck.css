@@ -453,7 +453,7 @@
 .deck-root .feed-b p { font-size: 12px; color: var(--slate); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deck-root .tag { font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--hairline-strong); color: var(--slate); }
 .deck-root .tag.ai { color: var(--signal-text); border-color: rgba(0, 107, 255, .35); }
-.deck-root .tag.h { color: var(--warn); border-color: rgba(156, 93, 15, .35); }
+.deck-root .tag.h { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
 
 .deck-root .area { width: 100%; height: 148px; }
 .deck-root .foot { margin-top: 24px; display: flex; align-items: center; justify-content: space-between; color: var(--mist); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; flex-wrap: wrap; gap: 8px; }
@@ -779,8 +779,8 @@
 }
 @keyframes nx-pulse-ring {
   0%   { box-shadow: 0 0 0 0 var(--sky-glow); }
-  70%  { box-shadow: 0 0 0 7px rgba(63, 178, 255, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(63, 178, 255, 0); }
+  70%  { box-shadow: 0 0 0 7px rgba(47, 93, 80, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(47, 93, 80, 0); }
 }
 @keyframes nx-spin { to { transform: rotate(360deg); } }
 @keyframes nx-sheen {
@@ -1138,31 +1138,31 @@ html[data-theme="dark"] .deck-root:not(.lp):not(.admin-root):not(.pl-root) {
              rgba(0, 0, 0, 0.3) 0 8px 18px -10px;
 }
 
-/* The six customer faces, dimmed so they do not glare on navy. */
+/* The six customer faces, warmed for Warm Night. */
 html[data-theme="dark"] .ibx {
-  --av1-bg: #163a5c;
-  --av1-fg: #9ad7ff;
-  --av2-bg: #2c2554;
-  --av2-fg: #c5b8ff;
-  --av3-bg: #123f33;
-  --av3-fg: #7fe0bb;
-  --av4-bg: #4a2c17;
-  --av4-fg: #ffc49a;
-  --av5-bg: #4a1f2e;
-  --av5-fg: #ffa9c2;
-  --av6-bg: #133a44;
-  --av6-fg: #8fdcee;
+  --av1-bg: #3A3118;
+  --av1-fg: #EBC75A;
+  --av2-bg: #1E3029;
+  --av2-fg: #8CC4AE;
+  --av3-bg: #3B2418;
+  --av3-fg: #F0A07A;
+  --av4-bg: #2C2438;
+  --av4-fg: #C9B6EC;
+  --av5-bg: #3A1F27;
+  --av5-fg: #F0A9BE;
+  --av6-bg: #1C2F33;
+  --av6-fg: #8FCFDA;
 }
 
 /* Surfaces that were drawn as translucent white over the light ground. */
-html[data-theme="dark"] .ibx-event { background: rgba(16, 29, 46, 0.85); }
+html[data-theme="dark"] .ibx-event { background: rgba(29, 26, 21, 0.85); }
 html[data-theme="dark"] .day-focus-tile,
-html[data-theme="dark"] .day-clear { background: rgba(16, 29, 46, 0.85); }
+html[data-theme="dark"] .day-clear { background: rgba(29, 26, 21, 0.85); }
 html[data-theme="dark"] .day-hero::after { opacity: 0.18; }
 html[data-theme="dark"] .ibx-thread {
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%234fbcff' stroke-opacity='.07' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 20h28v18H30l-7 6v-6h-7z'/%3E%3Cpath d='M121 34c-3-6-12-4-10 3l10 9 10-9c2-7-7-9-10-3z'/%3E%3Cpath d='M52 104l3.5 7 7.5 1-5.5 5.5 1.5 7.5-7-3.5-7 3.5 1.5-7.5L41 112l7.5-1z'/%3E%3Cpath d='M134 132v-20l16-3.5v18'/%3E%3Cellipse cx='130' cy='132' rx='4.5' ry='3.5'/%3E%3Cellipse cx='146' cy='126.5' rx='4.5' ry='3.5'/%3E%3Cpath d='M78 70l26-10-8 26-5-10z'/%3E%3Ccircle cx='160' cy='70' r='9'/%3E%3Cpath d='M155 72a6 6 0 0 0 10 0'/%3E%3Cpath d='M18 150h22v14H18zM18 150l11 8 11-8'/%3E%3Cpath d='M96 160l4-8 4 8m-6-3h4'/%3E%3C/g%3E%3C/svg%3E"),
-    radial-gradient(80% 60% at 50% 0%, rgba(79, 188, 255, .08), transparent 70%);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%238CC4AE' stroke-opacity='.07' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 20h28v18H30l-7 6v-6h-7z'/%3E%3Cpath d='M121 34c-3-6-12-4-10 3l10 9 10-9c2-7-7-9-10-3z'/%3E%3Cpath d='M52 104l3.5 7 7.5 1-5.5 5.5 1.5 7.5-7-3.5-7 3.5 1.5-7.5L41 112l7.5-1z'/%3E%3Cpath d='M134 132v-20l16-3.5v18'/%3E%3Cellipse cx='130' cy='132' rx='4.5' ry='3.5'/%3E%3Cellipse cx='146' cy='126.5' rx='4.5' ry='3.5'/%3E%3Cpath d='M78 70l26-10-8 26-5-10z'/%3E%3Ccircle cx='160' cy='70' r='9'/%3E%3Cpath d='M155 72a6 6 0 0 0 10 0'/%3E%3Cpath d='M18 150h22v14H18zM18 150l11 8 11-8'/%3E%3Cpath d='M96 160l4-8 4 8m-6-3h4'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(80% 60% at 50% 0%, rgba(111, 168, 146, .08), transparent 70%);
 }
 /* Stars over the night rail — a few, and only while it is night. */
 html[data-theme="dark"] .deck-root.shell .shell-rail::after {
@@ -1187,16 +1187,19 @@ html[data-theme="dark"] .deck-root.shell .shell-rail::after {
 
 /* The help panel lives beside the deck, on its own :root tokens. */
 html[data-theme="dark"] {
-  --as-ink: #e4eef9;
-  --as-slate: #a3b8ce;
-  --as-paper: #101d2e;
-  --as-marble: #0a1422;
-  --as-pebble: #172739;
-  --as-hairline: #1e3247;
-  --as-signal: #86cdff;
-  --as-navy: #1486e0;
+  --as-ink: #F3EFE8;
+  --as-slate: #C9C1B3;
+  --as-paper: #1D1A15;
+  --as-marble: #14120E;
+  --as-pebble: #27231C;
+  --as-hairline: #2E2A22;
+  --as-signal: #8CC4AE;
+  --as-navy: #F3EFE8;
+  --as-on-navy: #14120E;
+  --as-on-navy-soft: #5B5549;
+  --as-on-signal: #14120E;
 }
-html[data-theme="dark"] body { background: #0a1422; }
+html[data-theme="dark"] body { background: #14120E; }
 
 /* ---------- the switch between them ---------- */
 /* A circle of the new sky spreading from the switch (View Transitions),
@@ -1247,7 +1250,7 @@ html.nx-theme-fade .deck-root * {
   border-radius: var(--r-pill);
   overflow: hidden;
   background: linear-gradient(180deg, #8fd6ff, #4fb4f5);
-  box-shadow: inset 0 1px 3px rgba(11, 42, 74, .25);
+  box-shadow: inset 0 1px 3px rgba(60, 45, 20, .22);
   transition: background .45s ease;
 }
 .nx-theme.is-dark .nx-theme-track { background: linear-gradient(180deg, #0b1d38, #1b3a66); }

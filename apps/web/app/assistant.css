@@ -4,15 +4,20 @@
    the deck rather than a child of it. */
 
 :root {
-  --as-ink: #0b2a4a;
-  --as-slate: #44678a;
-  --as-paper: #ffffff;
-  --as-marble: #f3f8fd;
-  --as-pebble: #e8f2fc;
-  --as-hairline: #d6e7f6;
-  --as-signal: #065fa8;
-  --as-navy: #0873c9;
-  --as-crit: #c4342a;
+  /* Cream (1 Nov 2026), matching the deck tokens. --as-navy is the
+     panel's button and header: the dock's near-black. */
+  --as-ink: #16140F;
+  --as-slate: #5B5549;
+  --as-paper: #FFFEFB;
+  --as-marble: #F3EFE8;
+  --as-pebble: #ECE6DB;
+  --as-hairline: #E6DFD3;
+  --as-signal: #2F5D50;
+  --as-navy: #16140F;
+  --as-crit: #B42318;
+  --as-on-navy: #F3EFE8;
+  --as-on-navy-soft: #B5B2AB;
+  --as-on-signal: #FFFFFF;
 }
 
 .as-open {
@@ -26,16 +31,16 @@
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--as-on-navy);
   background: var(--as-navy);
   border: 0;
   border-radius: 999px;
   padding: 11px 18px 11px 15px;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(11, 53, 88, .22);
+  box-shadow: 0 4px 14px rgba(60, 45, 20, .22);
 }
 .as-open svg { width: 17px; height: 17px; }
-.as-open:hover { background: #123f66; }
+.as-open:hover { background: #2B2822; }
 
 .as {
   position: fixed;
@@ -52,7 +57,7 @@
   border: 1px solid var(--as-hairline);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 10px 34px rgba(11, 53, 88, .18);
+  box-shadow: 0 10px 34px rgba(60, 45, 20, .18);
 }
 
 .as-head {
@@ -62,23 +67,23 @@
   gap: 10px;
   padding: 12px 14px;
   background: var(--as-navy);
-  color: #fff;
+  color: var(--as-on-navy);
 }
 .as-head strong { display: block; font-size: 13.5px; }
 /* The disclaimer sits in the header rather than in the first message, so it is
    still visible after twenty turns. */
-.as-head span { display: block; font-size: 11px; color: #a9c4de; margin-top: 1px; }
+.as-head span { display: block; font-size: 11px; color: var(--as-on-navy-soft); margin-top: 1px; }
 .as-head button {
   font: inherit;
   font-size: 20px;
   line-height: 1;
   background: none;
   border: 0;
-  color: #a9c4de;
+  color: var(--as-on-navy-soft);
   cursor: pointer;
   padding: 0 2px;
 }
-.as-head button:hover { color: #fff; }
+.as-head button:hover { color: var(--as-on-navy); }
 
 .as-body {
   flex: 1;
@@ -98,7 +103,7 @@
 }
 .as-user {
   background: var(--as-signal);
-  color: #fff;
+  color: var(--as-on-signal);
   margin-left: auto;
   border-bottom-right-radius: 3px;
 }
@@ -155,7 +160,7 @@
   border-radius: 8px;
   padding: 8px 15px;
   background: var(--as-signal);
-  color: #fff;
+  color: var(--as-on-signal);
   cursor: pointer;
 }
 .as-ask button:disabled { background: var(--as-pebble); color: var(--as-slate); cursor: not-allowed; }

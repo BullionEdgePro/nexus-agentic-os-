@@ -17,18 +17,18 @@
 .ibx {
   /* Six soft faces. Fixed per person (see tintOf) so a customer is
      recognisable across visits without reading the name. */
-  --av1-bg: #dff0ff;
-  --av1-fg: #0b5fa5;
-  --av2-bg: #e9e4ff;
-  --av2-fg: #5a3fb8;
-  --av3-bg: #dcf6ec;
-  --av3-fg: #0d7352;
-  --av4-bg: #ffe9dc;
-  --av4-fg: #a4521a;
-  --av5-bg: #ffe3ec;
-  --av5-fg: #a8335c;
-  --av6-bg: #e2f4f8;
-  --av6-fg: #1b6f82;
+  --av1-bg: #F6E7B8;
+  --av1-fg: #6B4E00;
+  --av2-bg: #E3EDE7;
+  --av2-fg: #2F5D50;
+  --av3-bg: #F4DDD2;
+  --av3-fg: #8E3E1F;
+  --av4-bg: #E9E2F2;
+  --av4-fg: #5A3F86;
+  --av5-bg: #F2DEE3;
+  --av5-fg: #8A3150;
+  --av6-bg: #E1ECEE;
+  --av6-fg: #2C5F6A;
   /* The channels' own colours — recognition beats palette purity here. */
   --ch-whatsapp: #25d366;
   --ch-facebook: #1877f2;
@@ -474,7 +474,7 @@
   background-color: var(--pebble);
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%230873c9' stroke-opacity='.075' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 20h28v18H30l-7 6v-6h-7z'/%3E%3Cpath d='M121 34c-3-6-12-4-10 3l10 9 10-9c2-7-7-9-10-3z'/%3E%3Cpath d='M52 104l3.5 7 7.5 1-5.5 5.5 1.5 7.5-7-3.5-7 3.5 1.5-7.5L41 112l7.5-1z'/%3E%3Cpath d='M134 132v-20l16-3.5v18'/%3E%3Cellipse cx='130' cy='132' rx='4.5' ry='3.5'/%3E%3Cellipse cx='146' cy='126.5' rx='4.5' ry='3.5'/%3E%3Cpath d='M78 70l26-10-8 26-5-10z'/%3E%3Ccircle cx='160' cy='70' r='9'/%3E%3Cpath d='M155 72a6 6 0 0 0 10 0'/%3E%3Cpath d='M18 150h22v14H18zM18 150l11 8 11-8'/%3E%3Cpath d='M96 160l4-8 4 8m-6-3h4'/%3E%3C/g%3E%3C/svg%3E"),
-    radial-gradient(80% 60% at 50% 0%, rgba(94, 196, 255, .14), transparent 70%);
+    radial-gradient(80% 60% at 50% 0%, color-mix(in srgb, var(--sky) 10%, transparent), transparent 70%);
   background-size: 180px 180px, 100% 100%;
 }
 .ibx-thread-empty {
@@ -626,7 +626,7 @@
   height: 14px;
   border-radius: 50%;
   background: var(--paper);
-  box-shadow: 0 1px 3px rgba(11, 42, 74, .25);
+  box-shadow: 0 1px 3px rgba(60, 45, 20, .22);
   transition: transform .22s var(--ease-spring);
 }
 .ibx-handoff input:checked + .ibx-switch { background: var(--warn); }
@@ -733,12 +733,12 @@
   line-height: 1.45;
   color: var(--ink);
   overflow-wrap: anywhere;
-  box-shadow: 0 1px 1.5px rgba(11, 42, 74, .08);
+  box-shadow: 0 1px 1.5px rgba(60, 45, 20, .08);
   animation: nx-pop .28s var(--ease-out) both;
 }
 .ibx-bubble.in { align-self: flex-start; background: var(--paper); border-top-left-radius: 4px; }
 .ibx-bubble.out { align-self: flex-end; background: var(--sky-soft); border-top-right-radius: 4px; }
-.ibx-bubble.out.ai { background: linear-gradient(135deg, var(--sky-soft), var(--paper) 140%); border: 1px solid rgba(63, 178, 255, .35); }
+.ibx-bubble.out.ai { background: linear-gradient(135deg, var(--sky-soft), var(--paper) 140%); border: 1px solid color-mix(in srgb, var(--sky) 30%, transparent); }
 .ibx-bubble.out.sys { background: var(--paper); border: 1px dashed var(--hairline-strong); }
 .ibx-bubble-who { font-size: 12.5px; font-weight: 700; color: var(--signal-text); }
 .ibx-ai-badge,
@@ -785,7 +785,7 @@
   box-shadow: var(--lift-sm);
 }
 .ibx-sla .ibx-ic { width: 15px; height: 15px; color: var(--sky-deep); }
-.ibx-sla.late { color: var(--crit); background: var(--paper); border: 1px solid rgba(196, 52, 42, .25); }
+.ibx-sla.late { color: var(--crit); background: var(--paper); border: 1px solid color-mix(in srgb, var(--crit) 25%, transparent); }
 .ibx-sla.late .ibx-ic { color: var(--crit); animation: ibx-breathe 2.4s ease-in-out infinite; }
 
 /* ---------- the composer ---------- */
@@ -1545,7 +1545,7 @@
   margin: 0 -4px;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--sky-soft), var(--paper) 120%);
-  border: 1px solid rgba(63, 178, 255, .35);
+  border: 1px solid color-mix(in srgb, var(--sky) 30%, transparent);
 }
 .dp-summary .dp-loading { padding: 4px 0; }
 .dp-summary-list { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -1607,7 +1607,7 @@
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--sky-soft);
-  border: 1px solid rgba(63, 178, 255, .4);
+  border: 1px solid color-mix(in srgb, var(--sky) 35%, transparent);
   animation: nx-pop .25s var(--ease-out) both;
 }
 .ibx-fu-read-title { margin: 0; font-size: 13.5px; font-weight: 700; color: var(--ink); }

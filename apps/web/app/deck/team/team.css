@@ -32,8 +32,8 @@
 /* ---------- messages ---------- */
 
 .team-msg { font-family: var(--mono); font-size: 12px; padding: 11px 14px; border-radius: var(--r-sm); border: 1px solid; }
-.team-msg.ok  { color: var(--good); border-color: rgba(15, 122, 86, .4); background: rgba(15, 122, 86, .07); }
-.team-msg.bad { color: var(--crit); border-color: rgba(196, 52, 42, .4); background: rgba(196, 52, 42, .07); }
+.team-msg.ok  { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); background: color-mix(in srgb, var(--good) 7%, transparent); }
+.team-msg.bad { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 40%, transparent); background: color-mix(in srgb, var(--crit) 7%, transparent); }
 
 /* ---------- panels ---------- */
 
@@ -75,7 +75,7 @@
   padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--hairline);
   background: transparent; color: var(--mist); cursor: pointer;
 }
-.team-remove:hover:not(:disabled) { color: var(--crit); border-color: rgba(196, 52, 42, .45); }
+.team-remove:hover:not(:disabled) { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 45%, transparent); }
 .team-remove:disabled { opacity: .45; cursor: default; }
 /* Issuing a sign-in is a constructive action, so it must not borrow the
    destructive hover the Remove button uses. */
@@ -135,12 +135,12 @@
   font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none;
   padding: 4px 9px; border-radius: 100px; border: 1px solid var(--hairline-strong); color: var(--slate);
 }
-.tag.bad { color: var(--crit); border-color: rgba(196, 52, 42, .45); }
+.tag.bad { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 45%, transparent); }
 
 /* Lead priority. Semantic colour, separate from the blueprint accent, so
    "needs attention" is legible without reading the number. */
-.tag.pri-urgent { color: var(--crit); border-color: rgba(196, 52, 42, .5); background: rgba(196, 52, 42, .07); }
-.tag.pri-high   { color: var(--warn); border-color: rgba(156, 93, 15, .5); }
+.tag.pri-urgent { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 7%, transparent); }
+.tag.pri-high   { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
 .tag.pri-normal { color: var(--slate); }
 .tag.pri-low    { color: var(--mist); }
 
@@ -284,7 +284,7 @@
   letter-spacing: 0;
   text-transform: none;
   color: var(--warn);
-  border: 1px solid rgba(156, 93, 15, 0.4);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   border-radius: 100px;
   padding: 2px 7px;
   white-space: nowrap;
@@ -845,7 +845,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--paper);
-  box-shadow: 0 1px 3px rgba(11, 42, 74, .25);
+  box-shadow: 0 1px 3px rgba(60, 45, 20, .22);
   transition: transform .22s var(--ease-spring);
 }
 .rules-switch input:checked + .rules-knob { background: var(--btn-grad); }
