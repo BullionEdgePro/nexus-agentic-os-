@@ -26,6 +26,7 @@ export default async function DeckLayout({ children }: { children: React.ReactNo
   return (
     <ConsoleShell
       role={session?.role ?? "employee"}
+      signedInAs={session?.sub}
       me={
         session?.role === "employee" && session.employeeId && session.organizationSlug
           ? { employeeId: session.employeeId, organizationSlug: session.organizationSlug }

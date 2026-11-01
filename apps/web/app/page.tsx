@@ -64,5 +64,10 @@ export default async function Home() {
     );
   }
 
-  return <DeckConsole signedInAs={session.sub} />;
+  // The admin's overview, in the same frame as every other screen.
+  return (
+    <ConsoleShell role="operator" signedInAs={session.sub}>
+      <DeckConsole />
+    </ConsoleShell>
+  );
 }

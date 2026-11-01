@@ -17,6 +17,7 @@ export default async function InboxLayout({ children }: { children: React.ReactN
   return (
     <ConsoleShell
       role={session?.role ?? "employee"}
+      signedInAs={session?.sub}
       me={
         session?.role === "employee" && session.employeeId && session.organizationSlug
           ? { employeeId: session.employeeId, organizationSlug: session.organizationSlug }

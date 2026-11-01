@@ -12,6 +12,7 @@ import { MobileTabs } from "./mobile-tabs";
 import { InstallBanner } from "./install-app";
 import { MotionBoot } from "./motion-boot";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
+import { WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
 import "./console-shell.css";
@@ -141,9 +142,12 @@ export function ConsoleShell({
   children,
   role,
   me,
+  signedInAs,
 }: {
   children: React.ReactNode;
   role: "operator" | "employee";
+  /** Who is signed in, for the admin's account menu. */
+  signedInAs?: string;
   /** A signed-in staff member — who "a chat is now yours" alerts are for. */
   me?: { employeeId: string; organizationSlug: string } | null;
 }) {
@@ -186,6 +190,16 @@ export function ConsoleShell({
         <RailLinks role={role} />
       </nav>
       <main className="shell-main">
+        {/* The admin's tools on every page — work, notifications, account —
+            which used to exist only on the front page's own header. Staff
+            have none of these menus. */}
+        {role === "operator" ? (
+          <header className="shell-top">
+            <WorkMenu />
+            <NotificationsMenu />
+            <AccountMenu signedInAs={signedInAs ?? ""} />
+          </header>
+        ) : null}
         {/* Operator-only, and above everything: a narrowed console is
             indistinguishable from a quiet one unless something says so on every
             page. See ViewAsStaff. */}

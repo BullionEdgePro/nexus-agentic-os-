@@ -492,3 +492,24 @@
 .nx-sound:hover { background: var(--hairline-on-dark); }
 .nx-sound:focus-visible { outline: 2px solid var(--st-mustard); outline-offset: 2px; }
 .nx-sound[aria-checked="false"] { opacity: .65; }
+
+/* ---------- the admin front page inside the frame (1 Nov 2026) ----------
+   deck-console.tsx keeps its .app / .main names for its card styles; here
+   the old two-column grid (header row + its own rail) steps aside. */
+.deck-root.shell .app { display: block; min-height: 0; }
+.deck-root.shell .app > .main { overflow: visible; padding: 8px 26px 40px; }
+
+/* The admin's work, notifications and account, top right on every page. */
+.deck-root.shell .shell-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 26px 0;
+  position: relative;
+  z-index: 4;
+}
+@media (max-width: 860px) {
+  .deck-root.shell .shell-top { padding: 10px 14px 0; }
+  .deck-root.shell .app > .main { padding: 8px 16px 32px; }
+}

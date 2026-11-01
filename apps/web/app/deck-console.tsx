@@ -1,17 +1,11 @@
 "use client";
 
-import { ThemeToggle } from "./theme-toggle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OverviewMetrics } from "@nexus/shared";
-import { initDeckFx } from "@/lib/deck-fx";
 import { getOverview } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
-import { RailLinks } from "./console-shell";
-import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { SystemHealth } from "./system-health";
-import { Assistant } from "./assistant";
-import { CommandPalette } from "./command-palette";
 import "./deck/deck.css";
 
 /* ---------------- static presentation data ---------------- */
@@ -186,28 +180,14 @@ function liveFeed(m: OverviewMetrics) {
   });
 }
 
-const BrandMark = () => (
-  <span className="brand-mark">
-    <svg viewBox="0 0 32 32" fill="none">
-      <path d="M16 2 3 9v14l13 7 13-7V9L16 2Z" stroke="var(--ink)" strokeWidth="1.3" />
-      <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" fill="none" stroke="var(--signal)" strokeWidth="1.2" />
-      <circle cx="16" cy="16" r="2" fill="var(--signal)" />
-    </svg>
-  </span>
-);
-
 /**
- * `signedInAs` comes from the server.
+ * The admin's front page — the operations overview.
  *
- * The first attempt fetched it from /api/auth/me — an endpoint that does not
- * exist. It would have failed silently forever and left the avatar reading
- * "OP", which is the same class of thing as the hardcoded "AA" it replaced:
- * plausible, wrong, and invisible. app/page.tsx already verified the session
- * to decide whether to render this at all, so the answer was one prop away.
+ * It sits inside ConsoleShell (app/page.tsx) like every other signed-in screen,
+ * so the dock, the ⌘K search, the assistant and the account menu all come from
+ * the shell. This file is only the page (1 Nov 2026).
  */
-export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
-  const who = signedInAs ?? "operator";
-  const rootRef = useRef<HTMLDivElement>(null);
+export default function DeckConsole() {
   const boardRef = useRef<HTMLDivElement>(null);
 
   const [tenants, setTenants] = useState<TenantMeta[]>(TENANT_META);
@@ -267,11 +247,6 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
         );
   const displayIntents = live && overview && overview.intents.length ? liveIntents(overview) : INTENTS;
   const displayFeed = live && overview && overview.feed.length ? liveFeed(overview) : FEED;
-
-  // visual effects
-  useEffect(() => {
-    if (rootRef.current) return initDeckFx(rootRef.current);
-  }, []);
 
   // switchboard geometry (measured, responsive)
   useEffect(() => {
@@ -382,48 +357,12 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
   }, []);
 
   return (
-    <div className={`deck-root ${fontVariables}`} ref={rootRef}>
-      <canvas className="bg" />
-      <div className="grid-overlay" />
-      <div className="vignette" />
-
-      {/* ⌘K here too — this front page is the one operator screen outside the
-          shared shell, so it needs its own mount to match every other page. */}
-      <CommandPalette role="operator" />
-
+    <div className={`deck-root ${fontVariables}`}>
+      {/* .app / .main stay: the overview's card styles are keyed off them.
+          Inside the shell, .app is a plain block (console-shell.css). */}
       <div className="app">
-        <header className="topbar">
-          {/* Every control here is real. This bar previously held six that were
-              not: a brand that was not a link, a tenant switcher with no menu,
-              a search box with no handler beside a ⌘K hint nothing listened
-              for, two icon buttons with no onClick, and an avatar reading a
-              hardcoded "AA" next to a hardcoded badge of "6" — an invented
-              governance-alert count on a live console. */}
-          <a className="brand" href="/" title="Nexus Agentic OS">
-            <BrandMark />
-          </a>
-
-          <HeaderSearch />
-
-          <div className="top-right">
-            {/* Light or dark — the same switch as the rail's, in the header. */}
-            <ThemeToggle />
-            <WorkMenu />
-            <NotificationsMenu />
-            <AccountMenu signedInAs={who} />
-          </div>
-        </header>
-
-        {/* The rail contents come from lib/nav.tsx, the single list the shared
-            console shell also renders. They used to be written out here and
-            nowhere else, which is why every other screen had no navigation at
-            all — and why adding Follow-ups meant this file was the only place
-            that learned about it. */}
-        <nav className="rail" aria-label="Sections">
-          <RailLinks role="operator" />
-        </nav>
-
-        <main className="main">
+        {/* A div, not <main>: the shell already holds the page's one <main>. */}
+        <div className="main">
           <div className="page-head">
             <div>
               <div className="eyebrow">Command deck · Live</div>
@@ -795,7 +734,7 @@ export default function DeckConsole({ signedInAs }: { signedInAs?: string }) {
             <span>NEXUS AGENTIC OS · nexusagenticos.com</span>
             <span>Session · operator@nexusagenticos.com · {clock}</span>
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );
@@ -862,7 +801,6 @@ function GovRow({
           {val === null ? null : <i style={{ width: `${pct}%`, background: color }} />}
         </div>
       </div>
-          <Assistant />
-</div>
+    </div>
   );
 }

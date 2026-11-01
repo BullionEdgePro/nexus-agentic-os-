@@ -510,10 +510,10 @@
 
 /* The two badges are anchors now, so they carry a destination. Without this
    they would sit on the text baseline instead of centred in their square. */
-.deck-root .topbar a.icon-btn { display: grid; place-items: center; }
+.deck-root :is(.topbar, .shell-top) a.icon-btn { display: grid; place-items: center; }
 
 /* And the avatar is a real button, so it needs the reset a div never did. */
-.deck-root .topbar button.avatar {
+.deck-root :is(.topbar, .shell-top) button.avatar {
   font-family: inherit;
   font-size: inherit;
   border: none;
@@ -521,8 +521,8 @@
   padding: 0;
 }
 
-.deck-root .topbar a.icon-btn:focus-visible,
-.deck-root .topbar button.avatar:focus-visible,
+.deck-root :is(.topbar, .shell-top) a.icon-btn:focus-visible,
+.deck-root :is(.topbar, .shell-top) button.avatar:focus-visible,
 .deck-root .topbar .brand:focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 2px;
