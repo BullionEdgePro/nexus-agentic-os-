@@ -162,6 +162,12 @@ apply; the shell resets `.app` from a grid to a plain block.
 - Foot: who is signed in (Admin / Staff), the light/dark switch, the sound
   switch (§4), sign out.
 - Badges (Team chat unread) stay where they are.
+- Icons as glass tiles (owner's choice, 1 Nov 2026): each icon sits in a small
+  rounded glass tile like an iPhone home-screen app, coloured by its section —
+  Home mustard, Work forest, People terracotta, Grow cream, AI agent plum,
+  Insights teal, Admin graphite, You rose (`toneOf` in `lib/nav.tsx`, colours in
+  `app/console-shell.css`); every icon reads at ≥3:1 on both ends of its tile.
+  The staff phone tabs use the same tiles.
 - Phones (≤860px): the dock becomes a floating dark bar 12px above the bottom
   edge, icons only, scrolling sideways as today, with the same sliding pill.
   The staff `MobileTabs` bar keeps its four tabs and takes the same dark style.

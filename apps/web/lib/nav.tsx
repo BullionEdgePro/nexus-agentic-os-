@@ -407,6 +407,16 @@ export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
 ];
 
 /**
+ * The colour a screen's icon tile wears in the dock (Cream, 1 Nov 2026): its
+ * section's, so a section is found by colour before its name is read. The
+ * tile colours themselves are in app/console-shell.css, one per section slug.
+ */
+export function toneOf(href: string): string {
+  const group = NAV_GROUPS.find((g) => g.hrefs.includes(href));
+  return group ? group.title.toLowerCase().replace(/\s+/g, "-") : "other";
+}
+
+/**
  * Which nav entry a path belongs to.
  *
  * Longest match wins, so `/deck/tasks` highlights Follow-ups rather than

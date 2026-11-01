@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { TeamChatBadge } from "./team-chat-alerts";
 import "./mobile-tabs.css";
+import { toneOf } from "@/lib/nav";
 
 /**
  * A staff member's phone (24 Oct 2026, Focus workspace): four tabs at the
@@ -28,9 +29,11 @@ export function MobileTabs() {
         const on = tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
         return (
           <a key={tab.href} href={tab.href} className={on ? "on" : undefined} aria-current={on ? "page" : undefined}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d={tab.d} />
-            </svg>
+            <span className="rail-icon" data-tone={toneOf(tab.href)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={tab.d} />
+              </svg>
+            </span>
             <span>{tab.label}</span>
             {tab.href === "/deck/team-chat" ? <TeamChatBadge /> : null}
           </a>

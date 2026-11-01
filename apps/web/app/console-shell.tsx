@@ -14,7 +14,7 @@ import { MotionBoot } from "./motion-boot";
 import { SoundToggle } from "./sound-toggle";
 import { play } from "@/lib/sound";
 import { RAIL_FROM_KEY, RAIL_KEY, readRailMode, type RailMode } from "@/lib/rail";
-import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
+import { NAV, NAV_GROUPS, activeHref, toneOf } from "@/lib/nav";
 import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
@@ -83,7 +83,8 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
       // navigating by keyboard or screen reader.
       aria-current={item.href === current ? "page" : undefined}
     >
-      <span className="rail-icon">{item.icon}</span>
+      {/* A glass tile in its section's colour, like an app on a home screen. */}
+      <span className="rail-icon" data-tone={toneOf(item.href)}>{item.icon}</span>
       <span className="rail-label">{labelFor(item)}</span>
       {item.href === "/deck/team-chat" ? <TeamChatBadge /> : null}
     </a>
