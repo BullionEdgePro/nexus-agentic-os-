@@ -1209,9 +1209,12 @@ html {
   --nx-x: 90%;
   --nx-y: 5%;
 }
-::view-transition-old(root),
-::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-::view-transition-new(root) { animation: nx-sky-reveal .55s cubic-bezier(0.22, 1, 0.36, 1); }
+/* Only while the theme is switching (theme-toggle.tsx sets the class): page
+   changes are view transitions too now (motion.css), and must not play the
+   circle. */
+html.nx-theme-switch::view-transition-old(root),
+html.nx-theme-switch::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.nx-theme-switch::view-transition-new(root) { animation: nx-sky-reveal .55s cubic-bezier(0.22, 1, 0.36, 1); }
 @keyframes nx-sky-reveal {
   from { clip-path: circle(0 at var(--nx-x) var(--nx-y)); }
   to   { clip-path: circle(150vmax at var(--nx-x) var(--nx-y)); }
@@ -1222,7 +1225,7 @@ html.nx-theme-fade .deck-root * {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-new(root) { animation: none; }
+  html.nx-theme-switch::view-transition-new(root) { animation: none; }
   html[data-theme="dark"] .deck-root.shell .shell-rail::after { animation: none; }
 }
 

@@ -1,0 +1,127 @@
+/* ============================================================
+   MOTION KIT (Cream, 1 Nov 2026)
+   ============================================================
+   What the video does, on every signed-in screen:
+   the page changes with a fade and a lift while the dock stays put,
+   cards rise in one after another, lines draw, bars grow, windows
+   grow out of the spot that opened them and side panels slide in.
+
+   Only transform, opacity and filter move. EVERYTHING is inside the
+   no-preference query: a person whose device asks for reduced motion
+   gets the same screens, still, and nothing is ever hidden waiting for
+   an animation that will not come. (A test strips these blocks and
+   checks nothing animated is left.) */
+
+/* Keyframes are inert until something names them, so they can live out here. */
+@keyframes nx-in {
+  from { opacity: 0; translate: 0 10px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+@keyframes nx-page-out {
+  to { opacity: 0; translate: 0 -8px; }
+}
+@keyframes nx-page-in {
+  from { opacity: 0; translate: 0 8px; }
+}
+@keyframes nx-draw-in {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes nx-grow-in {
+  from { scale: 1 0; }
+  to   { scale: 1 1; }
+}
+@keyframes nx-pop-in {
+  from {
+    opacity: 0;
+    scale: .72;
+    translate: calc((var(--nx-ox, 50vw) - 50vw) * .55) calc((var(--nx-oy, 50vh) - 50vh) * .55);
+  }
+  to { opacity: 1; scale: 1; translate: 0 0; }
+}
+@keyframes nx-fade-in {
+  from { opacity: 0; }
+}
+@keyframes nx-sheet-in {
+  from { translate: 104% 0; }
+  to   { translate: 0 0; }
+}
+
+/* Frosted backdrops are a look, not a motion: they apply everywhere. */
+.nx-pop-backdrop,
+.nx-sheet-backdrop {
+  background: rgba(22, 20, 15, .28);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* ---------- page change ----------
+     The sidebar's plain links are full page loads; the browser carries
+     the change across them (Chrome, Edge, Safari). The dock is named, so
+     it is held still while the page column fades and lifts. Browsers
+     without the feature simply load the page. */
+  @view-transition { navigation: auto; }
+  .deck-root.shell .shell-rail { view-transition-name: nx-rail; }
+  .deck-root.shell .shell-main { view-transition-name: nx-page; }
+  ::view-transition-group(nx-rail) { animation: none; }
+  ::view-transition-old(nx-page) { animation: nx-page-out .14s ease-in both; }
+  ::view-transition-new(nx-page) { animation: nx-page-in .26s var(--ease-out, ease-out) both; }
+
+  /* ---------- cards rise in ----------
+     The page's blocks and its cards, from the first paint, 45ms apart.
+     Pure CSS: the server's HTML animates as it arrives, with no flash of
+     cards that are then hidden for the script to animate. Only the first
+     twelve of a run move; a long list is never slow to appear. */
+  .shell-main > .deck-root > :not(:only-child),
+  .shell-main > .deck-root > :only-child > *,
+  .shell-main .app > .main > *,
+  .shell-main :is(.stat, .card, .glass, .day-card, .hq-card) {
+    animation: nx-in .5s var(--ease-out, ease-out) both;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(2) { --i: 1; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(3) { --i: 2; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(4) { --i: 3; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(5) { --i: 4; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(6) { --i: 5; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(7) { --i: 6; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(8) { --i: 7; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(9) { --i: 8; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(10) { --i: 9; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(11) { --i: 10; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(12) { --i: 11; }
+  :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(n + 13) { animation: none; }
+
+  /* ---------- lines draw, bars grow ----------
+     A drawn path needs pathLength="1" so one dash spans the whole line. */
+  .nx-draw {
+    stroke-dasharray: 1;
+    animation: nx-draw-in .9s var(--ease-out, ease-out) both;
+  }
+  .nx-grow {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: nx-grow-in .6s var(--ease-out, ease-out) both;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+
+  /* ---------- windows and panels ---------- */
+  .nx-pop { animation: nx-pop-in .26s var(--ease-out, ease-out) both; }
+  .nx-pop-backdrop,
+  .nx-sheet-backdrop { animation: nx-fade-in .2s ease-out both; }
+  .nx-sheet { animation: nx-sheet-in .32s var(--ease-out, ease-out) both; }
+
+  /* ---------- hover and press ----------
+     Zero specificity (:where) on purpose: a card or button that already
+     declares its own transition keeps it, rather than losing its colour
+     fades to ours. */
+  :where(.shell-main) :where(.card, .glass, .panel) {
+    transition: translate .2s var(--ease-out, ease-out), box-shadow .2s var(--ease-out, ease-out);
+  }
+  :where(.shell-main) :where(.card, .glass, .panel):hover {
+    translate: 0 -2px;
+    box-shadow: var(--lift);
+  }
+  :where(.deck-root) :where(button:not(:disabled)):active { scale: .97; }
+}

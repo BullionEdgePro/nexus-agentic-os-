@@ -10,10 +10,12 @@ import { AssignmentAlerts } from "./assignment-alerts";
 import { TeamChatAlerts, TeamChatBadge } from "./team-chat-alerts";
 import { MobileTabs } from "./mobile-tabs";
 import { InstallBanner } from "./install-app";
+import { MotionBoot } from "./motion-boot";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
 import "./console-shell.css";
+import "./motion.css";
 
 /**
  * The frame every signed-in screen sits in.
@@ -198,6 +200,8 @@ export function ConsoleShell({
       <Assistant />
       {/* ⌘K / Ctrl-K from anywhere signed in. Role-filtered like the rail. */}
       <CommandPalette role={role} />
+      {/* The motion and sound kit, once per signed-in screen. */}
+      <MotionBoot />
       {/* "New chat for you" — wherever a staff member is in the product. */}
       {/* Team chat's unread count and @mention alerts, both roles. */}
       <TeamChatAlerts employeeId={role === "employee" ? (me?.employeeId ?? null) : null} />

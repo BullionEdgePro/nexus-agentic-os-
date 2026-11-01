@@ -44,13 +44,17 @@ export function ThemeToggle({ compact }: { compact?: boolean }) {
     const next: Theme = theme === "dark" ? "light" : "dark";
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const root = document.documentElement;
-    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
 
     if (!reduce && typeof doc.startViewTransition === "function") {
       const rect = event.currentTarget.getBoundingClientRect();
       root.style.setProperty("--nx-x", `${rect.left + rect.width / 2}px`);
       root.style.setProperty("--nx-y", `${rect.top + rect.height / 2}px`);
-      doc.startViewTransition(() => apply(next));
+      // The circle reveal is scoped to this class, so page changes (also
+      // view transitions now) keep their own fade.
+      root.classList.add("nx-theme-switch");
+      const transition = doc.startViewTransition(() => apply(next));
+      void transition.finished.finally(() => root.classList.remove("nx-theme-switch"));
       return;
     }
     if (!reduce) {
