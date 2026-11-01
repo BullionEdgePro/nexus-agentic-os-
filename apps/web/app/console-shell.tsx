@@ -15,7 +15,7 @@ import { SoundToggle } from "./sound-toggle";
 import { play } from "@/lib/sound";
 import { RAIL_FROM_KEY, RAIL_KEY, readRailMode, type RailMode } from "@/lib/rail";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
-import { WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
+import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
 import "./console-shell.css";
@@ -226,6 +226,11 @@ function RailPill() {
         ? [...nav.querySelectorAll<HTMLElement>("a[href]")].find((a) => a.getAttribute("href") === fromHref && a !== current) ?? null
         : null;
 
+    // On a phone the dock is a sideways-scrolling bar: bring this page's icon
+    // into view, so the pill is never off the end of it.
+    if (nav.scrollWidth > nav.clientWidth) {
+      nav.scrollLeft = current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2;
+    }
     place(from ?? current);
     nav.dataset.pill = "ready";
     let frame = requestAnimationFrame(() => {
@@ -300,11 +305,14 @@ export function ConsoleShell({
         <RailLinks role={role} />
       </nav>
       <main className="shell-main">
-        {/* The admin's tools on every page — work, notifications, account —
+        {/* The admin's tools on every page — search, work, notifications, account —
             which used to exist only on the front page's own header. Staff
             have none of these menus. */}
         {role === "operator" ? (
           <header className="shell-top">
+            {/* The admin's search across customers and conversations — wider
+                than the dock's ⌘K palette, which finds screens. */}
+            <HeaderSearch />
             <WorkMenu />
             <NotificationsMenu />
             <AccountMenu signedInAs={signedInAs ?? ""} />

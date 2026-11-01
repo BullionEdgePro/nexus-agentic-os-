@@ -39,13 +39,35 @@ test("night is the console's; customers' pages and the admin door keep their loo
   assert.match(DECK, /color-scheme: dark;/);
 });
 
-test("text on a blue gradient stays white in both themes", () => {
-  assert.match(DECK, /--on-accent: #ffffff;/);
+// Cream (1 Nov 2026): the button is a black pill by day and a cream pill at
+// night, so the words on it flip with it. The rule that survives the change is
+// the one that mattered: they read, in both themes.
+test("the words on a button read in both themes", () => {
+  const hex = (block, name) => new RegExp(`${name}:\\s*(#[0-9a-f]{6})`, "i").exec(block)?.[1];
+  const lum = (h) =>
+    [1, 3, 5]
+      .map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+      .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => {
+    const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+  };
+  const day = DECK.slice(DECK.indexOf("\n.deck-root {"));
   const night = DECK.slice(DECK.indexOf('html[data-theme="dark"] .deck-root:not(.lp)'));
-  assert.ok(!/--on-accent:/.test(night.slice(0, night.indexOf("}"))), "the dark theme must not redefine --on-accent");
+  for (const [theme, block] of [["light", day.slice(0, day.indexOf("\n}"))], ["dark", night.slice(0, night.indexOf("\n}"))]]) {
+    const text = hex(block, "--on-accent");
+    const pill = hex(block, "--signal");
+    assert.ok(text && pill, `${theme}: --on-accent or --signal is missing`);
+    assert.ok(ratio(text, pill) >= 4.5, `${theme}: ${text} on ${pill} is ${ratio(text, pill).toFixed(2)}:1`);
+  }
 });
 
-test("the switch is in the header of every signed-in screen", () => {
+// The switch moved from each page's header to the foot of the one dock
+// (1 Nov 2026), and the admin front page now sits inside that dock's frame.
+test("the switch is on every signed-in screen", () => {
+  const PAGE = read("apps", "web", "app", "page.tsx");
   assert.match(SHELL, /<ThemeToggle compact \/>/);
-  assert.match(CONSOLE, /<ThemeToggle \/>/);
+  assert.match(PAGE, /<ConsoleShell[^>]*role="operator"[\s\S]*<DeckConsole \/>/);
+  assert.doesNotMatch(CONSOLE, /<ThemeToggle/, "a second switch on the front page");
 });

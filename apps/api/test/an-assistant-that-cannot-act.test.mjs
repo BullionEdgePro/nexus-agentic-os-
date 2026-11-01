@@ -212,9 +212,13 @@ test("both roles get it", () => {
     "the assistant has become operator-only"
   );
   const SHELL = read("apps", "web", "app", "console-shell.tsx");
+  const PAGE = read("apps", "web", "app", "page.tsx");
   const DECK = read("apps", "web", "app", "deck-console.tsx");
   assert.match(SHELL, /<Assistant \/>/);
-  assert.match(DECK, /<Assistant \/>/, "the owner is the one person without help");
+  // The owner's front page sits in the shell (1 Nov 2026), so the shell's one
+  // assistant is theirs too — and the page must not draw a second.
+  assert.match(PAGE, /<ConsoleShell[^>]*role="operator"[\s\S]*<DeckConsole \/>/, "the owner is the one person without help");
+  assert.doesNotMatch(DECK, /<Assistant \/>/, "a second help button on the front page");
 });
 
 test("the disclaimer survives a long conversation", () => {

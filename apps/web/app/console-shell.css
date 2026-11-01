@@ -230,7 +230,7 @@ html[data-rail="icons"] .deck-root.shell .rail-collapse svg { transform: scaleX(
   transform: translate(var(--pill-x, 0), var(--pill-y, 0));
   border-radius: 9999px;
   background: var(--dock-pill);
-  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 16px -8px rgba(13, 12, 9, 0.5);
   pointer-events: none;
   opacity: 0;
 }
@@ -286,7 +286,7 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand) .rail-la
   color: var(--dock-ink);
   font-size: 12.5px;
   font-weight: 600;
-  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 20px -8px rgba(13, 12, 9, 0.5);
   opacity: 0;
   pointer-events: none;
   overflow: visible;
@@ -318,15 +318,19 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
     overscroll-behavior-x: contain;
     z-index: 40;
   }
+  /* Names are dropped, not truncated to nothing: every door stays reachable. */
+  .deck-root.shell .rail-label { display: none; }
   .deck-root.shell .rail-brand-row,
   .deck-root.shell .rail-group,
-  .deck-root.shell .rail-label,
   .deck-root.shell .rail-search-label,
   .deck-root.shell .rail-search-kbd,
   .deck-root .rail-foot-who { display: none; }
   .deck-root.shell .rail-search { width: auto; margin: 0; padding: 11px; flex: 0 0 auto; }
   .deck-root.shell .shell-rail a:not(.rail-brand) { flex: 0 0 auto; padding: 11px; }
   .deck-root .rail-foot { margin: 0; padding: 0 0 0 6px; border-top: 0; border-left: 1px solid rgba(243, 239, 232, 0.12); }
+  /* The Ask button sits above the bar, never on it. */
+  body .as-open { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px); }
+  body .as { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 72px); }
 }
 
 /* A staff phone has its own four tabs at the bottom (mobile-tabs.tsx), which
@@ -339,7 +343,8 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
    THE STRIP ABOVE THE PAGE
    ============================================================ */
 
-/* The admin's work, notifications and account, top right on every page. */
+/* The admin's search on the left; work, notifications and account on the
+   right — every admin page. */
 .deck-root.shell .shell-top {
   display: flex;
   align-items: center;
@@ -349,6 +354,7 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
   position: relative;
   z-index: 4;
 }
+.deck-root.shell .shell-top > :first-child { margin-right: auto; }
 
 /* "View as staff": a small button on the right, not a stray link. */
 .deck-root.shell .shell-main > .vas-open {
@@ -424,4 +430,16 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
 @media (max-width: 860px) {
   .deck-root.shell .shell-top { padding: 10px 14px 0; }
   .deck-root.shell .app > .main { padding: 8px 16px 32px; }
+}
+
+/* ---------- page titles: the video's big, tight two-liners ----------
+   Every screen's own header names its page; inside the frame they all take
+   the same title type as the overview (deck.css .page-head h1), so the look
+   holds from page to page. Part 2 restyles the rest of each header. */
+.deck-root.shell .shell-main :is(.act-head, .mc-head, .team-head, .hq-head, .sw-head, .rules-head, .rt-head, .cl-head, .bd-head) h1 {
+  font-family: var(--display);
+  font-size: clamp(30px, 3.2vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
 }

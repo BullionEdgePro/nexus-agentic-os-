@@ -701,13 +701,19 @@ test("no header badge shows a number the server did not send", () => {
 });
 
 test("every header control has a destination or an action", () => {
-  const CONSOLE = read("apps", "web", "app", "deck-console.tsx");
-  const topbar = CONSOLE.slice(CONSOLE.indexOf('<header className="topbar">'), CONSOLE.indexOf("</header>"));
-  assert.ok(topbar.length > 200, "the topbar slice must not be empty");
+  // The header moved (1 Nov 2026): the admin front page sits in ConsoleShell
+  // now, whose top bar carries these controls on every admin page, and the
+  // brand link lives in the dock beside it.
+  const SHELL = read("apps", "web", "app", "console-shell.tsx");
+  const start = SHELL.indexOf('<header className="shell-top">');
+  const end = SHELL.indexOf("</header>", start);
+  assert.ok(start >= 0 && end > start, "the shell's top bar is missing");
+  const topbar = SHELL.slice(start, end);
+  assert.ok(topbar.length > 100, "the topbar slice must not be empty");
 
-  // The brand is a link, and the three controls are real components rather
-  // than decorative markup.
-  assert.match(topbar, /<a className="brand" href="\/"/);
+  // The brand is a link, and the controls are real components rather than
+  // decorative markup.
+  assert.match(SHELL, /<a className="rail-brand" href="\/"/);
   for (const control of ["<HeaderSearch />", "<WorkMenu />", "<NotificationsMenu />", "<AccountMenu"]) {
     assert.ok(topbar.includes(control), `${control} missing from the header`);
   }
@@ -757,16 +763,21 @@ test("the avatar shows who is signed in, from the server", () => {
   // that does not exist, which would have failed silently forever and shown a
   // plausible wrong value. The page already verified the session to decide
   // whether to render the console at all.
-  const CONSOLE = read("apps", "web", "app", "deck-console.tsx");
+  // Since 1 Nov 2026 the account menu is the shell's, fed by every layout.
+  const SHELL = read("apps", "web", "app", "console-shell.tsx");
   const PAGE = read("apps", "web", "app", "page.tsx");
-  assert.match(PAGE, /<DeckConsole signedInAs=\{session\.sub\} \/>/);
-  assert.match(CONSOLE, /signedInAs\?: string/);
+  assert.match(PAGE, /<ConsoleShell[^>]*signedInAs=\{session\.sub\}/);
+  assert.match(SHELL, /signedInAs\?: string/);
+  assert.match(SHELL, /<AccountMenu signedInAs=\{signedInAs/);
   // Checked against CODE, not the file: three comments explain the fix by
   // naming the value it replaced, and a file-wide scan flags the explanation.
-  const code = CONSOLE.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
-  assert.ok(!/"AA"/.test(code), "the hardcoded initials must not return");
-  // And no call to the endpoint that never existed.
-  assert.ok(!/fetch\("\/api\/auth\/me"/.test(CONSOLE));
+  for (const file of ["console-shell.tsx", "deck-console.tsx"]) {
+    const source = read("apps", "web", "app", file);
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    assert.ok(!/"AA"/.test(code), `the hardcoded initials must not return (${file})`);
+    // And no call to the endpoint that never existed.
+    assert.ok(!/fetch\("\/api\/auth\/me"/.test(source), file);
+  }
 });
 
 test("every rail item is named, not just drawn", () => {

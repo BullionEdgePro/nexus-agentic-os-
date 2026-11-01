@@ -859,16 +859,7 @@
 .deck-root .grid-overlay { opacity: .5; }
 .deck-root .vignette { background: var(--aurora); }
 
-/* --- arrival: the page and its first cards rise in once ------------ */
-.deck-root.shell .shell-main > * { animation: nx-rise .5s var(--ease-out) both; }
-.deck-root.shell .shell-main .card,
-.deck-root.shell .shell-main .stat { animation: nx-pop .45s var(--ease-out) both; }
-.deck-root.shell .shell-main .card:nth-child(2),
-.deck-root.shell .shell-main .stat:nth-child(2) { animation-delay: .05s; }
-.deck-root.shell .shell-main .card:nth-child(3),
-.deck-root.shell .shell-main .stat:nth-child(3) { animation-delay: .1s; }
-.deck-root.shell .shell-main .card:nth-child(4),
-.deck-root.shell .shell-main .stat:nth-child(4) { animation-delay: .15s; }
+/* --- arrival: cards rising in now live in app/motion.css (1 Nov 2026) --- */
 
 /* --- a loading line that shimmers instead of saying "Loading…" still */
 .deck-root .nx-skel {
@@ -884,9 +875,6 @@
   .deck-root .btn:hover::after,
   .deck-root .dot.live,
   .deck-root .nx-skel { animation: none; }
-  .deck-root.shell .shell-main > *,
-  .deck-root.shell .shell-main .card,
-  .deck-root.shell .shell-main .stat { animation: none; }
 }
 
 /* ============================================================
@@ -1132,10 +1120,10 @@ html[data-theme="dark"] .deck-root:not(.lp):not(.admin-root):not(.pl-root) {
   --warn-soft: rgba(233, 182, 92, 0.14);
   --crit-soft: rgba(255, 138, 122, 0.14);
 
-  --lift: rgba(0, 0, 0, 0.35) 0 2px 4px 0,
-          rgba(0, 0, 0, 0.35) 0 16px 32px -14px;
-  --lift-sm: rgba(0, 0, 0, 0.3) 0 1px 3px 0,
-             rgba(0, 0, 0, 0.3) 0 8px 18px -10px;
+  --lift: rgba(13, 12, 9, 0.35) 0 2px 4px 0,
+          rgba(13, 12, 9, 0.35) 0 16px 32px -14px;
+  --lift-sm: rgba(13, 12, 9, 0.3) 0 1px 3px 0,
+             rgba(13, 12, 9, 0.3) 0 8px 18px -10px;
 }
 
 /* The six customer faces, warmed for Warm Night. */
@@ -1163,22 +1151,6 @@ html[data-theme="dark"] .ibx-thread {
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%238CC4AE' stroke-opacity='.07' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 20h28v18H30l-7 6v-6h-7z'/%3E%3Cpath d='M121 34c-3-6-12-4-10 3l10 9 10-9c2-7-7-9-10-3z'/%3E%3Cpath d='M52 104l3.5 7 7.5 1-5.5 5.5 1.5 7.5-7-3.5-7 3.5 1.5-7.5L41 112l7.5-1z'/%3E%3Cpath d='M134 132v-20l16-3.5v18'/%3E%3Cellipse cx='130' cy='132' rx='4.5' ry='3.5'/%3E%3Cellipse cx='146' cy='126.5' rx='4.5' ry='3.5'/%3E%3Cpath d='M78 70l26-10-8 26-5-10z'/%3E%3Ccircle cx='160' cy='70' r='9'/%3E%3Cpath d='M155 72a6 6 0 0 0 10 0'/%3E%3Cpath d='M18 150h22v14H18zM18 150l11 8 11-8'/%3E%3Cpath d='M96 160l4-8 4 8m-6-3h4'/%3E%3C/g%3E%3C/svg%3E"),
     radial-gradient(80% 60% at 50% 0%, rgba(111, 168, 146, .08), transparent 70%);
-}
-/* Stars over the night rail — a few, and only while it is night. */
-html[data-theme="dark"] .deck-root.shell .shell-rail::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 220px;
-  background-image:
-    radial-gradient(1.2px 1.2px at 20% 18%, rgba(228, 238, 249, .7), transparent 60%),
-    radial-gradient(1px 1px at 70% 10%, rgba(228, 238, 249, .5), transparent 60%),
-    radial-gradient(1.4px 1.4px at 85% 32%, rgba(154, 215, 255, .7), transparent 60%),
-    radial-gradient(1px 1px at 40% 40%, rgba(228, 238, 249, .4), transparent 60%),
-    radial-gradient(1.2px 1.2px at 12% 55%, rgba(228, 238, 249, .5), transparent 60%);
-  animation: nx-twinkle 5s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 0;
 }
 @keyframes nx-twinkle {
   0%, 100% { opacity: .9; }
@@ -1226,7 +1198,6 @@ html.nx-theme-fade .deck-root * {
 
 @media (prefers-reduced-motion: reduce) {
   html.nx-theme-switch::view-transition-new(root) { animation: none; }
-  html[data-theme="dark"] .deck-root.shell .shell-rail::after { animation: none; }
 }
 
 /* ---------- the sun / moon switch (theme-toggle.tsx) ---------- */
@@ -1316,15 +1287,6 @@ html.nx-theme-fade .deck-root * {
 .nx-theme.is-dark .nx-theme-stars i:nth-child(2) { animation-delay: -.9s; }
 .nx-theme.is-dark .nx-theme-stars i:nth-child(3) { animation-delay: -1.7s; }
 .nx-theme-label { min-width: 34px; text-align: left; }
-
-/* In the rail's brand row, the switch sits at the far end. */
-.deck-root.shell .rail-brand-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--hairline); }
-.deck-root.shell .rail-brand-row .rail-brand { flex: 1; min-width: 0; margin-bottom: 0; border-bottom: 0; }
-.deck-root.shell .rail-brand-row .nx-theme { margin: 0 2px 8px 0; }
-@media (max-width: 860px) {
-  .deck-root.shell .rail-brand-row { display: flex; border: 0; margin: 0; }
-  .deck-root.shell .rail-brand-row .nx-theme { margin: 0; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .nx-theme-track,

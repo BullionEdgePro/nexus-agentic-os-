@@ -132,9 +132,10 @@ canvas, grid overlay, vignette and ink-crosshair cursor (`initDeckFx`). The
 video's clean ground has no backdrop and a normal pointer.
 
 Its header tools move into the shell: for operators the shell shows a slim top
-bar on every page with `WorkMenu`, `NotificationsMenu` and `AccountMenu`
-(`app/header-menus.tsx`). `HeaderSearch` is not carried over — the dock's
-search box opens the same ⌘K palette. Staff keep no top bar. The front page
+bar on every page with `HeaderSearch`, `WorkMenu`, `NotificationsMenu` and
+`AccountMenu` (`app/header-menus.tsx`). `HeaderSearch` stays: it searches
+customers and conversations through the API, which the dock's ⌘K palette (it
+finds screens, and staff's own clients) does not. Staff keep no top bar. The front page
 keeps its `.app` / `.main` class names so its existing card styles still
 apply; the shell resets `.app` from a grid to a plain block.
 
