@@ -126,7 +126,7 @@ function Spark({ vals }: { vals: number[]; hi?: boolean }) {
         </linearGradient>
       </defs>
       <path d={`${p} L64 26 L0 26 Z`} fill={`url(#${id})`} opacity=".18" />
-      <path d={p} stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={p} className="nx-draw" pathLength="1" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -412,7 +412,7 @@ export default function DeckConsole() {
                 ) : null}
                 <div className="k">{s.k}</div>
                 <div className="v">
-                  {s.v}
+                  <span data-countup>{s.v}</span>
                   {s.unit && <small>{s.unit}</small>}
                 </div>
                 <div className={`d ${s.cls}`}>
@@ -627,12 +627,14 @@ export default function DeckConsole() {
                   </linearGradient>
                 </defs>
                 <path d="M0 75 H320" stroke="rgba(11,42,74,.1)" />
-                <path d="M0 120 H320" stroke="rgba(11,42,74,.07)" />
+                <path d="M0 120 H320" stroke="var(--hairline)" />
                 {area ? (
                   <>
                     <path d={area.fill} fill="url(#ag)" />
                     <path
                       d={area.line}
+                      className="nx-draw"
+                      pathLength="1"
                       fill="none"
                       stroke="var(--signal)"
                       strokeWidth="2"

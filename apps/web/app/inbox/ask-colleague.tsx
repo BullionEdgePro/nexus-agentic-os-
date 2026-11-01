@@ -66,7 +66,7 @@ export function AskColleague({ conversationId, customerName }: { conversationId:
         <span>Ask a colleague</span>
       </button>
       {open ? (
-        <div className="ibx-ask-pop" role="dialog" aria-label="Ask a colleague">
+        <div className="ibx-ask-pop nx-pop" role="dialog" aria-label="Ask a colleague">
           {state === "sent" && chosen ? (
             <>
               <p>

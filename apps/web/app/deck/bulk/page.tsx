@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import { standingOf } from "@/lib/client-filters";
 import { fontVariables } from "@/lib/fonts";
+import { play } from "@/lib/sound";
 import { tenantName } from "@/lib/tenants";
 import { AddNumbers } from "./add-numbers";
 import { AiWriter } from "./ai-writer";
@@ -480,6 +481,7 @@ function ApprovedSend({
                 setResult(null);
                 try {
                   const outcome = await sendBulk(business, { phoneNumberId: numberId, templateId, contactIds: chosenIds });
+                  play("chime");
                   setResult({ ok: true, text: `Queued to ${outcome.enqueued} customers. Delivery shows below as WhatsApp confirms it.` });
                   setConfirming(false);
                   onSent();

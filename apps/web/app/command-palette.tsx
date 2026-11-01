@@ -166,12 +166,12 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
 
   return (
     <div
-      className="cmdp-backdrop"
+      className="cmdp-backdrop nx-pop-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
     >
-      <div className="cmdp" role="dialog" aria-label="Search">
+      <div className="cmdp nx-pop" role="dialog" aria-label="Search">
         <input
           ref={inputRef}
           className="cmdp-input"

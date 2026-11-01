@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getTeamUnread } from "@/lib/api";
+import { play } from "@/lib/sound";
 import { useTeamSocket, type TeamSocketEvent } from "@/lib/use-team-socket";
 import "./team-chat-alerts.css";
 
@@ -69,6 +70,7 @@ export function TeamChatAlerts({ employeeId }: { employeeId: string | null }) {
         !pathname.startsWith("/deck/team-chat")
       ) {
         setToast({ author: message.authorName, threadId: event.threadId });
+        play("ping");
         if (hide.current) clearTimeout(hide.current);
         hide.current = setTimeout(() => setToast(null), 12_000);
       }

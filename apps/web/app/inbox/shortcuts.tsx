@@ -66,8 +66,8 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div className="ibx-keys-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="ibx-keys" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+    <div className="ibx-keys-backdrop nx-pop-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="ibx-keys nx-pop" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
         <div className="ibx-keys-head">
           <h2>Shortcuts</h2>
           <button type="button" onClick={onClose} aria-label="Close">

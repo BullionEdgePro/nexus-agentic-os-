@@ -275,15 +275,15 @@ function BookCard({ counts, wide }: { counts: MyDay["counts"]; wide?: boolean })
       <dl className="day-stats">
         <div>
           <dt>Your clients</dt>
-          <dd>{counts.clients}</dd>
+          <dd data-countup>{counts.clients}</dd>
         </div>
         <div>
           <dt>Never written in</dt>
-          <dd className={counts.neverSpoken > 0 ? "day-attn" : undefined}>{counts.neverSpoken}</dd>
+          <dd data-countup className={counts.neverSpoken > 0 ? "day-attn" : undefined}>{counts.neverSpoken}</dd>
         </div>
         <div>
           <dt>Came via your link</dt>
-          <dd>{counts.referredConversations}</dd>
+          <dd data-countup>{counts.referredConversations}</dd>
         </div>
       </dl>
     </section>

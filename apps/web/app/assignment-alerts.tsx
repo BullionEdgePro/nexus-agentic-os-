@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { InboxSocketEvent } from "@nexus/shared";
+import { play } from "@/lib/sound";
 import "./assignment-alerts.css";
 
 interface Alert {
@@ -70,6 +71,7 @@ export function AssignmentAlerts({ employeeId, organizationSlug }: { employeeId:
         setAlerts((current) => [...current.filter((a) => a.conversationId !== alert.conversationId), alert].slice(-3));
         setTimeout(() => setAlerts((current) => current.filter((a) => a.key !== alert.key)), KEEP_MS);
         notifyDesktop(alert, organizationSlug);
+        play("ping");
       };
       socket.onclose = () => {
         if (cancelled) return;

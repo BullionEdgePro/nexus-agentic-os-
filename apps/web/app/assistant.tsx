@@ -115,7 +115,7 @@ export function Assistant() {
   }
 
   return (
-    <aside className="as" aria-label="Help assistant">
+    <aside className="as nx-sheet" aria-label="Help assistant">
       <header className="as-head">
         <div>
           <strong>Ask anything</strong>
