@@ -2,17 +2,20 @@
 .mtabs { display: none; }
 
 @media (max-width: 759px) {
+  /* The same dark floating dock as everyone's sidebar (Cream, 1 Nov 2026). */
   .mtabs {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 12px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
     z-index: 50;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    padding: 4px 6px calc(6px + env(safe-area-inset-bottom));
-    background: var(--paper);
-    border-top: 1px solid var(--hairline);
+    gap: 4px;
+    padding: 6px;
+    background: var(--charcoal);
+    border-radius: 22px;
+    box-shadow: 0 18px 40px -18px rgba(22, 20, 15, 0.45);
   }
   .mtabs a {
     position: relative;
@@ -22,20 +25,21 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
-    color: var(--slate);
+    border-radius: 16px;
+    color: rgba(243, 239, 232, 0.72);
     text-decoration: none;
     font-size: 11.5px;
   }
-  .mtabs a.on { color: var(--signal); font-weight: 600; }
+  .mtabs a.on { color: #16140F; background: #F3EFE8; font-weight: 700; }
   .mtabs svg { width: 22px; height: 22px; }
   .mtabs .rail-badge { position: absolute; top: 4px; left: calc(50% + 6px); margin: 0; }
   /* Room for the tabs under every page's last line. */
-  .deck-root.shell .shell-main { padding-bottom: 72px; }
+  .deck-root.shell .shell-main { padding-bottom: 96px; }
 
   /* Everything else pinned to the bottom of the screen sits above the tabs,
      never on top of them: the Ask button covered "Me" (26 Oct 2026). */
   body:has(.mtabs) {
-    --mtabs-h: calc(62px + env(safe-area-inset-bottom, 0px));
+    --mtabs-h: calc(76px + env(safe-area-inset-bottom, 0px));
   }
   body:has(.mtabs) .as-open { bottom: calc(var(--mtabs-h) + 12px); }
   body:has(.mtabs) .as {

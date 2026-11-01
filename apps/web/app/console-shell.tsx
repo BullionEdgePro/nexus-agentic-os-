@@ -1,7 +1,7 @@
 "use client";
 
 import { ThemeToggle } from "./theme-toggle";
-import { Fragment } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ViewAsStaff } from "./view-as-staff";
 import { Assistant } from "./assistant";
@@ -11,6 +11,9 @@ import { TeamChatAlerts, TeamChatBadge } from "./team-chat-alerts";
 import { MobileTabs } from "./mobile-tabs";
 import { InstallBanner } from "./install-app";
 import { MotionBoot } from "./motion-boot";
+import { SoundToggle } from "./sound-toggle";
+import { play } from "@/lib/sound";
+import { RAIL_FROM_KEY, RAIL_KEY, readRailMode, type RailMode } from "@/lib/rail";
 import { NAV, NAV_GROUPS, activeHref } from "@/lib/nav";
 import { WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { fontVariables } from "@/lib/fonts";
@@ -125,6 +128,9 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
           <span className="rail-foot-name">{role === "operator" ? "Admin" : "Staff"}</span>
           <span className="rail-foot-role">{role === "operator" ? "All businesses" : "Your own work"}</span>
         </span>
+        {/* Light or dark, and sound on or off, beside the way out. */}
+        <ThemeToggle compact />
+        <SoundToggle />
         <a href="/api/auth/logout" title="Sign out">
           <span className="rail-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -136,6 +142,109 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
       </div>
     </>
   );
+}
+
+/**
+ * « — shrink the dock to the video's icon-only strip, or open it again.
+ * THEME_BOOT applies the saved choice before paint; this keeps it.
+ */
+function RailCollapse() {
+  const [mode, setMode] = useState<RailMode>("full");
+
+  useEffect(() => setMode(readRailMode(() => localStorage.getItem(RAIL_KEY))), []);
+
+  function toggle() {
+    const next: RailMode = mode === "icons" ? "full" : "icons";
+    const root = document.documentElement;
+    if (next === "icons") root.setAttribute("data-rail", "icons");
+    else root.removeAttribute("data-rail");
+    try {
+      localStorage.setItem(RAIL_KEY, next);
+    } catch {
+      // Blocked storage: the choice lasts for this page only.
+    }
+    setMode(next);
+    play("tick");
+  }
+
+  const shrunk = mode === "icons";
+  return (
+    <button
+      type="button"
+      className="rail-collapse"
+      onClick={toggle}
+      aria-pressed={shrunk}
+      aria-label={shrunk ? "Expand sidebar" : "Shrink sidebar"}
+      title={shrunk ? "Expand sidebar" : "Shrink sidebar"}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m11 17-5-5 5-5M18 17l-5-5 5-5" />
+      </svg>
+    </button>
+  );
+}
+
+/** useLayoutEffect in the browser, nothing on the server (where it warns). */
+const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/**
+ * The cream pill behind the current page's link.
+ *
+ * One element, moved — not a background on each link — so it can slide. On
+ * load it starts where the person clicked on the previous page (MotionBoot
+ * notes that href under RAIL_FROM_KEY) and slides here; with nothing noted, or
+ * under reduced motion, it is simply placed. Until it is placed, the link wears
+ * the cream itself, so the first paint already shows where you are.
+ */
+function RailPill() {
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useBrowserLayoutEffect(() => {
+    const pill = ref.current;
+    const nav = pill?.parentElement;
+    if (!pill || !nav) return;
+    const current = nav.querySelector<HTMLElement>("a.on");
+    if (!current) return;
+
+    const place = (link: HTMLElement) => {
+      pill.style.setProperty("--pill-x", `${link.offsetLeft}px`);
+      pill.style.setProperty("--pill-y", `${link.offsetTop}px`);
+      pill.style.setProperty("--pill-w", `${link.offsetWidth}px`);
+      pill.style.setProperty("--pill-h", `${link.offsetHeight}px`);
+    };
+
+    let fromHref: string | null = null;
+    try {
+      fromHref = sessionStorage.getItem(RAIL_FROM_KEY);
+      sessionStorage.removeItem(RAIL_FROM_KEY);
+    } catch {
+      // Blocked storage: no slide, just the pill in place.
+    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const from =
+      !reduce && fromHref
+        ? [...nav.querySelectorAll<HTMLElement>("a[href]")].find((a) => a.getAttribute("href") === fromHref && a !== current) ?? null
+        : null;
+
+    place(from ?? current);
+    nav.dataset.pill = "ready";
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        pill.classList.add("sliding");
+        place(current);
+      });
+    });
+
+    // Follow the link when the dock changes size: shrunk, opened, rotated phone.
+    const resize = new ResizeObserver(() => place(current));
+    resize.observe(nav);
+    return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+    };
+  }, []);
+
+  return <span ref={ref} className="rail-pill" aria-hidden="true" />;
 }
 
 export function ConsoleShell({
@@ -165,10 +274,10 @@ export function ConsoleShell({
               <path d="M16 9 9 12.5v7L16 23l7-3.5v-7L16 9Z" stroke="var(--signal)" strokeWidth="1.2" />
               <circle cx="16" cy="16" r="2" fill="var(--signal)" />
             </svg>
-            <span className="rail-wordmark">Nexus</span>
+            <span className="rail-wordmark">nexus</span>
           </a>
-          {/* Light or dark, at the head of every signed-in screen. */}
-          <ThemeToggle compact />
+          {/* « shrinks the dock to icons; the theme switch moved to the foot. */}
+          <RailCollapse />
         </div>
         {/* A visible way in to the search that ⌘K already opened — the shortcut
             is fast once known and invisible until then, so the box makes it
@@ -187,6 +296,7 @@ export function ConsoleShell({
           <span className="rail-search-label">Search</span>
           <kbd className="rail-search-kbd" aria-hidden="true">⌘K</kbd>
         </button>
+        <RailPill />
         <RailLinks role={role} />
       </nav>
       <main className="shell-main">

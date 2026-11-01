@@ -1,453 +1,356 @@
 /* The shared console frame.
  *
- * deck.css already defines .deck-root (the token set) and .rail (the strip of
- * icons). This file only does the part that was missing: making that rail a
- * PERSISTENT column beside the page, on every screen, instead of one row of a
- * grid that only the front page ever built.
+ * deck.css defines .deck-root (the token set). This file makes the frame every
+ * signed-in screen sits in: the dock beside the page, the page column, and the
+ * strip above the page (the admin's top bar, View as staff, Install).
  *
- * Nothing here redefines a colour. Everything comes from the tokens on
- * .deck-root, so the shell inherits whatever theme the deck is wearing rather
- * than starting a third palette. */
+ * Colours come from the tokens on .deck-root, so the frame wears whatever theme
+ * the deck is wearing. The one exception is the dock's pill, which is cream in
+ * both themes on purpose: it is the "you are here" mark, and it must be the
+ * brightest thing in the dark panel day and night. */
+
+/* ============================================================
+   THE DOCK (Cream, 1 Nov 2026)
+   ============================================================
+   From the owner's reference video: a dark rounded panel floating off the
+   left edge, full height, icon + name for every section (the label is the
+   navigation, the glyph the landmark — an icon-only strip made everyone hover
+   to find out what each square was). A cream pill marks the current page and
+   slides there from the page just left (RailPill in console-shell.tsx). The «
+   button shrinks it to the video's icon-only dock; the choice is applied
+   before paint (THEME_BOOT) via html[data-rail="icons"], so nothing jumps. */
 
 .shell {
+  --dock-w: 236px;
   display: grid;
-  grid-template-columns: 212px minmax(0, 1fr);
+  grid-template-columns: calc(var(--dock-w) + 24px) minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--marble);
   color: var(--ink);
 }
+html[data-rail="icons"] .shell { --dock-w: 64px; }
 
-/* deck.css puts the rail on `grid-row: 2 / 3` for the front page's own layout,
-   which has a header row above it. This shell has no header row, so the rail
-   would sit in a track that does not exist and collapse. Reset it here rather
-   than editing deck.css, so the front page's grid keeps working unchanged. */
 .deck-root.shell .shell-rail {
+  /* The dock's own two colours, the same in both themes. */
+  --dock-ink: #F3EFE8;
+  --dock-pill: #F3EFE8;
+  --dock-pill-ink: #16140F;
+
   grid-row: auto;
   grid-column: 1;
   position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100dvh;
-  /* Above the deck's fixed backdrop layers (.bg, .grid-overlay), which sit at
-     z-index 0 and would otherwise swallow clicks on the icons. */
+  top: 12px;
+  height: calc(100vh - 24px);
+  height: calc(100dvh - 24px);
+  margin: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 14px 10px 10px;
+  border: 0;
+  border-radius: 24px;
+  background: var(--charcoal);
+  color: color-mix(in srgb, var(--dock-ink) 72%, transparent);
+  box-shadow: 0 18px 40px -18px rgba(22, 20, 15, 0.45);
+  overflow: hidden auto;
+  scrollbar-width: none;
+  /* Above anything a page fixes behind it. */
   z-index: 3;
 }
+.deck-root.shell .shell-rail::-webkit-scrollbar { display: none; }
+/* Night's twinkling stars belonged to the old rail. */
+.deck-root.shell .shell-rail::before,
+.deck-root.shell .shell-rail::after { content: none; }
+.deck-root.shell .shell-rail > * { position: relative; z-index: 1; }
 
 .deck-root.shell .shell-main {
   grid-column: 2;
   min-width: 0;
   position: relative;
   z-index: 1;
+  background: transparent;
 }
 
-/* On a phone the rail becomes a bottom bar. A 56px column on a 375px screen
-   costs 15% of the width for navigation nobody is using while they read a
-   conversation — and deck.css already hides `.rail` at this width, which left
-   those screens with no navigation at all rather than with less. */
-@media (max-width: 860px) {
-  .shell {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-
-  .deck-root.shell .shell-main {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .deck-root.shell .shell-rail {
-    display: flex;
-    grid-column: 1;
-    grid-row: 2;
-    position: sticky;
-    top: auto;
-    bottom: 0;
-    height: auto;
-    flex-direction: row;
-    justify-content: flex-start;
-    /* Scrolls horizontally rather than squeezing eleven icons into 375px and
-       making each one an unhittable sliver. */
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    border-right: none;
-    border-top: 1px solid var(--hairline);
-    padding: 8px 10px;
-    /* Clears the home indicator on iOS, where a bottom bar otherwise sits
-       underneath it and the last icon cannot be tapped. */
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
-    gap: 4px;
-  }
-
-  .deck-root.shell .shell-rail a {
-    flex: 0 0 auto;
-  }
-
-  /* The hover tooltip is pointless on touch and would be clipped by the bar's
-     own overflow anyway. */
-  .deck-root.shell .shell-rail .tip {
-    display: none;
-  }
-
-  .deck-root.shell .shell-rail .sep {
-    flex: 0 0 auto;
-    width: 10px;
-  }
+/* ---------- brand row ---------- */
+.deck-root.shell .rail-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 2px 14px 4px;
 }
-
-
-/* ============================================================
-   A NAMED RAIL, NOT A ROW OF GUESSES
-   ============================================================
-   The rail was eleven unlabelled glyphs. Every one of them required a hover to
-   find out what it was, which on a touch screen means there was no way to find
-   out at all — and "Needs attention" and "Follow-ups" are not things anyone
-   recognises from a triangle and a checklist.
-
-   The label is now the navigation and the glyph is the landmark: it is what
-   lets someone who has used the product once find the row they want without
-   reading all nine. */
-
-.deck-root.shell .shell-rail {
-  align-items: stretch;
-  padding: 14px 10px;
-  gap: 2px;
-}
-
 .deck-root.shell .rail-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: auto;
   width: auto;
-  padding: 6px 8px 14px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid var(--hairline);
+  height: auto;
+  padding: 0;
+  border: 0;
   border-radius: 0;
-  color: var(--ink);
+  background: none;
+  color: var(--dock-ink);
+  text-decoration: none;
 }
-
-.deck-root.shell .rail-brand:hover { background: transparent; }
-.deck-root.shell .rail-brand svg { width: 22px; height: 22px; flex: 0 0 auto; }
-
+.deck-root.shell .rail-brand:hover { background: none; }
+.deck-root.shell .rail-brand svg {
+  width: 34px;
+  height: 34px;
+  padding: 6px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: var(--charcoal-card);
+  box-shadow: inset 0 0 0 1px rgba(243, 239, 232, 0.12);
+  color: var(--dock-ink);
+}
+.deck-root.shell .rail-brand svg path,
+.deck-root.shell .rail-brand svg circle { stroke: var(--dock-ink); }
+.deck-root.shell .rail-brand svg circle { fill: #E8C24A; stroke: none; }
 .deck-root.shell .rail-wordmark {
   font-family: var(--display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--dock-ink);
+  background: none;
 }
 
-.deck-root.shell .shell-rail a {
-  width: auto;
-  height: auto;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 9px 10px;
-  border-radius: var(--r-sm);
+.deck-root.shell .rail-collapse {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(243, 239, 232, 0.08);
+  color: inherit;
+  cursor: pointer;
 }
+.deck-root.shell .rail-collapse svg { width: 15px; height: 15px; display: block; }
+.deck-root.shell .rail-collapse:hover { background: rgba(243, 239, 232, 0.16); color: var(--dock-ink); }
+html[data-rail="icons"] .deck-root.shell .rail-collapse svg { transform: scaleX(-1); }
 
-.deck-root.shell .rail-icon { display: grid; place-items: center; flex: 0 0 18px; }
-.deck-root.shell .rail-icon svg { width: 17px; height: 17px; display: block; }
-
-.deck-root.shell .rail-label {
-  font-family: var(--sans);
-  font-size: 13.5px;
-  line-height: 1.2;
-  white-space: nowrap;
-  /* The rail is a fixed width and two labels are long. Truncating beats
-     wrapping to two lines, which would make those rows taller than the rest
-     and break the rhythm the eye scans down. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The section heading. A landmark, not a link: it names the run under it so the
-   eye can skip whole groups it does not want, which is the entire point of
-   grouping nineteen doors. Quiet enough to read as scaffolding, not as an item. */
-.deck-root.shell .rail-group {
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--mist);
-  padding: 12px 10px 3px;
-}
-/* The first heading sits right under the brand rule — no extra air above it. */
-.deck-root.shell .rail-brand + .rail-group { padding-top: 2px; }
-
-/* The search box at the head of the rail. Styled as a FIELD rather than a link,
-   because it is the one control here that opens something instead of navigating
-   — the cursor and the border say "type", the destinations below say "go". It
-   opens the same palette ⌘K does; the shortcut hint on the right teaches the
-   faster way without hiding the slower one. */
+/* ---------- search (opens the ⌘K palette) ---------- */
 .deck-root.shell .rail-search {
   display: flex;
   align-items: center;
   gap: 9px;
   width: 100%;
-  margin: 2px 0 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-sm);
-  background: var(--paper);
-  color: var(--slate);
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(243, 239, 232, 0.08);
+  color: inherit;
   font-family: var(--sans);
   font-size: 13px;
   cursor: text;
-  transition: border-color 0.16s, color 0.16s;
 }
-.deck-root.shell .rail-search:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}
+.deck-root.shell .rail-search:hover { background: rgba(243, 239, 232, 0.14); color: var(--dock-ink); }
 .deck-root.shell .rail-search-ic { width: 16px; height: 16px; flex: 0 0 16px; display: block; }
 .deck-root.shell .rail-search-label { flex: 1; text-align: left; }
 .deck-root.shell .rail-search-kbd {
   font-family: var(--mono);
   font-size: 10px;
-  padding: 1px 5px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 4px;
-  color: var(--mist);
+  padding: 1px 6px;
+  border: 1px solid rgba(243, 239, 232, 0.2);
+  border-radius: 6px;
+  color: inherit;
 }
 
-/* --- narrow: back to a compact bar, labels dropped rather than truncated ---
-   Nine names do not fit across a phone. Below this width the bar scrolls
-   horizontally as icons, which is the one arrangement that keeps every
-   destination reachable. */
-@media (max-width: 860px) {
-  .deck-root.shell .rail-brand { display: none; }
-  .deck-root.shell .rail-label { display: none; }
-  /* On the icon bar the search collapses to its glyph, like every other item —
-     a full field would not fit and would read as a text input nobody can type
-     into here. */
-  .deck-root.shell .rail-search {
-    width: auto;
-    margin: 0;
-    padding: 9px 11px;
-    border-color: var(--hairline);
-  }
-  .deck-root.shell .rail-search-label,
-  .deck-root.shell .rail-search-kbd { display: none; }
-  /* Headings are wordless landmarks; on the icon-only bar they would be blank
-     gaps that scroll, so they go entirely. */
-  .deck-root.shell .rail-group { display: none; }
-  .deck-root.shell .shell-rail { align-items: center; padding: 8px 10px; }
-  .deck-root.shell .shell-rail a { padding: 9px 11px; }
-}
-
-/* ============================================================
-   CLEAR SKY — the rail
-   ============================================================
-   White glass over the ice ground, a soft aurora breathing behind the
-   brand, and the current page marked by a sky pill with a lit edge —
-   the way a team inbox marks the folder you are in. */
-
-.deck-root.shell .shell-rail {
-  background: var(--paper);
-  border-right: 1px solid var(--hairline);
-  overflow: hidden auto;
-  scrollbar-width: thin;
-}
-/* The aurora: two soft blooms that drift slowly behind the top of the rail. */
-.deck-root.shell .shell-rail::before {
-  content: "";
-  position: absolute;
-  inset: -40px -60px auto -60px;
-  height: 260px;
-  background: var(--aurora);
-  filter: blur(6px);
-  animation: nx-drift 14s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-.deck-root.shell .shell-rail > * { position: relative; z-index: 1; }
-
-.deck-root.shell .rail-brand { border-bottom-color: var(--hairline); }
-.deck-root.shell .rail-brand svg {
-  width: 30px;
-  height: 30px;
-  padding: 5px;
-  border-radius: 9px;
-  background: var(--sky-grad);
-  color: var(--on-accent);
-  box-shadow: 0 6px 16px -6px var(--sky-glow);
-}
-.deck-root.shell .rail-brand svg path:nth-of-type(2),
-.deck-root.shell .rail-brand svg circle { stroke: var(--on-accent); fill: none; }
-.deck-root.shell .rail-brand svg circle { fill: var(--on-accent); transform-origin: 16px 16px; animation: nx-pulse-dot 2.8s ease-in-out infinite; }
-@keyframes nx-pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: .55; transform: scale(1.5); }
-}
-.deck-root.shell .rail-wordmark {
-  font-weight: 800;
-  background: linear-gradient(90deg, var(--ink), var(--signal));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.deck-root.shell .rail-search { background: var(--pebble); border-color: transparent; }
-.deck-root.shell .rail-search:hover { border-color: var(--sky); color: var(--signal-text); background: var(--paper); }
-
-.deck-root.shell .shell-rail a {
-  color: var(--slate);
-  transition: background .18s, color .18s, transform .18s var(--ease-out);
-}
-.deck-root.shell .shell-rail a:not(.rail-brand):hover {
-  background: var(--pebble);
-  color: var(--ink);
-  transform: translateX(2px);
-}
-.deck-root.shell .shell-rail a.on {
-  position: relative;
-  background: var(--sky-soft);
-  color: var(--signal-deep);
-  font-weight: 600;
-}
-.deck-root.shell .shell-rail a.on::before {
-  content: "";
-  position: absolute;
-  left: -10px;
-  top: 7px;
-  bottom: 7px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--sky-grad);
-  box-shadow: 0 0 10px var(--sky-glow);
-}
-.deck-root.shell .shell-rail a.on .rail-icon { color: var(--sky-deep); }
-.deck-root.shell .rail-group { color: var(--mist); }
-
-.deck-root.shell .shell-main {
-  background:
-    radial-gradient(70% 40% at 100% 0%, rgba(232, 194, 74, 0.10), transparent 70%),
-    var(--marble);
-}
-
-@media (max-width: 860px) {
-  .deck-root.shell .shell-rail { overflow: auto hidden; }
-  .deck-root.shell .shell-rail a.on::before { left: 8px; right: 8px; top: auto; bottom: 2px; width: auto; height: 3px; border-radius: 3px; }
-  .deck-root.shell .shell-rail a:not(.rail-brand):hover { transform: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .deck-root.shell .shell-rail::before,
-  .deck-root.shell .rail-brand svg circle { animation: none; }
-}
-
-/* ---------- Install Nexus as an app (spec 2026-10-09) ---------- */
-
-.deck-root .install-banner {
-  display: flex; align-items: center; gap: 10px;
-  margin: 0 0 14px; padding: 10px 12px;
-  background: var(--paper); border: 1px solid var(--hairline); border-radius: 12px;
-  color: var(--ink); font-size: 14px;
-}
-.deck-root .install-banner img { border-radius: 8px; flex: none; }
-.deck-root .install-banner p { flex: 1; margin: 0; min-width: 0; }
-.deck-root .install-banner .install-go {
-  flex: none; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px;
-  display: inline-flex; align-items: center;
-  background: var(--btn-grad); color: #fff; font-weight: 600; text-decoration: none; cursor: pointer;
-}
-.deck-root .install-banner .install-x {
-  flex: none; width: 40px; height: 40px; border: 0; background: transparent;
-  color: var(--slate); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 999px;
-}
-.deck-root .install-banner .install-go:focus-visible,
-.deck-root .install-banner .install-x:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
-@media (max-width: 520px) {
-  .deck-root .install-banner { flex-wrap: wrap; }
-  .deck-root .install-banner p { flex-basis: calc(100% - 92px); }
-}
-
-/* ============================================================
-   CALM — the rail (22 Oct 2026)
-   ============================================================
-   The owner's direction: calm and premium. A solid white rail with no moving
-   glow behind it, headings in plain sentence case, a quiet "you are here"
-   instead of a glowing edge, no sideways hover jump, and the account closing
-   the rail instead of sign-out sitting in the list like a screen. */
-
-.deck-root.shell .shell-rail { padding: 18px 12px 12px; gap: 1px; }
-.deck-root.shell .shell-rail::before { display: none; }
-
-.deck-root.shell .rail-brand { padding: 4px 8px 16px; margin-bottom: 8px; }
-.deck-root.shell .rail-brand svg {
-  background: var(--signal);
-  box-shadow: none;
-}
-.deck-root.shell .rail-brand svg circle { animation: none; }
-.deck-root.shell .rail-wordmark {
-  font-family: var(--sans);
-  font-weight: 700;
-  font-size: 15.5px;
-  background: none;
-  color: var(--ink);
-}
-
-.deck-root.shell .rail-search { margin: 2px 2px 8px; border-radius: var(--r-sm); }
-
+/* ---------- section headings and links ---------- */
 .deck-root.shell .rail-group {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--slate);
-  padding: 16px 10px 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--dock-ink) 50%, transparent);
+  padding: 14px 12px 5px;
+}
+.deck-root.shell .rail-brand-row + .rail-search + .rail-group { padding-top: 4px; }
+
+.deck-root.shell .shell-rail a:not(.rail-brand) {
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border-radius: 9999px;
+  color: inherit;
+  background: transparent;
+  font-weight: 500;
+  text-decoration: none;
+  transform: none;
+  transition: color .16s, background-color .16s;
+}
+.deck-root.shell .shell-rail a:not(.rail-brand):hover {
+  color: var(--dock-ink);
+  background: rgba(243, 239, 232, 0.07);
+}
+.deck-root.shell .shell-rail a:not(.rail-brand):focus-visible {
+  outline: 2px solid #E8C24A;
+  outline-offset: 1px;
+}
+.deck-root.shell .rail-icon { display: grid; place-items: center; flex: 0 0 18px; }
+.deck-root.shell .rail-icon svg { width: 18px; height: 18px; display: block; }
+.deck-root.shell .rail-label {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.deck-root.shell .shell-rail a { padding: 8px 10px; color: var(--ink-soft); }
-.deck-root.shell .shell-rail a:not(.rail-brand):hover {
-  transform: none;
-  background: var(--pebble);
-  color: var(--ink);
-}
-.deck-root.shell .shell-rail a.on {
-  background: var(--signal-soft);
-  color: var(--ink);
+/* The current page. Until RailPill has placed the pill (and with no script at
+   all) the link carries the cream itself; once the pill is ready it moves. */
+.deck-root.shell .shell-rail a.on,
+.deck-root.shell .shell-rail a.on:hover {
+  color: var(--dock-pill-ink);
+  background: var(--dock-pill);
   font-weight: 700;
 }
-.deck-root.shell .shell-rail a.on::before {
-  left: -12px;
-  top: 9px;
-  bottom: 9px;
-  width: 3px;
-  background: var(--signal);
-  box-shadow: none;
+.deck-root.shell .shell-rail a.on::before { content: none; }
+.deck-root.shell .shell-rail[data-pill="ready"] a.on,
+.deck-root.shell .shell-rail[data-pill="ready"] a.on:hover { background: transparent; }
+
+.deck-root.shell .rail-pill {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  width: var(--pill-w, 0);
+  height: var(--pill-h, 0);
+  transform: translate(var(--pill-x, 0), var(--pill-y, 0));
+  border-radius: 9999px;
+  background: var(--dock-pill);
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  opacity: 0;
 }
-.deck-root.shell .shell-rail a.on .rail-icon { color: var(--signal); }
-.deck-root.shell .rail-label { font-size: 14px; }
+.deck-root.shell .shell-rail[data-pill="ready"] .rail-pill { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .deck-root.shell .rail-pill.sliding {
+    transition: transform .38s var(--ease-out), width .38s var(--ease-out), height .38s var(--ease-out);
+  }
+}
 
-.deck-root.shell .shell-main { background: var(--marble); }
-
-/* The account at the foot of the rail — both shells, the front page too. */
+/* ---------- the foot: who, light/dark, sound, sign out ---------- */
 .deck-root .rail-foot {
   margin-top: auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 6px 4px 10px;
-  border-top: 1px solid var(--hairline);
+  gap: 4px;
+  padding: 12px 4px 2px 10px;
+  border-top: 1px solid rgba(243, 239, 232, 0.12);
 }
-.deck-root .rail-foot-who { display: flex; flex-direction: column; min-width: 0; }
-.deck-root .rail-foot-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
-.deck-root .rail-foot-role { font-size: 12px; color: var(--slate); }
-.deck-root.shell .rail-foot a { padding: 7px 9px; color: var(--slate); }
+.deck-root .rail-foot-who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.deck-root .rail-foot-name { font-size: 13.5px; font-weight: 700; color: var(--dock-ink, var(--ink)); }
+.deck-root .rail-foot-role { font-size: 12px; color: inherit; }
+.deck-root.shell .rail-foot a:not(.rail-brand) { padding: 8px; }
+.deck-root.shell .rail-foot .nx-theme { color: inherit; }
+.deck-root.shell .rail-foot .nx-theme:focus-visible { outline-color: #E8C24A; }
 
+/* ---------- shrunk to icons ----------
+   Names become a tooltip on hover and keyboard focus. The dock stops
+   scrolling so the tooltips are not clipped; it grows instead. */
+html[data-rail="icons"] .deck-root.shell .shell-rail {
+  overflow: visible;
+  height: auto;
+  min-height: calc(100dvh - 24px);
+  padding: 14px 8px 10px;
+}
+html[data-rail="icons"] .deck-root.shell .rail-brand-row { flex-direction: column; padding: 0 0 12px; }
+html[data-rail="icons"] .deck-root.shell .rail-wordmark,
+html[data-rail="icons"] .deck-root.shell .rail-group,
+html[data-rail="icons"] .deck-root.shell .rail-search-label,
+html[data-rail="icons"] .deck-root.shell .rail-search-kbd,
+html[data-rail="icons"] .deck-root .rail-foot-who { display: none; }
+html[data-rail="icons"] .deck-root.shell .rail-search { justify-content: center; padding: 10px; }
+html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand) { justify-content: center; padding: 11px; }
+html[data-rail="icons"] .deck-root .rail-foot { flex-direction: column; padding: 10px 0 0; }
+html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand) .rail-label {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  translate: 0 -50%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--charcoal);
+  color: var(--dock-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hover, :focus-visible) .rail-label { opacity: 1; }
+
+/* ---------- phones: a floating bar above the home indicator ---------- */
 @media (max-width: 860px) {
-  .deck-root .rail-foot { margin-top: 0; border-top: 0; padding: 0; }
+  .shell,
+  html[data-rail="icons"] .shell { grid-template-columns: minmax(0, 1fr); }
+  .deck-root.shell .shell-main { grid-column: 1; padding-bottom: 96px; }
+
+  .deck-root.shell .shell-rail,
+  html[data-rail="icons"] .deck-root.shell .shell-rail {
+    position: fixed;
+    top: auto;
+    left: 12px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    border-radius: 22px;
+    overflow: auto hidden;
+    overscroll-behavior-x: contain;
+    z-index: 40;
+  }
+  .deck-root.shell .rail-brand-row,
+  .deck-root.shell .rail-group,
+  .deck-root.shell .rail-label,
+  .deck-root.shell .rail-search-label,
+  .deck-root.shell .rail-search-kbd,
   .deck-root .rail-foot-who { display: none; }
+  .deck-root.shell .rail-search { width: auto; margin: 0; padding: 11px; flex: 0 0 auto; }
+  .deck-root.shell .shell-rail a:not(.rail-brand) { flex: 0 0 auto; padding: 11px; }
+  .deck-root .rail-foot { margin: 0; padding: 0 0 0 6px; border-top: 0; border-left: 1px solid rgba(243, 239, 232, 0.12); }
 }
 
-/* CALM — the strip above every page (22 Oct 2026). "View as staff" read as a
-   stray link in the corner; it is now a small button on the right. The
-   install offer is slimmer and quieter, and still remembers a dismissal. */
+/* A staff phone has its own four tabs at the bottom (mobile-tabs.tsx), which
+   already covered the old bottom rail; the dock steps aside for them. */
+@media (max-width: 759px) {
+  body:has(.mtabs) .deck-root.shell .shell-rail { display: none; }
+}
+
+/* ============================================================
+   THE STRIP ABOVE THE PAGE
+   ============================================================ */
+
+/* The admin's work, notifications and account, top right on every page. */
+.deck-root.shell .shell-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 26px 0;
+  position: relative;
+  z-index: 4;
+}
+
+/* "View as staff": a small button on the right, not a stray link. */
 .deck-root.shell .shell-main > .vas-open {
   display: flex;
   align-items: center;
@@ -464,16 +367,35 @@
 }
 .deck-root.shell .shell-main > .vas-open:hover { background: var(--pebble); color: var(--ink); }
 .deck-root.shell .shell-main > .vas-pick { margin: 14px 24px; justify-content: flex-end; }
+
+/* ---------- Install Nexus as an app (spec 2026-10-09) ---------- */
 .deck-root .install-banner {
+  display: flex; align-items: center; gap: 10px;
   margin: 12px 24px 0;
   padding: 8px 10px 8px 12px;
-  border-radius: var(--r-sm);
-  font-size: 13.5px;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-sm);
+  color: var(--ink); font-size: 13.5px;
   box-shadow: var(--lift-sm);
 }
-.deck-root .install-banner .install-go { min-height: 36px; background: var(--signal); }
+.deck-root .install-banner img { border-radius: 8px; flex: none; }
+.deck-root .install-banner p { flex: 1; margin: 0; min-width: 0; }
+.deck-root .install-banner .install-go {
+  flex: none; min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center;
+  background: var(--signal); color: var(--on-accent); font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.deck-root .install-banner .install-x {
+  flex: none; width: 40px; height: 40px; border: 0; background: transparent;
+  color: var(--slate); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 999px;
+}
+.deck-root .install-banner .install-go:focus-visible,
+.deck-root .install-banner .install-x:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+@media (max-width: 520px) {
+  .deck-root .install-banner { flex-wrap: wrap; }
+  .deck-root .install-banner p { flex-basis: calc(100% - 92px); }
+}
 
-/* ---------- the sound switch (sound-toggle.tsx, 1 Nov 2026) ----------
+/* ---------- the sound switch (sound-toggle.tsx) ----------
    The same footprint as the compact theme switch beside it, so the two
    read as a pair in the dock's foot. */
 .nx-sound {
@@ -493,22 +415,12 @@
 .nx-sound:focus-visible { outline: 2px solid var(--st-mustard); outline-offset: 2px; }
 .nx-sound[aria-checked="false"] { opacity: .65; }
 
-/* ---------- the admin front page inside the frame (1 Nov 2026) ----------
+/* ---------- the admin front page inside the frame ----------
    deck-console.tsx keeps its .app / .main names for its card styles; here
    the old two-column grid (header row + its own rail) steps aside. */
 .deck-root.shell .app { display: block; min-height: 0; }
 .deck-root.shell .app > .main { overflow: visible; padding: 8px 26px 40px; }
 
-/* The admin's work, notifications and account, top right on every page. */
-.deck-root.shell .shell-top {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 14px 26px 0;
-  position: relative;
-  z-index: 4;
-}
 @media (max-width: 860px) {
   .deck-root.shell .shell-top { padding: 10px 14px 0; }
   .deck-root.shell .app > .main { padding: 8px 16px 32px; }

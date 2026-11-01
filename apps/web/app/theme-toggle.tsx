@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { THEME_KEY } from "@/lib/theme";
+import { play } from "@/lib/sound";
 
 /**
  * Light or dark — the Clear Sky and the Night Sky.
@@ -42,6 +43,7 @@ export function ThemeToggle({ compact }: { compact?: boolean }) {
 
   function toggle(event: React.MouseEvent<HTMLButtonElement>) {
     const next: Theme = theme === "dark" ? "light" : "dark";
+    play("tick");
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const root = document.documentElement;
     const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };

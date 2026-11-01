@@ -7,3 +7,14 @@
  */
 export const RAIL_KEY = "nexus-rail";
 export const RAIL_FROM_KEY = "nexus-rail-from";
+
+export type RailMode = "full" | "icons";
+
+/** Only a saved "icons" shrinks the dock; anything else — or storage that throws — is full. */
+export function readRailMode(read: () => string | null): RailMode {
+  try {
+    return read() === "icons" ? "icons" : "full";
+  } catch {
+    return "full";
+  }
+}
