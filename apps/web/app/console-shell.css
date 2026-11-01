@@ -472,3 +472,23 @@
   box-shadow: var(--lift-sm);
 }
 .deck-root .install-banner .install-go { min-height: 36px; background: var(--signal); }
+
+/* ---------- the sound switch (sound-toggle.tsx, 1 Nov 2026) ----------
+   The same footprint as the compact theme switch beside it, so the two
+   read as a pair in the dock's foot. */
+.nx-sound {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.nx-sound svg { width: 18px; height: 18px; display: block; }
+.nx-sound:hover { background: var(--hairline-on-dark); }
+.nx-sound:focus-visible { outline: 2px solid var(--st-mustard); outline-offset: 2px; }
+.nx-sound[aria-checked="false"] { opacity: .65; }
