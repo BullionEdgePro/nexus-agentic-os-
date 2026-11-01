@@ -25,7 +25,15 @@ export const metadata: Metadata = {
   // Installed from Safari's Add to Home Screen, iOS opens Nexus full screen
   // under its own name and icon (spec 2026-10-09-nexus-mobile-app-design.md).
   appleWebApp: { capable: true, title: "Nexus", statusBarStyle: "default" },
-  icons: { apple: "/icons/apple-touch-icon.png" },
+  // The glass hexagon in every tab (1 Nov 2026): SVG where the browser takes
+  // it, sharp at any size; a 32px PNG where it does not; the iPhone's own.
+  icons: {
+    icon: [
+      { url: "/icons/favicon.svg", type: "image/svg+xml" },
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 // The status bar and Android task switcher take the dock's near-black (Cream, 1 Nov 2026).

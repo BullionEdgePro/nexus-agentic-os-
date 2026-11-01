@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0873c9">
+<meta name="theme-color" content="#16140F">
 <title>Offline · Nexus</title>
 <style>
-  :root { color-scheme: light dark; --ground: #f3f8fd; --ink: #0e1b2c; --soft: #4a5a6e; --signal: #0873c9; }
-  @media (prefers-color-scheme: dark) { :root { --ground: #0a1422; --ink: #e8f0fa; --soft: #9fb0c4; --signal: #8fd3ff; } }
+  /* Cream and Warm Night (1 Nov 2026), as in the console. */
+  :root { color-scheme: light dark; --ground: #F3EFE8; --ink: #16140F; --soft: #5B5549; --signal: #16140F; --on-signal: #F3EFE8; }
+  @media (prefers-color-scheme: dark) { :root { --ground: #14120E; --ink: #F3EFE8; --soft: #C9C1B3; --signal: #F3EFE8; --on-signal: #14120E; } }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--ground); color: var(--ink);
@@ -20,7 +21,7 @@
   h1 { font-size: 20px; margin: 0; }
   p { margin: 0; color: var(--soft); }
   button {
-    margin-top: 6px; font: inherit; font-weight: 600; color: #fff; background: var(--signal);
+    margin-top: 6px; font: inherit; font-weight: 600; color: var(--on-signal); background: var(--signal);
     border: 0; border-radius: 999px; padding: 12px 22px; min-height: 44px; cursor: pointer;
   }
   button:focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; }

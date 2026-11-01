@@ -8,9 +8,9 @@ import type { MetadataRoute } from "next";
  * no browser bar. The Android download (Bubblewrap) is generated from this same
  * file, so its name, icon and colours come from here too.
  *
- * Colours are the console's Clear Sky tokens: --signal for the theme, so the
- * status bar and task switcher match the app, and --marble for the splash
- * ground.
+ * Colours are the console's Cream tokens (1 Nov 2026): the dock's near-black
+ * for the theme, so the status bar and task switcher match the app, and
+ * --marble for the splash ground. The icons are the glass hexagon.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -22,8 +22,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    theme_color: "#0873c9",
-    background_color: "#f3f8fd",
+    theme_color: "#16140F",
+    background_color: "#F3EFE8",
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

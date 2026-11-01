@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Nexus, the browser-tab icon (1 Nov 2026): the glass hexagon on warm
+       near-black, in the iPhone app-icon style. The PNG sizes are drawn from
+       the same design (public/icons/*.png). -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2C2821"/>
+      <stop offset="1" stop-color="#0C0B09"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0" r="0.75">
+      <stop offset="0" stop-color="#F3EFE8" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#F3EFE8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFDF7"/>
+      <stop offset="1" stop-color="#D6CBBA"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6DA70"/>
+      <stop offset="1" stop-color="#C99628"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.38"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.8"/>
+    </filter>
+  </defs>
+
+  <!-- The rounded square, with a hairline of light so it reads on a dark tab bar. -->
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="url(#ground)"/>
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="url(#glow)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="14.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.22"/>
+
+  <!-- Shadow under the mark. -->
+  <polygon points="32,15 49.2,24.9 49.2,44.7 32,54.6 14.8,44.7 14.8,24.9" fill="#000000" fill-opacity="0.55" filter="url(#drop)"/>
+
+  <!-- Frosted cream ring, the gap, and the mustard core. -->
+  <polygon points="32,12.8 49.2,22.7 49.2,42.5 32,52.4 14.8,42.5 14.8,22.7" fill="url(#ring)"/>
+  <polygon points="32,17.9 44.7,25.3 44.7,39.9 32,47.3 19.3,39.9 19.3,25.3" fill="#16140F"/>
+  <polygon points="32,20.7 42.3,26.7 42.3,38.6 32,44.5 21.7,38.6 21.7,26.7" fill="url(#core)"/>
+
+  <!-- Glass: a sheen over the top half, and a bright line along the upper edges. -->
+  <polygon points="32,12.8 49.2,22.7 49.2,42.5 32,52.4 14.8,42.5 14.8,22.7" fill="url(#sheen)"/>
+  <polyline points="14.8,22.9 32,13 49.2,22.9" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="0.8" stroke-linejoin="round"/>
+
+  <!-- The dot, with a pin of light. -->
+  <circle cx="32" cy="32.6" r="3.4" fill="#16140F"/>
+  <circle cx="30.6" cy="31.2" r="1" fill="#F3EFE8" fill-opacity="0.9"/>
+</svg>
