@@ -131,3 +131,14 @@ test("the mute switch first renders as sound on, as a labelled switch", async ()
   assert.match(html, /aria-label="Sound on — mute"/);
   assert.match(html, /class="nx-sound"/);
 });
+
+test("muting works for this visit even when storage is blocked", () => {
+  globalThis.localStorage = {
+    getItem() { throw new Error("blocked"); },
+    setItem() { throw new Error("blocked"); },
+  };
+  setMuted(true);
+  assert.equal(isMuted(), true, "the switch says off but sounds would keep playing");
+  setMuted(false);
+  assert.equal(isMuted(), false);
+});

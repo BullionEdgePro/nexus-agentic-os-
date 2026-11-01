@@ -33,7 +33,7 @@ test("the admin front page no longer builds its own frame", () => {
 test("the shell's top bar is for admins only", () => {
   const shell = read("../app/console-shell.tsx");
   assert.match(shell, /signedInAs\?: string/);
-  const bar = shell.match(/role === "operator" \? \(\s*<header className="shell-top"[\s\S]*?<\/header>/);
+  const bar = shell.match(/role === "operator" && !pathname\.startsWith\("\/inbox"\) \? \(\s*<header className="shell-top"[\s\S]*?<\/header>/);
   assert.ok(bar, "no admin-only shell-top header");
   for (const menu of ["<WorkMenu />", "<NotificationsMenu />", "<AccountMenu signedInAs="]) {
     assert.ok(bar[0].includes(menu), `${menu} is not in the admin top bar`);

@@ -74,6 +74,9 @@ html {
   ::view-transition-group(nx-rail) { animation: none; }
   ::view-transition-old(nx-page) { animation: nx-page-out .14s ease-in both; }
   ::view-transition-new(nx-page) { animation: nx-page-in .26s var(--ease-out, ease-out) both; }
+  /* The theme switch is one picture: unnamed, the dock and page are part of
+     the root the circle reveals, instead of fading on their own. */
+  html.nx-theme-switch .deck-root.shell :is(.shell-rail, .shell-main) { view-transition-name: none; }
 
   /* ---------- cards rise in ----------
      The page's blocks and its cards, from the first paint, 45ms apart.
@@ -85,7 +88,9 @@ html {
   .shell-main .app > .main > *,
   .shell-main :is(.stat, .card, .glass, .day-card, .hq-card) {
     --i: 0;
-    animation: nx-in .5s var(--ease-out, ease-out) both;
+    /* backwards, not both: the end state is the natural one, and a forward
+       fill would pin opacity and translate above every hover after it. */
+    animation: nx-in .5s var(--ease-out, ease-out) backwards;
     animation-delay: calc(var(--i, 0) * 45ms);
   }
   :is(.shell-main > .deck-root > *, .shell-main > .deck-root > :only-child > *, .shell-main .app > .main > *, .shell-main :is(.stat, .card, .glass, .day-card, .hq-card)):nth-child(2) { --i: 1; }
@@ -115,10 +120,10 @@ html {
   }
 
   /* ---------- windows and panels ---------- */
-  .nx-pop { animation: nx-pop-in .26s var(--ease-out, ease-out) both; }
+  .nx-pop { animation: nx-pop-in .26s var(--ease-out, ease-out) backwards; }
   .nx-pop-backdrop,
   .nx-sheet-backdrop { animation: nx-fade-in .2s ease-out both; }
-  .nx-sheet { animation: nx-sheet-in .32s var(--ease-out, ease-out) both; }
+  .nx-sheet { animation: nx-sheet-in .32s var(--ease-out, ease-out) backwards; }
 
   /* ---------- hover and press ----------
      Zero specificity (:where) on purpose: a card or button that already

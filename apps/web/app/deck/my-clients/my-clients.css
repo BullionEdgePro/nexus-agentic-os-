@@ -488,7 +488,7 @@
   border: 0;
   border-radius: 8px;
   background: var(--signal-text);
-  color: #fff;
+  color: var(--paper);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -542,7 +542,7 @@
   border: 0;
   border-radius: 8px;
   background: var(--signal-text);
-  color: #fff;
+  color: var(--paper);
   font: inherit;
   font-size: 13px;
   font-weight: 600;

@@ -25,7 +25,11 @@ type Ctor = new () => AudioContext;
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 
+/** The choice made on this page, which outlives storage that refuses it. */
+let chosen: boolean | null = null;
+
 export function isMuted(): boolean {
+  if (chosen !== null) return chosen;
   try {
     return globalThis.localStorage?.getItem(SOUND_KEY) === "off";
   } catch {
@@ -34,6 +38,7 @@ export function isMuted(): boolean {
 }
 
 export function setMuted(muted: boolean): void {
+  chosen = muted;
   try {
     globalThis.localStorage?.setItem(SOUND_KEY, muted ? "off" : "on");
   } catch {

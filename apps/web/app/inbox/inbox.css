@@ -1748,7 +1748,7 @@
   font: inherit; font-size: 12.5px; padding: 6px 12px; border-radius: 999px;
   border: 1px solid var(--hairline-strong); background: var(--paper); color: var(--ink); cursor: pointer;
 }
-.ibx-ask-row button.primary { background: var(--signal); border-color: transparent; color: #fff; }
+.ibx-ask-row button.primary { background: var(--signal); border-color: transparent; color: var(--on-accent); }
 .ibx-ask-row button:disabled { opacity: .5; }
 .ibx-ask-error { color: var(--crit); font-size: 12.5px; margin-top: 6px !important; }
 
@@ -1853,4 +1853,4 @@
   display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 14px;
   background: var(--ink); color: var(--marble); font-size: 13px; box-shadow: var(--lift); max-width: calc(100vw - 32px);
 }
-.ibx-undo button { font: inherit; font-weight: 700; color: var(--signal-on-dark); background: none; border: 0; cursor: pointer; min-height: 32px; }
+.ibx-undo button { font: inherit; font-weight: 700; color: var(--marble); text-decoration: underline; background: none; border: 0; cursor: pointer; min-height: 32px; }

@@ -40,7 +40,7 @@
   box-shadow: 0 4px 14px rgba(60, 45, 20, .22);
 }
 .as-open svg { width: 17px; height: 17px; }
-.as-open:hover { background: #2B2822; }
+.as-open:hover { background: color-mix(in srgb, var(--as-navy) 86%, var(--as-on-navy)); }
 
 .as {
   position: fixed;

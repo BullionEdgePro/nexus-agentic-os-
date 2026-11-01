@@ -31,6 +31,12 @@
 }
 html[data-rail="icons"] .shell { --dock-w: 64px; }
 
+/* deck.css gives every .deck-root `overflow-x: hidden`, which on the shell's
+   own root made it a scroll container that never scrolls — and the dock's
+   `position: sticky` stuck to it, so the dock scrolled away with the page.
+   clip hides the same overflow without becoming a scroll container. */
+.deck-root.shell { overflow-x: clip; }
+
 .deck-root.shell .shell-rail {
   /* The dock's own two colours, the same in both themes. */
   --dock-ink: #F3EFE8;
@@ -219,6 +225,13 @@ html[data-rail="icons"] .deck-root.shell .rail-collapse svg { transform: scaleX(
 .deck-root.shell .shell-rail a.on::before { content: none; }
 .deck-root.shell .shell-rail[data-pill="ready"] a.on,
 .deck-root.shell .shell-rail[data-pill="ready"] a.on:hover { background: transparent; }
+/* Arriving from the dock (THEME_BOOT sets data-rail-from), the link waits for
+   the pill to slide in rather than lighting up first and jumping back. */
+html[data-rail-from] .deck-root.shell .shell-rail:not([data-pill="ready"]) a.on,
+html[data-rail-from] .deck-root.shell .shell-rail:not([data-pill="ready"]) a.on:hover {
+  background: transparent;
+  color: var(--dock-ink);
+}
 
 .deck-root.shell .rail-pill {
   position: absolute;
@@ -327,7 +340,9 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
   .deck-root .rail-foot-who { display: none; }
   .deck-root.shell .rail-search { width: auto; margin: 0; padding: 11px; flex: 0 0 auto; }
   .deck-root.shell .shell-rail a:not(.rail-brand) { flex: 0 0 auto; padding: 11px; }
-  .deck-root .rail-foot { margin: 0; padding: 0 0 0 6px; border-top: 0; border-left: 1px solid rgba(243, 239, 232, 0.12); }
+  .deck-root .rail-foot,
+  html[data-rail="icons"] .deck-root .rail-foot { flex-direction: row; margin: 0; padding: 0 0 0 6px; border-top: 0; border-left: 1px solid rgba(243, 239, 232, 0.12); }
+  html[data-rail="icons"] .deck-root.shell .rail-search { padding: 11px; }
   /* The Ask button sits above the bar, never on it. */
   body .as-open { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px); }
   body .as { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 72px); }
@@ -337,6 +352,25 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
    already covered the old bottom rail; the dock steps aside for them. */
 @media (max-width: 759px) {
   body:has(.mtabs) .deck-root.shell .shell-rail { display: none; }
+}
+
+/* An open conversation on a phone is the whole screen: the dock steps aside
+   so the composer is never under it. */
+@media (max-width: 760px) {
+  body:has(.ibx.has-thread) .deck-root.shell .shell-rail { display: none; }
+}
+
+/* Staff phones: light/dark and mute, since their dock is hidden. */
+.deck-root.shell .shell-phone-tools { display: none; }
+@media (max-width: 759px) {
+  .deck-root.shell .shell-phone-tools {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 14px 0;
+    color: var(--ink);
+  }
 }
 
 /* ============================================================
@@ -424,7 +458,8 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
 /* ---------- the admin front page inside the frame ----------
    deck-console.tsx keeps its .app / .main names for its card styles; here
    the old two-column grid (header row + its own rail) steps aside. */
-.deck-root.shell .app { display: block; min-height: 0; }
+.deck-root.shell .app { display: block; min-height: 0; height: auto; }
+.deck-root.shell .shell-main > .deck-root { min-height: 0; }
 .deck-root.shell .app > .main { overflow: visible; padding: 8px 26px 40px; }
 
 @media (max-width: 860px) {

@@ -196,15 +196,42 @@ const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLa
  * under reduced motion, it is simply placed. Until it is placed, the link wears
  * the cream itself, so the first paint already shows where you are.
  */
+/**
+ * The page the person just left, read once per page.
+ *
+ * Kept here rather than re-read in the effect: React runs a layout effect twice
+ * in development, and the first run removing the key left the second with
+ * nothing to slide from. Keyed by path, so a later client-side page change does
+ * not reuse an old start point.
+ */
+let railFrom: { path: string; href: string | null } | null = null;
+function takeRailFrom(path: string): string | null {
+  if (railFrom?.path !== path) {
+    let href: string | null = null;
+    try {
+      href = sessionStorage.getItem(RAIL_FROM_KEY);
+      sessionStorage.removeItem(RAIL_FROM_KEY);
+    } catch {
+      // Blocked storage: no slide, just the pill in place.
+    }
+    railFrom = { path, href };
+  }
+  return railFrom.href;
+}
+
 function RailPill() {
   const ref = useRef<HTMLSpanElement>(null);
+  const pathname = usePathname() ?? "";
 
   useBrowserLayoutEffect(() => {
     const pill = ref.current;
     const nav = pill?.parentElement;
     if (!pill || !nav) return;
-    const current = nav.querySelector<HTMLElement>("a.on");
-    if (!current) return;
+    const current = nav.querySelector<HTMLElement>(":scope > a.on");
+    if (!current) {
+      delete nav.dataset.pill;
+      return;
+    }
 
     const place = (link: HTMLElement) => {
       pill.style.setProperty("--pill-x", `${link.offsetLeft}px`);
@@ -213,17 +240,13 @@ function RailPill() {
       pill.style.setProperty("--pill-h", `${link.offsetHeight}px`);
     };
 
-    let fromHref: string | null = null;
-    try {
-      fromHref = sessionStorage.getItem(RAIL_FROM_KEY);
-      sessionStorage.removeItem(RAIL_FROM_KEY);
-    } catch {
-      // Blocked storage: no slide, just the pill in place.
-    }
+    // Only the dock's own destinations: the logo and the foot's sign-out are
+    // links too, and a slide must never start from either.
+    const fromHref = takeRailFrom(pathname);
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const from =
       !reduce && fromHref
-        ? [...nav.querySelectorAll<HTMLElement>("a[href]")].find((a) => a.getAttribute("href") === fromHref && a !== current) ?? null
+        ? [...nav.querySelectorAll<HTMLElement>(":scope > a[href]")].find((a) => a.getAttribute("href") === fromHref && a !== current) ?? null
         : null;
 
     // On a phone the dock is a sideways-scrolling bar: bring this page's icon
@@ -231,23 +254,27 @@ function RailPill() {
     if (nav.scrollWidth > nav.clientWidth) {
       nav.scrollLeft = current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2;
     }
-    place(from ?? current);
+
+    // First placement (or a fresh start point) without a transition; a pill
+    // already showing slides on from where it is (a client-side page change).
+    if (from || nav.dataset.pill !== "ready") {
+      pill.classList.remove("sliding");
+      place(from ?? current);
+    }
     nav.dataset.pill = "ready";
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        pill.classList.add("sliding");
-        place(current);
-      });
-    });
+    document.documentElement.removeAttribute("data-rail-from");
+    // Commit that position as the start of the slide, then slide. The class
+    // goes on before the ResizeObserver below exists, so its first call (which
+    // always comes, before paint) cannot snap the pill home un-animated.
+    void pill.offsetWidth;
+    if (!reduce) pill.classList.add("sliding");
+    place(current);
 
     // Follow the link when the dock changes size: shrunk, opened, rotated phone.
     const resize = new ResizeObserver(() => place(current));
     resize.observe(nav);
-    return () => {
-      cancelAnimationFrame(frame);
-      resize.disconnect();
-    };
-  }, []);
+    return () => resize.disconnect();
+  }, [pathname]);
 
   return <span ref={ref} className="rail-pill" aria-hidden="true" />;
 }
@@ -265,6 +292,9 @@ export function ConsoleShell({
   /** A signed-in staff member — who "a chat is now yours" alerts are for. */
   me?: { employeeId: string; organizationSlug: string } | null;
 }) {
+  // The inbox is a full-screen workspace with its own header: the admin's top
+  // bar would push its composer below the fold, so it is left off there.
+  const pathname = usePathname() ?? "";
   return (
     <div className={`deck-root shell ${fontVariables}`}>
       <nav className="rail shell-rail" aria-label="Sections">
@@ -308,7 +338,7 @@ export function ConsoleShell({
         {/* The admin's tools on every page — search, work, notifications, account —
             which used to exist only on the front page's own header. Staff
             have none of these menus. */}
-        {role === "operator" ? (
+        {role === "operator" && !pathname.startsWith("/inbox") ? (
           <header className="shell-top">
             {/* The admin's search across customers and conversations — wider
                 than the dock's ⌘K palette, which finds screens. */}
@@ -322,6 +352,15 @@ export function ConsoleShell({
             indistinguishable from a quiet one unless something says so on every
             page. See ViewAsStaff. */}
         {role === "operator" ? <ViewAsStaff /> : null}
+        {/* A staff phone hides the dock for its four tabs (mobile-tabs.tsx), so
+            light/dark and mute come along here instead — staff are the ones
+            the pings are for. Shown only at phone width. */}
+        {role === "employee" ? (
+          <div className="shell-phone-tools">
+            <ThemeToggle compact />
+            <SoundToggle />
+          </div>
+        ) : null}
         {/* Offers to install Nexus as an app; shows nothing once installed. */}
         <InstallBanner />
         {children}
