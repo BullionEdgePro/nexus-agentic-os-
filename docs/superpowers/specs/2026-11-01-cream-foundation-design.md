@@ -91,8 +91,8 @@ New status tokens (stages, business tags, chart series):
 | `--st-ink` / `--on-ink` | `#16140F` | `#F3EFE8` (16:1) |
 
 Urgent (`--crit`) never relies on colour alone: every crit badge already
-carries a word, and this part adds a small warning icon where it does not, so
-crit can never be mistaken for terracotta.
+carries a word ("Urgent", "Blocked", "Failed"), so crit can never be mistaken
+for terracotta.
 
 Shape: `--r` 22px, `--r-lg` 28px, `--r-sm` 12px, buttons and tabs are pills.
 Elevation: warm, close shadows, `rgba(60,45,20,.05) 0 1px 2px, rgba(60,45,20,.07) 0 14px 30px -14px`.
@@ -132,8 +132,11 @@ canvas, grid overlay, vignette and ink-crosshair cursor (`initDeckFx`). The
 video's clean ground has no backdrop and a normal pointer.
 
 Its header tools move into the shell: for operators the shell shows a slim top
-bar on every page with `HeaderSearch`, `WorkMenu`, `NotificationsMenu` and
-`AccountMenu` (`app/header-menus.tsx`). Staff keep no top bar.
+bar on every page with `WorkMenu`, `NotificationsMenu` and `AccountMenu`
+(`app/header-menus.tsx`). `HeaderSearch` is not carried over — the dock's
+search box opens the same ⌘K palette. Staff keep no top bar. The front page
+keeps its `.app` / `.main` class names so its existing card styles still
+apply; the shell resets `.app` from a grid to a plain block.
 
 ### The dock
 
@@ -185,11 +188,12 @@ motion nothing moves and nothing is hidden waiting to move.
 - **Count-up.** Any element with `data-countup` counts from 0 to its own text
   value (keeping its prefix, suffix and thousands separators) over 700ms the
   first time it scrolls into view. Applied in part 1 to the operator front
-  page's stat cards and HQ overview figures.
+  page's stat cards and the staff My Day counts.
 - **Draw and grow.** `.nx-draw` on an SVG path draws it left to right
   (stroke-dashoffset, 900ms); `.nx-grow` on a bar grows it from its baseline
   (scaleY, 600ms, staggered by `--i`). Applied in part 1 to the front page's
-  overview line chart and My Day's chart.
+  overview line chart and its stat-card sparklines; `.nx-grow` waits for part
+  2's bar charts.
 - **Zoom windows.** `.nx-pop` on a dialog makes it scale up from the point
   that opened it (`--nx-ox`, `--nx-oy`, set by `lib/motion.ts` from the click)
   over a backdrop that blurs (8px) and dims. Applied to the command palette,
