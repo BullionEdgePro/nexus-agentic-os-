@@ -30,75 +30,86 @@
    ============================================================ */
 
 .deck-root {
-  /* --- ground and surfaces -------------------------------- */
-  --marble: #f6f7f9;          /* canvas — soft cool grey */
-  --paper: #ffffff;           /* cards and elevated panels */
-  --pebble: #f1f3f6;          /* inset fills, badges, hover washes */
-  --charcoal: #111827;        /* inverse surfaces — deep ink, not black */
-  --charcoal-card: #1f2937;
+  /* --- ground and surfaces (Cream, 1 Nov 2026) ------------ */
+  --marble: #F3EFE8;          /* canvas — warm cream */
+  --paper: #FFFEFB;           /* cards and elevated panels — warm white */
+  --pebble: #ECE6DB;          /* inset fills, badges, hover washes */
+  --charcoal: #16140F;        /* inverse surfaces and the dock — warm near-black */
+  --charcoal-card: #24211B;
 
   /* --- ink ------------------------------------------------ */
-  --ink: #111827;
-  --ink-soft: rgba(17, 24, 39, 0.78);
-  --slate: #4b5563;           /* secondary copy, helper text — 7:1 on pebble */
-  --mist: #5f6773;            /* tertiary copy — 5.2:1 on pebble, the worst ground */
-  --faint: #c2c8d0;           /* genuinely disabled/inactive ONLY — never content */
+  --ink: #16140F;
+  --ink-soft: rgba(22, 20, 15, 0.78);
+  --slate: #5B5549;           /* secondary copy — 5.95:1 on pebble */
+  --mist: #6B6357;            /* tertiary copy — 4.77:1 on pebble, the worst ground */
+  --faint: #C9C0B1;           /* genuinely disabled/inactive ONLY — never content */
   --muted: var(--slate);
 
   /* --- lines ---------------------------------------------- */
-  --hairline: #e5e7eb;
-  --hairline-strong: #d1d5db;
-  --hairline-on-dark: rgba(246, 247, 249, 0.18);
+  --hairline: #E6DFD3;
+  --hairline-strong: #D6CDBE;
+  --hairline-on-dark: rgba(243, 239, 232, 0.16);
 
-  /* --- the sky: the brand's light blue --------------------- */
-  --sky: #3b82f6;             /* luminous — fills and graphics; never small text */
-  --sky-deep: #2563eb;
-  --sky-soft: #eef2fb;        /* our own chat bubbles, the selected row */
-  --sky-wash: rgba(59, 130, 246, 0.08);
-  --sky-glow: rgba(37, 99, 235, 0.16);
-  --sky-grad: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  /* The same sky, deep enough to carry white text (4.2-6:1 across the ramp).
-     --sky-grad is for glow and decoration only; anything with words on it
-     takes this one. */
-  --btn-grad: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
-  /* Calm (22 Oct 2026): no moving glow behind the work. */
+  /* --- the accent: forest, where the brand blue used to be --
+     The names stay (--sky, --signal) so every screen that reads them
+     changes with them. --sky is for fills, graphics and selected rows;
+     --signal is the black of the pills and buttons; --signal-text is
+     the forest green links are written in. */
+  --sky: #2F5D50;
+  --sky-deep: #24493F;
+  --sky-soft: #E7EFEA;        /* our own chat bubbles, the selected row */
+  --sky-wash: rgba(47, 93, 80, 0.08);
+  --sky-glow: rgba(47, 93, 80, 0.16);
+  --sky-grad: linear-gradient(135deg, #2F5D50 0%, #24493F 100%);
+  --btn-grad: linear-gradient(180deg, #24211B 0%, #16140F 100%);
   --aurora: linear-gradient(transparent, transparent);
 
   /* --- the working accent ---------------------------------- */
-  --signal: #1d4ed8;          /* 6.7:1 behind white text */
-  --signal-soft: rgba(29, 78, 216, 0.08);
-  --signal-deep: #1e3a8a;     /* informational text on pebble fills */
-  --signal-text: #1d4ed8;     /* links and inline accents — 6.5:1 on the ground */
-  /* Text ON a blue gradient or a channel colour. White in BOTH themes: the
-     gradients stay deep blue in the dark, where --paper turns to night. */
-  --on-accent: #ffffff;
+  --signal: #16140F;          /* black pill buttons — cream text at 16:1 */
+  --signal-soft: rgba(22, 20, 15, 0.06);
+  --signal-deep: #24493F;     /* informational text on pebble fills */
+  --signal-text: #2F5D50;     /* links and inline accents — 6.0:1 on pebble */
+  /* Text ON a button or a gradient: cream on the black pill. */
+  --on-accent: #F3EFE8;
 
-  /* --- text on the inverse (ocean) surfaces ---------------- */
-  --ink-on-dark: #f9fafb;
-  --mist-on-dark: #c3cad4;
-  --signal-on-dark: #93b4ff;
+  /* --- text on the inverse (dock) surfaces ----------------- */
+  --ink-on-dark: #F3EFE8;
+  --mist-on-dark: #B5B2AB;
+  --signal-on-dark: #E8C24A;
+
+  /* --- status: the video's four card colours ---------------
+     Stages, business tags and chart series. Each fill has the one text
+     colour that reads on it. */
+  --st-mustard: #E8C24A;
+  --on-mustard: #16140F;
+  --st-forest: #2F5D50;
+  --on-forest: #FFFFFF;
+  --st-terra: #B4532C;
+  --on-terra: #FFFFFF;
+  --st-ink: #16140F;
+  --on-ink: #F3EFE8;
 
   /* --- severity, which outranks the accent ---------------- */
-  --good: #0f7a56;
-  --warn: #9c5d0f;
-  --crit: #c4342a;
-  --good-soft: rgba(15, 122, 86, 0.08);
-  --warn-soft: rgba(156, 93, 15, 0.09);
-  --crit-soft: rgba(196, 52, 42, 0.08);
+  --good: #2B6B4A;
+  --warn: #875400;
+  --crit: #B42318;
+  --good-soft: rgba(43, 107, 74, 0.10);
+  --warn-soft: rgba(135, 84, 0, 0.10);
+  --crit-soft: rgba(180, 35, 24, 0.09);
 
   /* --- shape ---------------------------------------------- */
-  --r: 16px;                  /* cards */
-  --r-sm: 10px;               /* buttons, inputs */
-  --r-lg: 24px;               /* feature panels */
-  --r-xs: 5px;
-  --r-pill: 9999px;
+  --r: 22px;                  /* cards */
+  --r-sm: 12px;               /* inputs */
+  --r-lg: 28px;               /* feature panels */
+  --r-xs: 6px;
+  --r-pill: 9999px;           /* buttons and tabs */
 
   /* --- elevation ------------------------------------------ */
-  /* Soft, cool and close: a premium surface barely lifts. */
-  --lift: rgba(17, 24, 39, 0.04) 0 1px 2px 0,
-          rgba(17, 24, 39, 0.06) 0 12px 28px -12px;
-  --lift-sm: rgba(17, 24, 39, 0.04) 0 1px 2px 0,
-             rgba(17, 24, 39, 0.04) 0 6px 16px -8px;
+  /* Warm and close: a card sits on cream, it does not float above it. */
+  --lift: rgba(60, 45, 20, 0.05) 0 1px 2px 0,
+          rgba(60, 45, 20, 0.07) 0 14px 30px -14px;
+  --lift-sm: rgba(60, 45, 20, 0.05) 0 1px 2px 0,
+             rgba(60, 45, 20, 0.05) 0 8px 18px -10px;
 
   /* --- motion --------------------------------------------- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -113,7 +124,7 @@
 
   position: relative;
   min-height: 100dvh;
-  background: var(--marble);
+  background: radial-gradient(1200px 600px at 85% -10%, rgba(232, 194, 74, 0.10), transparent 60%), var(--marble);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
@@ -380,7 +391,7 @@
 
 .deck-root .main { grid-row: 2 / 3; overflow: auto; padding: 22px 26px 40px; }
 .deck-root .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 6px; }
-.deck-root .page-head h1 { font-family: var(--display); font-size: 25px; font-weight: 700; letter-spacing: -.02em; }
+.deck-root .page-head h1 { font-family: var(--display); font-size: clamp(30px, 3.2vw, 44px); font-weight: 700; letter-spacing: -0.025em; line-height: 1.02; }
 .deck-root .page-head .eyebrow { margin-bottom: 8px; }
 .deck-root .page-head .meta { display: flex; gap: 9px; align-items: center; }
 .deck-root .main > .dither { margin: 16px -26px 20px; width: calc(100% + 52px); }
@@ -924,7 +935,7 @@
 
 /* The heading gets room to breathe; the status pills wrap under it on a narrow screen. */
 .deck-root .app .page-head { flex-wrap: wrap; margin-bottom: 14px; }
-.deck-root .app .page-head h1 { font-size: 28px; font-weight: 800; letter-spacing: -.025em; }
+.deck-root .app .page-head h1 { font-weight: 700; }
 .deck-root .app .page-head .meta { flex-wrap: wrap; }
 
 /* ---------- quick actions ---------- */
@@ -982,7 +993,7 @@
 }
 .deck-root .stat-ic svg { width: 16px; height: 16px; }
 .deck-root .app .stat .k { padding-right: 38px; }
-.deck-root .app .stat .v { font-size: 28px; font-weight: 800; }
+.deck-root .app .stat .v { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .deck-root .app .stat.hi { border-color: var(--sky); background: linear-gradient(160deg, var(--sky-soft), var(--paper) 70%); }
 .deck-root .app .stat.hi .stat-ic { background: var(--btn-grad); color: var(--on-accent); }
 
@@ -1067,54 +1078,64 @@
 html[data-theme="dark"] .deck-root:not(.lp):not(.admin-root):not(.pl-root) {
   color-scheme: dark;
 
-  --marble: #0a1422;
-  --paper: #101d2e;
-  --pebble: #172739;
-  --charcoal: #050d18;
-  --charcoal-card: #0d1a2b;
+  /* Warm Night (1 Nov 2026): the same cream workshop after dark. */
+  --marble: #14120E;
+  --paper: #1D1A15;
+  --pebble: #27231C;
+  --charcoal: #0D0C09;
+  --charcoal-card: #1D1A15;
 
-  --ink: #e4eef9;
-  --ink-soft: rgba(228, 238, 249, 0.8);
-  --slate: #a3b8ce;
-  --mist: #8fa6bf;
-  --faint: #4d6480;
+  --ink: #F3EFE8;
+  --ink-soft: rgba(243, 239, 232, 0.8);
+  --slate: #C9C1B3;
+  --mist: #A69E90;
+  --faint: #554E43;
   --muted: var(--slate);
 
-  --hairline: #1e3247;
-  --hairline-strong: #2c4764;
-  --hairline-on-dark: rgba(228, 238, 249, 0.14);
+  --hairline: #2E2A22;
+  --hairline-strong: #3D372D;
+  --hairline-on-dark: rgba(243, 239, 232, 0.14);
 
-  --sky: #4fbcff;
-  --sky-deep: #6ac8ff;
-  --sky-soft: rgba(79, 188, 255, 0.14);
-  --sky-wash: rgba(79, 188, 255, 0.16);
-  --sky-glow: rgba(79, 188, 255, 0.4);
-  --aurora: radial-gradient(60% 50% at 15% 0%, rgba(79, 188, 255, 0.16), transparent 70%),
-            radial-gradient(50% 45% at 100% 20%, rgba(124, 214, 255, 0.1), transparent 70%),
-            radial-gradient(70% 60% at 50% 110%, rgba(43, 156, 240, 0.08), transparent 70%);
+  --sky: #6FA892;
+  --sky-deep: #8CC4AE;
+  --sky-soft: rgba(111, 168, 146, 0.16);
+  --sky-wash: rgba(111, 168, 146, 0.14);
+  --sky-glow: rgba(111, 168, 146, 0.3);
+  --sky-grad: linear-gradient(135deg, #6FA892 0%, #4F8A74 100%);
+  --btn-grad: linear-gradient(180deg, #F3EFE8 0%, #E6DFD3 100%);
+  --aurora: linear-gradient(transparent, transparent);
 
-  --signal: #4aaef5;
-  --signal-soft: rgba(74, 174, 245, 0.14);
-  --signal-deep: #9ad7ff;
-  --signal-text: #86cdff;
+  /* The pill turns cream at night, with near-black words on it. */
+  --signal: #F3EFE8;
+  --signal-soft: rgba(243, 239, 232, 0.08);
+  --signal-deep: #8CC4AE;
+  --signal-text: #8CC4AE;
+  --on-accent: #14120E;
 
-  --ink-on-dark: #e4eef9;
-  --mist-on-dark: #a3b8ce;
-  --signal-on-dark: #9ad7ff;
+  --ink-on-dark: #F3EFE8;
+  --mist-on-dark: #B3AFAA;
+  --signal-on-dark: #EBC75A;
 
-  --good: #43d197;
-  --warn: #f2b85b;
-  --crit: #ff7166;
-  --good-soft: rgba(67, 209, 151, 0.14);
-  --warn-soft: rgba(242, 184, 91, 0.14);
-  --crit-soft: rgba(255, 113, 102, 0.14);
+  --st-mustard: #EBC75A;
+  --on-mustard: #14120E;
+  --st-forest: #6FA892;
+  --on-forest: #14120E;
+  --st-terra: #E0835A;
+  --on-terra: #14120E;
+  --st-ink: #F3EFE8;
+  --on-ink: #14120E;
 
-  --lift: rgba(1, 6, 14, 0.35) 0 4px 6px 0,
-          rgba(1, 6, 14, 0.3) 0 10px 18px 0,
-          rgba(1, 6, 14, 0.4) 0 28px 48px 0;
-  --lift-sm: rgba(1, 6, 14, 0.3) 0 2px 4px 0,
-             rgba(1, 6, 14, 0.25) 0 6px 12px 0,
-             rgba(1, 6, 14, 0.3) 0 12px 22px 0;
+  --good: #7CC79E;
+  --warn: #E9B65C;
+  --crit: #FF8A7A;
+  --good-soft: rgba(124, 199, 158, 0.14);
+  --warn-soft: rgba(233, 182, 92, 0.14);
+  --crit-soft: rgba(255, 138, 122, 0.14);
+
+  --lift: rgba(0, 0, 0, 0.35) 0 2px 4px 0,
+          rgba(0, 0, 0, 0.35) 0 16px 32px -14px;
+  --lift-sm: rgba(0, 0, 0, 0.3) 0 1px 3px 0,
+             rgba(0, 0, 0, 0.3) 0 8px 18px -10px;
 }
 
 /* The six customer faces, dimmed so they do not glare on navy. */

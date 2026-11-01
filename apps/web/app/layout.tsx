@@ -28,11 +28,11 @@ export const metadata: Metadata = {
   icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
-// The status bar and Android task switcher take the console's --signal blue.
+// The status bar and Android task switcher take the dock's near-black (Cream, 1 Nov 2026).
 // viewportFit "cover" lets the phone inbox use the full screen; the layouts pad
 // with env(safe-area-inset-*) themselves.
 export const viewport: Viewport = {
-  themeColor: "#0873c9",
+  themeColor: "#16140F",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

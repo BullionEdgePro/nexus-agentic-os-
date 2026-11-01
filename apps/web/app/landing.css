@@ -10,6 +10,47 @@
 
 .deck-root.lp {
   --lp-max: 1180px;
+  /* Calm, pinned (1 Nov 2026): the console moved to Cream, and the
+     storefront keeps this look until its own redesign (part 3). */
+  --marble: #f6f7f9;
+  --paper: #ffffff;
+  --pebble: #f1f3f6;
+  --charcoal: #111827;
+  --charcoal-card: #1f2937;
+  --ink: #111827;
+  --ink-soft: rgba(17, 24, 39, 0.78);
+  --slate: #4b5563;
+  --mist: #5f6773;
+  --faint: #c2c8d0;
+  --hairline: #e5e7eb;
+  --hairline-strong: #d1d5db;
+  --hairline-on-dark: rgba(246, 247, 249, 0.18);
+  --sky: #3b82f6;
+  --sky-deep: #2563eb;
+  --sky-soft: #eef2fb;
+  --sky-wash: rgba(59, 130, 246, 0.08);
+  --sky-glow: rgba(37, 99, 235, 0.16);
+  --sky-grad: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  --btn-grad: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  --signal: #1d4ed8;
+  --signal-soft: rgba(29, 78, 216, 0.08);
+  --signal-deep: #1e3a8a;
+  --signal-text: #1d4ed8;
+  --on-accent: #ffffff;
+  --ink-on-dark: #f9fafb;
+  --mist-on-dark: #c3cad4;
+  --signal-on-dark: #93b4ff;
+  --good: #0f7a56;
+  --warn: #9c5d0f;
+  --crit: #c4342a;
+  --r: 16px;
+  --r-sm: 10px;
+  --r-lg: 24px;
+  --r-xs: 5px;
+  --lift: rgba(17, 24, 39, 0.04) 0 1px 2px 0,
+          rgba(17, 24, 39, 0.06) 0 12px 28px -12px;
+  --lift-sm: rgba(17, 24, 39, 0.04) 0 1px 2px 0,
+             rgba(17, 24, 39, 0.04) 0 6px 16px -8px;
   background: var(--marble);
   overflow-x: hidden;
 }
