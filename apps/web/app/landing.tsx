@@ -6,18 +6,23 @@ import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import type { SalesContact } from "@/lib/sales-contact";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
+import { ThemeToggle } from "./theme-toggle";
+import { ContactButton, ClosingBand } from "./landing-contact";
 import "./deck/deck.css";
 import "./landing.css";
 
 // ============================================================
-// The public front page — "Clear Sky".
+// The public front page — in Cream, and selling (2 Nov 2026, spec
+// 2026-11-02-storefront-cream-design.md).
 // ============================================================
 //
-// Laid out after the team-inbox platforms the owner measures Nexus against
-// (DoubleTick): an editorial serif headline over mono spec labels, a product
-// that is SHOWN working rather than described, a tabbed tour of what it does,
-// and the sign-in at the foot. Everything claimed here is something the
-// platform does today; nothing is a roadmap item wearing present tense.
+// A product site that wins other businesses. Laid out after the team-inbox
+// platforms the owner measures Nexus against (DoubleTick): an editorial serif
+// headline over mono spec labels, a product that is SHOWN working rather than
+// described, a tabbed tour of what it does, and one way in for a business —
+// WhatsApp to a number Nexus answers (landing-contact.tsx) — with the team's
+// sign-in at the foot. Everything claimed here is something the platform does
+// today; nothing is a roadmap item wearing present tense.
 //
 // Motion is the product demonstrating itself: messages arriving in the mock
 // inbox, a pulse travelling the switchboard, circuit traces carrying signal.
@@ -485,13 +490,14 @@ export default function Landing({ contact }: { contact: SalesContact }) {
           <a href="#journey">How it works</a>
           <a href="/links">Customer links</a>
         </div>
+        {/* Selling first: the contact pill is the button, Sign in is quiet. The
+            admin's door is named under the team's sign-in card instead. */}
         <div className="lp-nav-cta">
-          <a href="/admin" className="lp-link-quiet">
-            Admin
-          </a>
-          <a href="#signin" className="btn">
+          <ThemeToggle compact />
+          <a href="#signin" className="lp-link-quiet">
             Sign in
           </a>
+          <ContactButton contact={contact} whatsappLabel="Chat on WhatsApp" />
         </div>
       </nav>
 
@@ -510,12 +516,7 @@ export default function Landing({ contact }: { contact: SalesContact }) {
             answers in seconds, and a team inbox that never lets anyone wait unseen.
           </p>
           <div className="lp-cta">
-            <a href="#signin" className="btn">
-              Enter the console
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M5 12h14m-6-6 6 6-6 6" />
-              </svg>
-            </a>
+            <ContactButton contact={contact} whatsappLabel="Chat with Nexus on WhatsApp" />
             <a href="#tour" className="btn ghost">
               See it work
             </a>
@@ -662,10 +663,12 @@ export default function Landing({ contact }: { contact: SalesContact }) {
         </ol>
       </section>
 
+      <ClosingBand contact={contact} />
+
       <section className="lp-signin" id="signin">
         <div className="lp-signin-copy">
           <span className="lp-kicker">For the team</span>
-          <h2>Your inbox is waiting.</h2>
+          <h2>Staff of a Nexus business?</h2>
           <p>
             Staff sign in with the access code their manager issued. Every business below answers
             through Nexus today.

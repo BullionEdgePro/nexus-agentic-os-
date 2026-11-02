@@ -39,3 +39,23 @@ export function ContactButton({
     </a>
   );
 }
+
+/**
+ * The last ask before the team's sign-in: one line and the button again. The
+ * line is honest about which button it is — it only promises a number Nexus
+ * answers when there is one.
+ */
+export function ClosingBand({ contact }: { contact: SalesContact }) {
+  return (
+    <section className="lp-close" id="talk" aria-labelledby="talk-h">
+      <span className="lp-kicker">See it on your own business</span>
+      <h2 id="talk-h">Talk to the agent yourself</h2>
+      <p>
+        {contact.kind === "whatsapp"
+          ? "The button opens WhatsApp to a number Nexus answers — ask it what a customer would."
+          : "Write to us and we'll show you Nexus on your own business."}
+      </p>
+      <ContactButton contact={contact} whatsappLabel="Chat with Nexus on WhatsApp" />
+    </section>
+  );
+}

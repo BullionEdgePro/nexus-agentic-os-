@@ -695,11 +695,37 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
 .lp-step-card h3 { font-size: 17px; font-weight: 700; color: var(--ink); }
 .lp-step-card p { font-size: 13.5px; line-height: 1.55; color: var(--slate); }
 
+/* ---------- the closing ask ---------- */
+/* A dark band like the console's dock, lit from below by the sunrise. */
+.lp-close {
+  width: calc(100% - 48px);
+  max-width: var(--lp-max);
+  margin: 90px auto 0;
+  padding: 56px 32px;
+  border-radius: var(--r-lg);
+  background: var(--charcoal);
+  background-image:
+    radial-gradient(70% 120% at 50% 120%, color-mix(in srgb, var(--st-mustard) 34%, transparent), transparent 70%),
+    radial-gradient(40% 80% at 100% 0%, color-mix(in srgb, var(--st-terra) 22%, transparent), transparent 70%);
+  border: 1px solid var(--hairline-on-dark);
+  box-shadow: var(--lift);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.lp-close .lp-kicker { color: var(--signal-on-dark); }
+.lp .lp-close h2 { color: var(--ink-on-dark); }
+.lp-close p { max-width: 52ch; font-size: 16px; line-height: 1.6; color: var(--mist-on-dark); }
+.lp-close .btn { margin-top: 6px; padding: 14px 24px; font-size: 14.5px; }
+.lp-contact svg { flex: 0 0 auto; }
+
 /* ---------- sign-in ---------- */
 .lp-signin {
   max-width: calc(var(--lp-max) + 48px);
   margin: 0 auto;
-  padding: 90px 24px 60px;
+  padding: 72px 24px 60px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
   gap: 56px;
@@ -846,6 +872,7 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
   .lp-marquee-track { width: 100%; }
   .lp-auth { padding: 22px; }
   .lp-foot-meta { margin-left: 0; }
+  .lp-close { width: calc(100% - 32px); margin-top: 64px; padding: 40px 20px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

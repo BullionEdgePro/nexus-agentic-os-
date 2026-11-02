@@ -11,7 +11,7 @@ import { createElement } from "react";
 import vm from "node:vm";
 
 import { salesContact, SALES_TEXT } from "@/lib/sales-contact";
-import { ContactButton } from "@/app/landing-contact";
+import { ContactButton, ClosingBand } from "@/app/landing-contact";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -124,4 +124,30 @@ test("the storefront wears Cream: no colours of its own, no Clear Sky left", () 
   const calm = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
   assert.match(calm, /animation: none/);
   assert.match(calm, /\.lp-sky::after/);
+});
+
+// The page sells: WhatsApp in the top bar, the headline and a closing band (spec §2).
+test("the closing band asks once more, honestly for each kind of contact", () => {
+  const wa = render(ClosingBand, { contact: salesContact("971501234567") });
+  assert.match(wa, /Talk to the agent yourself/);
+  assert.match(wa, /a number Nexus answers/);
+  assert.match(wa, /<section class="lp-close" id="talk" aria-labelledby="talk-h">/);
+  const mail = render(ClosingBand, { contact: salesContact(undefined) });
+  assert.match(mail, /Email us/);
+  assert.doesNotMatch(mail, /a number Nexus answers/);
+});
+
+test("the storefront's top bar, headline and sign-in are the sales page's", () => {
+  const L = read("app/landing.tsx");
+  assert.match(L, /<ThemeToggle compact \/>/);
+  assert.match(L, /<ContactButton contact=\{contact\} whatsappLabel="Chat on WhatsApp"/);
+  assert.match(L, /<ContactButton contact=\{contact\} whatsappLabel="Chat with Nexus on WhatsApp"/);
+  assert.match(L, /<ClosingBand contact=\{contact\} \/>/);
+  assert.match(L, /Staff of a Nexus business\?/);
+  assert.doesNotMatch(L, /Enter the console/);
+  // Sign-in unchanged.
+  assert.match(L, /mode: "staff"/);
+  assert.match(L, /id="email"/);
+  assert.match(L, /id="pass"/);
+  assert.match(L, /<a href="\/admin">Administrator sign-in<\/a> is separate\./);
 });
