@@ -178,3 +178,59 @@ test("a swipe right replies, a hold opens reactions", () => {
   assert.equal(isLongPress(460, 20), false);
   assert.equal(isLongPress(300, 0), false);
 });
+
+// ---- Task 7: photo sizes, name colours and message runs ------------------------------
+
+import { fitWithin, SHRINK } from "@/lib/team-chat/shrink-image";
+import { nameColourIndex } from "@/lib/team-chat/name-colour";
+import { groupRuns } from "@/lib/team-chat/runs";
+
+function lum(hex) {
+  return [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+}
+const contrast = (a, b) => {
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+};
+
+test("a photo is shrunk to 1600 on its longest side, never enlarged", () => {
+  assert.deepEqual(SHRINK, { longest: 1600, quality: 0.82, previewLongest: 320 });
+  assert.deepEqual(fitWithin(4032, 3024, 1600), { width: 1600, height: 1200 });
+  assert.deepEqual(fitWithin(900, 1600, 320), { width: 180, height: 320 });
+  assert.deepEqual(fitWithin(800, 600, 1600), { width: 800, height: 600 });
+});
+
+test("each colleague keeps one colour", () => {
+  const id = "aaaaaaaa-0000-0000-0000-000000000001";
+  assert.equal(nameColourIndex(id), nameColourIndex(id));
+  const used = new Set(Array.from({ length: 40 }, (_, i) => nameColourIndex(`aaaaaaaa-0000-0000-0000-${String(i).padStart(12, "0")}`)));
+  assert.ok(used.size >= 6, `only ${used.size} of 8 colours used across 40 people`);
+  for (const i of used) assert.ok(i >= 0 && i <= 7);
+});
+
+test("every name colour reads on both bubbles", { todo: "Task 9 writes --tc-name-*" }, () => {
+  const css = read("app/team-chat/team-chat.css");
+  const all = [...css.matchAll(/--tc-name-(\d): (#[0-9A-Fa-f]{6})/g)].map((m) => m[2]);
+  const light = all.slice(0, 8);
+  const dark = all.slice(8, 16);
+  assert.equal(light.length, 8);
+  assert.equal(dark.length, 8);
+  for (const c of light) assert.ok(contrast(c, "#FFFEFB") >= 4.5, c);
+  for (const c of dark) assert.ok(contrast(c, "#1D1A15") >= 4.5, c);
+});
+
+test("a run of messages from one person shows the name once", () => {
+  const m = (who, min) => ({
+    authorEmployeeId: who,
+    authorIsAdmin: false,
+    createdAt: `2026-11-02T10:${String(min).padStart(2, "0")}:00Z`,
+    deletedAt: null,
+  });
+  assert.deepEqual(groupRuns([m("a", 0), m("a", 1), m("b", 2), m("b", 9)]), [true, false, true, true]);
+  const admin = { authorEmployeeId: null, authorIsAdmin: true, createdAt: "2026-11-02T10:03:00Z", deletedAt: null };
+  assert.deepEqual(groupRuns([m("a", 0), admin, admin]), [true, true, false]);
+  assert.deepEqual(groupRuns([]), []);
+});
