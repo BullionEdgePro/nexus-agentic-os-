@@ -117,7 +117,7 @@ export async function teamFileMeta(ids: string[]): Promise<Map<string, TeamFileM
 export async function teamFileBytes(
   id: string,
   which: "bytes" | "preview"
-): Promise<{ meta: TeamFileMeta; bytes: Uint8Array } | null> {
+): Promise<{ meta: TeamFileMeta; bytes: Uint8Array<ArrayBuffer> } | null> {
   const column = which === "preview" ? "preview" : "bytes";
   const { rows } = await getPool().query<FileRow & { data: Buffer | null }>(
     `select ${FILE_COLUMNS}, ${column} as data from team_files

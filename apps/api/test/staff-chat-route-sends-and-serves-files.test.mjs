@@ -239,8 +239,8 @@ function seedFile(threadId, kind) {
   return f;
 }
 
-const react = (messageId, emoji) =>
-  app.request(`/messages/${messageId}/reaction`, {
+const react = (threadId, messageId, emoji) =>
+  app.request(`/threads/${threadId}/messages/${messageId}/reaction`, {
     method: "PUT",
     body: JSON.stringify({ emoji }),
     headers: { "content-type": "application/json" },
@@ -302,4 +302,101 @@ test("a picture sent as a voice note is refused and nothing is stored", async ()
   assert.equal(messages.length, 0);
 });
 
-export { seedFile, react, AZIZ_STAFF, ADMIN, RALPH_STAFF };
+
+// ---- Task 4: fetching files, reactions, reads, removal ---------------------------
+
+test("only people who can read the chat can fetch its file, and the admin can listen to a direct chat", async () => {
+  const f = seedFile(DIRECT, "voice");
+  scopeNow = AZIZ_STAFF; // same business, not in this direct chat
+  assert.equal((await app.request(`/threads/${DIRECT}/files/${f.id}`)).status, 404);
+  // Naming a thread they CAN read does not reach a file of another thread.
+  assert.equal((await app.request(`/threads/${ROOM}/files/${f.id}`)).status, 404);
+  scopeNow = SFS_STAFF;
+  assert.equal((await app.request(`/threads/${DIRECT}/files/${f.id}`)).status, 404);
+  scopeNow = ADMIN;
+  const res = await app.request(`/threads/${DIRECT}/files/${f.id}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "audio/mp4");
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(res.headers.get("content-security-policy"), "sandbox");
+  assert.equal((await res.arrayBuffer()).byteLength, f.bytes.byteLength);
+});
+
+test("a photo's preview is fetched on its own path, and a file with none is not found", async () => {
+  const f = seedFile(ROOM, "photo");
+  assert.equal((await app.request(`/threads/${ROOM}/files/${f.id}/preview`)).status, 404);
+  f.preview = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  const preview = await app.request(`/threads/${ROOM}/files/${f.id}/preview`);
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get("content-type"), "image/jpeg");
+  assert.equal((await app.request(`/threads/${ROOM}/files/not-a-uuid`)).status, 404);
+});
+
+test("a removed message's file is gone", async () => {
+  const m = seedMessage(ROOM, "", { file: seedFile(ROOM, "photo"), author: RALPH });
+  scopeNow = RALPH_STAFF;
+  assert.equal((await app.request(`/messages/${m.id}`, { method: "DELETE" })).status, 200);
+  assert.equal((await app.request(`/threads/${ROOM}/files/${m.fileId}`)).status, 404);
+});
+
+test("one reaction per person: another emoji replaces it, removing takes it off, and everyone hears", async () => {
+  const m = seedMessage(ROOM, "hello");
+  scopeNow = RALPH_STAFF;
+  assert.equal((await react(ROOM, m.id, "👍")).status, 200);
+  const after = await (await react(ROOM, m.id, "❤️")).json();
+  assert.deepEqual(after.reactions, [{ emoji: "❤️", by: [{ key: RALPH, name: "Ralph" }] }]);
+  const cleared = await app.request(`/threads/${ROOM}/messages/${m.id}/reaction`, { method: "DELETE" });
+  assert.deepEqual((await cleared.json()).reactions, []);
+  assert.equal(reactions.length, 0);
+  const events = published.filter((e) => e.type === "team_reaction");
+  assert.equal(events.length, 3);
+  assert.equal(events[0].messageId, m.id);
+  assert.equal(events[0].threadId, ROOM);
+});
+
+test("a reaction that is not an emoji is refused and nothing is published", async () => {
+  const m = seedMessage(ROOM, "hello");
+  for (const emoji of ["<script>", "nice one", ""]) assert.equal((await react(ROOM, m.id, emoji)).status, 400);
+  assert.equal(reactions.length, 0);
+  assert.equal(published.length, 0);
+});
+
+test("the admin cannot react in a direct chat, and nobody can react to another business's message", async () => {
+  scopeNow = ADMIN;
+  assert.equal((await react(DIRECT, seedMessage(DIRECT, "hi").id, "👍")).status, 404);
+  scopeNow = SFS_STAFF;
+  assert.equal((await react(ROOM, seedMessage(ROOM, "hi").id, "👍")).status, 404);
+  // A message of another thread cannot be reached through a thread you can read.
+  scopeNow = AZIZ_STAFF;
+  assert.equal((await react(ROOM, seedMessage(DIRECT, "private").id, "👍")).status, 404);
+  assert.equal(reactions.length, 0);
+});
+
+test("each screen is told its own reaction key", async () => {
+  scopeNow = ADMIN;
+  assert.equal((await (await app.request("/threads?business=zipicka")).json()).me.key, "admin:admin-1");
+  scopeNow = RALPH_STAFF;
+  assert.equal((await (await app.request("/threads")).json()).me.key, RALPH);
+});
+
+test("a room reports when everyone has seen it, and a read in a room says so live", async () => {
+  const page = await (await app.request(`/threads/${ROOM}/messages`)).json();
+  assert.equal(page.seenByAllAt, "2026-11-02T09:00:00.000Z");
+  await app.request(`/threads/${ROOM}/read`, { method: "POST" });
+  const read = published.find((e) => e.type === "team_read");
+  assert.equal(read.seenByAllAt, "2026-11-02T09:00:00.000Z");
+});
+
+test("a page of messages carries each file, quote and reaction", async () => {
+  const photo = seedFile(ROOM, "photo");
+  const original = seedMessage(ROOM, "", { file: photo });
+  const reply = seedMessage(ROOM, "nice");
+  reply.replyToId = original.id;
+  reactions.push({ message_id: reply.id, emoji: "👍", reactor: SHAH, reactor_name: "Shah", created_at: now() });
+  const page = await (await app.request(`/threads/${ROOM}/messages`)).json();
+  const [first, second] = page.messages;
+  assert.equal(first.file.kind, "photo");
+  assert.equal(first.file.bytes, undefined);
+  assert.deepEqual(second.replyTo, { id: original.id, authorName: "Shah", snippet: "📷 Photo", removed: false });
+  assert.deepEqual(second.reactions, [{ emoji: "👍", by: [{ key: SHAH, name: "Shah" }] }]);
+});

@@ -22,11 +22,15 @@ import {
   reactionsFor,
   readerKey,
   removeTeamMessage,
+  removeTeamReaction,
   replySnippet,
   saveTeamFile,
+  seenByAllAt,
+  setTeamReaction,
   setConversationCollaborators,
   sharedConversationCards,
   teamAccess,
+  teamFileBytes,
   teamFileMeta,
   teamMessagesByIds,
   teamUnread,
@@ -40,7 +44,7 @@ import { resolvePresence } from "@nexus/employees";
 import type { Employee } from "@nexus/shared";
 import type { SessionScope } from "../lib/session.js";
 import { publishTeamEvent, type TeamEvent } from "../lib/team-events.js";
-import { checkUpload, cleanName, TEAM_LIMITS } from "../lib/team-files.js";
+import { checkUpload, cleanName, isEmoji, servedHeaders, TEAM_LIMITS } from "../lib/team-files.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -230,7 +234,9 @@ teamChatRoute.get("/threads", async (c) => {
 
   return c.json({
     business: { slug: organization?.slug ?? "", name: organization?.name ?? "" },
-    me: { employeeId: me, isAdmin: who.role === "admin", name: who.name },
+    // `key` is how this viewer appears in reactions and reads, so a screen can
+    // tell its own reaction from a colleague's (the admin's is admin:<id>).
+    me: { employeeId: me, isAdmin: who.role === "admin", name: who.name, key: readerKey(who.viewer) },
     threads,
     colleagues: employees
       .filter((e) => e.isActive && e.id !== me)
@@ -281,15 +287,17 @@ teamChatRoute.get("/threads/:id/messages", async (c) => {
 
   const me = who.role === "staff" ? who.viewer.employeeId : null;
   const other = thread.kind === "direct" && me ? (thread.memberA === me ? thread.memberB : thread.memberA) : null;
-  const [messages, seenByOther] = await withTenant(thread.organizationId, async () => [
+  const [messages, seenByOther, seenByEveryone] = await withTenant(thread.organizationId, async () => [
     await listTeamMessages(thread.id, before, limit),
     other ? await lastReadBy(thread.id, other) : null,
+    thread.kind === "room" ? await seenByAllAt(thread) : null,
   ] as const);
 
   return c.json({
     thread,
     canPost: teamAccess(thread, who.viewer).post,
     seenByOther,
+    seenByAllAt: seenByEveryone,
     messages: await shapeMessages(thread.organizationId, messages),
   });
 });
@@ -456,9 +464,115 @@ teamChatRoute.post("/threads/:id/read", async (c) => {
     return c.json(NOT_FOUND, 404);
   }
   const reader = readerKey(who.viewer);
-  await withTenant(thread.organizationId, () => markTeamRead(thread, reader));
-  await publish(await eventFor(thread, "team_read", { reader }));
+  const seenByEveryone = await withTenant(thread.organizationId, async () => {
+    await markTeamRead(thread, reader);
+    return thread.kind === "room" ? await seenByAllAt(thread) : null;
+  });
+  // In a room, ✓✓ means everybody has read it, so each read says where that now is.
+  await publish(
+    await eventFor(thread, "team_read", { reader, ...(thread.kind === "room" ? { seenByAllAt: seenByEveryone } : {}) })
+  );
   return c.json({ ok: true });
+});
+
+// ---- voice notes, photos and files (2 Nov 2026) ----------------------------
+//
+// Fetched through the thread they belong to, so access is decided exactly as
+// for the thread's messages, and a file id from another chat named under a
+// thread you can read is still "not found". Only real photos and voice notes
+// are served as what they are; everything else downloads, sandboxed.
+
+/** A file of a thread the handler has already let the caller read. */
+async function serveFile(c: Context, thread: TeamThread, which: "bytes" | "preview") {
+  const id = c.req.param("id") ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json(NOT_FOUND, 404);
+  const found = await withTenant(thread.organizationId, () => teamFileBytes(id, which));
+  if (!found || found.meta.threadId !== thread.id) return c.json(NOT_FOUND, 404);
+  // A preview is always the JPEG the sender's device made (checked on upload).
+  const headers =
+    which === "preview"
+      ? servedHeaders({ kind: "photo", mime: "image/jpeg", name: found.meta.name })
+      : servedHeaders(found.meta);
+  return c.body(found.bytes, 200, headers);
+}
+
+teamChatRoute.get("/threads/:threadId/files/:id", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  return serveFile(c, thread, "bytes");
+});
+
+teamChatRoute.get("/threads/:threadId/files/:id/preview", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  return serveFile(c, thread, "preview");
+});
+
+// ---- reactions ---------------------------------------------------------------
+
+/** The message a reaction is for: in this thread, and still standing. */
+async function reactionTarget(c: Context, thread: TeamThread) {
+  const id = c.req.param("id") ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const message = (await withTenant(thread.organizationId, () => teamMessagesByIds([id]))).get(id);
+  if (!message || message.threadId !== thread.id || message.deletedAt) return null;
+  return message;
+}
+
+async function reactionsNow(thread: TeamThread, messageId: string) {
+  return (await reactionsFor([messageId])).get(messageId) ?? [];
+}
+
+teamChatRoute.put("/threads/:threadId/messages/:id/reaction", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  // The admin reads a direct chat; reacting in it is writing in it.
+  if (!teamAccess(thread, who.viewer).post) return c.json(NOT_FOUND, 404);
+  const message = await reactionTarget(c, thread);
+  if (!message) return c.json(NOT_FOUND, 404);
+  const input = (await c.req.json().catch(() => null)) as { emoji?: unknown } | null;
+  if (!isEmoji(input?.emoji)) return c.json({ error: "Pick an emoji to react with." }, 400);
+  const emoji = input.emoji;
+  const reactions = await withTenant(thread.organizationId, async () => {
+    await setTeamReaction({ thread, messageId: message.id, reactor: readerKey(who.viewer), reactorName: who.name, emoji });
+    return reactionsNow(thread, message.id);
+  });
+  await publish(await eventFor(thread, "team_reaction", { messageId: message.id, reactions }));
+  return c.json({ reactions });
+});
+
+teamChatRoute.delete("/threads/:threadId/messages/:id/reaction", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  if (!teamAccess(thread, who.viewer).post) return c.json(NOT_FOUND, 404);
+  const message = await reactionTarget(c, thread);
+  if (!message) return c.json(NOT_FOUND, 404);
+  const reactions = await withTenant(thread.organizationId, async () => {
+    await removeTeamReaction(message.id, readerKey(who.viewer));
+    return reactionsNow(thread, message.id);
+  });
+  await publish(await eventFor(thread, "team_reaction", { messageId: message.id, reactions }));
+  return c.json({ reactions });
 });
 
 // "<name> is typing" (24 Oct 2026, Focus workspace). Nothing is stored: the
