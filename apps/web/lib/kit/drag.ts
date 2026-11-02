@@ -16,3 +16,13 @@ export function orderAfterDrop<T extends { id: string }>(cards: T[], id: string,
   const at = Math.max(0, Math.min(toIndex, rest.length));
   return [...rest.slice(0, at), moving, ...rest.slice(at)];
 }
+
+/**
+ * Where a drop goes: the column under the pointer, unless that is no column,
+ * the card's own column, or one the board refuses — then nowhere, and nothing
+ * is sent.
+ */
+export function dropTarget(from: string, to: string | null, allowed: boolean): string | null {
+  if (!to || to === from || !allowed) return null;
+  return to;
+}

@@ -191,3 +191,38 @@ test("Tab stays inside, and Escape, focus return and sounds are wired", () => {
   // Not part 1's nx-pop / nx-sheet, which play their own sound on top.
   assert.doesNotMatch(W + P, /nx-pop|nx-sheet/);
 });
+
+// ---- Task 5: board column, board card and pointer drag -------------------------------------
+
+import { BoardColumn, BoardCard } from "@/app/kit/board";
+import { dropTarget } from "@/lib/kit/drag";
+
+test("a column has its tone, name and count, and a card its tone and name", () => {
+  const html = render(BoardColumn, { id: "today", tone: "mustard", title: "Today", count: 3, children: "" });
+  assert.match(html, /data-column="today"/);
+  assert.match(html, /class="kit-col tone-head-mustard/);
+  assert.match(html, />3</);
+  const card = render(BoardCard, { id: "t1", tone: "terra", title: "Call back", lines: ["Zipicka"], onOpen() {}, label: "Open follow-up: Call back" });
+  assert.match(card, /class="kit-card tone-terra/);
+  assert.match(card, /aria-label="Open follow-up: Call back"/);
+  assert.match(card, /dir="auto"/);
+});
+
+test("a drop onto its own column, onto no column, or one the board refuses goes nowhere", () => {
+  assert.equal(dropTarget("today", "later", true), "later");
+  assert.equal(dropTarget("today", "today", true), null);
+  assert.equal(dropTarget("today", null, true), null);
+  assert.equal(dropTarget("done", "today", false), null);
+});
+
+test("the drag waits for intent, plays the chime only after a saved drop, and Escape cancels", () => {
+  const B = read("app/kit/board.tsx");
+  assert.match(B, /DRAG_START_PX = 6/);
+  assert.match(B, /TOUCH_HOLD_MS = 250/);
+  assert.match(B, /dropTarget\(/);
+  assert.match(B, /\.then\(\(\) => play\("chime"\)\)/);
+  assert.match(B, /\.catch\(/);
+  assert.match(B, /"Escape"/);
+  // A drag that ends never also opens the card.
+  assert.match(B, /suppressClick/);
+});

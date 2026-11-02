@@ -259,6 +259,36 @@ button.kit-card, a.kit-card { cursor: pointer; }
 .kit-btn:disabled { opacity: .5; cursor: default; }
 .kit-btn:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
 
+/* ---- board ------------------------------------------------------------------ */
+
+.kit-board { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 14px; align-items: start; }
+.kit-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  background: var(--pebble);
+  border: 2px solid transparent;
+}
+.kit-col.active { border-color: var(--signal-text); background: color-mix(in srgb, var(--signal-text) 8%, var(--pebble)); }
+.kit-col-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px; }
+.kit-col-head h3 { flex: 1; margin: 0; font-size: 14px; font-weight: 700; color: var(--ink); }
+.kit-col-dot { width: 10px; height: 10px; border-radius: 50%; }
+.tone-head-mustard .kit-col-dot { background: var(--st-mustard); }
+.tone-head-forest .kit-col-dot { background: var(--st-forest); }
+.tone-head-terra .kit-col-dot { background: var(--st-terra); }
+.tone-head-ink .kit-col-dot { background: var(--st-ink); }
+.kit-col-count { min-width: 24px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--paper); color: var(--ink); font-size: 12px; font-weight: 700; text-align: center; }
+.kit-col-cards { display: flex; flex-direction: column; gap: 8px; min-height: 8px; }
+.kit-col-drop { height: 0; border-radius: var(--r); border: 2px dashed transparent; }
+.kit-col.active .kit-col-drop { height: 64px; border-color: var(--signal-text); }
+.kit-board-card { width: 100%; }
+.kit-board-card.can-drag { touch-action: pan-x pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.kit-placeholder { opacity: .35; }
+.kit-ghost { position: fixed; z-index: 970; margin: 0; pointer-events: none; box-shadow: var(--lift); }
+
 @media (max-width: 760px) {
   .kit-scrim { padding: 0; place-items: stretch; }
   .kit-window, .kit-panel { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; }
@@ -270,6 +300,7 @@ button.kit-card, a.kit-card { cursor: pointer; }
 /* ---- motion: only when welcome -------------------------------------------------- */
 
 @media (prefers-reduced-motion: no-preference) {
+  .kit-col, .kit-col-drop { transition: height .18s ease, border-color .15s ease, background .15s ease; }
   .kit-scrim { animation: kit-fade .2s ease-out both; }
   .kit-window { animation: kit-grow .26s cubic-bezier(.2, .9, .3, 1.1) both; }
   .kit-panel { animation: kit-slide .3s cubic-bezier(.2, .8, .2, 1) both; }
