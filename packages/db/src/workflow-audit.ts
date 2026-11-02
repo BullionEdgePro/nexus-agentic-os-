@@ -1,5 +1,6 @@
 import { bucketKeys, fillBuckets, type AuditDays, type WorkflowAudit } from "@nexus/shared";
 import { getPool, withTenant } from "./client.js";
+import { contactServedBy } from "./contacts.js";
 
 /**
  * The workflow audit's one read (2 Nov 2026): what happened at a business in
@@ -40,6 +41,9 @@ export async function getWorkflowAudit(input: {
     const args = [input.organizationId, input.timezone, input.days, bucket];
     const START = `(((now() at time zone $2)::date - ($3::int - 1))::timestamp at time zone $2)`;
     const BUCKET = (ts: string) => `to_char(date_trunc($4, ${ts} at time zone $2), 'YYYY-MM-DD')`;
+    // The business's customers are the ones it serves — on a shared number a
+    // contact's own row belongs to the number's owner (contacts.ts).
+    const SERVED = contactServedBy("$1");
 
     const period = await db.query<{ from_day: string; today: string }>(
       `select to_char((now() at time zone $2)::date - ($3::int - 1), 'YYYY-MM-DD') as from_day,
@@ -136,11 +140,11 @@ export async function getWorkflowAudit(input: {
 
     const counts = await db.query<Record<string, string>>(
       `select
-         (select count(*) from contacts ct where ct.organization_id = $1)::text as contacts_total,
-         (select count(*) from contacts ct where ct.organization_id = $1 and ct.created_at >= ${START})::text as contacts_added,
-         (select count(*) from contacts ct where ct.organization_id = $1 and nullif(trim(ct.lead_source), '') is not null)::text as contacts_with_source,
-         (select count(*) from contacts ct where ct.organization_id = $1 and ct.reengagement_opted_out)::text as contacts_opted_out,
-         (select count(*) from contacts ct where ct.organization_id = $1 and ct.not_a_customer_at is not null)::text as contacts_not_customer,
+         (select count(*) from contacts ct where ${SERVED})::text as contacts_total,
+         (select count(*) from contacts ct where ${SERVED} and ct.created_at >= ${START})::text as contacts_added,
+         (select count(*) from contacts ct where ${SERVED} and nullif(trim(ct.lead_source), '') is not null)::text as contacts_with_source,
+         (select count(*) from contacts ct where ${SERVED} and ct.reengagement_opted_out)::text as contacts_opted_out,
+         (select count(*) from contacts ct where ${SERVED} and ct.not_a_customer_at is not null)::text as contacts_not_customer,
          (select count(*) from broadcast_recipients br join broadcasts b on b.id = br.broadcast_id
            where b.organization_id = $1 and coalesce(br.sent_at, b.created_at) >= ${START}
              and br.status in ('sent', 'delivered'))::text as outreach_sent,

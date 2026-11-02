@@ -150,6 +150,9 @@ test("counts SFS's real activity and nothing of the other business", db, async (
 test("a chat routed to SFS through a shared number is SFS's lead, not the number owner's", db, async () => {
   const a = await sfs();
   assert.equal(a.evidence.leads.byChannel.instagram, 1);
+  // SFS's customers are the ones it serves: five on its own number plus the
+  // routed one, whose row belongs to the number's owner.
+  assert.equal(a.evidence.contacts.total, 6);
   const other = await getWorkflowAudit({ organizationId: OTHER, slug: "other-firm", name: "Other Firm", timezone: "Asia/Dubai", days: 7 });
   assert.equal(other.evidence.leads.total, 2);
 });
