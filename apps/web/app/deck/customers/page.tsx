@@ -15,10 +15,14 @@ import {
   type ContactSummary,
 } from "@/lib/api";
 import { ImportCustomers } from "./import-customers";
+import { HistoryCards, ago as when } from "./history-cards";
+import { SlidePanel } from "../../kit/slide-panel";
+import { Initials } from "../../kit/status-card";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
+import "../../kit/kit.css";
 import "./customers.css";
 
 /**
@@ -145,6 +149,8 @@ export default function CustomersPage() {
     }
   }
 
+  const latest = selected ? latestConversation(selected) : null;
+
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
@@ -228,11 +234,17 @@ export default function CustomersPage() {
               : "Nobody has messaged this business yet. Once somebody does, they appear here."}
           </p>
         ) : (
-          <ul className="cu-list">
+          <ul className="kit-cards cu-cards">
             {contacts.map((contact) => (
               <li key={contact.id}>
-                <button type="button" className="cu-row" onClick={() => void open(contact)}>
-                  <span className="cu-name">{contact.displayName ?? (contact.waId ? `+${contact.waId}` : "Customer")}</span>
+                <button type="button" className="kit-card tone-paper cu-card" onClick={() => void open(contact)}>
+                  <span className="cu-card-top">
+                    <Initials name={contact.displayName} />
+                    <span className="kit-card-title" dir="auto">
+                      {contact.displayName ?? (contact.waId ? `+${contact.waId}` : "Customer")}
+                    </span>
+                  </span>
+                  <span className="kit-card-sub">{contact.waId ? `+${contact.waId}` : "Email"}</span>
                   <span className="cu-meta">
                     {contact.leadPriority ? (
                       <span className={`cu-pri ${contact.leadPriority}`}>
@@ -259,12 +271,14 @@ export default function CustomersPage() {
         )}
 
         {selected ? (
-          <section className="cu-detail">
-            <div className="cu-detail-head">
-              <h2>{selected.displayName ?? (selected.waId ? `+${selected.waId}` : "Customer")}</h2>
-              <button type="button" className="cu-close" onClick={() => setSelected(null)}>
-                Close
-              </button>
+          <SlidePanel
+            open
+            title={selected.displayName ?? (selected.waId ? `+${selected.waId}` : "Customer")}
+            onClose={() => setSelected(null)}
+          >
+            <div className="cu-profile-head">
+              <Initials name={selected.displayName} />
+              <h2 dir="auto">{selected.displayName ?? (selected.waId ? `+${selected.waId}` : "Customer")}</h2>
             </div>
             <p className="cu-detail-meta">
               {selected.waId ? `+${selected.waId}` : "Email"}
@@ -277,20 +291,38 @@ export default function CustomersPage() {
               {selected.openFollowUps > 0 ? <> · {selected.openFollowUps} open follow-ups</> : null}
               {selected.bookings > 0 ? <> · {selected.bookings} appointments</> : null}
             </p>
+            {latest ? (
+              <div className="kit-actions">
+                <a className="kit-btn" href={`/inbox?conversation=${encodeURIComponent(latest)}`}>
+                  Open chat
+                </a>
+              </div>
+            ) : null}
 
-            <h3>What this platform remembers</h3>
+            {/* An erase or a download that failed says so here, where it was
+                asked for, not behind the panel. */}
+            {error ? <p className="cu-err">{error}</p> : null}
+            {notice ? <p className="cu-notice">{notice}</p> : null}
+
+            <h3 className="cu-h3">What this platform remembers</h3>
             {memory ? (
               <div className="cu-mem">
-                <p className="cu-mem-text">{memory.summary}</p>
-                <p className="cu-mem-meta">
-                  worked out from {memory.sourceMessages}{" "}
-                  {memory.sourceMessages === 1 ? "message" : "messages"} · updated{" "}
-                  {when(memory.updatedAt)}
-                </p>
-                <div className="cu-mem-acts">
+                <dl className="kit-rows">
+                  <dt>In its words</dt>
+                  <dd className="cu-mem-text" dir="auto">
+                    {memory.summary}
+                  </dd>
+                  <dt>Worked out from</dt>
+                  <dd>
+                    {memory.sourceMessages} {memory.sourceMessages === 1 ? "message" : "messages"}
+                  </dd>
+                  <dt>Updated</dt>
+                  <dd>{when(memory.updatedAt)}</dd>
+                </dl>
+                <div className="kit-actions">
                   <button
                     type="button"
-                    className="cu-forget"
+                    className="kit-btn quiet"
                     onClick={() => void forget(selected)}
                     disabled={busy}
                   >
@@ -302,7 +334,7 @@ export default function CustomersPage() {
                       belong next to each other. */}
                   <button
                     type="button"
-                    className="cu-forget"
+                    className="kit-btn quiet"
                     disabled={busy}
                     onClick={() =>
                       void download(
@@ -321,26 +353,10 @@ export default function CustomersPage() {
               </p>
             )}
 
-            <h3>Conversations</h3>
-            {selected.conversationList.length === 0 ? (
-              <p className="cu-note">None with this business.</p>
-            ) : (
-              <ul className="cu-convos">
-                {selected.conversationList.map((conversation) => (
-                  <li key={conversation.id}>
-                    <span className={`cu-status ${conversation.status}`}>{conversation.status}</span>
-                    <span>
-                      {conversation.messages}{" "}
-                      {conversation.messages === 1 ? "message" : "messages"}
-                    </span>
-                    <span className="cu-when">{when(conversation.lastMessageAt)}</span>
-                    <a href="/inbox">Open</a>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h3 className="cu-h3">Conversations</h3>
+            <HistoryCards conversations={selected.conversationList} />
 
-            <h3>How they have been scored</h3>
+            <h3 className="cu-h3">How they have been scored</h3>
             {selected.leadHistory.length === 0 ? (
               <p className="cu-note">Never scored.</p>
             ) : (
@@ -356,21 +372,20 @@ export default function CustomersPage() {
                 ))}
               </ul>
             )}
-          </section>
+          </SlidePanel>
         ) : null}
       </div>
     </div>
   );
 }
 
-/** Age, not a timestamp: "3d" is what a reader acts on. */
-function when(iso: string | null): string {
-  if (!iso) return "never";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "never";
-  const minutes = Math.max(0, Math.round((Date.now() - then) / 60000));
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+/** The conversation "Open chat" goes to: the one most recently written in. */
+function latestConversation(contact: ContactDetail): string | null {
+  let best: { id: string; at: number } | null = null;
+  for (const c of contact.conversationList) {
+    const at = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : Number.NaN;
+    const score = Number.isNaN(at) ? -Infinity : at;
+    if (!best || score > best.at) best = { id: c.id, at: score };
+  }
+  return best?.id ?? null;
 }
