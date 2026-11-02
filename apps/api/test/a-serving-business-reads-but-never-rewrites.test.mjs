@@ -51,6 +51,7 @@ const THIRD = "71717171-0000-4000-8000-000000000003";
 const ORGS = [OWNER, SERVING, THIRD];
 
 let owner;
+let dbTurn; // this file's turn at the shared test database
 let withTenant;
 let withAllTenants;
 let getPool;
@@ -101,6 +102,10 @@ before(async () => {
   if (db.skip) return;
   const pg = (await import("pg")).default;
   owner = new pg.Pool({ connectionString: OWNER_URL });
+  // One database test file at a time: they share the throwaway database, and a
+  // migration one re-applies deadlocks with another's seed (2 Nov 2026).
+  dbTurn = await owner.connect();
+  await dbTurn.query("select pg_advisory_lock(20261102)");
   await owner.query(SQL); // the database may predate 106; the file is safe to re-run
   await owner.query(
     `insert into organizations (id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone)
@@ -121,8 +126,12 @@ after(async () => {
   await owner.query(`delete from lead_assessments where organization_id in (${list}) or serving_organization_id in (${list})`);
   await owner.query(`delete from conversations where organization_id in (${list}) or routed_organization_id in (${list})`);
   await owner.query(`delete from organizations where id in (${list})`);
+  if (dbTurn) {
+    await dbTurn.query("select pg_advisory_unlock(20261102)");
+    dbTurn.release();
+  }
   await owner.end();
-  await getPool().end();
+  if (getPool) await getPool().end(); // before() may have failed before it loaded
 });
 
 test("a serving business reads every routed row and still answers in the chat", db, async () => {

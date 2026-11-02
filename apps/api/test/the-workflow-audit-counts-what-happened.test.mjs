@@ -54,6 +54,7 @@ const OTHER = "51515151-0000-4000-8000-000000000002";
 const EDGE = "51515151-0000-4000-8000-000000000003";
 
 let owner;
+let dbTurn; // this file's turn at the shared test database
 let getWorkflowAudit;
 
 /** Dubai midnight `daysAgo` days back, plus `plus` (an interval), as a timestamptz expression. */
@@ -161,6 +162,10 @@ before(async () => {
   if (db.skip) return;
   const pg = (await import("pg")).default;
   owner = new pg.Pool({ connectionString: OWNER_URL });
+  // One database test file at a time: they share the throwaway database, and a
+  // migration one re-applies deadlocks with another's seed (2 Nov 2026).
+  dbTurn = await owner.connect();
+  await dbTurn.query("select pg_advisory_lock(20261102)");
   await owner.query(SEED);
   process.env.DATABASE_URL = APP_URL;
   ({ getWorkflowAudit } = await import("@nexus/db"));
@@ -176,6 +181,10 @@ after(async () => {
     `delete from lead_assessments where organization_id in ('${SFS}', '${OTHER}', '${EDGE}') or serving_organization_id in ('${SFS}', '${OTHER}', '${EDGE}')`
   );
   await owner.query(`delete from organizations where id in ('${SFS}', '${OTHER}', '${EDGE}')`);
+  if (dbTurn) {
+    await dbTurn.query("select pg_advisory_unlock(20261102)");
+    dbTurn.release();
+  }
   await owner.end();
   const { getPool } = await import("@nexus/db");
   await getPool().end();

@@ -66,6 +66,7 @@ const MOVING_CONV = "d6161610-0000-4000-8000-000000000003"; // routed after it w
 const DOOMED_CONV = "d6161610-0000-4000-8000-000000000004"; // routed, then deleted
 
 let owner;
+let dbTurn; // this file's turn at the shared test database
 let withTenant;
 let recordLeadAssessment;
 let getContact;
@@ -124,6 +125,10 @@ before(async () => {
   if (db.skip) return;
   const pg = (await import("pg")).default;
   owner = new pg.Pool({ connectionString: OWNER_URL });
+  // One database test file at a time: they share the throwaway database, and a
+  // migration one re-applies deadlocks with another's seed (2 Nov 2026).
+  dbTurn = await owner.connect();
+  await dbTurn.query("select pg_advisory_lock(20261102)");
   await owner.query(SQL); // the database may predate 105; the file is safe to re-run
   await owner.query(SEED);
   process.env.DATABASE_URL = APP_URL;
@@ -148,6 +153,10 @@ after(async () => {
   await owner.query(`delete from messages where organization_id in (${list}) or serving_organization_id in (${list})`);
   await owner.query(`delete from lead_assessments where organization_id in (${list}) or serving_organization_id in (${list})`);
   await owner.query(`delete from organizations where id in (${list})`);
+  if (dbTurn) {
+    await dbTurn.query("select pg_advisory_unlock(20261102)");
+    dbTurn.release();
+  }
   await owner.end();
   const { getPool } = await import("@nexus/db");
   await getPool().end();
