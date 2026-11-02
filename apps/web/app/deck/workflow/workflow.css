@@ -73,6 +73,32 @@
 .wf-window .wf-note { margin-top: 14px; }
 .wf-noscreen { color: var(--slate); font-size: 13px; }
 
+/* ---- tiles, charts, funnel, compliance ---------------------------------------- */
+
+.wf-tiles { grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); }
+.wf-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; }
+.wf-charts > * { min-width: 0; }
+.wf-shares { margin-top: 14px; }
+.wf-shares h4, .wf-consent h4 { margin: 0 0 6px; font-size: 12.5px; font-weight: 650; color: var(--slate); }
+.wf-shares ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+/* A name, its bar, its count: the name gives way first, so a long lead source never widens the row. */
+.wf-share { display: grid; grid-template-columns: minmax(0, 9rem) minmax(40px, 1fr) auto; align-items: center; gap: 10px; font-size: 13px; }
+.wf-source { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-share b { font-variant-numeric: tabular-nums; }
+
+.wf-funnel { display: grid; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
+.wf-funnel-step { display: grid; grid-template-columns: minmax(0, 1fr) auto 4.5rem; align-items: baseline; gap: 4px 10px; font-size: 13.5px; }
+.wf-funnel-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-funnel-count { font-variant-numeric: tabular-nums; }
+.wf-funnel-share { color: var(--slate); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.wf-funnel-step .kit-hbar { grid-column: 1 / -1; }
+
+.wf-compliance { display: grid; grid-template-columns: minmax(0, 2fr) minmax(min(100%, 240px), 1fr); gap: 14px; align-items: start; }
+.wf-compliance .kit-table th[scope="row"] { text-align: left; font-weight: 650; white-space: nowrap; }
+.wf-consent { padding: 14px 16px; border-radius: var(--r); background: var(--paper); box-shadow: var(--lift-sm); }
+.wf-consent .kit-rows { margin: 0; }
+@media (max-width: 900px) { .wf-compliance { grid-template-columns: minmax(0, 1fr); } }
+
 /* ---- a phone: each lane a list, branches indented in pairs -------------------- */
 
 @media (max-width: 760px) {
@@ -106,12 +132,12 @@
     stroke-dasharray: 100;
     stroke-dashoffset: 100;
     animation: wf-draw 520ms ease-out forwards;
-    animation-delay: calc(var(--lane, 0) * 420ms + var(--i, 0) * 70ms);
+    animation-delay: calc(var(--lane) * 420ms + var(--i) * 70ms);
   }
   .wf-head {
     opacity: 0;
     animation: wf-show 160ms ease-out forwards;
-    animation-delay: calc(var(--lane, 0) * 420ms + var(--i, 0) * 70ms + 440ms);
+    animation-delay: calc(var(--lane) * 420ms + var(--i) * 70ms + 440ms);
   }
   /* A soft pulse travels along each path that leaves a Working card. */
   .wf-pulse {
@@ -120,7 +146,7 @@
     stroke-dashoffset: 100;
     opacity: .55;
     animation: wf-flow 2.6s linear infinite;
-    animation-delay: calc(var(--lane, 0) * 420ms + 900ms);
+    animation-delay: calc(var(--lane) * 420ms + 900ms);
   }
   @keyframes wf-draw { to { stroke-dashoffset: 0; } }
   @keyframes wf-show { to { opacity: 1; } }

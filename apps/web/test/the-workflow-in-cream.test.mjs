@@ -15,20 +15,27 @@ import { REAL_ESTATE_WORKFLOW } from "@nexus/shared";
 import { stepFigures } from "@/lib/workflow/step-figures";
 import { WorkflowLanes } from "@/app/deck/workflow/lanes";
 import { StepWindow } from "@/app/deck/workflow/step-window";
+import { AuditTiles, AuditCharts } from "@/app/deck/workflow/audit-charts";
+import { Funnel } from "@/app/deck/workflow/funnel";
+import { ComplianceTable } from "@/app/deck/workflow/compliance";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
 
 const byId = (id) => REAL_ESTATE_WORKFLOW.steps.find((step) => step.id === id);
 
-/** An audit for "SFS International": 3 new leads, 1 won, a 5-minute median reply, every other count 2. */
+/**
+ * An audit for "SFS International": 3 new leads, 1 won, a 5-minute median
+ * reply, every other count 2. `overrides` merges into period, evidence and
+ * series; `replyMedian` and `bySource` are shortcuts for those two lists.
+ */
 function sample(overrides = {}) {
   const days = ["2026-11-01", "2026-11-02"];
   const base = {
     business: { slug: "sfs-international", name: "SFS International", timezone: "Asia/Dubai" },
     period: { days: 30, from: "2026-10-04", today: "2026-11-02", bucket: "day" },
     evidence: {
-      contacts: { total: 2, added: 2, withSource: 2, optedOut: 2, notACustomer: 2 },
+      contacts: { total: 2, added: 2, withSource: 2, optedOut: 2, notACustomer: 2, emailOptedOut: 2 },
       outreach: { sent: 2, delivered: 2, failed: 2 },
       calls: { answered: 2, noAnswer: 2, voicemail: 2, busy: 2, failed: 2 },
       reengagement: { sent: 2, replied: 2, optedOut: 2, inCooldown: 2 },
@@ -47,12 +54,11 @@ function sample(overrides = {}) {
     },
     funnel: { leads: 3, scored: 2, hot: 2, booked: 2, held: 2, won: 1 },
   };
-  return {
-    ...base,
-    period: { ...base.period, ...overrides.period },
-    evidence: { ...base.evidence, ...overrides.evidence },
-    series: { ...base.series, ...overrides.series },
-  };
+  const evidence = { ...base.evidence, ...overrides.evidence };
+  if (overrides.bySource) evidence.leads = { ...evidence.leads, bySource: overrides.bySource };
+  const series = { ...base.series, ...overrides.series };
+  if (overrides.replyMedian) series.replyMedian = overrides.replyMedian;
+  return { ...base, period: { ...base.period, ...overrides.period }, evidence, series };
 }
 
 test("each step is a card in its status's colour, with the boss's words", () => {
@@ -100,4 +106,71 @@ test("connectors draw in and the pulse runs only when motion is welcome", () => 
   // A pulse rides only a path that leaves a Working card for a step Nexus tracks.
   const html = render(WorkflowLanes, { workflow: REAL_ESTATE_WORKFLOW, evidence: sample().evidence, onOpen() {} });
   assert.equal((html.match(/class="wf-pulse"/g) ?? []).length, 1);
+});
+
+// ---- Task 6: tiles, charts, funnel and compliance -------------------------------------------
+
+test("six tiles in the spec's words, from the period's own figures", () => {
+  const html = render(AuditTiles, { audit: sample() });
+  for (const label of ["New leads", "Median first reply", "Hot leads", "Viewings held", "Follow-ups overdue now", "Won (labelled)"]) {
+    assert.ok(html.includes(`class="kit-tile-label">${label}<`), label);
+  }
+  assert.ok(html.includes('class="kit-tile-label">Median first reply</span><span class="kit-tile-figure"><span data-countup="">5 m<'));
+  // No reply in the period is a dash, never "0 m".
+  const none = render(AuditTiles, { audit: sample({ evidence: { replies: { medianMs: null, byAi: 0, byPerson: 0, unanswered: 0 } } }) });
+  assert.ok(none.includes('class="kit-tile-label">Median first reply</span><span class="kit-tile-figure"><span data-countup="">—<'));
+});
+
+test("five charts, the reply chart named for the business", () => {
+  const html = render(AuditCharts, { audit: sample() });
+  for (const title of ["Leads coming in", "How fast SFS International answers", "From lead to won", "Viewings", "Lead quality"]) {
+    assert.ok(html.includes(`<h3>${title}</h3>`), title);
+  }
+});
+
+test("the reply chart draws no-reply days as empty slots, never zero", () => {
+  const html = render(AuditCharts, { audit: sample({ replyMedian: [{ bucket: "2026-11-01", medianMs: 300000 }, { bucket: "2026-11-02", medianMs: null }] }) });
+  assert.equal((html.match(/kit-bar-empty/g) ?? []).length, 1);
+  assert.match(html, /How fast SFS International answers/);
+});
+
+test("90 days reads in Monday weeks, and the bucket holding today is drawn in progress", () => {
+  const weeks = ["2026-10-26", "2026-11-02"];
+  const html = render(AuditCharts, {
+    audit: sample({
+      period: { days: 90, from: "2026-08-07", today: "2026-11-04", bucket: "week" },
+      series: {
+        leads: weeks.map((bucket) => ({ bucket, count: 2 })),
+        replyMedian: weeks.map((bucket) => ({ bucket, medianMs: 300000 })),
+        quality: weeks.map((bucket) => ({ bucket, scored: 2, hot: 1 })),
+        viewings: weeks.map((bucket) => ({ bucket, booked: 2, held: 1, noShow: 0, cancelled: 0 })),
+      },
+    }),
+  });
+  assert.match(html, /w\/c 26 Oct/);
+  // One in-progress bar in each of the three bar charts: the week of 2 Nov holds the 4th.
+  assert.equal((html.match(/kit-bar-col partial/g) ?? []).length, 3);
+  assert.match(render(AuditCharts, { audit: sample() }), />1 Nov</);
+});
+
+test("the funnel says 'x of y' under 20 and % from 20", () => {
+  const small = render(Funnel, { funnel: { leads: 7, scored: 3, hot: 1, booked: 1, held: 1, won: 0 } });
+  assert.match(small, /3 of 7/);
+  assert.doesNotMatch(small, /43%/);
+  assert.match(render(Funnel, { funnel: { leads: 40, scored: 18, hot: 6, booked: 3, held: 2, won: 1 } }), /45%/);
+});
+
+test("compliance items are kept outside Nexus, beside the consent Nexus does record", () => {
+  const html = render(ComplianceTable, { evidence: sample().evidence });
+  for (const item of ["Form A", "Trakheesi permit", "Ejari", "Form F", "KYC/AML", "DLD transfer"]) assert.match(html, new RegExp(item));
+  assert.match(html, /Kept outside Nexus/);
+  assert.match(html, /Opted out of re-engagement/);
+  assert.match(html, /Unsubscribed from campaign emails/);
+  assert.match(html, /Marked &quot;not a customer&quot;/);
+});
+
+test("a long lead source never widens its row", () => {
+  const html = render(AuditCharts, { audit: sample({ bySource: [{ source: "Bayut premium featured listing campaign October", count: 3 }] }) });
+  assert.match(html, /class="wf-source"[^>]*dir="auto"/);
+  assert.match(read("app/deck/workflow/workflow.css"), /\.wf-source \{[^}]*text-overflow: ellipsis/);
 });

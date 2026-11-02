@@ -21,7 +21,8 @@ export type WorkflowAudit = {
   business: { slug: string; name: string; timezone: string };
   period: { days: AuditDays; from: string; today: string; bucket: "day" | "week" };
   evidence: {
-    contacts: { total: number; added: number; withSource: number; optedOut: number; notACustomer: number };
+    /** optedOut: of re-engagement; emailOptedOut: of campaign emails (spec §6). */
+    contacts: { total: number; added: number; withSource: number; optedOut: number; notACustomer: number; emailOptedOut: number };
     outreach: { sent: number; delivered: number; failed: number };
     calls: { answered: number; noAnswer: number; voicemail: number; busy: number; failed: number };
     reengagement: { sent: number; replied: number; optedOut: number; inCooldown: number };

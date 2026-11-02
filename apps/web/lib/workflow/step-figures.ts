@@ -17,6 +17,9 @@ const CHANNEL: Record<string, string> = {
   facebook: "Facebook",
 };
 
+/** A channel as people say it ("WhatsApp"); an unknown one as stored. */
+export const channelName = (channel: string) => CHANNEL[channel] ?? channel;
+
 const n = (value: number) => value.toLocaleString("en-GB");
 const fig = (label: string, value: number): StepFigure => ({ label, value: n(value) });
 
@@ -59,7 +62,7 @@ export function stepFigures(stepId: string, evidence: WorkflowAudit["evidence"])
         fig("New leads", e.leads.total),
         ...Object.entries(e.leads.byChannel)
           .sort((a, b) => b[1] - a[1])
-          .map(([channel, count]) => fig(`By ${CHANNEL[channel] ?? channel}`, count)),
+          .map(([channel, count]) => fig(`By ${channelName(channel)}`, count)),
         ...e.leads.bySource.map(({ source, count }) => fig(`From ${source}`, count)),
       ];
     case "D2":

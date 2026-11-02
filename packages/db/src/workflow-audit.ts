@@ -145,6 +145,7 @@ export async function getWorkflowAudit(input: {
          (select count(*) from contacts ct where ${SERVED} and nullif(trim(ct.lead_source), '') is not null)::text as contacts_with_source,
          (select count(*) from contacts ct where ${SERVED} and ct.reengagement_opted_out)::text as contacts_opted_out,
          (select count(*) from contacts ct where ${SERVED} and ct.not_a_customer_at is not null)::text as contacts_not_customer,
+         (select count(*) from contacts ct where ${SERVED} and ct.email_campaigns_opted_out_at is not null)::text as contacts_email_opted_out,
          (select count(*) from broadcast_recipients br join broadcasts b on b.id = br.broadcast_id
            where b.organization_id = $1 and coalesce(br.sent_at, b.created_at) >= ${START}
              and br.status in ('sent', 'delivered'))::text as outreach_sent,
@@ -200,6 +201,7 @@ export async function getWorkflowAudit(input: {
           withSource: n("contacts_with_source"),
           optedOut: n("contacts_opted_out"),
           notACustomer: n("contacts_not_customer"),
+          emailOptedOut: n("contacts_email_opted_out"),
         },
         outreach: { sent: n("outreach_sent"), delivered: n("outreach_delivered"), failed: n("outreach_failed") },
         calls: {

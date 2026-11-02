@@ -69,6 +69,9 @@ insert into contacts (id, organization_id, wa_id, channel, display_name, not_a_c
 insert into contacts (id, organization_id, wa_id, channel, display_name) values
   ('c0000000-0000-4000-8000-000000000007', '${OTHER}', '971500000007', 'whatsapp', 'Other one'),
   ('c0000000-0000-4000-8000-000000000008', '${OTHER}', '971500000008', 'whatsapp', 'Other two');
+-- Unsubscribed from campaign emails: one of SFS's, one of the other firm's.
+update contacts set email_campaigns_opted_out_at = now()
+ where id in ('c0000000-0000-4000-8000-000000000005', 'c0000000-0000-4000-8000-000000000007');
 
 insert into conversations (id, organization_id, routed_organization_id, contact_id, opened_at) values
   ('d0000000-0000-4000-8000-000000000001', '${SFS}', null, 'c0000000-0000-4000-8000-000000000001', ${dubai(2, "10 hours")}),
@@ -141,6 +144,7 @@ test("counts SFS's real activity and nothing of the other business", db, async (
   assert.equal(a.evidence.qualifier.hot, 1);
   assert.equal(a.evidence.won, 1);
   assert.equal(a.evidence.contacts.notACustomer, 1);
+  assert.equal(a.evidence.contacts.emailOptedOut, 1);
   assert.deepEqual(a.funnel, { leads: 3, scored: 2, hot: 1, booked: 1, held: 1, won: 1 });
   assert.equal(a.series.leads.length, 7);
   assert.ok(a.series.replyMedian.some((r) => r.medianMs === null), "a day with no replies is null, never 0");
