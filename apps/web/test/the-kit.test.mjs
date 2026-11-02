@@ -226,3 +226,75 @@ test("the drag waits for intent, plays the chime only after a saved drop, and Es
   // A drag that ends never also opens the card.
   assert.match(B, /suppressClick/);
 });
+
+// ---- Found in the browser check (Task 12): the deck's base link rule ------------------------
+
+test("a kit card, pill or button that is a link keeps its own colours inside the deck", () => {
+  // `.deck-root a { color: inherit }` outranked the kit's one-class colours, so
+  // every toned card that is a link — the waiting cards, a customer's
+  // conversations — and the quick-link pills drew ink text on an ink, green or
+  // terracotta ground. A base reset must never outrank a component's class.
+  const deck = read("app/deck/deck.css");
+  assert.doesNotMatch(deck, /^\.deck-root a \{/m);
+  assert.match(deck, /^:where\(\.deck-root\) a \{ color: inherit; text-decoration: none; \}/m);
+});
+
+test("a board's columns are full-height lanes, so a drop below the last card still lands", () => {
+  // Found in the browser (Task 12): columns as tall as their cards made a short
+  // column a small target, and letting go just under its last card did nothing.
+  const kit = read("app/kit/kit.css");
+  assert.match(kit, /\.kit-board \{[^}]*align-items: stretch;/);
+});
+
+test("a press is followed by the window, so a flick off the card or a release anywhere ends it", () => {
+  // Found in the browser (Task 12): a mouse that left the card before moving
+  // 6px on it never started the drag, and its release landed elsewhere — so the
+  // press was never let go and the board stopped dragging until a reload.
+  const B = read("app/kit/board.tsx");
+  for (const type of ["pointermove", "pointerup", "pointercancel"]) {
+    assert.ok(B.includes(`window.addEventListener("${type}"`), `the window does not hear ${type}`);
+    assert.ok(B.includes(`window.removeEventListener("${type}"`), `the window keeps hearing ${type} after the press`);
+  }
+  // The card only starts a press; the window hears the rest of it.
+  assert.doesNotMatch(B, /onPointerUp\(event\)/);
+});
+
+test("the click that ends a drag is swallowed for a moment, wherever the browser sends it", () => {
+  // A real drag's click lands on whatever holds both the card and the drop
+  // point, never on the card, so a flag waiting for the card's click stayed up
+  // and swallowed the next real tap on any card.
+  const B = read("app/kit/board.tsx");
+  assert.match(B, /Date\.now\(\) < suppressClickUntil\.current/);
+  assert.doesNotMatch(B, /suppressClick\.current = true/);
+});
+
+test("a window and a panel mount on the console shell, so they cover its rail too", () => {
+  // Found in the browser (Task 12): rendered inside the page, the scrim sat in
+  // the shell's main column — its own stacking context at z 1 — so the rail
+  // (z 3) stayed sharp above every window. They mount on the shell instead,
+  // which also carries the tokens and fonts the window needs.
+  const W = read("app/kit/card-window.tsx");
+  assert.match(W, /export function kitLayer\(\)/);
+  assert.match(W, /document\.querySelector<HTMLElement>\("\.deck-root\.shell"\)/);
+  assert.match(W, /createPortal\(/);
+  const P = read("app/kit/slide-panel.tsx");
+  assert.match(P, /kitLayer\(\)/);
+  assert.match(P, /createPortal\(/);
+});
+
+test("a bar chart's hover label has a kit name of its own, so no page's old .bar can squash it", () => {
+  // Found in the browser (Task 12): the label was `kit-tip bar`, and the deck's
+  // `.deck-root .bar` (a 6px progress bar, overflow hidden, pale ground) beat
+  // it — every bar chart's label in the deck was an invisible pale strip.
+  const C = read("app/kit/charts.tsx");
+  assert.match(C, /className="kit-tip kit-tip-bar"/);
+  assert.doesNotMatch(C, /"kit-tip bar"/);
+  assert.match(read("app/kit/kit.css"), /\.kit-tip\.kit-tip-bar \{/);
+});
+
+test("on a phone a month of bars keeps them wide enough to see and tap", () => {
+  // Found in the browser (Task 12): 30 days at 375px with 6px gaps left 5px bars.
+  const kit = read("app/kit/kit.css");
+  const phone = kit.slice(kit.indexOf("@media (max-width: 760px)"));
+  assert.match(phone, /\.kit-bars-row \{ gap: 2px; \}/);
+});

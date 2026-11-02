@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TaskRecord } from "@/lib/api";
 import { CardWindow } from "../../kit/card-window";
 import { COLUMNS, columnFor, whenLabel, type ColumnKey } from "./columns";
@@ -31,6 +31,15 @@ export function FollowUpWindow({
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const noteRef = useRef<HTMLParagraphElement | null>(null);
+
+  // Mark done removes itself (and a move swaps its button), so once the result
+  // shows, a keyboard that has fallen out of the window is put back in it.
+  useEffect(() => {
+    if (!note) return;
+    const box = noteRef.current?.closest<HTMLElement>("[role=dialog]");
+    if (box && !box.contains(document.activeElement)) box.focus();
+  }, [note]);
 
   async function run(action: () => Promise<void>, saved: string) {
     setBusy(true);
@@ -132,7 +141,7 @@ export function FollowUpWindow({
         </div>
       ) : null}
 
-      <p className="fu-note" role="status">
+      <p ref={noteRef} className="fu-note" role="status">
         {note}
       </p>
     </CardWindow>

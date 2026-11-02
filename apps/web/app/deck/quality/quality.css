@@ -50,7 +50,11 @@
   box-shadow: var(--lift-sm);
 }
 .q-ask .act-sub-head { margin-top: 0; }
-.q-tiles { margin-bottom: 8px; }
+/* Four figures: two by two, or four across with room — never three and one. */
+.kit-tiles.q-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 8px; }
+@media (min-width: 1280px) {
+  .kit-tiles.q-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 
 .q-ask form { display: flex; gap: 8px; flex-wrap: wrap; }
 

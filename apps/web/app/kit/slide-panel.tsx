@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { play } from "@/lib/sound";
 import { trapTab } from "@/lib/kit/focus";
+import { kitLayer } from "./card-window";
 
 /**
  * A panel that slides in from the right over a frosted page (2 Nov 2026, Cream
@@ -49,7 +51,7 @@ export function SlidePanel({
   }, [open]);
 
   if (!open) return null;
-  return (
+  const scrim = (
     <div
       className="kit-scrim side"
       onMouseDown={(event) => {
@@ -64,4 +66,7 @@ export function SlidePanel({
       </div>
     </div>
   );
+  // On the console shell, above its rail (see kitLayer).
+  const layer = kitLayer();
+  return layer ? createPortal(scrim, layer) : scrim;
 }

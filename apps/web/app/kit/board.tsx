@@ -51,15 +51,18 @@ export function BoardColumn({
   );
 }
 
+/**
+ * The card only starts a press. Everything after — the moves, the release, a
+ * cancel — is heard by the window, because a quick flick leaves the card before
+ * the drag has begun, and its release can land anywhere on the page.
+ */
 export type CardHandlers = {
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerUp: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerCancel: (event: React.PointerEvent<HTMLElement>) => void;
   onClickCapture: (event: React.MouseEvent<HTMLElement>) => void;
 };
 
 export function BoardCard({
+  id,
   tone,
   title,
   lines,
@@ -82,6 +85,9 @@ export function BoardCard({
       type="button"
       className={`kit-card tone-${tone} kit-board-card${handlers ? " can-drag" : ""}${dragging ? " kit-placeholder" : ""}`}
       aria-label={label}
+      // Lets a page find the card again after it moves columns (and so becomes
+      // a new element), to put the keyboard back on it.
+      data-card={id}
       onClick={(event) => onOpen(event.currentTarget)}
       {...handlers}
     >
@@ -111,7 +117,12 @@ type Press = {
   ghost: HTMLElement | null;
   hold: ReturnType<typeof setTimeout> | null;
   stopScroll: ((event: TouchEvent) => void) | null;
+  /** Lets go of the window's listeners for this press. */
+  detach: () => void;
 };
+
+/** How long after a drag ends its click is swallowed, wherever the browser sends it. */
+const SWALLOW_CLICK_MS = 400;
 
 function columnBoxes(): Box[] {
   return Array.from(document.querySelectorAll<HTMLElement>("[data-column]")).map((el) => {
@@ -130,7 +141,7 @@ export function useBoardDrag({
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const press = useRef<Press | null>(null);
-  const suppressClick = useRef(false);
+  const suppressClickUntil = useRef(0);
   const latest = useRef({ canDrop, onDrop });
   latest.current = { canDrop, onDrop };
 
@@ -143,6 +154,7 @@ export function useBoardDrag({
     const p = press.current;
     press.current = null;
     if (!p) return;
+    p.detach();
     if (p.hold) clearTimeout(p.hold);
     if (p.stopScroll) document.removeEventListener("touchmove", p.stopScroll);
     p.ghost?.remove();
@@ -193,12 +205,56 @@ export function useBoardDrag({
     setOver(targetAt(p, x, y));
   }
 
+  function onMove(event: PointerEvent) {
+    const p = press.current;
+    if (!p || p.pointerId !== event.pointerId) return;
+    if (!p.started) {
+      const moved = Math.hypot(event.clientX - p.x, event.clientY - p.y);
+      if (moved < DRAG_START_PX) return;
+      // A finger that moves before the hold is a scroll, not a drag.
+      if (p.touch) {
+        end();
+        return;
+      }
+      begin(p);
+    }
+    follow(p, event.clientX, event.clientY);
+  }
+
+  function onUp(event: PointerEvent) {
+    const p = press.current;
+    if (!p || p.pointerId !== event.pointerId) return;
+    if (!p.started) {
+      end();
+      return;
+    }
+    // The click that ends a drag lands wherever the browser decides — usually
+    // not on the card — so it is swallowed by time rather than by waiting for it.
+    suppressClickUntil.current = Date.now() + SWALLOW_CLICK_MS;
+    const to = targetAt(p, event.clientX, event.clientY);
+    const { id, from } = p;
+    end();
+    if (!to) return;
+    latest.current
+      .onDrop(id, from, to)
+      .then(() => play("chime"))
+      .catch(() => undefined);
+  }
+
+  function onCancel(event: PointerEvent) {
+    if (press.current && press.current.pointerId === event.pointerId) end();
+  }
+
   function cardHandlers(cardId: string, column: string): CardHandlers {
     return {
       onPointerDown(event) {
         if (event.button > 0 || press.current) return;
         const el = event.currentTarget;
         const rect = el.getBoundingClientRect();
+        // The window hears the rest of the press (see CardHandlers).
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onCancel);
         const p: Press = {
           id: cardId,
           from: column,
@@ -213,6 +269,11 @@ export function useBoardDrag({
           ghost: null,
           hold: null,
           stopScroll: null,
+          detach: () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onCancel);
+          },
         };
         press.current = p;
         if (p.touch) {
@@ -221,45 +282,9 @@ export function useBoardDrag({
           }, TOUCH_HOLD_MS);
         }
       },
-      onPointerMove(event) {
-        const p = press.current;
-        if (!p || p.pointerId !== event.pointerId) return;
-        if (!p.started) {
-          const moved = Math.hypot(event.clientX - p.x, event.clientY - p.y);
-          if (moved < DRAG_START_PX) return;
-          // A finger that moves before the hold is a scroll, not a drag.
-          if (p.touch) {
-            end();
-            return;
-          }
-          begin(p);
-        }
-        follow(p, event.clientX, event.clientY);
-      },
-      onPointerUp(event) {
-        const p = press.current;
-        if (!p || p.pointerId !== event.pointerId) return;
-        if (!p.started) {
-          end();
-          return;
-        }
-        suppressClick.current = true;
-        const to = targetAt(p, event.clientX, event.clientY);
-        const { id, from } = p;
-        end();
-        if (!to) return;
-        latest.current
-          .onDrop(id, from, to)
-          .then(() => play("chime"))
-          .catch(() => undefined);
-      },
-      onPointerCancel(event) {
-        if (press.current && press.current.pointerId === event.pointerId) end();
-      },
       onClickCapture(event) {
         // The click that ends a drag never also opens the card.
-        if (suppressClick.current) {
-          suppressClick.current = false;
+        if (Date.now() < suppressClickUntil.current) {
           event.preventDefault();
           event.stopPropagation();
         }

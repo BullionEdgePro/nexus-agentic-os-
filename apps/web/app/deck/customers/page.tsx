@@ -244,7 +244,8 @@ export default function CustomersPage() {
                       {contact.displayName ?? (contact.waId ? `+${contact.waId}` : "Customer")}
                     </span>
                   </span>
-                  <span className="kit-card-sub">{contact.waId ? `+${contact.waId}` : "Email"}</span>
+                  {/* The number is the title when there is no name; not twice. */}
+                  <span className="kit-card-sub">{contact.displayName ? (contact.waId ? `+${contact.waId}` : "Email") : "no name saved"}</span>
                   <span className="cu-meta">
                     {contact.leadPriority ? (
                       <span className={`cu-pri ${contact.leadPriority}`}>

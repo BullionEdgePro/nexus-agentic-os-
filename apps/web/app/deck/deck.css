@@ -149,7 +149,9 @@
   .deck-root.fx-cursor input,
   .deck-root.fx-cursor textarea { cursor: text !important; }
 }
-.deck-root a { color: inherit; text-decoration: none; }
+/* A base reset, so it weighs nothing (:where): any class that colours a link —
+   the kit's toned cards, pills and buttons — must win over it (2 Nov 2026). */
+:where(.deck-root) a { color: inherit; text-decoration: none; }
 .deck-root ::selection { background: var(--signal); color: var(--marble); }
 .deck-root h1, .deck-root h2, .deck-root h3, .deck-root p { margin: 0; }
 .deck-root button { font-family: inherit; }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { play } from "@/lib/sound";
 import { trapTab } from "@/lib/kit/focus";
 import { originOf } from "@/lib/kit/place";
@@ -15,6 +15,18 @@ import { originOf } from "@/lib/kit/place";
  * View Transitions (and motion is welcome) the card itself morphs into the
  * window; elsewhere the window scales in from the card's position.
  */
+/**
+ * Where windows and panels mount: the console shell itself. Inside the page
+ * they would sit in the shell's main column, a stacking context of its own, and
+ * the rail would stay sharp above the scrim. The shell also carries the tokens
+ * and fonts. Without a document (the server, the render tests) they render in
+ * place.
+ */
+export function kitLayer(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return document.querySelector<HTMLElement>(".deck-root.shell") ?? document.body;
+}
+
 export function openFromCard(card: HTMLElement | null, open: () => void): void {
   const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
   const motion = window.matchMedia("(prefers-reduced-motion: no-preference)").matches;
@@ -77,7 +89,7 @@ export function CardWindow({
       ? originOf(origin.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight })
       : { x: 50, y: 50 };
 
-  return (
+  const scrim = (
     <div
       className="kit-scrim"
       onMouseDown={(event) => {
@@ -100,4 +112,6 @@ export function CardWindow({
       </div>
     </div>
   );
+  const layer = kitLayer();
+  return layer ? createPortal(scrim, layer) : scrim;
 }

@@ -31,7 +31,7 @@ test("a customer's conversations are cards in their state's colour", () => {
   assert.match(html, /href="\/inbox\?conversation=a"/);
   assert.match(html, /3 messages/);
   assert.match(html, /1 message</);
-  assert.match(html, /aria-label="Open conversation, 3 messages, last never\. Open the chat\."/);
+  assert.match(html, /aria-label="Open conversation, 3 messages, no messages yet\. Open the chat\."/);
   // A state this screen does not know is drawn plain, never guessed at.
   assert.match(render(HistoryCards, { conversations: [{ id: "c", status: "snoozed", lastMessageAt: null }] }), /tone-paper/);
   assert.match(render(HistoryCards, { conversations: [] }), /None with this business\./);
@@ -46,4 +46,26 @@ test("the profile slides in, and the admin-only export is untouched", () => {
   assert.match(P, /<Initials name=\{/);
   assert.match(P, /className="kit-card tone-paper cu-card"/);
   assert.doesNotMatch(P, /<section className="cu-detail">/);
+});
+
+test("found in the browser: the badge holds its size, a nameless customer is not their number twice, the panel breathes", () => {
+  // A conversation card's foot says what it means.
+  const old = new Date(Date.now() - 3 * 86400e3).toISOString();
+  const html = render(HistoryCards, { conversations: [{ id: "a", status: "open", lastMessageAt: old, messages: 2 }] });
+  assert.match(html, /last message 3d ago/);
+  const P = read("app/deck/customers/page.tsx");
+  assert.match(P, /\{contact\.displayName \? \(contact\.waId \? `\+\$\{contact\.waId\}` : "Email"\) : "no name saved"\}/);
+  const CSS = read("app/deck/customers/customers.css");
+  assert.match(CSS, /\.cu-card-top \.kit-initials \{[^}]*flex: 0 0 auto;/);
+  assert.match(CSS, /\.cu-cards \{[^}]*margin: 14px 0 0;/);
+  // Two classes, so the deck's `.deck-root h3, p { margin: 0 }` reset does not win.
+  assert.match(CSS, /\.kit-panel \.cu-h3 \{/);
+  assert.match(CSS, /\.kit-panel \.cu-detail-meta \{/);
+});
+
+test("found in the browser: a card's age and 'not scored' are readable, not faint", () => {
+  // Measured at 1.8:1 (light) and 2.1:1 (Warm Night) against the paper cards.
+  const CSS = read("app/deck/customers/customers.css");
+  assert.match(CSS, /\.cu-when \{\s*color: var\(--mist\);/);
+  assert.match(CSS, /\.cu-pri\.none \{[^}]*color: var\(--mist\);/);
 });

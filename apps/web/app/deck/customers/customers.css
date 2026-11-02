@@ -56,7 +56,7 @@
    pages 2a). */
 .cu-cards {
   list-style: none;
-  margin: 0;
+  margin: 14px 0 0;
   padding: 0;
 }
 
@@ -85,6 +85,11 @@
 
 .cu-card-top .kit-card-title {
   min-width: 0;
+}
+
+/* The badge keeps its size beside a long name; the name gives way. */
+.cu-card-top .kit-initials {
+  flex: 0 0 auto;
 }
 
 .cu-card .cu-meta {
@@ -116,9 +121,10 @@
   color: var(--crit);
 }
 
+/* Quieter than a score, but readable on a paper card (--faint measured 1.8:1). */
 .cu-pri.none {
   border-style: dashed;
-  color: var(--faint);
+  color: var(--mist);
 }
 
 /* Not a warning. That this platform holds something about a person is a plain
@@ -132,7 +138,7 @@
 }
 
 .cu-when {
-  color: var(--faint);
+  color: var(--mist);
 }
 
 /* The profile, in the panel that slides in from the side. */
@@ -144,6 +150,7 @@
 }
 
 .cu-profile-head .kit-initials {
+  flex: 0 0 auto;
   width: 44px;
   height: 44px;
   font-size: 15px;
@@ -157,14 +164,15 @@
   overflow-wrap: anywhere;
 }
 
-.cu-h3 {
+/* Two classes, so the deck's `.deck-root h3, p { margin: 0 }` reset does not win. */
+.kit-panel .cu-h3 {
   margin: 22px 0 8px;
   font-size: 13px;
   font-weight: 650;
   color: var(--slate);
 }
 
-.cu-detail-meta {
+.kit-panel .cu-detail-meta {
   margin: 8px 0 0;
   font-family: var(--mono);
   font-size: 11px;

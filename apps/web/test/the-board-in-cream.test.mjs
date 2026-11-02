@@ -71,3 +71,31 @@ test("the board drags with the kit's pointer drag, never the browser's", () => {
   const CSS = read("app/deck/board/board.css");
   assert.match(CSS.slice(CSS.indexOf("@media (max-width")), /scroll-snap-type: x mandatory/);
 });
+
+test("the board scrolls sideways whenever its columns do not fit, whatever the window", () => {
+  // Found in the browser (Task 12): at 1024px the sidebar leaves ~760px, and a
+  // breakpoint on the window's width let four 220px columns overflow with Done
+  // cut off. The sideways scroll belongs to the board itself, at every width.
+  const CSS = read("app/deck/board/board.css");
+  const base = CSS.slice(0, CSS.indexOf("@media (max-width"));
+  assert.match(base, /\.bd-board \{[^}]*grid-auto-flow: column;[^}]*overflow-x: auto;/);
+  // A follow-up's title is a sentence: two lines, then an ellipsis.
+  assert.match(base, /\.bd-board \.kit-card-title \{[^}]*-webkit-line-clamp: 2;/);
+});
+
+test("closing a follow-up's window puts the keyboard back on its card, even after it moved", () => {
+  // Found in the browser (Task 12): after Move to, the card is a new element in
+  // another column, so focusing the one the window opened from did nothing and
+  // the keyboard fell to the top of the page.
+  const B = read("app/kit/board.tsx");
+  assert.match(B, /data-card=\{id\}/);
+  const P = read("app/deck/board/page.tsx");
+  assert.match(P, /if \(!card\.isConnected\) document\.querySelector<HTMLElement>\(`\[data-card="\$\{CSS\.escape\(id\)\}"\]`\)\?\.focus\(\);/);
+});
+
+test("after Mark done the keyboard stays in the window, though the button it was on is gone", () => {
+  // Found in the browser (Task 12): Mark done removes itself (the follow-up is
+  // done), and focus fell out of the window onto the page behind it.
+  const W = read("app/deck/board/follow-up-window.tsx");
+  assert.match(W, /if \(box && !box\.contains\(document\.activeElement\)\) box\.focus\(\);/);
+});

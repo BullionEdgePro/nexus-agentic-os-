@@ -42,7 +42,7 @@ test("a number tile can carry a coloured edge for good, watch and bad", () => {
 test("forecasts draw as range bands, and the refusals stay", () => {
   const F = read("app/deck/forecast/page.tsx");
   assert.match(F, /<BarChart[\s\S]{0,300}low:/);
-  assert.match(F, /note: `the same weekday last week said \$\{formatCount\(row\.baseline\)\}`/);
+  assert.match(F, /note: `Same weekday last week: \$\{formatCount\(row\.baseline\)\}`/);
   assert.match(F, /<ChartCard/);
   assert.match(F, /className="fc-blocked kit-card tone-paper"/); // the refusal cards are still drawn
   assert.match(F, /className="kit-table fc-acc-table"/);
@@ -57,4 +57,10 @@ test("agent quality: number tiles and a daily chart with the escalated part shad
   assert.match(Q, /<table className="kit-table">/);
   // The kit's table look exists.
   assert.match(read("app/kit/kit.css"), /\.kit-table \{/);
+});
+
+test("found in the browser: Quality's four tiles sit two by two, or four across with room — never three and one", () => {
+  const CSS = read("app/deck/quality/quality.css");
+  assert.match(CSS, /\.kit-tiles\.q-tiles \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(CSS, /@media \(min-width: 1280px\) \{\s*\.kit-tiles\.q-tiles \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); \}/);
 });

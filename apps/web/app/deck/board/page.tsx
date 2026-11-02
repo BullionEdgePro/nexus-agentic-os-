@@ -309,7 +309,15 @@ export default function BoardPage() {
           key={opened.id}
           task={openedTask}
           origin={opened.card}
-          onClose={() => setOpened(null)}
+          onClose={() => {
+            const { id, card } = opened;
+            setOpened(null);
+            // The window puts focus back on the card it grew from; if that card
+            // has since moved columns it is a new element, so find it again.
+            requestAnimationFrame(() => {
+              if (!card.isConnected) document.querySelector<HTMLElement>(`[data-card="${CSS.escape(id)}"]`)?.focus();
+            });
+          }}
           onMove={(to) => move(opened.id, to)}
           onDone={() => move(opened.id, "done")}
         />

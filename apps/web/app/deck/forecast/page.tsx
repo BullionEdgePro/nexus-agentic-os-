@@ -340,7 +340,7 @@ function ForecastBars({ rows }: { rows: StoredForecast[] }) {
         value: row.predicted,
         low: row.intervalLow,
         high: row.intervalHigh,
-        note: `the same weekday last week said ${formatCount(row.baseline)}`,
+        note: `Same weekday last week: ${formatCount(row.baseline)}`,
       }))}
     />
   );

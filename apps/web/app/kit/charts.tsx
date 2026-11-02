@@ -175,7 +175,7 @@ export function BarChart({
               </div>
             )}
             {active === i ? (
-              <span className="kit-tip bar" aria-hidden="true">
+              <span className="kit-tip kit-tip-bar" aria-hidden="true">
                 <b>{isRange(bar) ? `${format(bar.low)}–${format(bar.high)}` : format(bar.value)}</b>
                 <span>
                   {bar.label}

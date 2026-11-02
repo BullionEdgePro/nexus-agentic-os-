@@ -95,7 +95,8 @@
 /* The columns and cards are the kit's (Cream pages 2a): coloured heads,
    cards in their column's colour, dragged by finger or mouse. What is left
    here is the board's own. */
-.bd-hint {
+/* Two classes, so the deck's `.deck-root p { margin: 0 }` reset does not win. */
+.bd-board .bd-hint {
   margin: -4px 4px 0;
   font-size: 11px;
   line-height: 1.4;
@@ -109,16 +110,24 @@
   color: var(--slate);
 }
 
-/* Four columns need about 940px. Narrower, they scroll sideways rather than
-   squeezing a card's title to a word a line. */
-@media (max-width: 960px) {
-  .bd-board {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(240px, 1fr);
-    overflow-x: auto;
-    padding-bottom: 6px;
-  }
+/* Four columns need about 940px, and how much the board gets depends on the
+   sidebar as well as the window — so the board itself scrolls sideways whenever
+   they do not fit, rather than squeezing a card's title to a word a line or
+   cutting Done off the edge. With room to spare, the columns share it. */
+.bd-board {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+/* A follow-up's title is a sentence, not a name: two lines, then an ellipsis. */
+.bd-board .kit-card-title {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 /* On a phone, one column at a time, each snapping into place, with the next
@@ -369,7 +378,8 @@
   color: var(--slate);
 }
 
-.fu-note {
+/* Two classes, so the deck's `.deck-root p { margin: 0 }` reset does not win. */
+.kit-window .fu-note {
   min-height: 1.4em;
   margin: 14px 0 0;
   font-size: 13px;

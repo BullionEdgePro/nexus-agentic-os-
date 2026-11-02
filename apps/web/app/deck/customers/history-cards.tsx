@@ -21,6 +21,7 @@ export function HistoryCards({
         const tone: Tone = STATE_TONE[c.status as keyof typeof STATE_TONE] ?? "paper";
         const count = c.messages === undefined ? null : `${c.messages} ${c.messages === 1 ? "message" : "messages"}`;
         const last = ago(c.lastMessageAt);
+        const foot = last === "never" ? "no messages yet" : `last message ${last}`;
         const state = c.status.charAt(0).toUpperCase() + c.status.slice(1);
         return (
           <StatusCard
@@ -28,9 +29,9 @@ export function HistoryCards({
             tone={tone}
             title={state}
             subtitle={count ?? undefined}
-            footer={`last ${last}`}
+            footer={foot}
             href={`/inbox?conversation=${encodeURIComponent(c.id)}`}
-            label={`${state} conversation${count ? `, ${count}` : ""}, last ${last}. Open the chat.`}
+            label={`${state} conversation${count ? `, ${count}` : ""}, ${foot}. Open the chat.`}
           />
         );
       })}
