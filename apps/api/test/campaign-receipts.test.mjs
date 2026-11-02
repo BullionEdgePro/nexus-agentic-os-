@@ -33,7 +33,9 @@ const MIGRATION = read("packages", "db", "migrations", "051-broadcast-receipts.s
 test("the campaign send stops throwing away the receipt it already had", () => {
   // sendWhatsAppTemplate was changed to return the wamid on 17 August and this
   // caller ignored it — the reply path was wired and the campaign path was not.
-  assert.match(SENDER, /const waMessageId = await sendWhatsAppTemplate\(/);
+  // Declared before the send's try since 3 Nov 2026, so the 'sent' mark can run
+  // outside it in its own savepoint; the receipt is still the one Meta returned.
+  assert.match(SENDER, /waMessageId = await sendWhatsAppTemplate\(/);
   assert.match(SENDER, /updateBroadcastRecipientStatus\(recipientId, "sent", waMessageId\)/);
   assert.match(MIGRATION, /add column if not exists wa_message_id text/);
 });

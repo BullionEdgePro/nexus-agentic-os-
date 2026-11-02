@@ -7,6 +7,7 @@ import {
   pauseBroadcastIfFailing,
   updateBroadcastStatus,
   withAllTenants,
+  withSavepoint,
 } from "@nexus/db";
 import { sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { isUpstreamUnavailable } from "../scripts/upstream.js";
@@ -80,20 +81,22 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
     }
 
     let failure: string | null = null;
+    let wentOut = false;
+    let waMessageId: string | null = null;
     try {
       // The receipt was already being returned and thrown away: the reply path was
       // wired to it on 17 August and this one was not. Without it 'sent' here can
       // only ever mean "Meta accepted", which on a campaign — sent by definition
       // to people who have NOT written in 24 hours — is the least trustworthy
       // moment to stop asking.
-      const waMessageId = await sendWhatsAppTemplate(
+      waMessageId = await sendWhatsAppTemplate(
         phoneNumberId,
         contactWaId,
         templateName,
         templateLanguage,
         templateParams ?? []
       );
-      await updateBroadcastRecipientStatus(recipientId, "sent", waMessageId);
+      wentOut = true;
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       // Refused at send time over payment: remembered for the number, so the
@@ -121,6 +124,23 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
       logger.error({ broadcastId, recipientId, err }, "Broadcast send failed for recipient");
       await updateBroadcastRecipientStatus(recipientId, "failed", null, reason);
       failure = reason;
+    }
+
+    // THE 'SENT' MARK IS NOT PART OF THE SEND (caught-error audit, 3 Nov 2026).
+    // Inside the send's try, its own failure read as a failed send: the 'failed'
+    // mark was refused too, the job threw, and the queue's retry sent the
+    // template to the customer again. In its own savepoint, and once the message
+    // has gone nothing here throws: the row stays pending and the log says why.
+    if (wentOut) {
+      try {
+        await withSavepoint(() => updateBroadcastRecipientStatus(recipientId, "sent", waMessageId));
+      } catch (err) {
+        logger.error(
+          { broadcastId, recipientId, err },
+          "A campaign message was sent but could not be marked sent; it will not be sent again"
+        );
+        return;
+      }
     }
 
     // COMPLETED IS NOT THE ONLY WAY TO FINISH. This wrote "completed" whenever

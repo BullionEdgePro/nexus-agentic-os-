@@ -6,6 +6,7 @@ import {
   createPhrase,
   updatePhraseBody,
   setPhraseActive,
+  withSavepoint,
 } from "@nexus/db";
 import {
   PHRASE_MOMENTS,
@@ -138,7 +139,9 @@ phrasesRoute.patch("/:slug/phrases/:id", async (c) => {
         }
       }
 
-      phrase = await setPhraseActive(organization.id, id, body.isActive, reviewer);
+      // Its own savepoint (3 Nov 2026): refused because another phrase is on, it
+      // no longer undoes the edit above while the answer names only this.
+      phrase = await withSavepoint(() => setPhraseActive(organization.id, id, body.isActive, reviewer));
       if (!phrase) return c.json({ error: "That phrase is already in that state." }, 409);
     }
 

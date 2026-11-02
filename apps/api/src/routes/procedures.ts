@@ -8,6 +8,7 @@ import {
   replaceProcedureSteps,
   acceptProposal,
   dismissProcedureSuggestion,
+  withSavepoint,
 } from "@nexus/db";
 import { INTENT_CATEGORIES, NON_PATTERN_INTENTS, parseProcedureSteps } from "@nexus/shared";
 import {
@@ -195,9 +196,11 @@ proceduresRoute.patch("/:slug/procedures/:id", async (c) => {
 
     // Applied last on purpose. Someone editing and activating in one request
     // means "switch on what I just wrote", and doing it the other way round
-    // would briefly make the OLD steps live.
+    // would briefly make the OLD steps live. In its own savepoint (3 Nov 2026):
+    // refused because another procedure is on, it no longer undoes the edit
+    // above while the answer names only the switch-on.
     if (typeof body.isActive === "boolean") {
-      procedure = await setProcedureActive(organization.id, id, body.isActive, reviewer);
+      procedure = await withSavepoint(() => setProcedureActive(organization.id, id, body.isActive, reviewer));
       if (!procedure) {
         return c.json({ error: "That procedure is already in that state." }, 409);
       }

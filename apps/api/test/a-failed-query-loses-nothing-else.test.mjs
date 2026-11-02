@@ -47,6 +47,29 @@ test("the assignment stands when the note of it fails", () => {
   assert.match(employees, /withSavepoint\(\(\) => recordAssignmentEvent\(conversationId, assigneeName, actor\.id, actor\.name\)\)/);
 });
 
+// The caught-error audit (3 Nov 2026): one save that makes two changes. The
+// second refused (another phrase or procedure already on, a slot taken) used to
+// undo the first silently while the 400 named only the second.
+test("an edit stays saved when switching it on is refused", () => {
+  const procedures = source("apps", "api", "src", "routes", "procedures.ts");
+  assert.match(procedures, /withSavepoint\(\(\) => setProcedureActive\(organization\.id, id, body\.isActive, reviewer\)\)/);
+  const phrases = source("apps", "api", "src", "routes", "phrases.ts");
+  assert.match(phrases, /withSavepoint\(\(\) => setPhraseActive\(organization\.id, id, body\.isActive, reviewer\)\)/);
+});
+
+test("a status change stays saved when the reassignment after it is refused", () => {
+  const bookings = source("apps", "api", "src", "routes", "bookings.ts");
+  assert.match(bookings, /withSavepoint\(\(\) =>\s*assignBooking\(/);
+  const tasks = source("apps", "api", "src", "routes", "tasks.ts");
+  assert.match(tasks, /withSavepoint\(\(\) =>\s*assignTask\(/);
+  assert.match(tasks, /withSavepoint\(\(\) => rescheduleTask\(taskId, dueAt, within\)\)/);
+});
+
+test("an automation's failure note cannot take its claims with it", () => {
+  const runner = source("apps", "api", "src", "services", "automation-runner.ts");
+  assert.match(runner, /withSavepoint\(\(\) => recordAutomationFailure\(runId, reason\)\)/);
+});
+
 test("one business's failed read leaves the others on the not-reported list", () => {
   const operators = source("apps", "api", "src", "services", "operators.ts");
   assert.match(operators, /isolated\(\(\) =>\s*withTenant\(organization\.id, \(\) => unansweredButNotReportedFor\(organization\.id\)\)/);
@@ -150,6 +173,8 @@ after(async () => {
   try {
     await owner.query(DROP_REFUSAL);
     await owner.query(`delete from bookings where organization_id = $1`, [ORG]);
+    await owner.query(`delete from broadcast_recipients where broadcast_id in (select id from broadcasts where organization_id = $1)`, [ORG]);
+    await owner.query(`delete from broadcasts where organization_id = $1`, [ORG]);
     await owner.query(`delete from messages where organization_id = $1 or serving_organization_id = $1`, [ORG]);
     await owner.query(`delete from lead_assessments where organization_id = $1 or serving_organization_id = $1`, [ORG]);
     await owner.query(`delete from conversations where organization_id = $1 or routed_organization_id = $1`, [ORG]);
@@ -438,6 +463,69 @@ test("a failed send-token lookup cannot abort the send's transaction", () => {
   // follows would invite a retry that messages everyone twice.
   const client = source("apps", "api", "src", "lib", "whatsapp-client.ts");
   assert.match(client, /await isolated\(\(\) => whatsappSendTokenForNumber\(phoneNumberId\)\)/);
+});
+
+test("a campaign message that went out is never sent again when its 'sent' mark fails", db, async () => {
+  // The mark sat inside the send's try: failing, it was treated as a failed
+  // send, the 'failed' mark was refused too, the job threw, and the queue's
+  // retry sent the template to the customer again (caught-error audit).
+  const { processBroadcastSendJob } = await import("../src/queue/broadcast-processor.ts");
+  const broadcast = (
+    await owner.query(
+      `insert into broadcasts (organization_id, channel, from_mailbox, email_subject, email_body, status)
+       values ($1, 'email', 'probe@firm.test', 'Probe', 'Probe body', 'sending') returning id`,
+      [ORG]
+    )
+  ).rows[0].id;
+  const recipient = (
+    await owner.query(`insert into broadcast_recipients (broadcast_id, contact_id, status) values ($1, $2, 'pending') returning id`, [
+      broadcast,
+      CONTACT1,
+    ])
+  ).rows[0].id;
+  await owner.query(`
+    create or replace function srb_refuse_sent() returns trigger language plpgsql as $$
+    begin raise exception 'refused for the test'; end $$;
+    drop trigger if exists srb_refuse_sent on broadcast_recipients;
+    create trigger srb_refuse_sent before update on broadcast_recipients
+      for each row when (new.status = 'sent') execute function srb_refuse_sent();`);
+  const sends = [];
+  const realFetch = globalThis.fetch;
+  const realToken = process.env.META_ACCESS_TOKEN;
+  process.env.META_ACCESS_TOKEN = "probe-token-never-sent"; // fetch is replaced below
+  globalThis.fetch = async (url) => {
+    sends.push(String(url));
+    return new Response(JSON.stringify({ messages: [{ id: "wamid.srb-campaign" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const logged = mock.method(console, "error", () => undefined);
+  let outcome;
+  try {
+    const job = {
+      data: {
+        broadcastId: broadcast,
+        recipientId: recipient,
+        contactWaId: "971595000101",
+        phoneNumberId: "950001",
+        templateName: "probe",
+        templateLanguage: "en",
+        templateParams: [],
+      },
+      opts: { attempts: 3 },
+      attemptsMade: 0,
+    };
+    outcome = await processBroadcastSendJob(job).then(() => "finished", (err) => err.message);
+  } finally {
+    logged.mock.restore();
+    globalThis.fetch = realFetch;
+    if (realToken === undefined) delete process.env.META_ACCESS_TOKEN;
+    else process.env.META_ACCESS_TOKEN = realToken;
+    await owner.query(`drop trigger if exists srb_refuse_sent on broadcast_recipients; drop function if exists srb_refuse_sent();`);
+  }
+  assert.equal(sends.length, 1);
+  assert.equal(outcome, "finished", "the job failed after the send, so the queue would send it again");
 });
 
 test("a handler that swallowed a failure after writing answers 500", db, async () => {

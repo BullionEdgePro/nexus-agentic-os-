@@ -146,7 +146,9 @@ export async function runAutomationsFor(organizationId: string): Promise<Automat
           });
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
-          await recordAutomationFailure(runId, reason).catch(() => undefined);
+          // Best effort, so in its own savepoint: failing, it must not abort the
+          // run and roll back every claim with it (caught-error audit).
+          await withSavepoint(() => recordAutomationFailure(runId, reason)).catch(() => undefined);
           outcomes.push({
             automationId: automation.id,
             action: automation.action,

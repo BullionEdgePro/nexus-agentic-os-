@@ -8,6 +8,7 @@ import {
   assignBooking,
   findOrganizationBySlug,
   SlotTakenError,
+  withSavepoint,
   type BookingStatus,
 } from "@nexus/db";
 import type { SessionScope } from "../lib/session.js";
@@ -182,10 +183,14 @@ bookingsRoute.patch("/:bookingId", async (c) => {
     }
 
     if ("employeeId" in body) {
-      booking = await assignBooking(
-        bookingId,
-        typeof body.employeeId === "string" && body.employeeId ? body.employeeId : null,
-        within
+      // Its own savepoint (3 Nov 2026): refused because the slot is taken, it no
+      // longer undoes the status change above while the 409 names only this.
+      booking = await withSavepoint(() =>
+        assignBooking(
+          bookingId,
+          typeof body.employeeId === "string" && body.employeeId ? body.employeeId : null,
+          within
+        )
       );
     }
 

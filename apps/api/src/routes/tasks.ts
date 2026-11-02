@@ -12,6 +12,7 @@ import {
   findOrganizationById,
   findConversationById,
   getConversationRouting,
+  withSavepoint,
   type TaskStatus,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
@@ -192,11 +193,16 @@ tasksRoute.patch("/:taskId", async (c) => {
           : await setTaskStatus(taskId, body.status as TaskStatus, within);
     }
 
+    // The changes after the first each run in their own savepoint (3 Nov 2026):
+    // one refused no longer undoes the change before it while the answer names
+    // only the one refused.
     if ("employeeId" in body) {
-      task = await assignTask(
-        taskId,
-        typeof body.employeeId === "string" && body.employeeId ? body.employeeId : null,
-        within
+      task = await withSavepoint(() =>
+        assignTask(
+          taskId,
+          typeof body.employeeId === "string" && body.employeeId ? body.employeeId : null,
+          within
+        )
       );
     }
 
@@ -215,7 +221,7 @@ tasksRoute.patch("/:taskId", async (c) => {
       } else if (body.dueAt !== null) {
         return c.json({ error: "A due date must be a date, or null to clear it." }, 400);
       }
-      task = await rescheduleTask(taskId, dueAt, within);
+      task = await withSavepoint(() => rescheduleTask(taskId, dueAt, within));
     }
 
     // Null from every branch means the row was not visible or was already in
