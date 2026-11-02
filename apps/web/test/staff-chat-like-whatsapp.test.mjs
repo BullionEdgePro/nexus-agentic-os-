@@ -234,3 +234,41 @@ test("a run of messages from one person shows the name once", () => {
   assert.deepEqual(groupRuns([m("a", 0), admin, admin]), [true, true, false]);
   assert.deepEqual(groupRuns([]), []);
 });
+
+// ---- Task 8: the emoji list and emoji search -----------------------------------------
+
+import { searchEmoji, withTone, pushRecent, RECENT_KEY } from "@/lib/team-chat/emoji-search";
+
+const EMOJI = JSON.parse(read("public/emoji/en.json"));
+
+test("the emoji list is Emoji 15.0, with search names, and no bare skin-tone swatches", () => {
+  assert.equal(EMOJI.version, "15.0");
+  const all = EMOJI.groups.flatMap((g) => g.emojis);
+  assert.ok(all.length > 1300, `${all.length} emojis`);
+  assert.ok(!EMOJI.groups.some((g) => /component/i.test(g.label)));
+  assert.ok(!all.some((x) => /[\u{1F3FB}-\u{1F3FF}]/u.test(x.e)), "tone variants are built at runtime, not listed");
+  assert.ok(all.find((x) => x.e === "👍").t === 1, "thumbs up takes skin tones");
+  assert.equal(EMOJI.groups[0].id, "smileys");
+});
+
+test("searching finds the obvious ones", () => {
+  assert.ok(searchEmoji(EMOJI, "heart").includes("❤️"));
+  assert.ok(searchEmoji(EMOJI, "thumbs").includes("👍"));
+  assert.ok(searchEmoji(EMOJI, "LAUGH").length > 0);
+  assert.deepEqual(searchEmoji(EMOJI, "zzzznothing"), []);
+  assert.deepEqual(searchEmoji(EMOJI, "   "), []);
+  assert.ok(searchEmoji(EMOJI, "face").length <= 48);
+});
+
+test("skin tones and recents", () => {
+  assert.equal(withTone("👍", 3), "👍🏽");
+  assert.equal(withTone("👍", 0), "👍");
+  assert.equal(withTone("☝️", 1), "☝🏻");
+  assert.equal(RECENT_KEY, "nexus-emoji-recent");
+  assert.deepEqual(pushRecent(["😀", "👍"], "👍"), ["👍", "😀"]);
+  assert.equal(pushRecent(Array.from({ length: 30 }, (_, i) => String(i)), "x").length, 24);
+});
+
+test("the emoji list loads only when the panel opens", { todo: "Task 10 writes the panel" }, () => {
+  assert.match(read("app/team-chat/emoji-panel.tsx"), /fetch\("\/emoji\/en\.json"\)/);
+});
