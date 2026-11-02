@@ -27,6 +27,7 @@ const CONTACT3 = "92929292-0000-4000-8000-0000000000a3";
 const CONV1 = "92929292-0000-4000-8000-0000000000c1";
 const CONV2 = "92929292-0000-4000-8000-0000000000c2"; // a message recorded here is refused
 const CONV3 = "92929292-0000-4000-8000-0000000000c3";
+const STAFF = "e9292920-0000-4000-8000-000000000001";
 const people = [
   { id: CONTACT1, displayName: "Probe One", waId: "971595000101", conversationId: CONV1 },
   { id: CONTACT2, displayName: "Probe Two", waId: "971595000102", conversationId: CONV2 },
@@ -62,6 +63,7 @@ before(async () => {
      values ($1, 'srb-org', 'Probe Firm', '950001', '850001', 'Asia/Dubai', true)`,
     [ORG]
   );
+  await owner.query(`insert into employees (id, organization_id, employee_code, full_name) values ($1, $2, 'SRB1', 'Probe Staff')`, [STAFF, ORG]);
   for (const person of people) {
     await owner.query(`insert into contacts (id, organization_id, wa_id, channel, display_name) values ($1, $2, $3, 'whatsapp', $4)`, [
       person.id,
@@ -104,6 +106,7 @@ after(async () => {
   if (db.skip) return;
   try {
     await owner.query(DROP_REFUSAL);
+    await owner.query(`delete from bookings where organization_id = $1`, [ORG]);
     await owner.query(`delete from messages where organization_id = $1 or serving_organization_id = $1`, [ORG]);
     await owner.query(`delete from lead_assessments where organization_id = $1 or serving_organization_id = $1`, [ORG]);
     await owner.query(`delete from conversations where organization_id = $1 or routed_organization_id = $1`, [ORG]);
@@ -326,6 +329,29 @@ test("a scheduled message whose record failed is marked sent and never sent agai
     if (realToken === undefined) delete process.env.META_ACCESS_TOKEN;
     else process.env.META_ACCESS_TOKEN = realToken;
   }
+});
+
+test("a slot taken by someone else leaves the rest of the transaction working", db, async () => {
+  // Two customers asking for the same time is a normal race. The second booking
+  // is refused -- and that refusal used to abort the transaction the AI reply
+  // runs in, so the reply went out and every record of the message was lost.
+  const slot = {
+    organizationId: ORG,
+    contactId: CONTACT1,
+    employeeId: STAFF,
+    startsAt: "2030-01-07T09:00:00Z",
+    endsAt: "2030-01-07T09:30:00Z",
+  };
+  await lib.withTenant(
+    ORG,
+    async () => {
+      await lib.createBooking(slot);
+      await assert.rejects(lib.createBooking(slot), lib.SlotTakenError);
+      await insertContact("971595000020");
+    },
+    failing
+  );
+  assert.equal(await contactNamed("971595000020"), 1);
 });
 
 test("a handler that swallowed a failure after writing answers 500", db, async () => {

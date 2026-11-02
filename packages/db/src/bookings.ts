@@ -1,4 +1,4 @@
-import { getPool, withServingTenant } from "./client.js";
+import { getPool, isolated, withServingTenant } from "./client.js";
 
 /**
  * Appointments the agent can actually make.
@@ -466,24 +466,31 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
   }
 
   try {
-    const { rows } = await getPool().query<BookingRow>(
-      `with inserted as (
-         insert into bookings
-           (organization_id, conversation_id, contact_id, employee_id, starts_at, ends_at, subject, notes)
-         values ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7, $8)
-         returning *
-       )
-       ${returning("inserted")}`,
-      [
-        organizationId,
-        input.conversationId ?? null,
-        contactId,
-        input.employeeId ?? null,
-        new Date(startsAt).toISOString(),
-        new Date(endsAt).toISOString(),
-        subject,
-        notes,
-      ]
+    // A SLOT TAKEN IS A NORMAL RACE, NOT A BROKEN REPLY (3 Nov 2026). The
+    // constraint refusing the second booking used to abort the transaction it
+    // ran in -- for the AI's tool, the one holding the customer's message and
+    // the reply -- so the reply went out and every record of it was rolled back.
+    // In its own savepoint the refusal is this booking's alone.
+    const { rows } = await isolated(() =>
+      getPool().query<BookingRow>(
+        `with inserted as (
+           insert into bookings
+             (organization_id, conversation_id, contact_id, employee_id, starts_at, ends_at, subject, notes)
+           values ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7, $8)
+           returning *
+         )
+         ${returning("inserted")}`,
+        [
+          organizationId,
+          input.conversationId ?? null,
+          contactId,
+          input.employeeId ?? null,
+          new Date(startsAt).toISOString(),
+          new Date(endsAt).toISOString(),
+          subject,
+          notes,
+        ]
+      )
     );
     return toBooking(rows[0]);
   } catch (err) {
