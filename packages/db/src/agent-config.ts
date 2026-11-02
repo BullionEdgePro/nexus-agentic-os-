@@ -19,7 +19,7 @@
  * platform's traffic could be weeks. So there is always a way back, and it is a
  * row rather than a hope that somebody kept a copy.
  */
-import { getPool } from "./client.js";
+import { getPool, withSavepoint } from "./client.js";
 
 /** Below this a prompt is not an instruction, it is a typo that shipped. */
 export const MIN_PROMPT_CHARS = 40;
@@ -160,8 +160,10 @@ export async function setSystemPrompt(input: {
   }
 
   const pool = getPool();
-  await pool.query("begin");
-  try {
+  // One atomic piece INSIDE the request's transaction (withSavepoint). Its own
+  // begin/commit used to commit the request early and drop the tenant, so the
+  // read-back below found nothing (3 Nov 2026).
+  await withSavepoint(async () => {
     await pool.query(
       `insert into agent_config_versions
          (organization_id, agent_config_id, system_prompt, replaced_by, note)
@@ -177,11 +179,7 @@ export async function setSystemPrompt(input: {
         where id = $1`,
       [current.id, next, input.changedBy]
     );
-    await pool.query("commit");
-  } catch (err) {
-    await pool.query("rollback").catch(() => undefined);
-    throw err;
-  }
+  });
 
   const updated = await getAgentConfig(input.organizationId);
   if (!updated) return { reason: "The prompt was changed and could not be read back." };

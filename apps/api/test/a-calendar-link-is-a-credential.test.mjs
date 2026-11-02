@@ -140,8 +140,10 @@ test("busy time is replaced wholesale rather than merged", () => {
   assert.ok(at > -1);
   const fn = DB.slice(at, DB.indexOf("export async function recordCalendarError"));
   assert.ok(fn.includes("delete from calendar_busy where employee_id = $1"));
-  assert.ok(fn.includes('await pool.query("begin")'), "the replace is not atomic");
-  assert.ok(fn.includes('rollback'), "a partial replace can survive a failure");
+  // Atomic inside the sweep's own transaction (withSavepoint, 3 Nov 2026): a
+  // failure rolls back the whole replace without ending the caller's work.
+  assert.ok(fn.includes("await withSavepoint(async () => {"), "the replace is not atomic");
+  assert.ok(!fn.includes('pool.query("begin")'), "its own begin/commit ends the sweep's transaction early");
 });
 
 // ============================================================

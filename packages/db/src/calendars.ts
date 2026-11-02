@@ -7,7 +7,7 @@
  * pasted. The one function that returns the URL says so in its name, and the
  * only caller is the sync job.
  */
-import { getPool } from "./client.js";
+import { getPool, withSavepoint } from "./client.js";
 
 export interface CalendarRecord {
   employeeId: string;
@@ -166,8 +166,8 @@ export async function replaceBusy(
   unsupportedCount: number
 ): Promise<void> {
   const pool = getPool();
-  await pool.query("begin");
-  try {
+  // Atomic inside the sweep's own transaction, never ending it (withSavepoint).
+  await withSavepoint(async () => {
     await pool.query(`delete from calendar_busy where employee_id = $1`, [employeeId]);
     for (const block of blocks) {
       await pool.query(
@@ -182,11 +182,7 @@ export async function replaceBusy(
         where employee_id = $1`,
       [employeeId, unsupportedCount]
     );
-    await pool.query("commit");
-  } catch (err) {
-    await pool.query("rollback").catch(() => undefined);
-    throw err;
-  }
+  });
 }
 
 /**

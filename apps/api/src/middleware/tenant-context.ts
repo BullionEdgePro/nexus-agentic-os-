@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler, Next } from "hono";
 import { findOrganizationBySlug, withTenant, withAllTenants } from "@nexus/db";
 import { logger } from "../lib/logger.js";
 
@@ -33,13 +33,47 @@ export const tenantContext: MiddlewareHandler = async (c, next) => {
     // between "no such business" and "something broke".
     if (organization) {
       const reason = crossTenantReason(c.req.method, c.req.path.replace(/^\/api\/organizations\/[^/]+/, ""));
-      if (reason) return withAllTenants(reason, () => next());
-      return withTenant(organization.id, () => next());
+      if (reason) return inTransaction((work) => withAllTenants(reason, work), c, next);
+      return inTransaction((work) => withTenant(organization.id, work), c, next);
     }
   }
 
-  return withAllTenants(`api ${c.req.method} ${new URL(c.req.url).pathname}`, () => next());
+  return inTransaction((work) => withAllTenants(`api ${c.req.method} ${new URL(c.req.url).pathname}`, work), c, next);
 };
+
+/** Thrown inside a request's transaction when its handler threw, so its work is rolled back. */
+class HandlerFailed extends Error {}
+
+/**
+ * Runs the rest of the request inside the transaction `open` starts, and rolls
+ * it back when the handler THREW (3 Nov 2026).
+ *
+ * Hono answers a thrown error with a 500 itself and never rethrows it into the
+ * middleware -- `await next()` resolves, with the error on `c.error` -- so the
+ * transaction used to commit whatever the handler wrote before it threw. Now
+ * the failure is turned back into a throw inside the transaction, which rolls
+ * it back, and swallowed outside it, so Hono's 500 stands. An answer the
+ * handler chose itself, at any status, commits: a deliberate error response may
+ * be recording a failure on purpose.
+ *
+ * Through the double mount the inner `/api/*` run swallows its own failure and
+ * the outer business run sees the same `c.error`, so the business transaction
+ * is the one rolled back.
+ */
+async function inTransaction(
+  open: (work: () => Promise<void>) => Promise<void>,
+  c: Context,
+  next: Next
+): Promise<void> {
+  try {
+    await open(async () => {
+      await next();
+      if (c.error) throw new HandlerFailed();
+    });
+  } catch (err) {
+    if (!(err instanceof HandlerFailed)) throw err;
+  }
+}
 
 /**
  * The business-scoped routes that must span businesses, each with its reason.
@@ -86,12 +120,19 @@ export function crossTenantReason(method: string, pathAfterSlug: string): string
  * ARCHITECTURE-ABOS.md §2.2; the routing lookup is the whole reason it exists.
  */
 export const webhookContext: MiddlewareHandler = async (c, next) => {
-  return withAllTenants("whatsapp webhook: phone_number_id resolves to a tenant", async () => {
-    try {
-      await next();
-    } catch (err) {
-      logger.error({ err }, "Webhook failed inside tenant context");
-      throw err;
-    }
-  });
+  return inTransaction(
+    (work) =>
+      withAllTenants("whatsapp webhook: phone_number_id resolves to a tenant", async () => {
+        try {
+          await work();
+        } catch (err) {
+          // A handler that threw is rolled back (inTransaction) and Hono has
+          // already answered and logged it; anything else is this layer's own.
+          if (!(err instanceof HandlerFailed)) logger.error({ err }, "Webhook failed inside tenant context");
+          throw err;
+        }
+      }),
+    c,
+    next
+  );
 };

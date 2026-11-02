@@ -403,6 +403,40 @@ export async function withServingTenant<T>(
  * error a person sees (final review, 3 Nov 2026). The transaction is rolled
  * back either way, so nothing is left pointed anywhere.
  */
+let savepoints = 0;
+
+/**
+ * Runs `fn` atomically INSIDE the transaction that is already open: between a
+ * savepoint and its release, rolled back to the savepoint if `fn` fails.
+ *
+ * WHY NOT begin/commit (3 Nov 2026). Inside a context, getPool() is the
+ * request's own connection, so a function's own `begin` does nothing and its
+ * `commit` ends the REQUEST's transaction early -- dropping its `set local`
+ * tenant settings, so every later query in the request ran with no tenant and
+ * read nothing. That is how saving the agent's prompt answered "could not be
+ * read back" after it had saved. A savepoint keeps the work atomic and the
+ * caller's transaction, tenant and all, exactly as it was.
+ *
+ * Refuses to run without a context: there is no transaction to be part of, and
+ * getPool() would spread the statements over different pooled connections.
+ */
+export async function withSavepoint<T>(fn: () => Promise<T>): Promise<T> {
+  const context = getTenantContext();
+  if (!context) {
+    throw new Error("withSavepoint runs inside the transaction a tenant context opens, and there is no context here.");
+  }
+  const name = `nexus_savepoint_${++savepoints}`;
+  await context.client.query(`savepoint ${name}`);
+  try {
+    const result = await fn();
+    await context.client.query(`release savepoint ${name}`);
+    return result;
+  } catch (err) {
+    await context.client.query(`rollback to savepoint ${name}`).catch(() => undefined);
+    throw err;
+  }
+}
+
 async function restoreCurrentOrg(client: PoolClient, organizationId: string, afterFailure: boolean): Promise<void> {
   try {
     await client.query("select set_config('app.current_org', $1, true)", [organizationId]);

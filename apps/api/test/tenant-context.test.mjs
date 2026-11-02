@@ -113,7 +113,9 @@ test("every API request runs inside some context", () => {
 
 test("an org-addressed request narrows to that org", () => {
   assert.match(MIDDLEWARE, /const slug = c\.req\.param\("slug"\)/);
-  assert.match(MIDDLEWARE, /return withTenant\(organization\.id, \(\) => next\(\)\)/);
+  // Inside inTransaction since 3 Nov 2026, so a handler that throws rolls back.
+  assert.match(MIDDLEWARE, /return inTransaction\(\(work\) => withTenant\(organization\.id, work\), c, next\)/);
+  assert.match(MIDDLEWARE, /if \(c\.error\) throw new HandlerFailed\(\)/);
 });
 
 test("an unknown slug stays a 404, not a 500", () => {

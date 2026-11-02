@@ -77,8 +77,11 @@ test("the old version is written BEFORE the new one takes effect", () => {
 test("both writes are one transaction", () => {
   const at = DB.indexOf("export async function setSystemPrompt");
   const fn = DB.slice(at);
-  assert.ok(fn.includes('await pool.query("begin")'));
-  assert.ok(fn.includes("rollback"), "a failure could leave the history and the config disagreeing");
+  // Atomic INSIDE the request's transaction since 3 Nov 2026: its own
+  // begin/commit committed the request early and lost the tenant, so the
+  // read-back failed. A savepoint rolls back both writes together on failure.
+  assert.ok(fn.includes("await withSavepoint(async () => {"), "a failure could leave the history and the config disagreeing");
+  assert.ok(!fn.includes('pool.query("begin")'), "its own begin/commit ends the request's transaction early");
 });
 
 test("restoring an old version goes through the same confirmation as any change", () => {
