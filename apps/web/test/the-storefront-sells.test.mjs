@@ -186,3 +186,23 @@ test("on a phone the links fold away and taps are big enough", () => {
   assert.match(phone, /min-height: 44px/);
   assert.match(phone, /env\(safe-area-inset-bottom\)/);
 });
+
+// The admin entrance in two parts (spec §3).
+test("the admin entrance is two parts, its sign-in untouched", () => {
+  const A = read("app/admin/page.tsx");
+  assert.match(A, /<aside className="admin-side" aria-hidden="true">/);
+  assert.match(A, /<h1>Administrator sign-in<\/h1>/);
+  assert.match(A, /mode: "admin"/);
+  assert.match(A, /<ThemeToggle compact \/>/);
+  for (const tone of ["mustard", "forest", "terra"]) assert.match(A, new RegExp(`admin-tile ${tone}`));
+  // Behaviour unchanged: the fields, the button rule, the error wording, the way back.
+  assert.match(A, /id="admin-email"/);
+  assert.match(A, /id="admin-password"/);
+  assert.match(A, /disabled=\{busy \|\| !email\.trim\(\) \|\| !password\}/);
+  assert.match(A, /That email and password don't match\./);
+  assert.match(A, /<a className="admin-back" href="\/">\s*Staff sign-in\s*<\/a>/);
+  const css = read("app/admin/admin.css");
+  assert.doesNotMatch(css, /--btn-grad|--sky/);
+  assert.doesNotMatch(css, /rgba\(\s*(94, 196, 255|43, 156, 240|63, 178, 255|143, 211, 255)/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.admin-shell \{[^}]*flex-direction: column/);
+});
