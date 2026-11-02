@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TeamThreadState } from "@/lib/use-team-thread";
+import { menuPlacement } from "@/lib/team-chat/menu-placement";
 import { EmojiPanel } from "./emoji-panel";
 
 /**
@@ -32,6 +33,20 @@ export function MessageMenu({
 }) {
   const [picking, setPicking] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [up, setUp] = useState(false);
+  const root = useRef<HTMLDivElement | null>(null);
+
+  // Below the message, unless the visible list has no room there (the newest
+  // message, always): then above. Then make sure it is in view.
+  useLayoutEffect(() => {
+    const menu = root.current;
+    const list = menu?.closest(".tc-messages");
+    const bubble = menu?.parentElement?.querySelector(".tc-bubble");
+    if (!menu || !list || !bubble) return;
+    const placement = menuPlacement(bubble.getBoundingClientRect(), menu.offsetHeight, list.getBoundingClientRect());
+    setUp(placement === "above");
+    requestAnimationFrame(() => menu.scrollIntoView({ block: "nearest" }));
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -52,7 +67,7 @@ export function MessageMenu({
   }
 
   return (
-    <div className={`tc-menu${mine ? " mine" : ""}`} role="menu" aria-label="Message options">
+    <div ref={root} className={`tc-menu${mine ? " mine" : ""}${up ? " up" : ""}`} role="menu" aria-label="Message options">
       {picking ? (
         <EmojiPanel
           onPick={(emoji) => {

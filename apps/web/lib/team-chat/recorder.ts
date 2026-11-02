@@ -158,3 +158,13 @@ export function step(state: RecorderState, event: RecorderEvent): RecorderState 
       return { ...state, phase: "cancelled", segmentStart: null };
   }
 }
+
+/**
+ * Whether a click on the hands-free bar's Send is really meant (final review).
+ * A mouse click on 🎤 opens the bar on pointerup, and the browser's `click`
+ * that follows lands on whatever button is under the pointer — Send, by then.
+ * A click within 400 ms of the bar opening belongs to the press that opened it.
+ */
+export function acceptSendClick(lockedAt: number | null, now: number): boolean {
+  return lockedAt === null || now - lockedAt >= 400;
+}

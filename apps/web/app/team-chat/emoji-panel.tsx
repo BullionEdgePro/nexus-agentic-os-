@@ -58,6 +58,13 @@ export function EmojiPanel({ onPick, onClose }: { onPick: (emoji: string) => voi
   const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const held = useRef(false);
   const panel = useRef<HTMLDivElement | null>(null);
+  const search = useRef<HTMLInputElement | null>(null);
+
+  // A computer types straight into the search; a phone would raise its
+  // keyboard over the panel, so there the search waits for a tap.
+  useEffect(() => {
+    if (window.matchMedia("(pointer: fine)").matches) search.current?.focus();
+  }, []);
 
   useEffect(() => {
     const list = readRecent();
@@ -122,7 +129,7 @@ export function EmojiPanel({ onPick, onClose }: { onPick: (emoji: string) => voi
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         aria-label="Search emoji"
-        autoFocus
+        ref={search}
       />
       {!query.trim() ? (
         <div className="tc-emoji-tabs" role="tablist" aria-label="Emoji categories">

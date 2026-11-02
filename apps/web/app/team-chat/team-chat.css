@@ -801,6 +801,7 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
   gap: 6px;
 }
 .tc-menu.mine { left: auto; right: 0; align-items: flex-end; }
+.tc-menu.up { top: auto; bottom: calc(100% + 6px); flex-direction: column-reverse; }
 .tc-react-bar { display: flex; gap: 2px; padding: 5px 6px; border-radius: var(--r-pill); background: var(--paper); box-shadow: var(--lift); }
 .tc-react-bar button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; font-size: 24px; line-height: 1; cursor: pointer; }
 .tc-react-bar button:hover, .tc-react-bar button.on { background: var(--pebble); }
@@ -829,8 +830,10 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
   .tc-shell.has-active .tc-thread {
     position: fixed;
     z-index: 900;
-    inset: 0;
-    height: 100dvh;
+    inset: 0 0 auto 0;
+    /* The visible height, which shrinks when the keyboard opens (iOS does not
+       shrink 100dvh for it), so the box stays above the keyboard. */
+    height: var(--vvh, 100dvh);
     padding-bottom: env(safe-area-inset-bottom);
   }
   .tc-shell.has-active .tc-thread-head { padding-top: calc(10px + env(safe-area-inset-top)); }

@@ -135,3 +135,13 @@ test("the limits are the spec's", () => {
   assert.equal(TEAM_LIMITS.requestBytes, 17 * 1024 * 1024);
   assert.equal(TEAM_LIMITS.voiceMaxMs, 305_000);
 });
+
+// ---- Final review: an upload never holds a database connection while it arrives ----------
+
+test("the upload gate runs before the tenant context on every API request", () => {
+  const INDEX = read("apps", "api", "src", "index.ts");
+  const gate = INDEX.indexOf('app.use("/api/team-chat/*", teamUploadGate)');
+  const tenant = INDEX.indexOf('app.use("/api/*", tenantContext)');
+  assert.ok(gate > 0, "the gate is mounted");
+  assert.ok(gate < tenant, "and before the tenant context");
+});

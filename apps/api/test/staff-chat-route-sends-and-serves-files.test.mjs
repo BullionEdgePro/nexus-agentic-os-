@@ -153,6 +153,7 @@ mock.module(new URL("../src/lib/logger.ts", import.meta.url).href, {
 
 const { Hono } = await import("hono");
 const { teamChatRoute } = await import("../src/routes/team-chat.ts");
+const { teamUploadGate } = await import("../src/lib/team-upload.ts");
 
 const RALPH_STAFF = { role: "employee", employeeId: RALPH, organizationId: ZIP };
 const AZIZ_STAFF = { role: "employee", employeeId: AZIZ, organizationId: ZIP };
@@ -262,9 +263,72 @@ test("a photo with no caption is a message; a caption over 4000 characters is no
   assert.equal((await send(ROOM, { clientId: "p2", kind: "photo", file: jpeg(), body: "x".repeat(4001) })).status, 400);
 });
 
-test("an upload without a length is refused before it is read, and one over 17 MB too", async () => {
-  assert.equal((await rawSend(ROOM, { headers: {} })).status, 411);
+test("an upload over 17 MB is refused whether its size is declared or only counted", async () => {
   assert.equal((await rawSend(ROOM, { headers: { "content-length": String(17 * 1024 * 1024 + 1) } })).status, 413);
+  // No length sent (a proxy may forward it chunked): the bytes are counted as
+  // they arrive. Up to 30 MB in 1 MB chunks, pulled only as the reader asks for them.
+  let sent = 0;
+  const stream = new ReadableStream({
+    pull(controller) {
+      if (sent >= 30) return controller.close();
+      sent += 1;
+      controller.enqueue(new Uint8Array(1024 * 1024));
+    },
+  });
+  const res = await app.request(`/threads/${ROOM}/messages`, {
+    method: "POST",
+    body: stream,
+    duplex: "half",
+    headers: { "content-type": "multipart/form-data; boundary=x" },
+  });
+  assert.ok(sent <= 20, `reading stopped near 17 MB instead of taking all 30 (read ${sent})`);
+  assert.equal(res.status, 413);
+  assert.equal(files.length, 0);
+});
+
+test("an upload that arrives without a length is still accepted when it is small", async () => {
+  const form = new FormData();
+  form.append("clientId", "nolen1");
+  form.append("kind", "file");
+  form.append("file", pdf());
+  const encoded = new Response(form);
+  const res = await app.request(`/threads/${ROOM}/messages`, {
+    method: "POST",
+    body: encoded.body,
+    duplex: "half",
+    headers: { "content-type": encoded.headers.get("content-type") },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(files.length, 1);
+});
+
+test("an upload is read in full before the database context opens, so a slow phone never holds a connection", async () => {
+  const seen = [];
+  const gated = new Hono();
+  gated.use("*", async (c, next) => {
+    c.set("scope", scopeNow);
+    await next();
+  });
+  gated.use("/api/team-chat/*", teamUploadGate);
+  // Stands in for the tenant context: by the time it runs, the body must already be read.
+  gated.use("/api/*", async (c, next) => {
+    seen.push(c.get("teamUpload")?.ok === true);
+    await next();
+  });
+  gated.route("/api/team-chat", teamChatRoute);
+  const form = new FormData();
+  form.append("clientId", "gate1");
+  form.append("kind", "file");
+  form.append("file", pdf());
+  const encoded = new Response(form);
+  const body = await encoded.arrayBuffer();
+  const res = await gated.request(`/api/team-chat/threads/${ROOM}/messages`, {
+    method: "POST",
+    body,
+    headers: { "content-type": encoded.headers.get("content-type"), "content-length": String(body.byteLength) },
+  });
+  assert.equal(res.status, 201);
+  assert.deepEqual(seen, [true]);
 });
 
 test("another business, or the admin in a direct chat, cannot send a file", async () => {

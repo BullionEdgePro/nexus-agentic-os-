@@ -45,6 +45,7 @@ import type { Employee } from "@nexus/shared";
 import type { SessionScope } from "../lib/session.js";
 import { publishTeamEvent, type TeamEvent } from "../lib/team-events.js";
 import { checkUpload, cleanName, isEmoji, servedHeaders, TEAM_LIMITS } from "../lib/team-files.js";
+import { readTeamUpload } from "../lib/team-upload.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -315,8 +316,9 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
   if (!access.post) return c.json(NOT_FOUND, 404);
 
   // A voice note, photo or file comes as a form (2 Nov 2026); words alone as
-  // JSON, as before. The size is checked from the header BEFORE the body is
-  // read, so a 500 MB upload is refused without being buffered to say so.
+  // JSON, as before. The form is read by readTeamUpload — normally already, by
+  // teamUploadGate, before this request took a database connection — counting
+  // its bytes, so a 500 MB upload is refused without being buffered.
   let input: {
     clientId?: unknown;
     body?: unknown;
@@ -326,17 +328,9 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
   } | null;
   let upload: { kind: unknown; file: File; preview: File | null; fields: Record<string, unknown> } | null = null;
   if ((c.req.header("content-type") ?? "").startsWith("multipart/form-data")) {
-    const length = c.req.header("content-length");
-    if (!length) return c.json({ error: "That upload has no size; try sending it again." }, 411);
-    if (!/^\d+$/.test(length) || Number(length) > TEAM_LIMITS.requestBytes) {
-      return c.json({ error: "That upload is too large. Files can be up to 16 MB." }, 413);
-    }
-    let form: Record<string, unknown>;
-    try {
-      form = await c.req.parseBody();
-    } catch {
-      return c.json({ error: "That upload could not be read." }, 400);
-    }
+    const read = await readTeamUpload(c);
+    if (!read.ok) return c.json({ error: read.error }, read.status);
+    const form = read.form;
     if (!(form.file instanceof File)) return c.json({ error: "Attach a voice note, a photo or a file." }, 400);
     input = { clientId: form.clientId, body: form.body ?? "", mentions: jsonList(form.mentions), replyTo: form.replyTo };
     upload = { kind: form.kind, file: form.file, preview: form.preview instanceof File ? form.preview : null, fields: form };

@@ -463,7 +463,7 @@ test("a phone's own long-press menu does not fight ours", () => {
 test("on a phone an open chat is the whole screen, and the bottom bar and Ask step aside", () => {
   const CSS = read("app/team-chat/team-chat.css");
   const phone = CSS.slice(CSS.indexOf("@media (max-width: 759px)"));
-  assert.match(phone, /\.tc-shell\.has-active \.tc-thread \{[^}]*position: fixed;[^}]*inset: 0;/);
+  assert.match(phone, /\.tc-shell\.has-active \.tc-thread \{[^}]*position: fixed;[^}]*inset: 0 0 auto 0;/);
   assert.match(phone, /body:has\(\.tc-shell\.has-active\) :is\(\.mtabs, \.as-open, \.shell-rail\) \{ display: none; \}/);
 });
 
@@ -480,4 +480,130 @@ test("time and ticks sit inside the bubble, and day pills float over the list", 
   assert.match(CSS, /\.tc-bubble \{[^}]*display: flow-root;/);
   assert.match(CSS, /\.tc-day \{[^}]*width: fit-content;/);
   assert.match(read("app/team-chat-thread.tsx"), /<Fragment key=\{message\.id\}>/);
+});
+
+// ---- Final review fixes: behaviour, not just source text ----------------------------------
+
+import { fetchWithRetry } from "@/lib/team-chat/retry";
+import { MicGate } from "@/lib/team-chat/mic-gate";
+import { acceptSendClick } from "@/lib/team-chat/recorder";
+import { pendingFor } from "@/lib/team-chat/pending";
+import { menuPlacement } from "@/lib/team-chat/menu-placement";
+import { seekTime } from "@/lib/team-chat/waveform";
+
+test("a file that is not there yet is fetched again, a few times; a refusal is not", async () => {
+  let calls = 0;
+  const found = await fetchWithRetry(async () => {
+    calls += 1;
+    return { ok: calls >= 3, status: calls >= 3 ? 200 : 404 };
+  }, [0, 0, 0]);
+  assert.equal(found.ok, true);
+  assert.equal(calls, 3);
+  let tries = 0;
+  const gone = await fetchWithRetry(async () => {
+    tries += 1;
+    return { ok: false, status: 404 };
+  }, [0, 0]);
+  assert.equal(gone.ok, false);
+  assert.equal(tries, 3);
+  let refused = 0;
+  await fetchWithRetry(async () => {
+    refused += 1;
+    return { ok: false, status: 403 };
+  }, [0, 0]);
+  assert.equal(refused, 1);
+  assert.match(read("app/team-chat/file-bubble.tsx"), /fetchWithRetry\(/);
+});
+
+const fakeStream = () => {
+  const track = { readyState: "live", stop() { this.readyState = "ended"; } };
+  return { track, getTracks: () => [track] };
+};
+
+test("a microphone that opens after it stopped being wanted is closed at once", () => {
+  const gate = new MicGate();
+  // A quick tap, then a press, both before the first microphone opened.
+  const first = gate.begin();
+  gate.cancel();
+  const second = gate.begin();
+  const a = fakeStream();
+  const b = fakeStream();
+  assert.equal(gate.keep(first, a), null);
+  assert.equal(a.track.readyState, "ended");
+  assert.equal(gate.keep(second, b), b);
+  assert.equal(b.track.readyState, "live");
+  // Leaving the chat while the permission question is still open.
+  const third = gate.begin();
+  gate.close();
+  const c = fakeStream();
+  assert.equal(gate.keep(third, c), null);
+  assert.equal(c.track.readyState, "ended");
+  assert.equal(gate.keep(gate.begin(), fakeStream()), null, "a closed gate keeps nothing");
+  // React mounts, unmounts and mounts again in development: mounting reopens it,
+  // while a request from before the unmount stays unwanted.
+  const before = gate.begin();
+  gate.close();
+  gate.open();
+  const late = fakeStream();
+  assert.equal(gate.keep(before, late), null);
+  const fresh = fakeStream();
+  assert.equal(gate.keep(gate.begin(), fresh), fresh);
+  const R = read("app/team-chat/voice-recorder.tsx");
+  assert.match(R, /gate\.current\.keep\(/);
+  assert.match(R, /gate\.current\.close\(\)/);
+  assert.match(R, /gate\.current\.open\(\)/);
+});
+
+test("the click that ends a press never lands on the Send button that took the mic's place", () => {
+  assert.equal(acceptSendClick(1000, 1100), false);
+  assert.equal(acceptSendClick(1000, 1450), true);
+  assert.equal(acceptSendClick(null, 5), true);
+  const R = read("app/team-chat/voice-recorder.tsx");
+  assert.match(R, /key="send-note"/);
+  assert.match(R, /key="record"/);
+  assert.match(R, /acceptSendClick\(/);
+});
+
+test("an upload in one chat survives opening another, and stays with the chat it was made in", () => {
+  const list = [
+    { clientId: "a", threadId: "room", status: "sending" },
+    { clientId: "b", threadId: "dm", status: "failed" },
+  ];
+  assert.deepEqual(pendingFor(list, "dm").map((p) => p.clientId), ["b"]);
+  assert.deepEqual(pendingFor(list, "room").map((p) => p.clientId), ["a"]);
+  assert.deepEqual(pendingFor(list, null), []);
+  const HOOK = read("lib/use-team-thread.ts");
+  const switching = HOOK.slice(HOOK.indexOf("    setMessages([]);\n    setTypingName(null);"), HOOK.indexOf("  const reload = useCallback"));
+  assert.ok(switching.length > 0);
+  assert.doesNotMatch(switching, /setPending/);
+  assert.match(HOOK, /pending: pendingFor\(pending, threadId\)/);
+  assert.match(HOOK, /if \(activeRef\.current === threadId\) setReplyingTo\(null\)/);
+});
+
+test("the newest message's menu opens above it when there is no room below", () => {
+  const list = { top: 100, bottom: 600 };
+  assert.equal(menuPlacement({ top: 500, bottom: 560 }, 220, list), "above");
+  assert.equal(menuPlacement({ top: 150, bottom: 200 }, 220, list), "below");
+  assert.equal(menuPlacement({ top: 120, bottom: 560 }, 220, list), "below");
+  assert.match(read("app/team-chat/message-menu.tsx"), /menuPlacement\(/);
+  assert.match(read("app/team-chat/team-chat.css"), /\.tc-menu\.up \{/);
+});
+
+test("on a phone the open chat follows the visible height, so the box stays above the keyboard", () => {
+  assert.match(read("app/team-chat/team-chat.css"), /height: var\(--vvh, 100dvh\);/);
+  assert.match(read("app/deck/team-chat/page.tsx"), /visualViewport/);
+  const P = read("app/team-chat/emoji-panel.tsx");
+  assert.doesNotMatch(P, /autoFocus/);
+  assert.match(P, /\(pointer: fine\)/);
+});
+
+test("tapping the waveform seeks even when the browser does not know the length", () => {
+  assert.equal(seekTime(0.5, Infinity, 4000), 2);
+  assert.equal(seekTime(0.5, Number.NaN, 4000), 2);
+  assert.equal(seekTime(0.25, 8, 4000), 2);
+  assert.equal(seekTime(2, 8, 4000), 8);
+  const V = read("app/team-chat/voice-note.tsx");
+  assert.match(V, /seekTime\(/);
+  // A phone that will not start the next note by itself leaves it waiting, not "could not play".
+  assert.match(V, /NotAllowedError/);
 });

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { teamFileUrl, type TeamChatFile } from "@/lib/api";
-import { formatClock } from "@/lib/team-chat/waveform";
+import { formatClock, seekTime } from "@/lib/team-chat/waveform";
 import { downloadFile } from "./download";
 
 /**
@@ -79,7 +79,7 @@ export function VoiceNote({ file, threadId, mine }: { file: TeamChatFile; thread
     const el = root.current;
     if (!el) return;
     // The previous note in the thread finished: this one plays on.
-    const onCue = () => void start();
+    const onCue = () => void start(true);
     el.addEventListener("tc-play", onCue);
     return () => el.removeEventListener("tc-play", onCue);
   });
@@ -92,7 +92,8 @@ export function VoiceNote({ file, threadId, mine }: { file: TeamChatFile; thread
     [file.id]
   );
 
-  async function start() {
+  /** Play; `auto` when the previous note ended, not a tap. */
+  async function start(auto = false) {
     if (failed) setFailed(false);
     if (!audio.current) {
       setLoading(true);
@@ -127,7 +128,9 @@ export function VoiceNote({ file, threadId, mine }: { file: TeamChatFile; thread
         markPlayed(file.id);
         setPlayed(true);
       }
-    } catch {
+    } catch (err) {
+      // An iPhone will not start a note nobody tapped: it simply waits for ▶.
+      if (auto && err instanceof DOMException && err.name === "NotAllowedError") return;
       setFailed(true);
     }
   }
@@ -148,12 +151,12 @@ export function VoiceNote({ file, threadId, mine }: { file: TeamChatFile; thread
     const box = event.currentTarget.getBoundingClientRect();
     const fraction = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
     const el = audio.current;
-    if (el && Number.isFinite(el.duration)) {
-      el.currentTime = fraction * el.duration;
+    if (el) {
+      el.currentTime = seekTime(fraction, el.duration, file.durationMs ?? 0);
       setPosition(el.currentTime);
     } else {
       void start().then(() => {
-        if (audio.current && Number.isFinite(audio.current.duration)) audio.current.currentTime = fraction * audio.current.duration;
+        if (audio.current) audio.current.currentTime = seekTime(fraction, audio.current.duration, file.durationMs ?? 0);
       });
     }
   }

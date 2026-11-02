@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { play } from "@/lib/sound";
-import { elapsedMs, INITIAL, micOn, RECORDER, step } from "@/lib/team-chat/recorder";
+import { acceptSendClick, elapsedMs, INITIAL, micOn, RECORDER, step } from "@/lib/team-chat/recorder";
+import { MicGate } from "@/lib/team-chat/mic-gate";
 import { foldPeaks, formatClock } from "@/lib/team-chat/waveform";
 
 /**
@@ -40,6 +41,11 @@ export function VoiceRecorder({ onSend, disabled }: { onSend: (note: Note) => vo
   const sampler = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const startedAt = useRef<number | null>(null);
   const reviewBlob = useRef<Blob | null>(null);
+  // Which request for the microphone is still wanted (final review): a mic that
+  // opens after its press ended, or after the recorder left the screen, is
+  // stopped the moment it arrives.
+  const gate = useRef(new MicGate());
+  const lockedAt = useRef<number | null>(null);
 
   const at = () => performance.now();
 
@@ -78,15 +84,20 @@ export function VoiceRecorder({ onSend, disabled }: { onSend: (note: Note) => vo
       dispatch({ type: "reset" });
       return;
     }
-    let media: MediaStream;
+    const ticket = gate.current.begin();
+    let opened: MediaStream;
     try {
-      media = await navigator.mediaDevices.getUserMedia({
+      opened = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
     } catch {
-      dispatch({ type: "denied" });
+      if (gate.current.keep(ticket, { getTracks: () => [] })) dispatch({ type: "denied" });
       return;
     }
+    // No longer wanted (the press ended, a newer press began, or the chat
+    // closed): keep() has already stopped it.
+    const media = gate.current.keep(ticket, opened);
+    if (!media) return;
     // Let go before the microphone was ready — the first time, the browser's
     // permission question takes the press. Nothing was recorded; say what next.
     if (!micOn(stateRef.current.phase)) {
@@ -135,6 +146,10 @@ export function VoiceRecorder({ onSend, disabled }: { onSend: (note: Note) => vo
   // ---- the phase decides what happens ------------------------------------------
   useEffect(() => {
     const phase = state.phase;
+    if (phase === "locked" && lockedAt.current === null) lockedAt.current = at();
+    if (phase !== "locked" && phase !== "paused" && phase !== "review") lockedAt.current = null;
+    // Not recording: any microphone still on its way is no longer wanted.
+    if (!micOn(phase)) gate.current.cancel();
     if (phase === "paused") recorder.current?.pause();
     if (phase === "locked" && recorder.current?.state === "paused") recorder.current.resume();
     if (!micOn(state.phase)) {
@@ -203,17 +218,18 @@ export function VoiceRecorder({ onSend, disabled }: { onSend: (note: Note) => vo
   }, []);
 
   // Leaving the chat: let the microphone go.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    gate.current.open();
+    return () => {
+      gate.current.close();
       try {
         recorder.current?.stop();
       } catch {
         // already stopped
       }
       releaseMic();
-    },
-    [releaseMic]
-  );
+    };
+  }, [releaseMic]);
 
   useEffect(() => {
     if (!hint) return;
@@ -233,6 +249,8 @@ export function VoiceRecorder({ onSend, disabled }: { onSend: (note: Note) => vo
       // A pointer the browser no longer tracks: the press still records.
     }
     setHint("");
+    // Each press starts from nothing: no review left over from an earlier one.
+    reviewBlob.current = null;
     dispatch({ type: "press", at: at(), x: event.clientX, y: event.clientY, pointer: event.pointerType === "mouse" ? "mouse" : "touch" });
     void openMic();
   }
@@ -302,11 +320,22 @@ export function VoiceRecorder({ onSend, disabled }: { onSend: (note: Note) => vo
         </p>
       ) : null}
       {hands ? (
-        <button type="button" className="tc-round" aria-label="Send voice note" onClick={() => dispatch({ type: "send", at: at() })}>
+        <button
+          key="send-note"
+          type="button"
+          className="tc-round"
+          aria-label="Send voice note"
+          onClick={() => {
+            // The click that ends the press that opened this bar is not a Send.
+            if (!acceptSendClick(lockedAt.current, at())) return;
+            dispatch({ type: "send", at: at() });
+          }}
+        >
           ➤
         </button>
       ) : (
         <button
+          key="record"
           type="button"
           className={`tc-round${phase === "holding" ? " recording" : ""}`}
           aria-label="Record a voice note"

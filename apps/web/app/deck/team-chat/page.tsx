@@ -113,6 +113,17 @@ export default function TeamChatPage() {
   );
   const directWith = (colleagueId: string) =>
     data?.threads.find((t) => t.kind === "direct" && (t.memberA === colleagueId || t.memberB === colleagueId));
+  // The visible height, which shrinks when a phone keyboard opens, so an open
+  // chat's box stays above it (as the inbox does; iOS keeps 100dvh unchanged).
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const sync = () => document.documentElement.style.setProperty("--vvh", `${viewport.height}px`);
+    sync();
+    viewport.addEventListener("resize", sync);
+    return () => viewport.removeEventListener("resize", sync);
+  }, []);
+
   // How much was unread when a chat was opened: the "N unread messages" strip.
   const latest = useRef(data);
   latest.current = data;

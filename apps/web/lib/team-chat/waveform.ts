@@ -24,3 +24,13 @@ export function formatClock(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
+
+/**
+ * Where a tap on the waveform seeks to, in seconds (final review). A recording
+ * from MediaRecorder often reports its length as Infinity until played through,
+ * so the length measured when it was recorded is used instead.
+ */
+export function seekTime(fraction: number, mediaDuration: number, recordedMs: number): number {
+  const length = Number.isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : recordedMs / 1000;
+  return Math.min(1, Math.max(0, fraction)) * length;
+}

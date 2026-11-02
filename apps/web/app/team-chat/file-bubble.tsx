@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { teamFileUrl, type TeamChatFile } from "@/lib/api";
+import { fetchWithRetry } from "@/lib/team-chat/retry";
 import { downloadFile } from "./download";
 import { VoiceNote } from "./voice-note";
 
@@ -17,7 +18,8 @@ export function useFileBlob(threadId: string, id: string, preview = false, enabl
     if (!enabled) return;
     let made: string | null = null;
     let cancelled = false;
-    fetch(teamFileUrl(threadId, id, preview), { credentials: "include" })
+    // A colleague's new photo can be announced a moment before it can be read.
+    fetchWithRetry(() => fetch(teamFileUrl(threadId, id, preview), { credentials: "include" }))
       .then((response) => (response.ok ? response.blob() : null))
       .then((blob) => {
         if (!blob || cancelled) return;

@@ -14,6 +14,7 @@ import {
   type TeamChatMessage,
 } from "./api";
 import { mineOf, toggleReaction } from "./team-chat/reactions";
+import { pendingFor } from "./team-chat/pending";
 import type { TeamSocketEvent } from "./use-team-socket";
 
 /**
@@ -135,7 +136,8 @@ export function useTeamThread(
     setReplyingTo(null);
     setSeenByAllAt(null);
     if (!threadId) return;
-    setPending((list) => list.filter((p) => p.status === "failed" || p.threadId === threadId));
+    // Pending sends of other chats are kept (final review): an upload still
+    // going, or failed, in the room is there with its Retry when you come back.
     void load(threadId);
   }, [threadId, load]);
 
@@ -201,7 +203,7 @@ export function useTeamThread(
     if (!text || !threadId || !canPost) return false;
     const item: PendingMessage = { clientId: crypto.randomUUID(), threadId, body: text, mentions, status: "sending", replyTo };
     setPending((list) => [...list, item]);
-    setReplyingTo(null);
+    if (activeRef.current === threadId) setReplyingTo(null);
     lastTypingSent.current = 0;
     void deliver(item);
     return true;
@@ -224,7 +226,7 @@ export function useTeamThread(
       file: { ...file, progress: 0 },
     };
     setPending((list) => [...list, item]);
-    setReplyingTo(null);
+    if (activeRef.current === threadId) setReplyingTo(null);
     void deliver(item);
     return true;
   }
@@ -321,7 +323,7 @@ export function useTeamThread(
 
   return {
     messages,
-    pending: pending.filter((p) => p.threadId === threadId),
+    pending: pendingFor(pending, threadId),
     canPost,
     seenByOther,
     seenByAllAt,
