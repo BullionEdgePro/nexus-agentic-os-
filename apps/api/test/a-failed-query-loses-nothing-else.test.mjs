@@ -21,6 +21,17 @@ const APP_URL = process.env.AUDIT_TEST_APP_URL;
 const db = { skip: !(OWNER_URL && APP_URL) && "set AUDIT_TEST_OWNER_URL and AUDIT_TEST_APP_URL" };
 
 const ORG = "92929292-0000-4000-8000-000000000001";
+const CONTACT1 = "92929292-0000-4000-8000-0000000000a1";
+const CONTACT2 = "92929292-0000-4000-8000-0000000000a2";
+const CONTACT3 = "92929292-0000-4000-8000-0000000000a3";
+const CONV1 = "92929292-0000-4000-8000-0000000000c1";
+const CONV2 = "92929292-0000-4000-8000-0000000000c2"; // a message recorded here is refused
+const CONV3 = "92929292-0000-4000-8000-0000000000c3";
+const people = [
+  { id: CONTACT1, displayName: "Probe One", waId: "971595000101", conversationId: CONV1 },
+  { id: CONTACT2, displayName: "Probe Two", waId: "971595000102", conversationId: CONV2 },
+  { id: CONTACT3, displayName: "Probe Three", waId: "971595000103", conversationId: CONV3 },
+];
 
 let owner;
 let dbTurn; // this file's turn at the shared test database
@@ -36,6 +47,9 @@ const insertContact = (waId) =>
   ]);
 // A failure the code catches and carries on past.
 const swallow = () => lib.getPool().query("select 1/0").catch(() => undefined);
+const messagesIn = async (conversationId) =>
+  Number((await owner.query(`select count(*) from messages where conversation_id = $1`, [conversationId])).rows[0].count);
+const DROP_REFUSAL = `drop trigger if exists srb_refuse_messages on messages; drop function if exists srb_refuse_messages();`;
 
 before(async () => {
   if (db.skip) return;
@@ -48,6 +62,28 @@ before(async () => {
      values ($1, 'srb-org', 'Probe Firm', '950001', '850001', 'Asia/Dubai', true)`,
     [ORG]
   );
+  for (const person of people) {
+    await owner.query(`insert into contacts (id, organization_id, wa_id, channel, display_name) values ($1, $2, $3, 'whatsapp', $4)`, [
+      person.id,
+      ORG,
+      person.waId,
+      person.displayName,
+    ]);
+    await owner.query(`insert into conversations (id, organization_id, contact_id, channel) values ($1, $2, $3, 'whatsapp')`, [
+      person.conversationId,
+      ORG,
+      person.id,
+    ]);
+  }
+  // The injected failure: recording a message in the second conversation is refused.
+  await owner.query(DROP_REFUSAL);
+  await owner.query(`
+    create function srb_refuse_messages() returns trigger language plpgsql as $$
+    begin
+      if new.conversation_id = '${CONV2}' then raise exception 'refused for the test'; end if;
+      return new;
+    end $$;
+    create trigger srb_refuse_messages before insert on messages for each row execute function srb_refuse_messages();`);
   process.env.DATABASE_URL = APP_URL;
   lib = await import("@nexus/db");
   const { Hono } = await import("hono");
@@ -67,6 +103,10 @@ before(async () => {
 after(async () => {
   if (db.skip) return;
   try {
+    await owner.query(DROP_REFUSAL);
+    await owner.query(`delete from messages where organization_id = $1 or serving_organization_id = $1`, [ORG]);
+    await owner.query(`delete from lead_assessments where organization_id = $1 or serving_organization_id = $1`, [ORG]);
+    await owner.query(`delete from conversations where organization_id = $1 or routed_organization_id = $1`, [ORG]);
     await owner.query(`delete from organizations where id = $1`, [ORG]);
   } finally {
     if (dbTurn) {
@@ -206,6 +246,35 @@ test("isolated() runs as it is outside a transaction, and in a savepoint inside 
     await insertContact("971595000007");
   }, failing);
   assert.equal(await contactNamed("971595000007"), 1, "the failure inside isolated() aborted its caller");
+});
+
+test("one person's record failing in a quick send loses that record only", db, async () => {
+  const { sendQuickMessages } = await import("../src/lib/quick-send.ts");
+  const outcome = await lib.withTenant(
+    ORG,
+    () =>
+      sendQuickMessages({
+        people,
+        text: "Probe hello {name}",
+        phoneNumberId: "950001",
+        send: async () => ({ waMessageId: null }),
+        record: (person, message) =>
+          lib
+            .insertOutboundMessage({
+              organizationId: ORG,
+              conversationId: person.conversationId,
+              contactId: person.id,
+              senderType: "human_agent",
+              body: message,
+            })
+            .then(() => undefined),
+      }),
+    failing
+  );
+  assert.deepEqual(outcome, { sent: 3, failed: [], notRecorded: ["Probe Two"] });
+  assert.equal(await messagesIn(CONV1), 1, "the first person's record was lost with the second's");
+  assert.equal(await messagesIn(CONV2), 0);
+  assert.equal(await messagesIn(CONV3), 1, "the third person's record was lost with the second's");
 });
 
 test("a handler that swallowed a failure after writing answers 500", db, async () => {

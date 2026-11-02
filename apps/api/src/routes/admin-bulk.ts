@@ -31,9 +31,9 @@ import { actorOf } from "../lib/actor.js";
 import { pendingFrom } from "../lib/pending-templates.js";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
+import { sendQuickMessages } from "../lib/quick-send.js";
 import {
   chosenIds,
-  personalise,
   staffTemplateParams,
   describeDailyCeiling,
   testSendRefusal,
@@ -320,12 +320,12 @@ adminBulkRoute.post("/:slug/quick", async (c) => {
   }
 
   const actor = await actorOf(c);
-  const sent: string[] = [];
-  const failed: Array<{ name: string; reason: string }> = [];
-  for (const person of people) {
-    const message = personalise(text, person.displayName);
-    try {
-      const dispatched = await sendReplyOnChannel(
+  const { sent, failed, notRecorded } = await sendQuickMessages({
+    people,
+    text,
+    phoneNumberId: number.phoneNumberId,
+    send: (person, message) =>
+      sendReplyOnChannel(
         {
           organizationId: organization.id,
           channel: "whatsapp",
@@ -335,7 +335,8 @@ adminBulkRoute.post("/:slug/quick", async (c) => {
           conversationId: person.conversationId,
         },
         message
-      );
+      ),
+    record: async (person, message, waMessageId) => {
       const recorded = await withTenant(organization.id, () =>
         insertOutboundMessage({
           organizationId: organization.id,
@@ -345,7 +346,7 @@ adminBulkRoute.post("/:slug/quick", async (c) => {
           senderId: actor.id ?? undefined,
           employeeId: number.ownerEmployeeId,
           body: message,
-          waMessageId: dispatched.waMessageId ?? undefined,
+          waMessageId: waMessageId ?? undefined,
         })
       );
       await publishInboxEvent({
@@ -355,15 +356,10 @@ adminBulkRoute.post("/:slug/quick", async (c) => {
         conversationId: person.conversationId,
         message: { ...recorded, senderName: actor.name },
       }).catch(() => undefined);
-      sent.push(person.displayName ?? `+${person.waId}`);
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
-      if (isPaymentRefusal(raw)) await notePaymentRefusal(number.phoneNumberId, raw).catch(() => undefined);
-      failed.push({ name: person.displayName ?? `+${person.waId}`, reason: explainSendError(raw) });
-    }
-  }
-  logger.info({ organization: organization.slug, from: number.phoneNumberId, sent: sent.length, failed: failed.length, by: actor.name }, "Admin quick message sent");
-  return c.json({ sent: sent.length, failed });
+    },
+  });
+  logger.info({ organization: organization.slug, from: number.phoneNumberId, sent, failed: failed.length, notRecorded: notRecorded.length, by: actor.name }, "Admin quick message sent");
+  return c.json({ sent, failed, notRecorded });
 });
 
 /** One copy of an approved message to one number, from the chosen number. */

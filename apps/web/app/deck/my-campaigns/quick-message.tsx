@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { readableError, sendQuickMessage } from "@/lib/api";
+import { describeQuickOutcome, type QuickOutcome } from "@/lib/quick-outcome";
 import { previewTemplate } from "./my-templates";
 
 /**
@@ -30,7 +31,7 @@ export function QuickMessage({
   contactIds?: string[];
   onSent: () => void;
   /** How to send; the admin page sends from the number it chose (30 Oct 2026). */
-  send?: (text: string) => Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }>;
+  send?: (text: string) => Promise<QuickOutcome>;
   /** What "written to …" refers to: "your WhatsApp", or the chosen number. */
   where?: string;
   /** Help writing it, above the box (the admin page's AI writer, 30 Oct 2026): `put` replaces the text. */
@@ -134,13 +135,7 @@ export function QuickMessage({
                         setResult(null);
                         try {
                           const outcome = send ? await send(text.trim()) : await sendQuickMessage(text.trim(), contactIds);
-                          setResult({
-                            ok: outcome.failed.length === 0,
-                            text: `Sent to ${outcome.sent} ${outcome.sent === 1 ? "person" : "people"}${
-                              outcome.failed.length ? `; ${outcome.failed.length} could not be sent` : ""
-                            }. Each one is in that client's conversation.`,
-                            failed: outcome.failed,
-                          });
+                          setResult(describeQuickOutcome(outcome));
                           setConfirming(false);
                           if (outcome.sent > 0) setText("");
                           onSent();

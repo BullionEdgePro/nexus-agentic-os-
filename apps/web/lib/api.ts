@@ -2906,7 +2906,7 @@ export function sendQuickMessage(
   text: string,
   /** Only these clients, when some were chosen in the Clients tab (30 Oct 2026). */
   contactIds?: string[]
-): Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }> {
+): Promise<{ sent: number; failed: Array<{ name: string; reason: string }>; notRecorded?: string[] }> {
   return request("/api/my/quick-message", {
     method: "POST",
     body: JSON.stringify(contactIds ? { text, contactIds } : { text }),
@@ -2972,7 +2972,7 @@ export function sendBulk(
 export function sendBulkQuick(
   orgSlug: BusinessSlug,
   input: { phoneNumberId: string; text: string; contactIds: string[] }
-): Promise<{ sent: number; failed: Array<{ name: string; reason: string }> }> {
+): Promise<{ sent: number; failed: Array<{ name: string; reason: string }>; notRecorded?: string[] }> {
   return request(`/api/bulk/${orgSlug}/quick`, { method: "POST", body: JSON.stringify(input) });
 }
 

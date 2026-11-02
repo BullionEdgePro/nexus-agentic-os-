@@ -55,6 +55,7 @@ import { campaignReadiness, sendingAccountOf } from "../services/campaign-readin
 import { logger } from "../lib/logger.js";
 import { explainSendError, isPaymentRefusal } from "../lib/send-errors.js";
 import { notePaymentRefusal } from "../lib/payment-refusal.js";
+import { personalise, sendQuickMessages } from "../lib/quick-send.js";
 
 /**
  * A staff member's own number, and campaigns to their own book.
@@ -355,11 +356,8 @@ export function chosenIds(raw: unknown): Set<string> | null {
   return new Set(raw.filter((id): id is string => typeof id === "string" && id.length <= 64).slice(0, 2000));
 }
 
-/** {name} → the recipient's first name, or "there". Exported for its test. */
-export function personalise(text: string, displayName: string | null): string {
-  const first = displayName?.trim().split(/\s+/)[0] || "there";
-  return text.replace(/\{name\}/gi, first);
-}
+// Lives with the quick-send loop now (3 Nov 2026); exported here as before.
+export { personalise };
 
 /**
  * Send one free-text message to everyone in the window, now.
@@ -409,12 +407,12 @@ myCampaignsRoute.post("/quick-message", async (c) => {
   }
 
   const organization = await withTenant(desk.organizationId, () => findOrganizationById(desk.organizationId));
-  const sent: string[] = [];
-  const failed: Array<{ name: string; reason: string }> = [];
-  for (const person of people) {
-    const message = personalise(text, person.displayName);
-    try {
-      const dispatched = await sendReplyOnChannel(
+  const { sent, failed, notRecorded } = await sendQuickMessages({
+    people,
+    text,
+    phoneNumberId: from,
+    send: (person, message) =>
+      sendReplyOnChannel(
         {
           organizationId: desk.organizationId,
           channel: "whatsapp",
@@ -424,7 +422,8 @@ myCampaignsRoute.post("/quick-message", async (c) => {
           conversationId: person.conversationId,
         },
         message
-      );
+      ),
+    record: async (person, message, waMessageId) => {
       const recorded = await withTenant(desk.organizationId, () =>
         insertOutboundMessage({
           organizationId: desk.organizationId,
@@ -434,7 +433,7 @@ myCampaignsRoute.post("/quick-message", async (c) => {
           senderId: desk.employeeId,
           employeeId: desk.employeeId,
           body: message,
-          waMessageId: dispatched.waMessageId ?? undefined,
+          waMessageId: waMessageId ?? undefined,
         })
       );
       if (organization) {
@@ -446,19 +445,14 @@ myCampaignsRoute.post("/quick-message", async (c) => {
           message: { ...recorded, senderName: employee.fullName },
         }).catch(() => undefined);
       }
-      sent.push(person.displayName ?? `+${person.waId}`);
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
-      if (isPaymentRefusal(raw)) await notePaymentRefusal(from, raw).catch(() => undefined);
-      failed.push({ name: person.displayName ?? `+${person.waId}`, reason: explainSendError(raw) });
-    }
-  }
+    },
+  });
 
   logger.info(
-    { employeeId: desk.employeeId, from, sent: sent.length, failed: failed.length },
+    { employeeId: desk.employeeId, from, sent, failed: failed.length, notRecorded: notRecorded.length },
     "Quick message sent to clients inside the 24-hour window"
   );
-  return c.json({ sent: sent.length, failed });
+  return c.json({ sent, failed, notRecorded });
 });
 
 /**
