@@ -33,13 +33,20 @@ export const tenantContext: MiddlewareHandler = async (c, next) => {
     // between "no such business" and "something broke".
     if (organization) {
       const reason = crossTenantReason(c.req.method, c.req.path.replace(/^\/api\/organizations\/[^/]+/, ""));
-      if (reason) return inTransaction((work) => withAllTenants(reason, work), c, next);
-      return inTransaction((work) => withTenant(organization.id, work), c, next);
+      if (reason) return inTransaction((work) => withAllTenants(reason, work, REQUEST), c, next);
+      return inTransaction((work) => withTenant(organization.id, work, REQUEST), c, next);
     }
   }
 
-  return inTransaction((work) => withAllTenants(`api ${c.req.method} ${new URL(c.req.url).pathname}`, work), c, next);
+  return inTransaction((work) => withAllTenants(`api ${c.req.method} ${new URL(c.req.url).pathname}`, work, REQUEST), c, next);
 };
+
+/**
+ * A request whose commit lost writes answers 500, not the 200 its handler
+ * built (3 Nov 2026): somebody is waiting to be told. Jobs log it instead,
+ * because their retry would repeat what they already did outside the database.
+ */
+const REQUEST = { failOnLostWrites: true };
 
 /** Thrown inside a request's transaction when its handler threw, so its work is rolled back. */
 class HandlerFailed extends Error {}
@@ -131,7 +138,7 @@ export const webhookContext: MiddlewareHandler = async (c, next) => {
           if (!(err instanceof HandlerFailed)) logger.error({ err }, "Webhook failed inside tenant context");
           throw err;
         }
-      }),
+      }, REQUEST),
     c,
     next
   );

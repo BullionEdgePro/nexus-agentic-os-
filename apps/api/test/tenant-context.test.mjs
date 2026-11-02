@@ -30,7 +30,9 @@ test("queries route to the context's client, not to an arbitrary pooled one", ()
   // SET LOCAL applies to one connection for the life of one transaction. A
   // query that lands on a different pooled connection sees no context at all —
   // and once RLS is on, silently returns nothing.
-  assert.match(CLIENT, /const context = getTenantContext\(\);\s*\n\s*if \(context\) return context\.client\.query/);
+  // Through noted() since 3 Nov 2026, which records what the statement did so
+  // the commit can say what was lost; it is still the context's own client.
+  assert.match(CLIENT, /const context = getTenantContext\(\);\s*\n\s*if \(context\) return noted\(context\.client, sql, context\.client\.query/);
 });
 
 test("a tenant context is a real transaction, committed or rolled back", () => {
@@ -39,7 +41,7 @@ test("a tenant context is a real transaction, committed or rolled back", () => {
   assert.match(CLIENT, /await client\.query\("rollback"\)\.catch/);
   // Release must happen whatever the outcome, or the pool leaks a connection
   // per failed request until it is exhausted.
-  assert.match(CLIENT, /finally \{\s*\n\s*client\.release\(\);/);
+  assert.match(CLIENT, /finally \{\s*\n\s*health\.delete\(client\);\s*\n\s*client\.release\(\);/);
 });
 
 test("SET LOCAL is transaction-scoped, so context cannot leak between requests", () => {
@@ -113,8 +115,9 @@ test("every API request runs inside some context", () => {
 
 test("an org-addressed request narrows to that org", () => {
   assert.match(MIDDLEWARE, /const slug = c\.req\.param\("slug"\)/);
-  // Inside inTransaction since 3 Nov 2026, so a handler that throws rolls back.
-  assert.match(MIDDLEWARE, /return inTransaction\(\(work\) => withTenant\(organization\.id, work\), c, next\)/);
+  // Inside inTransaction since 3 Nov 2026, so a handler that throws rolls back,
+  // and with REQUEST, so a commit that lost writes answers 500.
+  assert.match(MIDDLEWARE, /return inTransaction\(\(work\) => withTenant\(organization\.id, work, REQUEST\), c, next\)/);
   assert.match(MIDDLEWARE, /if \(c\.error\) throw new HandlerFailed\(\)/);
 });
 

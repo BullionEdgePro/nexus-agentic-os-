@@ -219,7 +219,7 @@ export function getPool(): Queryable {
   return {
     query<R extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]) {
       const context = getTenantContext();
-      if (context) return context.client.query<R>(sql, params);
+      if (context) return noted(context.client, sql, context.client.query<R>(sql, params));
       assertContext(sql);
       return rawPool().query<R>(sql, params);
     },
@@ -229,10 +229,84 @@ export function getPool(): Queryable {
   };
 }
 
+/**
+ * What an open transaction has done, so its commit can say what was lost.
+ *
+ * A FAILED STATEMENT ABORTS THE WHOLE TRANSACTION (3 Nov 2026). Postgres then
+ * refuses every later statement (25P02) and answers the commit with ROLLBACK
+ * rather than an error -- so code that caught the first failure and carried on
+ * lost everything it had written, and the request still answered 200. A quick
+ * send reported "sent" with no message recorded; a scheduled message went out
+ * again every minute.
+ */
+interface TransactionHealth {
+  /** A write succeeded -- and is undone if the commit comes back ROLLBACK. */
+  wrote: boolean;
+  /** A write was refused because of an earlier failure. */
+  refusedWrite: boolean;
+  /** The first failure that was not a refusal: the cause. */
+  failure: unknown;
+}
+
+const health = new WeakMap<PoolClient, TransactionHealth>();
+const WRITE_COMMANDS = new Set(["INSERT", "UPDATE", "DELETE", "MERGE"]);
+const IN_FAILED_TRANSACTION = "25P02";
+
+/** For a refused statement only, which has no result to say what it was. */
+function isWriteStatement(sql: string): boolean {
+  const scrubbed = scrubSql(sql).replace(/\bfor\s+(no\s+key\s+)?update\b/g, " ");
+  return /\b(insert\s+into|update\s+["a-z_]|delete\s+from|merge\s+into)\b/.test(scrubbed);
+}
+
+function noted<R extends QueryResultRow>(
+  client: PoolClient,
+  sql: string,
+  query: Promise<QueryResult<R>>
+): Promise<QueryResult<R>> {
+  const record = health.get(client);
+  if (!record) return query;
+  return query.then(
+    (result) => {
+      if (WRITE_COMMANDS.has(result.command)) record.wrote = true;
+      return result;
+    },
+    (err: unknown) => {
+      if ((err as { code?: string } | null)?.code === IN_FAILED_TRANSACTION) {
+        if (isWriteStatement(sql)) record.refusedWrite = true;
+      } else if (record.failure === undefined) {
+        record.failure = err;
+      }
+      throw err;
+    }
+  );
+}
+
+const LOST_WRITES =
+  "Nothing in this piece of work was saved: a database statement failed, its error was caught, and Postgres then rolled the whole transaction back.";
+
+/** A commit that came back ROLLBACK after writes: they are gone. `cause` is the failure that was caught. */
+export class TransactionRolledBack extends Error {
+  constructor(cause: unknown) {
+    super(LOST_WRITES, { cause });
+    this.name = "TransactionRolledBack";
+  }
+}
+
+export interface TransactionOptions {
+  /**
+   * Throw TransactionRolledBack when a commit lost writes, instead of logging
+   * it. The request middleware asks for this: somebody is waiting for an
+   * answer. A job does not -- a retry would repeat whatever it already did
+   * outside the database, such as answering a customer.
+   */
+  failOnLostWrites?: boolean;
+}
+
 async function withClient<T>(
   setup: (client: PoolClient) => Promise<void>,
   makeContext: (client: PoolClient) => Parameters<typeof runWithContext>[0],
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
+  options: TransactionOptions = {}
 ): Promise<T> {
   const existing = getTenantContext();
   // Nesting would open a transaction inside a transaction and, worse, let an
@@ -241,11 +315,23 @@ async function withClient<T>(
   if (existing) return fn();
 
   const client = await rawPool().connect();
+  const record: TransactionHealth = { wrote: false, refusedWrite: false, failure: undefined };
   try {
     await client.query("begin");
     await setup(client);
+    health.set(client, record);
     const result = await runWithContext(makeContext(client), fn);
-    await client.query("commit");
+    const done = await client.query("commit");
+    if (done.command === "ROLLBACK") {
+      if (record.wrote || record.refusedWrite) {
+        if (options.failOnLostWrites) throw new TransactionRolledBack(record.failure);
+        // eslint-disable-next-line no-console
+        console.error(`[db] ${LOST_WRITES}`, record.failure);
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn("[db] A read-only transaction rolled back after a caught failure:", record.failure);
+      }
+    }
     return result;
   } catch (err) {
     // Rolling back is best-effort: if the connection itself died, the rollback
@@ -254,6 +340,7 @@ async function withClient<T>(
     await client.query("rollback").catch(() => undefined);
     throw err;
   } finally {
+    health.delete(client);
     client.release();
   }
 }
@@ -267,7 +354,7 @@ async function withClient<T>(
  * scoped, which is the behaviour you want anyway: a lead written but its
  * conversation not is worse than neither.
  */
-export function withTenant<T>(organizationId: string, fn: () => Promise<T>): Promise<T> {
+export function withTenant<T>(organizationId: string, fn: () => Promise<T>, options?: TransactionOptions): Promise<T> {
   if (!organizationId) {
     // An empty id would set the context to the empty string, which every policy
     // reads as "matches nothing" — the silent-empty-result failure again, one
@@ -277,7 +364,8 @@ export function withTenant<T>(organizationId: string, fn: () => Promise<T>): Pro
   return withClient(
     (client) => client.query("select set_config('app.current_org', $1, true)", [organizationId]).then(() => undefined),
     (client) => ({ scope: "tenant", organizationId, client }),
-    fn
+    fn,
+    options
   );
 }
 
@@ -290,12 +378,13 @@ export function withTenant<T>(organizationId: string, fn: () => Promise<T>): Pro
  * phone number the message arrived on. Anything else calling this is worth a
  * second look, which is exactly why it has to name itself.
  */
-export function withAllTenants<T>(reason: string, fn: () => Promise<T>): Promise<T> {
+export function withAllTenants<T>(reason: string, fn: () => Promise<T>, options?: TransactionOptions): Promise<T> {
   if (!reason) throw new Error("withAllTenants requires a reason");
   return withClient(
     (client) => client.query("select set_config('app.tenant_scope', 'all', true)").then(() => undefined),
     (client) => ({ scope: "all", reason, client }),
-    fn
+    fn,
+    options
   );
 }
 
@@ -419,14 +508,33 @@ export async function withSavepoint<T>(fn: () => Promise<T>): Promise<T> {
   }
   const name = `nexus_savepoint_${++savepoints}`;
   await context.client.query(`savepoint ${name}`);
+  // Taken once the savepoint is set, so the transaction was healthy here.
+  const record = health.get(context.client);
+  const before = record ? { ...record } : undefined;
   try {
     const result = await fn();
     await context.client.query(`release savepoint ${name}`);
     return result;
   } catch (err) {
-    await context.client.query(`rollback to savepoint ${name}`).catch(() => undefined);
+    const revived = await context.client.query(`rollback to savepoint ${name}`).then(
+      () => true,
+      () => false
+    );
+    // Healthy again, and what it undid was undone on purpose: neither the
+    // failure nor those writes are anything the commit lost (3 Nov 2026).
+    if (revived && record && before) Object.assign(record, before);
     throw err;
   }
+}
+
+/**
+ * Runs `fn` so that its failure cannot abort the caller's transaction: in its
+ * own savepoint inside one, and as it is outside one, where each statement is
+ * already its own transaction. For a step that may run either way -- a booking
+ * made by the AI's tool inside a reply, or by a script with no context.
+ */
+export function isolated<T>(fn: () => Promise<T>): Promise<T> {
+  return getTenantContext() ? withSavepoint(fn) : fn();
 }
 
 /**
