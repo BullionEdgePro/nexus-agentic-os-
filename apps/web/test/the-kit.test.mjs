@@ -114,3 +114,45 @@ test("the kit moves only when motion is welcome", () => {
   assert.ok(at > 0);
   assert.doesNotMatch(css.slice(0, at), /animation:|transition:/);
 });
+
+// ---- Task 3: chart card and charts ---------------------------------------------------------
+
+import { ChartCard } from "@/app/kit/chart-card";
+import { AreaChart, BarChart } from "@/app/kit/charts";
+
+const days = [3, 5, 4, 8].map((value, i) => ({ label: `Day ${i + 1}`, value }));
+
+test("an area chart draws a line that draws in, and can be read by keyboard", () => {
+  const html = render(AreaChart, { points: days, ariaLabel: "Conversations per day" });
+  assert.match(html, /role="img" aria-label="Conversations per day"/);
+  assert.match(html, /class="nx-draw[^"]*"[^>]*pathLength="1"/);
+  assert.match(html, /tabindex="0"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.doesNotMatch(html, /NaN/);
+});
+
+test("too little history says so instead of drawing", () => {
+  for (const points of [[], [{ label: "Today", value: 4 }]]) {
+    const html = render(AreaChart, { points, ariaLabel: "x" });
+    assert.match(html, /Not enough days yet to draw a line\./);
+    assert.doesNotMatch(html, /<path/);
+  }
+  const flat = render(AreaChart, { points: [{ label: "a", value: 0 }, { label: "b", value: 0 }], ariaLabel: "x" });
+  assert.match(flat, /<path/);
+  assert.doesNotMatch(flat, /NaN/);
+});
+
+test("bars grow, a part is shaded, a range has its band and mid mark", () => {
+  const html = render(BarChart, { bars: [{ label: "Mon", value: 10, part: 3 }, { label: "Tue", value: 6, low: 4, high: 9 }], ariaLabel: "Daily" });
+  assert.match(html, /class="kit-bar nx-grow"/);
+  assert.match(html, /class="kit-bar-part"/);
+  assert.match(html, /class="kit-bar-range"/);
+  assert.match(html, /class="kit-bar-mid"/);
+  assert.match(render(BarChart, { bars: [], ariaLabel: "Daily" }), /Not enough days yet to draw a line\./);
+});
+
+test("a chart card has its title and big figure", () => {
+  const html = render(ChartCard, { title: "Conversations", figure: "126", children: "chart" });
+  assert.match(html, /<h3[^>]*>Conversations<\/h3>/);
+  assert.match(html, /<span data-countup="">126<\/span>/);
+});
