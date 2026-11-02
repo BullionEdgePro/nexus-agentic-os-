@@ -1,0 +1,139 @@
+/* The kit (2 Nov 2026, Cream pages 2a): the shared pieces every dashboard page
+   is built from. Spec: docs/superpowers/specs/2026-11-02-cream-pages-2a-design.md
+   Reads only the .deck-root tokens (part 1), so Cream and Warm Night both work. */
+
+/* ---- tones: the video's four card colours, and paper ------------------------ */
+
+.tone-mustard { background: var(--st-mustard); color: var(--on-mustard); }
+.tone-forest { background: var(--st-forest); color: var(--on-forest); }
+.tone-terra { background: var(--st-terra); color: var(--on-terra); }
+.tone-ink { background: var(--st-ink); color: var(--on-ink); }
+.tone-paper { background: var(--paper); color: var(--ink); border: 1px solid var(--hairline); }
+
+/* ---- number tile ------------------------------------------------------------- */
+
+.kit-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.kit-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 18px 20px 16px;
+  border-radius: var(--r);
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--lift-sm);
+  overflow: hidden;
+}
+.kit-tile-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--pebble);
+  color: var(--ink);
+}
+.kit-tile-icon svg { width: 19px; height: 19px; }
+.kit-tile-label { font-size: 13px; font-weight: 600; color: var(--slate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kit-tile-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: clamp(28px, 2.6vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.kit-tile-figure small { font-size: 15px; font-weight: 600; color: var(--slate); letter-spacing: 0; }
+.kit-tile-note {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--pebble);
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 600;
+}
+.kit-tile svg.kit-spark-svg { position: absolute; right: 16px; bottom: 14px; width: 88px; height: 30px; overflow: visible; }
+.kit-spark { fill: none; stroke: var(--signal-text); stroke-width: 2; stroke-linecap: round; }
+
+/* ---- status card ------------------------------------------------------------- */
+
+.kit-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.kit-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: var(--r);
+  box-shadow: var(--lift-sm);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+button.kit-card, a.kit-card { cursor: pointer; }
+.kit-card:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
+.kit-card-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kit-card-sub { display: block; font-size: 12.5px; opacity: .82; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kit-card-figure { display: block; margin-top: 10px; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.kit-card-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; opacity: .9; }
+.kit-initials {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---- pills (quick links, period choices) --------------------------------------- */
+
+.kit-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.kit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--r-pill);
+  background: var(--st-ink);
+  color: var(--on-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.kit-pill svg { width: 16px; height: 16px; }
+.kit-pill.quiet { background: var(--pebble); color: var(--ink); }
+.kit-pill[aria-pressed="true"] { background: var(--st-ink); color: var(--on-ink); }
+
+@media (max-width: 760px) {
+  .kit-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kit-tile { padding: 14px 14px 12px; }
+  .kit-cards { grid-template-columns: 1fr; }
+}
+
+/* ---- motion: only when welcome -------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .kit-card { transition: transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .18s ease; }
+  :is(a, button).kit-card:hover { transform: translateY(-3px); box-shadow: var(--lift); }
+  :is(a, button).kit-card:active { transform: translateY(-1px) scale(.99); }
+}

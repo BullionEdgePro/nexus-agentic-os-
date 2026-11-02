@@ -75,3 +75,42 @@ test("a window grows from the card it opens", () => {
   assert.deepEqual(originOf({ left: 100, top: 50, width: 200, height: 100 }, { width: 1000, height: 1000 }), { x: 20, y: 10 });
   assert.deepEqual(originOf({ left: 990, top: -50, width: 100, height: 20 }, { width: 1000, height: 1000 }), { x: 100, y: 0 });
 });
+
+// ---- Task 2: number tile and status card --------------------------------------------------
+
+import { NumberTile } from "@/app/kit/number-tile";
+import { StatusCard } from "@/app/kit/status-card";
+
+test("a number tile shows its figure ready to count up, with its note", () => {
+  const html = render(NumberTile, { label: "Messages today", value: "1,240", note: "since midnight" });
+  assert.match(html, /class="kit-tile"/);
+  assert.match(html, /<span data-countup="">1,240<\/span>/);
+  assert.match(html, /since midnight/);
+  assert.doesNotMatch(html, /<path/, "no sparkline without real points");
+  assert.match(render(NumberTile, { label: "x", value: "1", spark: [1, 4, 2] }), /class="kit-spark nx-draw"[^>]*pathLength="1"/);
+});
+
+test("a status card takes its tone, links when it has somewhere to go, and keeps long names on one line", () => {
+  const html = render(StatusCard, { tone: "terra", title: "عبد الله الهاشمي ".repeat(4), subtitle: "SFS International", figure: "3 h 12 m", href: "/inbox?conversation=1" });
+  assert.match(html, /^<a [^>]*class="kit-card tone-terra/);
+  assert.match(html, /href="\/inbox\?conversation=1"/);
+  assert.match(html, /dir="auto"/);
+  const css = read("app/kit/kit.css");
+  assert.match(css, /\.kit-card-title \{[^}]*text-overflow: ellipsis/);
+  for (const tone of ["mustard", "forest", "terra", "ink"]) {
+    assert.match(css, new RegExp(`\\.tone-${tone} \\{[^}]*background: var\\(--st-${tone}\\);[^}]*color: var\\(--on-${tone}\\);`));
+  }
+  assert.doesNotMatch(css, /rgba\(0,\s*0,\s*0/);
+});
+
+test("a card that opens is a button with a name", () => {
+  const html = render(StatusCard, { tone: "mustard", title: "Call back", onOpen: () => {}, label: "Open follow-up: Call back" });
+  assert.match(html, /^<button type="button" [^>]*aria-label="Open follow-up: Call back"/);
+});
+
+test("the kit moves only when motion is welcome", () => {
+  const css = read("app/kit/kit.css");
+  const at = css.indexOf("@media (prefers-reduced-motion: no-preference)");
+  assert.ok(at > 0);
+  assert.doesNotMatch(css.slice(0, at), /animation:|transition:/);
+});
