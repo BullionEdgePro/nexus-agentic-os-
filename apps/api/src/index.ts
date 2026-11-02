@@ -82,6 +82,11 @@ app.use("/api/*", requireAuth);
 // read another business's entire customer history, so the checks live in front
 // of every tenant path rather than in the routes that remembered to ask.
 app.use("/api/organizations/:slug/*", requireTenantScope);
+// THE BUSINESS'S OWN ROWS, enforced by the database too (3 Nov 2026). Mounted
+// here, where `:slug` is visible -- on `/api/*` below it never is, so every API
+// request used to run across all businesses. This one opens the business's
+// tenant first; the `/api/*` mount then nests inside it and keeps it.
+app.use("/api/organizations/:slug/*", tenantContext);
 app.use("/api/conversations/:id/*", requireConversationScope);
 
 // Cross-tenant by definition — there is no scoped version of "every business's

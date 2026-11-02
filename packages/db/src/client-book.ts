@@ -37,7 +37,7 @@
  * query that reads a client book omits it. Same shape as `contactServedBy`,
  * for the same reason, after the same bug.
  */
-import { getPool } from "./client.js";
+import { getPool, withContactOwner } from "./client.js";
 import { contactServedBy } from "./contacts.js";
 import { ensureContactForServingBusiness } from "./contact-identity.js";
 import { withTenant, withAllTenants } from "./client.js";
@@ -725,11 +725,15 @@ export async function assignContactOwnerIfUnowned(
   contactId: string,
   employeeId: string
 ): Promise<{ assigned: boolean; currentOwnerName: string | null }> {
-  const { rowCount } = await getPool().query(
-    `update contacts set owner_employee_id = $2
-      where id = $1
-        and owner_employee_id is null`,
-    [contactId, employeeId]
+  // As the contact's owner when this business serves a shared contact: under the
+  // business's own tenant the owner-only policies would leave it unassigned.
+  const { rowCount } = await withContactOwner(contactId, () =>
+    getPool().query(
+      `update contacts set owner_employee_id = $2
+        where id = $1
+          and owner_employee_id is null`,
+      [contactId, employeeId]
+    )
   );
   if ((rowCount ?? 0) > 0) return { assigned: true, currentOwnerName: null };
   const { rows } = await getPool().query<{ full_name: string | null; owner_employee_id: string | null }>(

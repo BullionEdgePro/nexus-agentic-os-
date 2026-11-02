@@ -1,4 +1,4 @@
-import { getPool, withTenant } from "./client.js";
+import { getPool, withServingTenant } from "./client.js";
 import { findOrganizationById, findOrganizationByPhoneNumberId } from "./organizations.js";
 
 /**
@@ -93,7 +93,11 @@ export async function ensureContactForServingBusiness(
     ? (await findOrganizationByPhoneNumberId(serving.whatsappPhoneNumberId)) ?? serving
     : serving;
 
-  return withTenant(owner.id, async () => {
+  // As the number's owner, on the connection already open: inside a business's
+  // own request a nested withTenant would keep that business, and the owner-only
+  // policies would refuse the write (3 Nov 2026). withServingTenant switches,
+  // checked against the shared number; with no ambient context it is withTenant.
+  return withServingTenant(owner.id, async () => {
     const db = getPool();
 
     // Keyed exactly as the webhook keys it, so an inbound message from this

@@ -21,6 +21,9 @@ import { logger } from "../lib/logger.js";
  * decides which rows the database will hand back once that question is settled.
  */
 export const tenantContext: MiddlewareHandler = async (c, next) => {
+  // Defined only where this is mounted at `/api/organizations/:slug/*` (index.ts):
+  // Hono middleware on `/api/*` never sees `:slug`. That mount runs first, so the
+  // later `/api/*` one nests inside it and keeps the business (3 Nov 2026).
   const slug = c.req.param("slug");
 
   if (slug) {
@@ -29,12 +32,49 @@ export const tenantContext: MiddlewareHandler = async (c, next) => {
     // here would turn every unknown slug into a 500 and lose the distinction
     // between "no such business" and "something broke".
     if (organization) {
+      const reason = crossTenantReason(c.req.method, c.req.path.replace(/^\/api\/organizations\/[^/]+/, ""));
+      if (reason) return withAllTenants(reason, () => next());
       return withTenant(organization.id, () => next());
     }
   }
 
   return withAllTenants(`api ${c.req.method} ${new URL(c.req.url).pathname}`, () => next());
 };
+
+/**
+ * The business-scoped routes that must span businesses, each with its reason.
+ *
+ * All five businesses share one WhatsApp business account, so the number an
+ * operator gives one person may be held by an employee of ANOTHER business.
+ * These three free it from whoever held it (`assignEmployeeWhatsAppNumber`), and
+ * under that business's own tenant they could reach only its own employees --
+ * leaving two people holding one number and the wrong business answering.
+ * Operator-only in their router. Matched on the method and the path after
+ * `/api/organizations/:slug`; anything not listed runs as its business.
+ */
+export const CROSS_TENANT_ROUTES: { method: string; path: RegExp; reason: string }[] = [
+  {
+    method: "POST",
+    path: /^\/employees\/[^/]+\/whatsapp-connect$/,
+    reason: "connecting a number frees it from whichever business's employee held it on the shared account",
+  },
+  {
+    method: "PATCH",
+    path: /^\/employees\/[^/]+\/whatsapp-number$/,
+    reason: "assigning a number frees it from whichever business's employee held it on the shared account",
+  },
+  {
+    method: "POST",
+    path: /^\/whatsapp-numbers\/[^/]+\/verify$/,
+    reason: "a verified number given to someone is freed from whichever business's employee held it",
+  },
+];
+
+/** Why a business-scoped request must span businesses, or null when it runs as its business. */
+export function crossTenantReason(method: string, pathAfterSlug: string): string | null {
+  const route = CROSS_TENANT_ROUTES.find((r) => r.method === method.toUpperCase() && r.path.test(pathAfterSlug));
+  return route ? `api ${route.method} /api/organizations/:slug${pathAfterSlug}: ${route.reason}` : null;
+}
 
 /**
  * The webhook path, which cannot know its tenant up front.

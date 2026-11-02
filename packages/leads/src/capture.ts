@@ -1,4 +1,4 @@
-import { getPool, ensureContactForServingBusiness } from "@nexus/db";
+import { getPool, ensureContactForServingBusiness, withContactOwner } from "@nexus/db";
 import { scoreLead, type LeadAssessment } from "./score.js";
 
 /**
@@ -94,8 +94,9 @@ export async function captureEmployeeLead(input: CaptureLeadInput): Promise<Capt
   );
 
   // Same standing update as an inbound assessment — highest score ever reached,
-  // not the most recent, so a follow-up "thanks" cannot bury a real lead.
-  await pool.query(
+  // not the most recent, so a follow-up "thanks" cannot bury a real lead. As
+  // the contact's owner when it is a shared contact this business serves.
+  await withContactOwner(contactId, () => pool.query(
     `update contacts
         set lead_score = greatest(coalesce(lead_score, 0), $2),
             lead_priority = case
@@ -105,7 +106,7 @@ export async function captureEmployeeLead(input: CaptureLeadInput): Promise<Capt
             updated_at = now()
       where id = $1`,
     [contactId, assessment.score, assessment.priority]
-  );
+  ));
 
   return { ...assessment, contactId, isNewContact, note: input.note };
 }
