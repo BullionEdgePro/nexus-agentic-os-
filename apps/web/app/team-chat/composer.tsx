@@ -7,7 +7,7 @@ import { play } from "@/lib/sound";
 import { formatClock } from "@/lib/team-chat/waveform";
 import { EmojiPanel } from "./emoji-panel";
 import { VoiceRecorder } from "./voice-recorder";
-import { AttachButton } from "./attach";
+import { AttachButton, AttachSheet, DropZone } from "./attach";
 
 /**
  * The one message box for team chat (2 Nov 2026), on the Team chat page and in
@@ -44,6 +44,7 @@ export function TeamComposer({
   const [draft, setDraft] = useState("");
   const [mentionIds, setMentionIds] = useState<Record<string, string>>({});
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [attached, setAttached] = useState<File[] | null>(null);
   const box = useRef<HTMLTextAreaElement | null>(null);
 
   if (!thread.canPost) return null;
@@ -90,7 +91,23 @@ export function TeamComposer({
   }
 
   return (
+    <DropZone onFiles={(files) => setAttached(files)}>
     <div className={`tc-composer${compact ? " compact" : ""}`}>
+      {attached ? (
+        <AttachSheet
+          files={attached}
+          onClose={() => setAttached(null)}
+          onSend={(ready, caption) => {
+            let sent = false;
+            ready.forEach((item, index) => {
+              // The caption goes with the first, as WhatsApp sends an album.
+              if (thread.sendFile(item, index === 0 ? caption : "")) sent = true;
+            });
+            if (sent) play("pop");
+            setAttached(null);
+          }}
+        />
+      ) : null}
       {emojiOpen ? <EmojiPanel onPick={insertEmoji} onClose={() => setEmojiOpen(false)} /> : null}
       {thread.replyingTo ? (
         <div className="tc-reply-strip">
@@ -150,9 +167,7 @@ export function TeamComposer({
             maxLength={4000}
             aria-label="Message"
           />
-          <AttachButton
-            onFiles={() => undefined}
-          />
+          <AttachButton onFiles={(files) => setAttached(files)} />
         </div>
         {draft.trim() ? (
           <button type="submit" className="tc-round" aria-label="Send">
@@ -178,5 +193,6 @@ export function TeamComposer({
         )}
       </form>
     </div>
+    </DropZone>
   );
 }

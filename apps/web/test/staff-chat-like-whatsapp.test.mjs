@@ -391,3 +391,37 @@ test("a voice note is fetched once with credentials, plays one at a time, and fa
   assert.match(V, /try \{[\s\S]{0,200}localStorage/);
   assert.match(read("app/team-chat/file-bubble.tsx"), /<VoiceNote/);
 });
+
+// ---- Task 12: photos and files ----------------------------------------------------------
+
+test("photos are shrunk on the device, and one the browser cannot read goes as a document", () => {
+  const A = read("app/team-chat/attach.tsx");
+  assert.match(A, /shrinkImage\(/);
+  assert.match(A, /kind: "file"/);
+  assert.match(A, /accept="image\/\*"/);
+  assert.match(A, /capture="environment"/);
+  assert.match(A, /onPaste/);
+  assert.match(A, /onDrop/);
+});
+
+test("each upload shows progress and can be cancelled", () => {
+  const T = read("app/team-chat-thread.tsx");
+  assert.match(T, /p\.file\.progress/);
+  assert.match(T, /thread\.cancel\(p\.clientId\)/);
+});
+
+test("limits are told before sending, not after", () => {
+  const A = read("app/team-chat/attach.tsx");
+  assert.match(A, /16 MB/);
+  assert.match(A, /refused/);
+});
+
+test("a photo opens full screen, zooms, downloads and closes with Escape", () => {
+  const V = read("app/team-chat/photo-viewer.tsx");
+  assert.match(V, /useFileBlob\(/);
+  assert.match(V, /Escape/);
+  assert.match(V, /downloadFile\(/);
+  assert.match(V, /onWheel/);
+  assert.match(read("app/team-chat-thread.tsx"), /<PhotoViewer/);
+  assert.match(read("app/team-chat/composer.tsx"), /<AttachSheet/);
+});

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TeamThreadState } from "@/lib/use-team-thread";
 import { groupRuns } from "@/lib/team-chat/runs";
 import { nameColourIndex } from "@/lib/team-chat/name-colour";
 import { FileBubble } from "./team-chat/file-bubble";
+import { PhotoViewer } from "./team-chat/photo-viewer";
 import "./team-chat/team-chat.css";
 
 type TeamChatMessage = TeamThreadState["messages"][number];
@@ -35,6 +36,7 @@ export function ThreadMessages({
   unreadAtOpen?: number;
 }) {
   const end = useRef<HTMLDivElement | null>(null);
+  const [viewing, setViewing] = useState<{ threadId: string; file: NonNullable<TeamChatMessage["file"]> } | null>(null);
   const { messages, pending } = thread;
   const lastId = messages.at(-1)?.id ?? null;
 
@@ -108,7 +110,14 @@ export function ThreadMessages({
                 ) : (
                   <>
                     {message.replyTo ? <Quote reply={message.replyTo} onJump={() => void jumpTo(message.replyTo!.id)} /> : null}
-                    {message.file ? <FileBubble file={message.file} threadId={message.threadId} mine={!!mine} /> : null}
+                    {message.file ? (
+                      <FileBubble
+                        file={message.file}
+                        threadId={message.threadId}
+                        mine={!!mine}
+                        onOpenPhoto={(file) => setViewing({ threadId: message.threadId, file })}
+                      />
+                    ) : null}
                     {message.body ? <p>{message.body}</p> : null}
                     {message.share ? (
                       <a className="tc-share" href={`/inbox?conversation=${message.share.conversationId}`}>
@@ -137,7 +146,17 @@ export function ThreadMessages({
       {pending.map((p) => (
         <div key={p.clientId} className={`tc-msg mine first ${p.status}`}>
           <div className="tc-bubble">
-            {p.file ? <p>{pendingLabel(p.file.kind, p.file.name)}</p> : null}
+            {p.file ? (
+              <div className="tc-upload">
+                <Progress fraction={p.file.progress} failed={p.status === "failed"} />
+                <span>{pendingLabel(p.file.kind, p.file.name)}</span>
+                {p.status === "sending" ? (
+                  <button type="button" className="tc-upload-cancel" aria-label="Cancel upload" onClick={() => thread.cancel(p.clientId)}>
+                    ✕
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {p.body ? <p>{p.body}</p> : null}
             {p.status === "sending" ? (
               <span className="tc-time">
@@ -165,7 +184,28 @@ export function ThreadMessages({
         </p>
       ) : null}
       <div ref={end} />
+      {viewing ? <PhotoViewer threadId={viewing.threadId} file={viewing.file} onClose={() => setViewing(null)} /> : null}
     </div>
+  );
+}
+
+/** An upload's progress, as a ring that fills. */
+function Progress({ fraction, failed }: { fraction: number; failed: boolean }) {
+  const r = 13;
+  const circumference = 2 * Math.PI * r;
+  return (
+    <svg className={`tc-ring${failed ? " failed" : ""}`} width="32" height="32" viewBox="0 0 32 32" role="img" aria-label={failed ? "Not sent" : `${Math.round(fraction * 100)}% sent`}>
+      <circle cx="16" cy="16" r={r} className="tc-ring-track" />
+      <circle
+        cx="16"
+        cy="16"
+        r={r}
+        className="tc-ring-fill"
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - Math.min(1, Math.max(0.04, fraction)))}
+        transform="rotate(-90 16 16)"
+      />
+    </svg>
   );
 }
 
