@@ -154,9 +154,12 @@ before(async () => {
 
 after(async () => {
   if (db.skip) return;
-  // Messages first: their serving-business key does not cascade.
+  // Messages and scores first: their serving-business keys do not cascade.
   await owner.query(
     `delete from messages where organization_id in ('${SFS}', '${OTHER}', '${EDGE}') or serving_organization_id in ('${SFS}', '${OTHER}', '${EDGE}')`
+  );
+  await owner.query(
+    `delete from lead_assessments where organization_id in ('${SFS}', '${OTHER}', '${EDGE}') or serving_organization_id in ('${SFS}', '${OTHER}', '${EDGE}')`
   );
   await owner.query(`delete from organizations where id in ('${SFS}', '${OTHER}', '${EDGE}')`);
   await owner.end();
