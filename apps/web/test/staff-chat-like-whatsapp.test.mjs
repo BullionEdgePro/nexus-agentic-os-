@@ -425,3 +425,35 @@ test("a photo opens full screen, zooms, downloads and closes with Escape", () =>
   assert.match(read("app/team-chat-thread.tsx"), /<PhotoViewer/);
   assert.match(read("app/team-chat/composer.tsx"), /<AttachSheet/);
 });
+
+// ---- Task 13: reactions, the message menu and swipe to reply ------------------------------
+
+test("press and hold, or hover, opens the reactions; the admin gets none in a direct chat", () => {
+  const M = read("app/team-chat/message-menu.tsx");
+  assert.match(M, /QUICK_REACTIONS = \["👍", "❤️", "😂", "😮", "😢", "🙏"\]/);
+  assert.match(M, /<EmojiPanel/);
+  const T = read("app/team-chat-thread.tsx");
+  assert.match(T, /isLongPress\(/);
+  assert.match(T, /swipeReply\(/);
+  assert.match(T, /thread\.canPost \?/);
+  assert.match(T, /thread\.react\(/);
+  assert.match(T, /thread\.setReplyingTo\(/);
+});
+
+test("Remove is offered only on your own message, and only through the menu", () => {
+  assert.match(read("app/team-chat/message-menu.tsx"), /mine && !message\.deletedAt/);
+  assert.doesNotMatch(read("app/team-chat-thread.tsx"), /className="tc-remove"/);
+});
+
+test("reactions show under the bubble, and tapping one says who", () => {
+  const R = read("app/team-chat/reactions.tsx");
+  assert.match(R, /mineOf\(/);
+  assert.match(R, /\.by\.map\(/);
+  assert.match(read("app/team-chat-thread.tsx"), /<Reactions/);
+});
+
+test("a phone's own long-press menu does not fight ours", () => {
+  const CSS = read("app/team-chat/team-chat.css");
+  assert.match(CSS, /@media \(pointer: coarse\)[\s\S]{0,300}-webkit-touch-callout: none/);
+  assert.match(CSS, /\.tc-swipe \{[^}]*touch-action: pan-y/);
+});

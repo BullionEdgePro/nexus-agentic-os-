@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { TeamThreadState } from "@/lib/use-team-thread";
 import { groupRuns } from "@/lib/team-chat/runs";
 import { nameColourIndex } from "@/lib/team-chat/name-colour";
+import { GESTURES, isLongPress, swipeReply } from "@/lib/team-chat/gestures";
+import { mineOf } from "@/lib/team-chat/reactions";
+import { MessageMenu } from "./team-chat/message-menu";
+import { Reactions } from "./team-chat/reactions";
 import { FileBubble } from "./team-chat/file-bubble";
 import { PhotoViewer } from "./team-chat/photo-viewer";
 import "./team-chat/team-chat.css";
@@ -36,6 +40,7 @@ export function ThreadMessages({
   unreadAtOpen?: number;
 }) {
   const end = useRef<HTMLDivElement | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const [viewing, setViewing] = useState<{ threadId: string; file: NonNullable<TeamChatMessage["file"]> } | null>(null);
   const { messages, pending } = thread;
   const lastId = messages.at(-1)?.id ?? null;
@@ -91,6 +96,8 @@ export function ThreadMessages({
         const first = runStarts[index] || showDay;
         const forMe = !!me?.employeeId && message.mentions.includes(me.employeeId);
         const removed = !!message.deletedAt;
+        // Reacting, replying and removing are writing: not for the admin in a direct chat.
+        const interactive = thread.canPost ? !removed : false;
         return (
           <div key={message.id}>
             {showDay ? <p className="tc-day">{day}</p> : null}
@@ -101,9 +108,24 @@ export function ThreadMessages({
             ) : null}
             <div
               id={`tc-m-${message.id}`}
-              className={`tc-msg${mine ? " mine" : ""}${first ? " first" : ""}${forMe ? " for-me" : ""}`}
+              className={`tc-msg${mine ? " mine" : ""}${first ? " first" : ""}${forMe ? " for-me" : ""}${menuFor === message.id ? " lifted" : ""}`}
             >
-              <div className={`tc-bubble${removed ? " removed" : ""}`}>
+              <Swipeable
+                enabled={interactive}
+                onHold={() => setMenuFor(message.id)}
+                onSwipe={() => thread.setReplyingTo(message)}
+              >
+              <div
+                className={`tc-bubble${removed ? " removed" : ""}`}
+                tabIndex={interactive ? 0 : undefined}
+                aria-haspopup={interactive ? "menu" : undefined}
+                onKeyDown={(event) => {
+                  if (interactive && event.key === "Enter" && event.target === event.currentTarget) {
+                    event.preventDefault();
+                    setMenuFor(message.id);
+                  }
+                }}
+              >
                 {!mine && first && showNames ? <Author message={message} /> : null}
                 {removed ? (
                   <p>Message removed</p>
@@ -132,12 +154,35 @@ export function ThreadMessages({
                   {mine && !removed ? <Ticks state={seenAt && seenAt >= message.createdAt ? "seen" : "sent"} /> : null}
                 </span>
               </div>
-              {mine && !removed && !me?.isAdmin ? (
-                <span className="tc-meta">
-                  <button type="button" className="tc-remove" onClick={() => void thread.remove(message)}>
-                    Remove
-                  </button>
-                </span>
+              </Swipeable>
+              {interactive ? (
+                <button
+                  type="button"
+                  className="tc-hover-tool"
+                  aria-label="React, reply or more"
+                  onClick={() => setMenuFor(message.id)}
+                >
+                  🙂
+                </button>
+              ) : null}
+              {!removed ? (
+                <Reactions
+                  reactions={message.reactions ?? []}
+                  myKey={thread.myKey}
+                  canReact={interactive}
+                  onToggle={(emoji) => thread.react(message, emoji)}
+                />
+              ) : null}
+              {menuFor === message.id ? (
+                <MessageMenu
+                  message={message}
+                  mine={!!mine && !me?.isAdmin}
+                  myReaction={thread.myKey ? mineOf(message.reactions ?? [], thread.myKey) : null}
+                  onReact={(emoji) => thread.react(message, emoji)}
+                  onReply={() => thread.setReplyingTo(message)}
+                  onRemove={() => void thread.remove(message)}
+                  onClose={() => setMenuFor(null)}
+                />
               ) : null}
             </div>
           </div>
@@ -184,7 +229,84 @@ export function ThreadMessages({
         </p>
       ) : null}
       <div ref={end} />
+      {menuFor ? <div className="tc-dim" aria-hidden="true" onClick={() => setMenuFor(null)} /> : null}
       {viewing ? <PhotoViewer threadId={viewing.threadId} file={viewing.file} onClose={() => setViewing(null)} /> : null}
+    </div>
+  );
+}
+
+/**
+ * A bubble's touch gestures (2 Nov 2026): hold still to open the reactions and
+ * menu; swipe right to reply, with the bubble following the finger. Vertical
+ * movement is left to the page (touch-action: pan-y), so scrolling the chat
+ * never counts as either. A mouse uses the hover button instead.
+ */
+function Swipeable({
+  enabled,
+  onHold,
+  onSwipe,
+  children,
+}: {
+  enabled: boolean;
+  onHold: () => void;
+  onSwipe: () => void;
+  children: ReactNode;
+}) {
+  const start = useRef<{ x: number; y: number; t: number } | null>(null);
+  const moved = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [dx, setDx] = useState(0);
+
+  const reset = () => {
+    if (timer.current) clearTimeout(timer.current);
+    start.current = null;
+    moved.current = 0;
+    setDx(0);
+  };
+
+  return (
+    <div
+      className="tc-swipe"
+      style={dx ? { transform: `translateX(${dx}px)` } : undefined}
+      onPointerDown={(event) => {
+        if (!enabled || event.pointerType === "mouse") return;
+        start.current = { x: event.clientX, y: event.clientY, t: performance.now() };
+        moved.current = 0;
+        timer.current = setTimeout(() => {
+          if (start.current && isLongPress(performance.now() - start.current.t, moved.current)) {
+            navigator.vibrate?.(12);
+            onHold();
+            reset();
+          }
+        }, GESTURES.holdMs);
+      }}
+      onPointerMove={(event) => {
+        const from = start.current;
+        if (!from) return;
+        const x = event.clientX - from.x;
+        const y = event.clientY - from.y;
+        moved.current = Math.max(moved.current, Math.hypot(x, y));
+        if (moved.current >= 10 && timer.current) clearTimeout(timer.current);
+        if (x > 0 && Math.abs(y) < 32) setDx(Math.min(x, 90));
+      }}
+      onPointerUp={(event) => {
+        const from = start.current;
+        if (from && swipeReply(event.clientX - from.x, event.clientY - from.y)) onSwipe();
+        reset();
+      }}
+      onPointerCancel={reset}
+      onContextMenu={(event) => {
+        if (enabled && event.nativeEvent instanceof PointerEvent && event.nativeEvent.pointerType !== "mouse") {
+          event.preventDefault();
+        }
+      }}
+    >
+      {dx > 20 ? (
+        <span className="tc-swipe-reply" aria-hidden="true" style={{ opacity: Math.min(1, dx / 64) }}>
+          ↩
+        </span>
+      ) : null}
+      {children}
     </div>
   );
 }

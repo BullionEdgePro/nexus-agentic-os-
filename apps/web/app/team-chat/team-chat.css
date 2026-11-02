@@ -722,6 +722,94 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 .tc-viewer-stage img { max-width: 94vw; max-height: 84vh; object-fit: contain; border-radius: 4px; user-select: none; transition: transform .15s ease-out; }
 .tc-viewer-note { color: #F3EFE8; font-size: 14px; text-align: center; }
 
+/* ---- reactions, the message menu, swipe to reply ---------------------------- */
+
+.tc-swipe { position: relative; max-width: 100%; touch-action: pan-y; }
+.tc-swipe-reply { position: absolute; left: -34px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--paper); color: var(--slate); font-size: 14px; box-shadow: var(--tc-bubble-lift); }
+.tc-bubble:focus-visible { outline: 2px solid var(--signal-text); outline-offset: 2px; }
+
+.tc-hover-tool {
+  position: absolute;
+  top: 4px;
+  right: -36px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--paper);
+  font-size: 15px;
+  cursor: pointer;
+  opacity: 0;
+  box-shadow: var(--tc-bubble-lift);
+  transition: opacity .12s;
+}
+.tc-msg.mine .tc-hover-tool { right: auto; left: -36px; }
+.tc-msg:hover .tc-hover-tool, .tc-hover-tool:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .tc-hover-tool { display: none; } }
+
+.tc-reacts { position: relative; margin: -6px 8px 2px; z-index: 1; }
+.tc-react-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px 7px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--slate);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: var(--tc-bubble-lift);
+}
+.tc-react-chips.mine { border-color: var(--signal-text); }
+.tc-react-chips b { margin-left: 4px; font-size: 11.5px; }
+.tc-react-who {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  max-width: 300px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: var(--lift);
+}
+.tc-msg.mine .tc-react-who { left: auto; right: 0; }
+.tc-react-group { display: flex; align-items: center; gap: 8px; padding: 5px 6px; font-size: 13px; color: var(--ink); }
+.tc-react-emoji { font-size: 18px; }
+.tc-react-group button { margin-left: auto; border: 0; background: none; color: var(--crit); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+
+.tc-dim { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--charcoal) 28%, transparent); }
+.tc-msg.lifted { z-index: 21; }
+.tc-menu {
+  position: absolute;
+  z-index: 22;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tc-menu.mine { left: auto; right: 0; align-items: flex-end; }
+.tc-react-bar { display: flex; gap: 2px; padding: 5px 6px; border-radius: var(--r-pill); background: var(--paper); box-shadow: var(--lift); }
+.tc-react-bar button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; font-size: 24px; line-height: 1; cursor: pointer; }
+.tc-react-bar button:hover, .tc-react-bar button.on { background: var(--pebble); }
+.tc-react-bar .tc-react-more { font-size: 20px; color: var(--slate); }
+.tc-menu-items { display: flex; flex-direction: column; min-width: 180px; padding: 6px; border-radius: 14px; background: var(--paper); box-shadow: var(--lift); }
+.tc-menu-items button { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 0; border-radius: 9px; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.tc-menu-items button:hover { background: var(--pebble); }
+.tc-menu-items button.bad { color: var(--crit); }
+.tc-menu .tc-emoji { bottom: auto; top: 0; left: 0; }
+
+/* A phone's own long-press menu would fight ours, and text selection with it. */
+@media (pointer: coarse) {
+  .tc-bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+}
+
 /* ---- phone: one pane at a time ------------------------------------------ */
 
 @media (max-width: 759px) {
@@ -741,6 +829,11 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 /* ---- motion: only when welcome ------------------------------------------ */
 
 @media (prefers-reduced-motion: no-preference) {
+  .tc-msg.lifted .tc-bubble { transform: scale(1.02); transition: transform .15s ease; }
+  .tc-react-bar, .tc-menu-items { animation: tc-pop .18s cubic-bezier(.2, .9, .3, 1.2) backwards; }
+  .tc-react-chips { animation: tc-pop .2s cubic-bezier(.2, .9, .3, 1.3) backwards; }
+  .tc-swipe { transition: transform .12s ease-out; }
+  @keyframes tc-pop { from { opacity: 0; transform: scale(.85); } }
   .tc-round { transition: transform .15s ease, background .15s ease; }
   .tc-rec-dot { animation: tc-blink 1s infinite ease-in-out; }
   .tc-rec-dot.paused { animation: none; }
