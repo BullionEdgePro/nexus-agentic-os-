@@ -269,7 +269,7 @@ test("skin tones and recents", () => {
   assert.equal(pushRecent(Array.from({ length: 30 }, (_, i) => String(i)), "x").length, 24);
 });
 
-test("the emoji list loads only when the panel opens", { todo: "Task 10 writes the panel" }, () => {
+test("the emoji list loads only when the panel opens", () => {
   assert.match(read("app/team-chat/emoji-panel.tsx"), /fetch\("\/emoji\/en\.json"\)/);
 });
 
@@ -313,4 +313,45 @@ test("the header lists the members, and the old stylesheet is gone", () => {
   assert.match(PAGE, /aria-expanded=\{showMembers\}/);
   assert.match(PAGE, /unreadAtOpen=\{/);
   assert.throws(() => read("app/deck/team-chat/team-chat.css"));
+});
+
+// ---- Task 10: one message box for the page and the dock --------------------------------
+
+test("the page and the inbox dock use the one message box, fresh for each chat", () => {
+  const PAGE = read("app/deck/team-chat/page.tsx");
+  const DOCK = read("app/inbox/team-dock.tsx");
+  assert.match(PAGE, /<TeamComposer[\s\S]{0,80}key=\{active\.id\}/);
+  assert.match(DOCK, /<TeamComposer[\s\S]{0,80}key=\{active\.id\}/);
+  assert.doesNotMatch(DOCK, /<textarea/);
+  assert.doesNotMatch(PAGE, /<textarea/);
+});
+
+test("the round button is a mic when empty and send once there is text", () => {
+  const C = read("app/team-chat/composer.tsx");
+  assert.match(C, /draft\.trim\(\) \? \(/);
+  assert.match(C, /aria-label="Send"/);
+  assert.match(C, /<VoiceRecorder/);
+  assert.match(C, /<AttachButton/);
+  assert.match(C, /if \(!thread\.canPost\) return null;/);
+});
+
+test("a reply shows its quote above the box and can be cleared", () => {
+  const C = read("app/team-chat/composer.tsx");
+  assert.match(C, /thread\.replyingTo/);
+  assert.match(C, /aria-label="Cancel reply"/);
+});
+
+test("sending plays the pop, and @mentions still work", () => {
+  const C = read("app/team-chat/composer.tsx");
+  assert.match(C, /play\("pop"\)/);
+  assert.match(C, /thread\.send\(body, mentions\)/);
+  assert.match(C, /role="listbox" aria-label="Mention a colleague"/);
+});
+
+test("the emoji keyboard searches, remembers recents safely, and offers skin tones", () => {
+  const P = read("app/team-chat/emoji-panel.tsx");
+  assert.match(P, /searchEmoji\(/);
+  assert.match(P, /try \{[\s\S]{0,160}localStorage/);
+  assert.match(P, /withTone\(/);
+  assert.match(P, /Escape/);
 });

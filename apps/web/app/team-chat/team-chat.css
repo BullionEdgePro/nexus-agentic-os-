@@ -376,44 +376,99 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 .tc-messages .tc-empty { background: var(--paper); border-radius: 10px; padding: 10px 16px; box-shadow: var(--tc-bubble-lift); }
 .tc-pick { display: grid; place-items: center; height: 100%; }
 
-/* ---- writing ------------------------------------------------------------ */
+/* ---- writing: WhatsApp's bar --------------------------------------------- */
 
+.tc-composer { position: relative; background: var(--tc-ground); }
 .tc-compose {
   position: relative;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-end;
-  padding: 12px 14px;
-  border-top: 1px solid var(--hairline);
+  padding: 8px 10px 10px;
 }
-.tc-compose textarea {
+.tc-field {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 3px 6px;
+  border-radius: 24px;
+  background: var(--paper);
+  box-shadow: var(--tc-bubble-lift);
+}
+.tc-field textarea {
+  flex: 1;
+  min-width: 0;
   resize: none;
   font: inherit;
-  font-size: 13.5px;
-  line-height: 1.45;
-  padding: 9px 12px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 12px;
-  background: var(--marble);
+  font-size: 14.5px;
+  line-height: 1.4;
+  padding: 9px 4px;
+  border: 0;
+  background: transparent;
   color: var(--ink);
   max-height: 140px;
+  field-sizing: content;
 }
-.tc-compose textarea:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; border-color: transparent; }
-.tc-compose > button {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 10px 18px;
+.tc-field textarea:focus-visible { outline: none; }
+.tc-field:focus-within { box-shadow: 0 0 0 2px var(--signal-text), var(--tc-bubble-lift); }
+.tc-icon-btn {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
   border: 0;
-  border-radius: var(--r-pill);
-  background: var(--signal);
-  color: var(--on-accent);
+  border-radius: 50%;
+  background: none;
+  color: var(--slate);
+  font-size: 20px;
+  line-height: 1;
   cursor: pointer;
 }
-.tc-compose > button:disabled { opacity: .45; cursor: default; }
+.tc-icon-btn:hover:not(:disabled) { background: var(--signal-soft); }
+.tc-icon-btn:disabled { opacity: .45; cursor: default; }
+.tc-round {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--st-ink);
+  color: var(--on-ink);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--tc-bubble-lift);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tc-round:disabled { opacity: .5; cursor: default; }
+.tc-composer.compact .tc-round { width: 40px; height: 40px; font-size: 17px; }
+
+.tc-reply-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 10px 0;
+  padding: 7px 8px 7px 10px;
+  border-left: 4px solid var(--signal-text);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: var(--tc-bubble-lift);
+}
+.tc-reply-strip > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tc-reply-strip b { font-size: 12.5px; color: var(--signal-text); }
+.tc-reply-strip span { font-size: 12.5px; color: var(--slate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-reply-strip button { border: 0; background: none; font-size: 20px; color: var(--mist); cursor: pointer; padding: 0 4px; }
+
 .tc-suggest {
   position: absolute;
+  z-index: 4;
   left: 14px;
   bottom: calc(100% - 4px);
   list-style: none;
@@ -428,6 +483,80 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 .tc-suggest button { width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 7px 10px; border: 0; border-radius: 8px; background: none; cursor: pointer; color: var(--ink); }
 .tc-suggest button:hover { background: var(--pebble); }
 .tc-readonly { margin: 0; padding: 14px 16px; border-top: 1px solid var(--hairline); font-size: 13px; color: var(--slate); background: var(--paper); text-align: center; }
+
+/* The emoji keyboard: opens above the bar. */
+.tc-emoji {
+  position: absolute;
+  z-index: 5;
+  left: 10px;
+  bottom: 100%;
+  width: min(380px, calc(100% - 20px));
+  height: 320px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: var(--lift);
+  overflow: hidden;
+}
+.tc-emoji-search {
+  margin: 10px 10px 6px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--pebble);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+}
+.tc-emoji-search:focus-visible { outline: 2px solid var(--signal-text); outline-offset: 1px; }
+.tc-emoji-tabs { display: flex; gap: 2px; padding: 0 8px 4px; border-bottom: 1px solid var(--hairline); }
+.tc-emoji-tabs button {
+  flex: 1;
+  padding: 5px 0 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-size: 17px;
+  cursor: pointer;
+  opacity: .6;
+}
+.tc-emoji-tabs button[aria-selected="true"] { opacity: 1; border-bottom-color: var(--signal-text); }
+.tc-emoji-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  align-content: start;
+  padding: 6px 8px 10px;
+}
+.tc-emoji-grid button {
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tc-emoji-grid button:hover { background: var(--pebble); }
+.tc-emoji-note { grid-column: 1 / -1; margin: 18px 8px; font-size: 13px; color: var(--mist); text-align: center; }
+.tc-emoji-tones {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  box-shadow: var(--lift);
+}
+.tc-emoji-tones button { width: 42px; height: 42px; border: 0; border-radius: 50%; background: none; font-size: 26px; cursor: pointer; }
+.tc-emoji-tones button:hover { background: var(--pebble); }
 
 /* ---- phone: one pane at a time ------------------------------------------ */
 

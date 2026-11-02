@@ -14,6 +14,7 @@ import {
 import { useTeamSocket, type TeamSocketEvent } from "@/lib/use-team-socket";
 import { useTeamThread } from "@/lib/use-team-thread";
 import { ThreadMessages } from "../../team-chat-thread";
+import { TeamComposer } from "../../team-chat/composer";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
@@ -37,8 +38,6 @@ export default function TeamChatPage() {
   const [data, setData] = useState<TeamThreadsResponse | null>(null);
   const [loadError, setLoadError] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [mentionIds, setMentionIds] = useState<Record<string, string>>({});
   const [opening, setOpening] = useState<string | null>(null);
   const [showMembers, setShowMembers] = useState(false);
   const [unreadAtOpen, setUnreadAtOpen] = useState(0);
@@ -146,27 +145,6 @@ export default function TeamChatPage() {
     } finally {
       setOpening(null);
     }
-  }
-
-  function send() {
-    const body = draft.trim();
-    const mentions = Object.entries(mentionIds)
-      .filter(([name]) => body.includes(`@${name}`))
-      .map(([, id]) => id);
-    if (!thread.send(body, mentions)) return;
-    setDraft("");
-    setMentionIds({});
-  }
-
-  // "@" at the end of the draft offers colleagues.
-  const mentionQuery = /(?:^|\s)@([\p{L}\p{N} ]{0,30})$/u.exec(draft)?.[1] ?? null;
-  const suggestions =
-    mentionQuery === null
-      ? []
-      : mentionable.filter((c) => c.fullName.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 6);
-  function pickMention(colleague: TeamColleague) {
-    setDraft((text) => text.replace(/@([\p{L}\p{N} ]{0,30})$/u, `@${colleague.fullName} `));
-    setMentionIds((ids) => ({ ...ids, [colleague.fullName]: colleague.id }));
   }
 
   // ---- render -----------------------------------------------------------
@@ -367,50 +345,16 @@ export default function TeamChatPage() {
                   ) : null}
 
                   {thread.canPost ? (
-                    <form
-                      className="tc-compose"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        send();
-                      }}
-                    >
-                      {suggestions.length > 0 ? (
-                        <ul className="tc-suggest" role="listbox" aria-label="Mention a colleague">
-                          {suggestions.map((c) => (
-                            <li key={c.id}>
-                              <button type="button" onClick={() => pickMention(c)}>
-                                @{c.fullName}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      <textarea
-                        value={draft}
-                        onChange={(event) => {
-                          setDraft(event.target.value);
-                          thread.notifyTyping();
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" && !event.shiftKey) {
-                            event.preventDefault();
-                            if (suggestions.length > 0) pickMention(suggestions[0]!);
-                            else send();
-                          }
-                        }}
-                        placeholder={
-                          active.kind === "room"
-                            ? `Message the ${data.business.name} team — type @ to mention someone`
-                            : `Message ${threadTitle}`
-                        }
-                        rows={2}
-                        maxLength={4000}
-                        aria-label="Message"
-                      />
-                      <button type="submit" disabled={!draft.trim()}>
-                        Send
-                      </button>
-                    </form>
+                    <TeamComposer
+                      key={active.id}
+                      thread={thread}
+                      colleagues={mentionable}
+                      placeholder={
+                        active.kind === "room"
+                          ? `Message the ${data.business.name} team — type @ to mention someone`
+                          : `Message ${threadTitle}`
+                      }
+                    />
                   ) : active.kind === "direct" && me?.isAdmin ? (
                     <p className="tc-readonly">
                       Read only — between {active.memberAName} and {active.memberBName}.
