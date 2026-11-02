@@ -59,7 +59,7 @@ export default function TeamChatPage() {
     }
   }, [ready, businessParam]);
 
-  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void loadThreads());
+  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void loadThreads(), data?.me.key ?? null);
 
   useEffect(() => {
     setActiveId(null);

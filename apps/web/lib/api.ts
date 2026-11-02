@@ -3567,6 +3567,25 @@ export interface TeamColleague {
   onShift: boolean;
 }
 
+/** A voice note, photo or file in team chat (2 Nov 2026): its description, never its bytes. */
+export interface TeamChatFile {
+  id: string;
+  kind: "voice" | "photo" | "file";
+  name: string;
+  size: number;
+  mime: string;
+  durationMs: number | null;
+  waveform: number[] | null;
+  width: number | null;
+  height: number | null;
+}
+
+/** One emoji on a message and who used it; `key` is an employee id or admin:<id>. */
+export interface TeamReaction {
+  emoji: string;
+  by: Array<{ key: string; name: string }>;
+}
+
 export interface TeamChatMessage {
   id: string;
   threadId: string;
@@ -3577,14 +3596,20 @@ export interface TeamChatMessage {
   clientId: string;
   mentions: string[];
   sharedConversationId: string | null;
+  fileId: string | null;
+  replyToId: string | null;
   createdAt: string;
   deletedAt: string | null;
   share: { conversationId: string; name: string; channel: string } | null;
+  file: TeamChatFile | null;
+  replyTo: { id: string; authorName: string; snippet: string; removed: boolean } | null;
+  reactions: TeamReaction[];
 }
 
 export interface TeamThreadsResponse {
   business: { slug: string; name: string };
-  me: { employeeId: string | null; isAdmin: boolean; name: string };
+  /** `key` is how this viewer appears in reactions and reads: an employee id, or admin:<id>. */
+  me: { employeeId: string | null; isAdmin: boolean; name: string; key: string };
   threads: TeamThreadSummary[];
   colleagues: TeamColleague[];
 }
@@ -3600,7 +3625,7 @@ export function openDirectChat(employeeId: string): Promise<{ thread: { id: stri
 export function getTeamMessages(
   threadId: string,
   before?: string
-): Promise<{ messages: TeamChatMessage[]; canPost: boolean; seenByOther: string | null }> {
+): Promise<{ messages: TeamChatMessage[]; canPost: boolean; seenByOther: string | null; seenByAllAt?: string | null }> {
   return request(
     `/api/team-chat/threads/${threadId}/messages${before ? `?before=${encodeURIComponent(before)}` : ""}`
   );
@@ -3608,9 +3633,76 @@ export function getTeamMessages(
 
 export function sendTeamMessage(
   threadId: string,
-  input: { clientId: string; body: string; mentions?: string[]; shareConversationId?: string }
+  input: { clientId: string; body: string; mentions?: string[]; shareConversationId?: string; replyTo?: string }
 ): Promise<{ message: TeamChatMessage }> {
   return request(`/api/team-chat/threads/${threadId}/messages`, { method: "POST", body: JSON.stringify(input) });
+}
+
+/**
+ * Send a voice note, photo or file (2 Nov 2026). XMLHttpRequest rather than
+ * fetch, because only it reports upload progress; otherwise it behaves like
+ * `request`: the session cookie, the view-as preview header, and the same
+ * "API <status> on <path>: <body>" failure text readableError understands.
+ * Aborting rejects with an AbortError.
+ */
+export function uploadTeamMessage(
+  threadId: string,
+  form: FormData,
+  onProgress: (fraction: number) => void,
+  signal: AbortSignal
+): Promise<{ message: TeamChatMessage }> {
+  const path = `/api/team-chat/threads/${threadId}/messages`;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}${path}`);
+    xhr.withCredentials = true;
+    const preview = viewingAs();
+    if (preview) xhr.setRequestHeader("x-nexus-view-as", preview);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as { message: TeamChatMessage });
+        } catch {
+          reject(new Error(`API ${xhr.status} on ${path}: the answer could not be read`));
+        }
+      } else {
+        reject(new Error(`API ${xhr.status} on ${path}: ${xhr.responseText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error(`API 0 on ${path}: the connection failed`));
+    xhr.onabort = () => reject(new DOMException("The upload was cancelled.", "AbortError"));
+    if (signal.aborted) {
+      reject(new DOMException("The upload was cancelled.", "AbortError"));
+      return;
+    }
+    signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.send(form);
+  });
+}
+
+/** Where a team chat file is fetched (with credentials) — through its thread. */
+function teamFilePath(threadId: string, id: string, preview: boolean): string {
+  return preview
+    ? `/api/team-chat/threads/${threadId}/files/${id}/preview`
+    : `/api/team-chat/threads/${threadId}/files/${id}`;
+}
+
+export function teamFileUrl(threadId: string, id: string, preview = false): string {
+  return `${API_URL}${teamFilePath(threadId, id, preview)}`;
+}
+
+export function setTeamReaction(threadId: string, messageId: string, emoji: string): Promise<{ reactions: TeamReaction[] }> {
+  return request(`/api/team-chat/threads/${threadId}/messages/${messageId}/reaction`, {
+    method: "PUT",
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+export function clearTeamReaction(threadId: string, messageId: string): Promise<{ reactions: TeamReaction[] }> {
+  return request(`/api/team-chat/threads/${threadId}/messages/${messageId}/reaction`, { method: "DELETE" });
 }
 
 /** "I am typing" — nothing stored; colleagues looking now see it for 5 seconds. */

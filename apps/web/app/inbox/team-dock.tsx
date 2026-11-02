@@ -37,7 +37,7 @@ export function TeamDock({ onClose }: { onClose: () => void }) {
     void load();
   }, [load]);
 
-  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void load());
+  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void load(), data?.me.key ?? null);
   const threadRef = useRef(thread);
   threadRef.current = thread;
 
