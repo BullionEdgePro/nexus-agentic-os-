@@ -289,6 +289,13 @@ button.kit-card, a.kit-card { cursor: pointer; }
 .kit-placeholder { opacity: .35; }
 .kit-ghost { position: fixed; z-index: 970; margin: 0; pointer-events: none; box-shadow: var(--lift); }
 
+/* ---- horizontal bars, "more" links, section heads ---------------------------------- */
+
+.kit-hbar { height: 8px; border-radius: var(--r-pill); background: var(--pebble); overflow: hidden; }
+.kit-hbar i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--st-forest); transform-origin: 0 50%; }
+.kit-more { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 650; color: var(--signal-text); text-decoration: none; }
+.kit-more:hover { text-decoration: underline; }
+
 @media (max-width: 760px) {
   .kit-scrim { padding: 0; place-items: stretch; }
   .kit-window, .kit-panel { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; }
@@ -300,6 +307,8 @@ button.kit-card, a.kit-card { cursor: pointer; }
 /* ---- motion: only when welcome -------------------------------------------------- */
 
 @media (prefers-reduced-motion: no-preference) {
+  .kit-hbar i { animation: kit-grow-x .7s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes kit-grow-x { from { scale: 0 1; } }
   .kit-col, .kit-col-drop { transition: height .18s ease, border-color .15s ease, background .15s ease; }
   .kit-scrim { animation: kit-fade .2s ease-out both; }
   .kit-window { animation: kit-grow .26s cubic-bezier(.2, .9, .3, 1.1) both; }

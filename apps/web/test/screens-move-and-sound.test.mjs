@@ -13,12 +13,14 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 test("the front page's figures count up and its lines draw", () => {
   const deck = read("../app/deck-console.tsx");
-  assert.match(deck, /<span data-countup>\{s\.v\}<\/span>/);
+  // Since Cream pages 2a the tiles and the chart are the kit's, which count up
+  // and draw (the-kit.test.mjs renders both).
+  assert.match(deck, /<NumberTile key=\{s\.k\} label=\{s\.k\} value=\{s\.v\}/);
+  assert.match(deck, /<AreaChart points=\{days\}/);
+  assert.match(read("../app/kit/number-tile.tsx"), /<span data-countup="">\{value\}<\/span>/);
   // A drawn line needs pathLength="1" so one dash spans it (motion.css).
-  const drawn = [...deck.matchAll(/<path[^>]*className="nx-draw"[^>]*>/g)].map((m) => m[0]);
-  assert.ok(drawn.some((p) => p.includes("d={area.line}")), "the overview line does not draw");
-  assert.ok(drawn.some((p) => p.includes("d={p}")), "the stat sparklines do not draw");
-  for (const path of drawn) assert.match(path, /pathLength="1"/);
+  assert.match(read("../app/kit/charts.tsx"), /className="nx-draw kit-line"[^>]*pathLength="1"/);
+  assert.match(read("../app/kit/number-tile.tsx"), /className="kit-spark nx-draw"[^>]*pathLength="1"/);
 });
 
 test("My Day's counts count up", () => {

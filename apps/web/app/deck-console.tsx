@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OverviewMetrics } from "@nexus/shared";
-import { getOverview } from "@/lib/api";
+import { getOverview, getStaffWork, type StaffWorkAttention } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { SystemHealth } from "./system-health";
+import { AreaChart, ChartCard, NumberTile } from "./kit";
+import { WaitingCards } from "./front/waiting-cards";
 import "./deck/deck.css";
+import "./kit/kit.css";
 
 /* ---------------- static presentation data ---------------- */
 type Stat = { k: string; v: string; unit?: string; d: string; cls: "up" | "flat"; spark: number[]; hi?: boolean };
@@ -99,38 +102,6 @@ const INTENTS: { n: string; v: number }[] = [];
 // has none.
 const FEED: Array<{ ini: string; nm: string; t: string; tag: string; tags: string; msg: string }> = [];
 
-/* ---------------- helpers ---------------- */
-function sparkPath(vals: number[], w: number, h: number): string {
-  const mn = Math.min(...vals);
-  const mx = Math.max(...vals);
-  const r = mx - mn || 1;
-  return vals
-    .map((v, i) => {
-      const x = (i / (vals.length - 1)) * w;
-      const y = h - ((v - mn) / r) * (h - 4) - 2;
-      return `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join("");
-}
-
-function Spark({ vals }: { vals: number[]; hi?: boolean }) {
-  const id = useMemo(() => "sg" + Math.random().toString(36).slice(2, 8), []);
-  const p = sparkPath(vals, 64, 26);
-  const color = "var(--signal)";
-  return (
-    <svg className="spark" viewBox="0 0 64 26" fill="none">
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={color} />
-          <stop offset="1" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${p} L64 26 L0 26 Z`} fill={`url(#${id})`} opacity=".18" />
-      <path d={p} className="nx-draw" pathLength="1" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 /* ---------------- live-metric mappers (fall back to sample when empty) ---------------- */
 function initials(name: string): string {
   return name
@@ -200,8 +171,19 @@ export default function DeckConsole() {
   >([]);
   /** Faint arcs between neighbouring businesses — they share one number. */
   const [web, setWeb] = useState<string[]>([]);
-  const [grown, setGrown] = useState(false);
   const [clock, setClock] = useState("");
+  // The customers waiting longest, for the front page's coloured cards (Cream
+  // pages 2a). A failed load is said as such, never as "nobody is waiting".
+  const [waiting, setWaiting] = useState<
+    { list: StaffWorkAttention["oldestWaiting"]; total: number; at: number } | "failed" | null
+  >(null);
+  useEffect(() => {
+    getStaffWork()
+      .then(({ attention }) =>
+        setWaiting({ list: attention.oldestWaiting ?? [], total: attention.waitingTotal ?? 0, at: Date.now() })
+      )
+      .catch(() => setWaiting("failed"));
+  }, []);
 
   // The header's counts and account now live in header-menus.tsx, beside the
   // panels that explain them. A badge whose number is fetched here and whose
@@ -316,15 +298,13 @@ export default function DeckConsole() {
     return () => ro.disconnect();
   }, [tenants]);
 
-  // grow bars + clock
+  // clock
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setGrown(true));
     const tick = () =>
       setClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     tick();
     const id = setInterval(tick, 1000);
     return () => {
-      cancelAnimationFrame(raf);
       clearInterval(id);
     };
   }, []);
@@ -343,18 +323,14 @@ export default function DeckConsole() {
    * answer the stat cards above already give with their empty sparklines.
    * When a real series exists, pass it here and this draws it.
    */
-  const area = useMemo(() => {
-    const vals: number[] = [];
-    if (vals.length < 2) return null;
-    const w = 320;
-    const h = 150;
-    const mn = Math.min(...vals);
-    const mx = Math.max(...vals);
-    const r = mx - mn || 1;
-    const pts = vals.map((v, i) => [(i / (vals.length - 1)) * w, h - ((v - mn) / r) * (h - 22) - 14]);
-    const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
-    return { line, fill: `${line} L${w} ${h} L0 ${h} Z`, last: pts[pts.length - 1] };
-  }, []);
+  //
+  // Since 2 Nov 2026 a real series exists: conversations per day from the
+  // nightly rollup (`conversationsByDay`), and the kit's AreaChart draws it —
+  // or, with fewer than two days, says there are not enough days yet.
+  const days = useMemo(
+    () => (overview?.conversationsByDay ?? []).map((d) => ({ label: dayLabel(d.day), value: d.conversations })),
+    [overview]
+  );
 
   return (
     <div className={`deck-root ${fontVariables}`}>
@@ -384,44 +360,37 @@ export default function DeckConsole() {
           </div>
 
           {/* Where an owner goes from here — each a real screen. */}
-          <nav className="adm-quick" aria-label="Quick actions">
+          <nav className="kit-pills adm-quick" aria-label="Quick actions">
             {QUICK.map((q) => (
-              <a key={q.href} href={q.href} className="adm-quick-a">
-                <span className="adm-quick-ic" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d={q.d} />
-                  </svg>
-                </span>
-                <span>
-                  <b>{q.label}</b>
-                  <small>{q.hint}</small>
-                </span>
+              <a key={q.href} href={q.href} className="kit-pill" title={q.hint}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d={q.d} />
+                </svg>
+                {q.label}
               </a>
             ))}
           </nav>
 
-          <div className="stats">
+          <div className="kit-tiles adm-tiles">
             {displayStats.map((s) => (
-              <div className={`stat glass${s.hi ? " hi" : ""}`} key={s.k}>
-                {STAT_ICON[s.k] ? (
-                  <span className="stat-ic" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d={STAT_ICON[s.k]} />
-                    </svg>
-                  </span>
-                ) : null}
-                <div className="k">{s.k}</div>
-                <div className="v">
-                  <span data-countup>{s.v}</span>
-                  {s.unit && <small>{s.unit}</small>}
-                </div>
-                <div className={`d ${s.cls}`}>
-                  {s.cls === "up" ? "▲" : "■"} {s.d}
-                </div>
-                {s.spark.length > 0 && <Spark vals={s.spark} hi={s.hi} />}
-              </div>
+              <NumberTile key={s.k} label={s.k} value={s.v} unit={s.unit} note={s.d} icon={STAT_ICON[s.k]} spark={s.spark} />
             ))}
           </div>
+
+          {/* The video's "hot deals", as the customers waiting longest. */}
+          <section className="adm-waiting" aria-labelledby="adm-waiting-h">
+            <div className="adm-section-head">
+              <h2 id="adm-waiting-h">Customers waiting</h2>
+              <span>Longest first, every business</span>
+            </div>
+            {waiting === "failed" ? (
+              <p className="chart-empty">Who is waiting could not be loaded. Open Staff work to see it.</p>
+            ) : waiting ? (
+              <WaitingCards waiting={waiting.list} total={waiting.total} now={waiting.at} />
+            ) : (
+              <p className="chart-empty">Loading who is waiting…</p>
+            )}
+          </section>
 
           <div className="grid-2">
             <div className="card glass">
@@ -602,69 +571,23 @@ export default function DeckConsole() {
           </div>
 
           <div className="grid-3">
-            <div className="card glass">
-              <div className="card-h">
-                <h3>
-                  <span className="ic">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                      <path d="M4 20V10m6 10V4m6 16v-7m4 7H2" />
-                    </svg>
-                  </span>
-                  Conversations
-                </h3>
-                {/* The pill said "+18%" in green, permanently, against a
-                    platform whose entire history is seventeen conversations.
-                    A growth figure nothing computed. */}
-                <span className="pill mono" style={{ color: "var(--mist)" }}>
-                  {live && overview ? `${overview.activeConversations} open` : "—"}
-                </span>
-              </div>
-              <svg className="area" viewBox="0 0 320 150" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stopColor="var(--signal)" stopOpacity=".22" />
-                    <stop offset="1" stopColor="var(--signal)" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d="M0 75 H320" stroke="rgba(11,42,74,.1)" />
-                <path d="M0 120 H320" stroke="var(--hairline)" />
-                {area ? (
-                  <>
-                    <path d={area.fill} fill="url(#ag)" />
-                    <path
-                      d={area.line}
-                      className="nx-draw"
-                      pathLength="1"
-                      fill="none"
-                      stroke="var(--signal)"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle cx={area.last[0]} cy={area.last[1]} r="3.5" fill="var(--signal)" />
-                  </>
-                ) : null}
-              </svg>
-              {/* Which of the two silences this is, in the same words the
-                  cards above use — an empty chart with no caption is just a
-                  chart that failed to load. */}
-              {area ? null : (
-                <p className="chart-empty">
-                  {live
-                    ? "No history is published yet — the overview counts today, not the week."
-                    : "Nothing to draw: the platform could not be reached."}
-                </p>
+            {/* The pill once said "+18%" in green, permanently, against a
+                platform whose entire history was seventeen conversations: a
+                growth figure nothing computed. The figure here is the count of
+                open conversations the API sent, and the line is real days. */}
+            <ChartCard
+              title="Conversations"
+              figure={live && overview ? String(overview.activeConversations) : undefined}
+              note={live && overview ? "open now · each day, last 14 days" : undefined}
+            >
+              {/* Which of the two silences this is: an unreachable platform is
+                  said as such, never drawn as an empty chart. */}
+              {unreachable ? (
+                <p className="chart-empty">Nothing to draw: the platform could not be reached.</p>
+              ) : (
+                <AreaChart points={days} ariaLabel="Conversations per day, last 14 days" />
               )}
-              <div className="foot" style={{ marginTop: 12 }}>
-                <span>Mon</span>
-                <span>Tue</span>
-                <span>Wed</span>
-                <span>Thu</span>
-                <span>Fri</span>
-                <span>Sat</span>
-                <span>Sun</span>
-              </div>
-            </div>
+            </ChartCard>
 
             <div className="card glass">
               <div className="card-h">
@@ -687,8 +610,8 @@ export default function DeckConsole() {
                     <span>{it.n}</span>
                     <b>{it.v}%</b>
                   </div>
-                  <div className="bar">
-                    <i style={{ width: grown ? `${it.v}%` : "0%" }} />
+                  <div className="kit-hbar">
+                    <i style={{ width: `${it.v}%` }} />
                   </div>
                 </div>
               ))}
@@ -805,4 +728,14 @@ function GovRow({
       </div>
     </div>
   );
+}
+
+/** "Sat 31 Oct" for a `YYYY-MM-DD` day, read in UTC so it never shifts a day. */
+function dayLabel(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
 }

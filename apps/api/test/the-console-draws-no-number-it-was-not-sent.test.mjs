@@ -138,6 +138,11 @@ test("the chart still draws when a real series arrives", () => {
   // shape, and the moment something passes a series it renders — which is what
   // the header argues for: an empty dashboard should still say what it would
   // show.
-  assert.ok(CONSOLE.includes("if (vals.length < 2) return null"), "the chart can no longer draw");
-  assert.ok(CONSOLE.includes("{area ? ("), "the chart render is not guarded on having data");
+  //
+  // Since 2 Nov 2026 (Cream pages 2a) a real series exists — conversations per
+  // day from the nightly rollup — and the kit's AreaChart draws it, or says
+  // there are not enough days yet when it has fewer than two (proved by
+  // apps/web/test/the-kit.test.mjs, which renders it).
+  assert.ok(CONSOLE.includes("overview?.conversationsByDay"), "the chart is not fed the real days");
+  assert.ok(CONSOLE.includes("<AreaChart points={days}"), "the chart is not drawn");
 });

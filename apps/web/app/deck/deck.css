@@ -1350,3 +1350,12 @@ html.nx-theme-fade .deck-root * {
   margin: 0 0 6px;
 }
 .deck-root .mc-head p { font-size: 14px; line-height: 1.55; }
+
+/* Cream pages 2a (2 Nov 2026): the front page's kit sections. The quick links
+   are kit pills now, not the old grid of cards. */
+.deck-root .adm-quick.kit-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 16px; }
+.deck-root .adm-tiles { margin: 0 0 8px; }
+.deck-root .adm-waiting { margin: 26px 0 22px; }
+.deck-root .adm-section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 12px; }
+.deck-root .adm-section-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+.deck-root .adm-section-head span { font-size: 13px; color: var(--mist); }
