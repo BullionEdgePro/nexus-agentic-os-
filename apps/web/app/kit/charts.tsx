@@ -12,7 +12,17 @@ import { areaPath, nearestIndex, niceMax, scaleLinear, smoothPath } from "@/lib/
  */
 
 export type Point = { label: string; value: number };
-export type Bar = { label: string; value: number; part?: number; low?: number; high?: number };
+export type Bar = {
+  label: string;
+  value: number;
+  part?: number;
+  low?: number;
+  high?: number;
+  /** Said after the figures in the hover label ("the same weekday last week said 6"). */
+  note?: string;
+  /** A day still in progress: drawn marked, so it never reads as a collapse. */
+  partial?: boolean;
+};
 
 const EMPTY = "Not enough days yet to draw a line.";
 const W = 600;
@@ -104,10 +114,16 @@ export function LineChart(props: { points: Point[]; ariaLabel: string; format?: 
 
 const pct = (n: number) => `${Math.max(0, Math.min(100, n))}%`;
 
-function describe(bar: Bar, format: Format, partLabel?: string): string {
-  if (bar.low != null && bar.high != null) return `${bar.label}: ${format(bar.low)}–${format(bar.high)}, most likely ${format(bar.value)}`;
+const isRange = (bar: Bar): bar is Bar & { low: number; high: number } => bar.low != null && bar.high != null;
+
+/** What a bar says when hovered, tapped or stepped to: its figures, then its note. */
+export function describeBar(bar: Bar, format: Format, partLabel?: string): string {
   const part = bar.part ? `, ${format(bar.part)} ${partLabel ?? "of them"}` : "";
-  return `${bar.label}: ${format(bar.value)}${part}`;
+  const figures = isRange(bar)
+    ? `${format(bar.low)}–${format(bar.high)}, most likely ${format(bar.value)}`
+    : `${format(bar.value)}${part}`;
+  const notes = [bar.note, bar.partial ? "Still in progress, counts only so far" : undefined].filter(Boolean);
+  return `${bar.label}: ${figures}${notes.length ? `. ${notes.join(". ")}` : ""}`;
 }
 
 export function BarChart({
@@ -142,11 +158,11 @@ export function BarChart({
         {bars.map((bar, i) => (
           <div
             key={`${bar.label}-${i}`}
-            className={`kit-bar-col${active === i ? " on" : ""}`}
+            className={`kit-bar-col${bar.partial ? " partial" : ""}${active === i ? " on" : ""}`}
             onPointerEnter={() => setActive(i)}
             onPointerDown={() => setActive(i)}
           >
-            {bar.low != null && bar.high != null ? (
+            {isRange(bar) ? (
               <div className="kit-bar-range" style={{ bottom: pct(share(bar.low)), height: pct(share(bar.high - bar.low)) }}>
                 <div
                   className="kit-bar-mid"
@@ -160,8 +176,14 @@ export function BarChart({
             )}
             {active === i ? (
               <span className="kit-tip bar" aria-hidden="true">
-                <b>{format(bar.value)}</b>
-                <span>{describe(bar, format, partLabel).split(": ")[0]}</span>
+                <b>{isRange(bar) ? `${format(bar.low)}–${format(bar.high)}` : format(bar.value)}</b>
+                <span>
+                  {bar.label}
+                  {isRange(bar) ? ` · most likely ${format(bar.value)}` : ""}
+                  {bar.part ? ` · ${format(bar.part)} ${partLabel ?? "of them"}` : ""}
+                </span>
+                {bar.note ? <span>{bar.note}</span> : null}
+                {bar.partial ? <span>still in progress</span> : null}
               </span>
             ) : null}
           </div>
@@ -172,7 +194,7 @@ export function BarChart({
         <span>{bars[bars.length - 1]!.label}</span>
       </div>
       <span id={live} className="kit-sr" aria-live="polite">
-        {active !== null ? describe(bars[active]!, format, partLabel) : ""}
+        {active !== null ? describeBar(bars[active]!, format, partLabel) : ""}
       </span>
     </div>
   );

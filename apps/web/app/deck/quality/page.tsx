@@ -15,8 +15,10 @@ import {
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { BrainSection } from "./brain-section";
+import { BarChart, NumberTile } from "../../kit";
 import "../deck.css";
 import "../activity/activity.css";
+import "../../kit/kit.css";
 import "./quality.css";
 
 /**
@@ -113,7 +115,6 @@ export default function QualityPage() {
     }
   }
 
-  const peak = Math.max(1, ...trend.map((day) => day.conversations));
   const hasTraffic = (summary?.aiAnswered ?? 0) > 0;
 
   return (
@@ -174,54 +175,47 @@ export default function QualityPage() {
           </div>
         ) : (
           <>
-            <section className="q-cards">
-              <Stat
+            {/* The colour on each tile's top edge is the reading of the figure —
+                good, worth watching, bad — so a rate that needs attention is
+                visible before the digits are parsed. */}
+            <section className="kit-tiles q-tiles">
+              <NumberTile
                 label="Handled without a human"
                 value={pct(summary?.containmentRate)}
                 note={`${summary?.aiAnswered ?? 0} conversations the agent answered`}
-                tone={toneFor(summary?.containmentRate, 0.7, 0.5)}
+                edge={EDGE[toneFor(summary?.containmentRate, 0.7, 0.5)]}
               />
-              <Stat
+              <NumberTile
                 label="A human had to join"
                 value={pct(summary?.escalationRate)}
                 note={`${summary?.escalated ?? 0} escalated`}
-                tone={toneFor(summary?.escalationRate, 0.3, 0.5, true)}
+                edge={EDGE[toneFor(summary?.escalationRate, 0.3, 0.5, true)]}
               />
-              <Stat
+              <NumberTile
                 label="Answered then corrected"
                 value={String(summary?.corrections ?? 0)}
                 note="a person replied directly after the agent"
-                tone="plain"
               />
-              <Stat
+              <NumberTile
                 label="Output tokens"
                 value={compact(summary?.outputTokens ?? 0)}
                 note="over the window — quality is never read without cost"
-                tone="plain"
               />
             </section>
 
             <h2 className="act-sub-head">Daily</h2>
-            <div className="q-chart" role="img" aria-label="Conversations per day, escalated portion shaded">
-              {trend.map((day) => (
-                <div className="q-col" key={day.day} title={`${day.day}: ${day.conversations} conversations, ${day.escalated} escalated`}>
-                  <div className="q-bar" style={{ height: `${(day.conversations / peak) * 100}%` }}>
-                    <div
-                      className="q-bar-esc"
-                      style={{
-                        height: day.conversations
-                          ? `${(day.escalated / day.conversations) * 100}%`
-                          : "0%",
-                      }}
-                    />
-                  </div>
-                  {/* An in-progress day must not read as a collapse in volume. */}
-                  <span className={`q-day${day.isComplete ? "" : " partial"}`}>
-                    {day.day.slice(8)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {/* An in-progress day is drawn marked and says so, so it never reads
+                as a collapse in volume. */}
+            <BarChart
+              ariaLabel="Conversations per day, escalated portion shaded"
+              partLabel="escalated"
+              bars={trend.map((day) => ({
+                label: day.day.slice(5),
+                value: day.conversations,
+                part: day.escalated,
+                partial: !day.isComplete,
+              }))}
+            />
             <p className="q-legend">
               <span className="q-key q-key-ai" /> handled by the agent
               <span className="q-key q-key-esc" /> a human joined
@@ -237,8 +231,8 @@ export default function QualityPage() {
         {hotspots.length > 0 ? (
           <>
             <h2 className="act-sub-head">What reaches a person most</h2>
-            <div className="act-table">
-              <table>
+            <div className="kit-table-wrap">
+              <table className="kit-table">
                 <thead>
                   <tr>
                     <th>Kind of enquiry</th>
@@ -305,8 +299,8 @@ export default function QualityPage() {
             <div className={`q-reply${reply.matched ? "" : " unmatched"}`}>
               <p className="q-answer">{reply.answer}</p>
               {reply.rows.length > 0 ? (
-                <div className="act-table q-reply-table">
-                  <table>
+                <div className="kit-table-wrap q-reply-table">
+                  <table className="kit-table">
                     <thead>
                       <tr>
                         {Object.keys(reply.rows[0]).map((key) => (
@@ -362,25 +356,8 @@ export default function QualityPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  note,
-  tone,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  tone: "good" | "warn" | "bad" | "plain";
-}) {
-  return (
-    <div className={`q-card q-${tone}`}>
-      <span className="q-label">{label}</span>
-      <strong className="q-value">{value}</strong>
-      <span className="q-note">{note}</span>
-    </div>
-  );
-}
+/** A reading's colour on its tile's top edge: the video's green, mustard and terracotta. */
+const EDGE = { good: "forest", warn: "mustard", bad: "terra", plain: undefined } as const;
 
 /** Null means "nothing to divide", which must not render as 0%. */
 function pct(rate: number | null | undefined): string {

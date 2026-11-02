@@ -13,8 +13,10 @@ import {
   type MetricReadiness, readableError } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
+import { BarChart, ChartCard } from "../../kit";
 import "../deck.css";
 import "../activity/activity.css";
+import "../../kit/kit.css";
 import "./forecast.css";
 
 /**
@@ -170,7 +172,7 @@ export default function ForecastPage() {
         {loadError ? null : loading ? (
           <div className="act-empty">Loading…</div>
         ) : (
-          <>
+          <div className="fc-metrics">
             {metrics.map((metric) => (
               <MetricSection
                 key={metric.metric}
@@ -199,7 +201,7 @@ export default function ForecastPage() {
                 </>
               )}
             </p>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -220,19 +222,15 @@ function MetricSection({
   const publishable = accuracy.filter((row) => row.publishable);
 
   return (
-    <section className="fc-metric">
-      <div className="fc-metric-head">
-        <h2>{readiness.label}</h2>
-        <span className="fc-evidence">
-          {readiness.historyDays} complete days · {readiness.activeDays} with traffic
-        </span>
-      </div>
-
+    <ChartCard
+      title={readiness.label}
+      note={`${readiness.historyDays} complete days · ${readiness.activeDays} with traffic`}
+    >
       {blocked ? (
         // The refusal gets the space the chart would have had, and says which
         // constraint binds — so the reader knows whether to wait or to fix
         // something. An empty panel would read as broken.
-        <div className="fc-blocked">
+        <div className="fc-blocked kit-card tone-paper">
           <strong>Not forecasting this yet.</strong>
           <p>{readiness.blockedBecause}</p>
         </div>
@@ -263,7 +261,7 @@ function MetricSection({
           ) : null}
 
           {upcoming.length === 0 ? (
-            <div className="fc-blocked">
+            <div className="fc-blocked kit-card tone-paper">
               <strong>Nothing stored for the days ahead.</strong>
               <p>
                 This measure can be forecast, but no run has written one yet. Press &ldquo;Score and
@@ -287,7 +285,8 @@ function MetricSection({
                 cannot be argued with, and it has to be earned a day at a time.
               </p>
             ) : (
-              <table className="fc-acc-table">
+              <div className="kit-table-wrap">
+              <table className="kit-table fc-acc-table">
                 <thead>
                   <tr>
                     <th>Made</th>
@@ -313,11 +312,12 @@ function MetricSection({
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </>
       )}
-    </section>
+    </ChartCard>
   );
 }
 
@@ -331,50 +331,31 @@ function MetricSection({
  * the correct emphasis.
  */
 function ForecastBars({ rows }: { rows: StoredForecast[] }) {
-  const peak = Math.max(1, ...rows.map((row) => row.intervalHigh));
-
   return (
-    <div className="fc-bars">
-      {rows.map((row) => {
-        const low = (row.intervalLow / peak) * 100;
-        const high = (row.intervalHigh / peak) * 100;
-        const mid = (row.predicted / peak) * 100;
-        return (
-          <div className="fc-bar" key={`${row.targetDay}-${row.horizonDays}`}>
-            <div className="fc-bar-track">
-              <div
-                className="fc-bar-range"
-                style={{ bottom: `${low}%`, height: `${Math.max(high - low, 1.5)}%` }}
-              />
-              <div className="fc-bar-mid" style={{ bottom: `${mid}%` }} />
-            </div>
-            <div className="fc-bar-value">{formatCount(row.predicted)}</div>
-            <div className="fc-bar-range-label">
-              {formatCount(row.intervalLow)}&ndash;{formatCount(row.intervalHigh)}
-            </div>
-            <div className="fc-bar-day">{weekdayLabel(row.targetDay)}</div>
-            <div className="fc-bar-date">{row.targetDay.slice(5)}</div>
-          </div>
-        );
-      })}
-    </div>
+    <BarChart
+      ariaLabel="Predicted range for each of the days ahead"
+      format={formatCount}
+      bars={rows.map((row) => ({
+        label: `${weekdayLabel(row.targetDay)} ${row.targetDay.slice(5)}`,
+        value: row.predicted,
+        low: row.intervalLow,
+        high: row.intervalHigh,
+        note: `the same weekday last week said ${formatCount(row.baseline)}`,
+      }))}
+    />
   );
 }
 
 /** Predicted against happened, most recent first. */
 function RecentTable({ rows }: { rows: ScoredForecast[] }) {
   return (
-    <section className="fc-metric">
-      <div className="fc-metric-head">
-        <h2>Recently marked</h2>
-        <span className="fc-evidence">what was said, and what happened</span>
-      </div>
+    <ChartCard title="Recently marked" note="what was said, and what happened">
       <p className="fc-sub">
         An average error is abstract. &ldquo;We said 9, it was 3&rdquo; is the thing that tells you
         whether to trust next week&rsquo;s number.
       </p>
-      <div className="act-table">
-        <table>
+      <div className="kit-table-wrap">
+        <table className="kit-table">
           <thead>
             <tr>
               <th>Day</th>
@@ -407,7 +388,7 @@ function RecentTable({ rows }: { rows: ScoredForecast[] }) {
           </tbody>
         </table>
       </div>
-    </section>
+    </ChartCard>
   );
 }
 

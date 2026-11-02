@@ -51,37 +51,13 @@
 
 /* --- one measure --- */
 
-.fc-metric {
-  margin: 30px 0 0;
-  border-top: 1px solid var(--hairline);
-  padding-top: 20px;
-}
-
-.fc-metric-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.fc-metric-head h2 {
-  font-family: var(--display);
-  font-size: 19px;
-  font-weight: 500;
-  color: var(--ink);
-  margin: 0;
-}
-
-/* The evidence count sits in the heading rather than a footnote. How many days
-   the figure rests on is not an aside; on this platform it is usually the
-   reason the figure is absent. */
-.fc-evidence {
-  font-family: var(--sans);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--mist);
+/* Each measure is a kit chart card (Cream pages 2a); how many days its figure
+   rests on is the card's note, in the heading rather than a footnote, because
+   on this platform it is usually the reason the figure is absent. */
+.fc-metrics {
+  display: grid;
+  gap: 18px;
+  margin-top: 26px;
 }
 
 /* --- the refusal ---
@@ -90,12 +66,8 @@
  * than as an error. For most businesses here this IS the screen, and for months
  * — a red panel would say something is broken when nothing is. */
 .fc-blocked {
+  display: block;
   margin: 14px 0 0;
-  border: 1px solid var(--hairline);
-  border-left: 3px solid var(--mist);
-  border-radius: var(--r);
-  background: var(--paper);
-  padding: 16px 18px;
 }
 
 .fc-blocked strong {
@@ -143,81 +115,6 @@
 
 .fc-backtest b { color: var(--ink); font-weight: 600; }
 
-/* --- the seven days ---
- *
- * The INTERVAL is the bar and the prediction is a line inside it, deliberately
- * inverted from the usual chart. Drawn the other way round, the eye reads the
- * midpoint as the answer and the whiskers as decoration — which on four weeks
- * of history is precisely backwards. */
-.fc-bars {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-  margin: 18px 0 0;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.fc-bar {
-  flex: 1 1 0;
-  min-width: 62px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-}
-
-.fc-bar-track {
-  position: relative;
-  width: 100%;
-  height: 128px;
-  border-bottom: 1px solid var(--hairline-strong);
-  background: linear-gradient(var(--hairline) 1px, transparent 1px) 0 0 / 100% 32px;
-}
-
-.fc-bar-range {
-  position: absolute;
-  left: 22%;
-  right: 22%;
-  background: var(--signal-soft);
-  border: 1px solid rgba(0, 107, 255, 0.35);
-  border-radius: var(--r-sm);
-}
-
-.fc-bar-mid {
-  position: absolute;
-  left: 14%;
-  right: 14%;
-  height: 2px;
-  background: var(--signal);
-  transform: translateY(1px);
-}
-
-.fc-bar-value {
-  font-family: var(--display);
-  font-size: 17px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  margin-top: 4px;
-}
-
-.fc-bar-range-label,
-.fc-bar-date {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--mist);
-  font-variant-numeric: tabular-nums;
-}
-
-.fc-bar-day {
-  font-family: var(--sans);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--slate);
-}
-
 /* --- earned accuracy --- */
 
 .fc-accuracy { margin: 22px 0 0; }
@@ -239,36 +136,11 @@
   max-width: 74ch;
 }
 
-.fc-acc-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.fc-acc-table th {
-  font-family: var(--sans);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--mist);
-  text-align: right;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--hairline);
-  font-weight: 400;
-}
-
-.fc-acc-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--hairline);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
+.fc-acc-table th,
+.fc-acc-table td { text-align: right; }
 
 .fc-acc-table th:first-child,
 .fc-acc-table td:first-child { text-align: left; }
-
-.fc-acc-table tbody tr:last-child td { border-bottom: 0; }
 
 .fc-good { color: var(--good); font-weight: 600; }
 .fc-warn { color: var(--warn); font-weight: 600; }

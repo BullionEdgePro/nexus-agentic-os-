@@ -349,7 +349,10 @@ test("no traffic yields no rate, not a perfect one", () => {
 test("an in-progress day is marked, not shown as a collapse in volume", () => {
   assert.match(QUALITY_MIGRATION, /is_complete/);
   assert.match(QUALITY_SQL, /\(select day_end from bounds\) <= now\(\)/);
-  assert.match(QUALITY_PAGE, /day\.isComplete \? "" : " partial"/);
+  // Since 2 Nov 2026 (Cream pages 2a) the kit's BarChart draws the day: a
+  // partial bar is hatched and its label says it is still in progress
+  // (apps/web/test/forecast-and-quality-in-cream.test.mjs renders it).
+  assert.match(QUALITY_PAGE, /partial: !day\.isComplete/);
 });
 
 test("the rollup window is trailing, so it self-heals", () => {

@@ -1,9 +1,11 @@
 import { scaleLinear, smoothPath } from "@/lib/kit/chart-math";
+import type { Tone } from "@/lib/kit/wait-band";
 
 /**
  * A number tile (2 Nov 2026, Cream pages 2a): an icon in a circle, a label, a
  * big figure that counts up (part 1's `data-countup`), and the note that says
- * what the number covers. A sparkline only when real points exist.
+ * what the number covers. A sparkline only when real points exist. An `edge`
+ * colours the tile's top edge, for a figure that is good, worth watching or bad.
  */
 export function NumberTile({
   label,
@@ -12,6 +14,7 @@ export function NumberTile({
   note,
   icon,
   spark,
+  edge,
 }: {
   label: string;
   value: string;
@@ -20,9 +23,10 @@ export function NumberTile({
   /** An SVG path `d` drawn in a 24×24 box. */
   icon?: string;
   spark?: number[];
+  edge?: Tone;
 }) {
   return (
-    <div className="kit-tile">
+    <div className={edge ? `kit-tile kit-edge-${edge}` : "kit-tile"}>
       {icon ? (
         <span className="kit-tile-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
