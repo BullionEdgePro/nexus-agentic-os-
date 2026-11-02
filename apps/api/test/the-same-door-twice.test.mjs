@@ -107,6 +107,7 @@ const TAB_API = {
   "/deck/knowledge": "/api/organizations",
   "/deck/procedures": "/api/organizations",
   "/deck/forecast": "/api/organizations",
+  "/deck/workflow": "/api/organizations",
   "/deck/catalogue": "/api/catalog",
   "/deck/channels": "/api/channels",
   "/deck/links": "/api/links",

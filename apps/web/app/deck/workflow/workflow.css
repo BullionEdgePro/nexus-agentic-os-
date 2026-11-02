@@ -5,6 +5,19 @@
  * Spec: docs/superpowers/specs/2026-11-02-sfs-audit-design.md §4.3
  */
 
+/* ---- the page ------------------------------------------------------------------ */
+
+.wf-page { min-width: 0; }
+.wf-pills { margin: 4px 0 12px; }
+.wf-verdict { margin: 0 0 18px; font-size: 15px; font-weight: 650; color: var(--ink); }
+.wf-verdict-days { font-weight: 500; color: var(--slate); }
+.wf-section { margin-top: 26px; min-width: 0; }
+.wf-section:first-of-type { margin-top: 0; }
+.wf-h2 { margin: 0 0 12px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+.wf-section .wf-tiles { margin-bottom: 14px; }
+
+/* ---- the lanes ----------------------------------------------------------------- */
+
 .wf-lanes { display: grid; gap: 22px; }
 .wf-lane { min-width: 0; }
 .wf-lane-title { margin: 0 0 10px; font-size: 14px; font-weight: 650; color: var(--slate); }

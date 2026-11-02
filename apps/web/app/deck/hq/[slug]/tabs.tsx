@@ -13,6 +13,7 @@ import {
   type HqCheck,
   type HqSocial,
 } from "@/lib/api";
+import { workflowFor } from "@nexus/shared";
 import { ScoreRing } from "../overview";
 import { VaultPanel } from "./vault-panel";
 import { OrgChartView } from "../org-chart";
@@ -108,6 +109,12 @@ export function HqBusinessView({
               {data.business.websiteUrl ?? "No website recorded"} · last checked {lastRun ? `${shortDate(lastRun)}` : "never"}
             </p>
           </div>
+          {/* The workflow audit, only on a business whose owner drew a workflow. */}
+          {workflowFor(slug) ? (
+            <a className="btn ghost" href={`/deck/workflow?business=${encodeURIComponent(slug)}`}>
+              Workflow audit
+            </a>
+          ) : null}
           <button type="button" className="btn" onClick={checkNow}>Check now</button>
         </div>
         {checkMsg ? <p className="hq-vault-msg" role="status">{checkMsg}</p> : null}

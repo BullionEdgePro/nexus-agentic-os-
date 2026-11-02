@@ -76,3 +76,29 @@ test("the sample is not still reachable under another name", () => {
   assert.ok(!/\bconst STATS\b/.test(code), "the sample stats array must be gone, not renamed");
   assert.ok(!/: STATS\b/.test(code), "nothing may fall back to a sample stats array");
 });
+
+test("the workflow audit draws only what the audit endpoint returned", () => {
+  // The SFS workflow audit (2 Nov 2026) is a page of figures about one
+  // business's real work; every one of them must come from the audit response.
+  // No literal series (four or more numbers in a row) and no figure written
+  // straight into a count field, in any file the page draws with.
+  const files = [
+    ["apps", "web", "app", "deck", "workflow", "page.tsx"],
+    ["apps", "web", "app", "deck", "workflow", "empty.tsx"],
+    ["apps", "web", "app", "deck", "workflow", "lanes.tsx"],
+    ["apps", "web", "app", "deck", "workflow", "step-window.tsx"],
+    ["apps", "web", "app", "deck", "workflow", "audit-charts.tsx"],
+    ["apps", "web", "app", "deck", "workflow", "funnel.tsx"],
+    ["apps", "web", "app", "deck", "workflow", "compliance.tsx"],
+    ["apps", "web", "lib", "workflow", "step-figures.ts"],
+  ];
+  for (const path of files) {
+    const src = read(...path).replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^[ \t]*\/\/[^\n]*/gm, " ");
+    const name = path[path.length - 1];
+    assert.ok(!/\[\s*\d+(\.\d+)?\s*(,\s*\d+(\.\d+)?\s*){3,}\]/.test(src), `${name} holds a literal series`);
+    assert.ok(
+      !/\b(value|count|medianMs|booked|held|noShow|cancelled|scored|hot|won|leads|total):\s*\d/.test(src),
+      `${name} writes a figure in instead of reading it from the audit`
+    );
+  }
+});

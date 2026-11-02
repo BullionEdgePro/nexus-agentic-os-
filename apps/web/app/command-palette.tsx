@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { NAV } from "@/lib/nav";
+import { workflowFor } from "@nexus/shared";
 import { getMyClients, type MyClient } from "@/lib/api";
 import { useCommandActions } from "@/lib/command-actions";
 import "./command-palette.css";
@@ -38,7 +39,7 @@ type Hit = ActionHit | ScreenHit | ClientHit;
 const clientHref = (c: MyClient) =>
   `/deck/my-clients?q=${encodeURIComponent(c.displayName || c.waId)}`;
 
-export function CommandPalette({ role }: { role: "operator" | "employee" }) {
+export function CommandPalette({ role, mySlug = null }: { role: "operator" | "employee"; mySlug?: string | null }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -49,11 +50,16 @@ export function CommandPalette({ role }: { role: "operator" | "employee" }) {
   // cannot open, filtered by the query as you type.
   const screenHits = useMemo<ScreenHit[]>(() => {
     const visible =
-      role === "operator" ? NAV.filter((i) => !i.staffOnly) : NAV.filter((i) => !i.operatorOnly);
+      role === "operator"
+        ? NAV.filter((i) => !i.staffOnly)
+        : NAV.filter((i) => !i.operatorOnly).filter(
+            // As in the rail: the workflow audit only where a workflow is drawn.
+            (i) => !i.needsWorkflow || (mySlug !== null && workflowFor(mySlug) !== null)
+          );
     const query = q.trim().toLowerCase();
     const matches = query ? visible.filter((i) => i.label.toLowerCase().includes(query)) : visible;
     return matches.map((i) => ({ kind: "screen", href: i.href, label: i.label, icon: i.icon }));
-  }, [role, q]);
+  }, [role, mySlug, q]);
 
   // Clients: staff only, and only once there is something to search for — an
   // empty query would fetch the whole book into a jump list nobody asked for.

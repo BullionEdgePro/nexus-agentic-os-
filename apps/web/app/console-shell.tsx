@@ -15,6 +15,7 @@ import { SoundToggle } from "./sound-toggle";
 import { play } from "@/lib/sound";
 import { RAIL_FROM_KEY, RAIL_KEY, readRailMode, type RailMode } from "@/lib/rail";
 import { NAV, NAV_GROUPS, activeHref, toneOf } from "@/lib/nav";
+import { workflowFor } from "@nexus/shared";
 import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { fontVariables } from "@/lib/fonts";
 import "./deck/deck.css";
@@ -50,7 +51,7 @@ import "./motion.css";
  * of the rail and each positions it. That is the part that was drifting: the
  * items, not the geometry.
  */
-export function RailLinks({ role }: { role: "operator" | "employee" }) {
+export function RailLinks({ role, mySlug = null }: { role: "operator" | "employee"; mySlug?: string | null }) {
   const pathname = usePathname();
   const current = activeHref(pathname);
 
@@ -69,7 +70,10 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
   const visible =
     role === "operator"
       ? NAV.filter((item) => !item.staffOnly)
-      : NAV.filter((item) => !item.operatorOnly);
+      : NAV.filter((item) => !item.operatorOnly).filter(
+          // The workflow audit only for staff whose business has a workflow drawn.
+          (item) => !item.needsWorkflow || (mySlug !== null && workflowFor(mySlug) !== null)
+        );
 
   // The link itself, so the grouped run and the fallback render it identically.
   const link = (item: (typeof NAV)[number]) => (
@@ -333,7 +337,7 @@ export function ConsoleShell({
           <kbd className="rail-search-kbd" aria-hidden="true">⌘K</kbd>
         </button>
         <RailPill />
-        <RailLinks role={role} />
+        <RailLinks role={role} mySlug={me?.organizationSlug ?? null} />
       </nav>
       <main className="shell-main">
         {/* The admin's tools on every page — search, work, notifications, account —
@@ -371,7 +375,7 @@ export function ConsoleShell({
           starts closed so it is never in the way of the work. */}
       <Assistant />
       {/* ⌘K / Ctrl-K from anywhere signed in. Role-filtered like the rail. */}
-      <CommandPalette role={role} />
+      <CommandPalette role={role} mySlug={me?.organizationSlug ?? null} />
       {/* The motion and sound kit, once per signed-in screen. */}
       <MotionBoot />
       {/* "New chat for you" — wherever a staff member is in the product. */}

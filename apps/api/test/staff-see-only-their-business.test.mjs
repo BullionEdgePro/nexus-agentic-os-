@@ -104,6 +104,11 @@ const TAB_API = {
   // Thursday is the business's own operational information, and the person
   // rostering Thursday is the one who needs it.
   "/deck/forecast": "/api/organizations/",
+  // The workflow audit (2 Nov 2026): the business's own picture of its own
+  // workflow, addressed per organization like the forecast — admins any
+  // business with a workflow, staff only their own, which requireTenantScope
+  // enforces. Staff-only in the rail, where admins reach it from Business HQ.
+  "/deck/workflow": "/api/organizations/",
   // The marketplace. Operator-only, and the odd one out among the three
   // "material" tabs: Knowledge and How we answer are the business's own
   // material and its own staff are trusted with them, but installing a pack

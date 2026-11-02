@@ -30,6 +30,12 @@ export interface NavItem {
    * it is not theirs, which is a worse answer than not offering it.
    */
   staffOnly?: boolean;
+  /**
+   * Only for staff whose business has a workflow drawn (`workflowFor` in
+   * @nexus/shared; today SFS International). Anyone else would open a screen
+   * saying there is no workflow, so the door is not offered.
+   */
+  needsWorkflow?: boolean;
   /** What staff call the same screen, when it differs (Inbox is "My queue"). */
   staffLabel?: string;
 }
@@ -350,6 +356,24 @@ export const NAV: NavItem[] = [
     // their own business, exactly as Knowledge and the diary do.
   },
   {
+    href: "/deck/workflow",
+    label: "Workflow audit",
+    staffOnly: true,
+    needsWorkflow: true,
+    // The business's own workflow, checked against what Nexus recorded (2 Nov
+    // 2026). Every SFS staff member sees the whole team's figures; admins reach
+    // it from Business HQ, so the rail item is staff-only, and only for staff
+    // whose business has a workflow drawn.
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <rect x="3" y="4" width="6" height="5" rx="1.2" />
+        <rect x="15" y="4" width="6" height="5" rx="1.2" />
+        <rect x="15" y="15" width="6" height="5" rx="1.2" />
+        <path d="M9 6.5h6M18 9v6" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/quality",
     label: "Agent quality",
     icon: (
@@ -400,7 +424,7 @@ export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
   { title: "People", hrefs: ["/deck/activity", "/deck/team", "/deck/customers", "/deck/my-clients"] },
   { title: "Grow", hrefs: ["/deck/bulk", "/deck/broadcasts", "/deck/links"] },
   { title: "AI agent", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue"] },
-  { title: "Insights", hrefs: ["/deck/forecast", "/deck/quality"] },
+  { title: "Insights", hrefs: ["/deck/forecast", "/deck/workflow", "/deck/quality"] },
   // Two runs that never meet: an admin sees Admin, a staff member sees You.
   { title: "Admin", hrefs: ["/deck/hq", "/deck/channels"] },
   { title: "You", hrefs: ["/deck/connections", "/deck/my-settings"] },

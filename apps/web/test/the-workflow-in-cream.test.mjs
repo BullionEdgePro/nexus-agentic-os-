@@ -18,6 +18,7 @@ import { StepWindow } from "@/app/deck/workflow/step-window";
 import { AuditTiles, AuditCharts } from "@/app/deck/workflow/audit-charts";
 import { Funnel } from "@/app/deck/workflow/funnel";
 import { ComplianceTable } from "@/app/deck/workflow/compliance";
+import { NoWorkflow } from "@/app/deck/workflow/empty";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
@@ -173,4 +174,37 @@ test("a long lead source never widens its row", () => {
   const html = render(AuditCharts, { audit: sample({ bySource: [{ source: "Bayut premium featured listing campaign October", count: 3 }] }) });
   assert.match(html, /class="wf-source"[^>]*dir="auto"/);
   assert.match(read("app/deck/workflow/workflow.css"), /\.wf-source \{[^}]*text-overflow: ellipsis/);
+});
+
+// ---- Task 7: the page, the sidebar item and the Business HQ link -------------------------------
+
+test("the page loads the audit for its period and ignores answers that arrive late", () => {
+  const P = read("app/deck/workflow/page.tsx");
+  assert.match(P, /getWorkflowAudit\(/);
+  assert.match(P, /const asked = \+\+requestId\.current;/);
+  assert.match(P, /if \(asked !== requestId\.current\) return;/);
+  assert.match(P, /The audit could not be loaded\./);
+  assert.match(P, /<NoWorkflow \/>/);
+  assert.match(P, /Loading…/);
+  assert.match(P, /const PERIODS: AuditDays\[\] = \[7, 30, 90\];/);
+  assert.match(P, /useState<AuditDays>\(30\)/);
+  assert.match(P, /aria-pressed=\{d === days\}/);
+  assert.match(P, /verdict\(/);
+  assert.match(P, /import "\.\.\/\.\.\/kit\/kit\.css";/);
+  assert.match(P, /import "\.\/workflow\.css";/);
+  assert.doesNotMatch(P, /\[\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,/); // no literal series
+});
+
+test("staff see the item only when their business has a workflow; admins reach it from Business HQ", () => {
+  assert.match(read("lib/nav.tsx"), /href: "\/deck\/workflow"[\s\S]{0,400}needsWorkflow: true/);
+  assert.match(read("app/console-shell.tsx"), /needsWorkflow[\s\S]{0,120}workflowFor\(/);
+  assert.match(read("app/console-shell.tsx"), /<RailLinks role=\{role\} mySlug=\{me\?\.organizationSlug \?\? null\} \/>/);
+  // The search palette offers the same doors as the rail, so it hides the item the same way.
+  assert.match(read("app/command-palette.tsx"), /needsWorkflow[\s\S]{0,120}workflowFor\(/);
+  assert.match(read("app/deck/hq/[slug]/tabs.tsx"), /workflowFor\([\s\S]{0,200}\/deck\/workflow\?business=/);
+});
+
+test("a business with no workflow says so, not an error", () => {
+  const html = render(NoWorkflow, {});
+  assert.match(html, /No workflow is set up for this business yet\./);
 });
