@@ -65,3 +65,73 @@ test("removing a message wipes its file in the same statement batch, and a retry
   assert.match(remove.slice(0, remove.indexOf("\n}\n")), /update team_files set bytes = null, preview = null, deleted_at = now\(\)/);
   assert.match(read("packages", "db", "src", "team-chat-media.ts"), /where thread_id = \$1 and client_id = \$2/);
 });
+
+// ---- Task 2: what a file really is, and how it is served -----------------------
+
+import { sniff, checkUpload, cleanName, servedHeaders, isEmoji, TEAM_LIMITS } from "../src/lib/team-files.ts";
+
+const bytes = (...b) => new Uint8Array([...b, ...new Array(32).fill(0)]);
+const JPEG = bytes(0xff, 0xd8, 0xff, 0xe0);
+const PNG = bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+const M4A = bytes(0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20); // ....ftypM4A
+const WEBM = bytes(0x1a, 0x45, 0xdf, 0xa3);
+const HTML = new TextEncoder().encode("<!doctype html><script>alert(1)</script>");
+const wave = new Array(64).fill(50);
+
+test("a file is what its bytes say, not what its name says", () => {
+  assert.equal(sniff(JPEG), "image/jpeg");
+  assert.equal(sniff(PNG), "image/png");
+  assert.equal(sniff(M4A), "audio/mp4");
+  assert.equal(sniff(WEBM), "audio/webm");
+  assert.equal(sniff(HTML), null);
+});
+
+test("a picture sent as a voice note, or a web page sent as a photo, is refused", () => {
+  assert.equal(checkUpload({ kind: "voice", bytes: PNG, preview: null, durationMs: 5000, waveform: wave }).ok, false);
+  assert.equal(checkUpload({ kind: "photo", bytes: HTML, preview: null }).ok, false);
+  assert.equal(checkUpload({ kind: "voice", bytes: M4A, preview: null, durationMs: 400_000, waveform: wave }).ok, false);
+  assert.equal(checkUpload({ kind: "voice", bytes: M4A, preview: null, durationMs: 5000, waveform: [101] }).ok, false);
+  const ok = checkUpload({ kind: "voice", bytes: M4A, preview: null, durationMs: 5000, waveform: wave });
+  assert.deepEqual([ok.ok, ok.mime, ok.durationMs], [true, "audio/mp4", 5000]);
+  const doc = checkUpload({ kind: "file", bytes: HTML, preview: null });
+  assert.deepEqual([doc.ok, doc.mime], [true, "application/octet-stream"]);
+});
+
+test("a name keeps only its last part", () => {
+  assert.equal(cleanName("../../etc/passwd"), "passwd");
+  assert.equal(cleanName(String.raw`C:\Users\x\cv.pdf`), "cv.pdf");
+  assert.equal(cleanName("  \n "), "file");
+  assert.equal(cleanName("x".repeat(300)).length, 200);
+});
+
+test("only real photos and voice notes open in the browser; everything else downloads, sandboxed", () => {
+  const photo = servedHeaders({ kind: "photo", mime: "image/png", name: "a.png" });
+  assert.equal(photo["Content-Type"], "image/png");
+  assert.equal(photo["X-Content-Type-Options"], "nosniff");
+  assert.equal(photo["Content-Security-Policy"], "sandbox");
+  assert.equal(photo["Cache-Control"], "private, max-age=31536000, immutable");
+  const page = servedHeaders({ kind: "file", mime: "application/octet-stream", name: "x.html" });
+  assert.equal(page["Content-Type"], "application/octet-stream");
+  assert.match(page["Content-Disposition"], /^attachment;/);
+  const svg = servedHeaders({ kind: "file", mime: "image/svg+xml", name: "logo.svg" });
+  assert.equal(svg["Content-Type"], "application/octet-stream");
+});
+
+test("a download name can never break or inject a header", () => {
+  const h = servedHeaders({ kind: "file", mime: "application/octet-stream", name: 'a"b\r\nSet-Cookie: x.pdf' })["Content-Disposition"];
+  assert.doesNotMatch(h, /[\r\n]/);
+  assert.match(h, /filename="[ -~]*"; filename\*=UTF-8''/);
+  const ar = servedHeaders({ kind: "file", mime: "application/octet-stream", name: "عرض سعر.pdf" })["Content-Disposition"];
+  assert.match(ar, /filename\*=UTF-8''%D8%B9/);
+});
+
+test("a reaction is an emoji and nothing else", () => {
+  for (const ok of ["👍", "❤️", "👍🏽", "🇦🇪", "1️⃣"]) assert.equal(isEmoji(ok), true, ok);
+  for (const bad of ["", "<script>", "nice one", "👍".repeat(9), 7, null]) assert.equal(isEmoji(bad), false, String(bad));
+});
+
+test("the limits are the spec's", () => {
+  assert.equal(TEAM_LIMITS.fileBytes, 16 * 1024 * 1024);
+  assert.equal(TEAM_LIMITS.requestBytes, 17 * 1024 * 1024);
+  assert.equal(TEAM_LIMITS.voiceMaxMs, 305_000);
+});
