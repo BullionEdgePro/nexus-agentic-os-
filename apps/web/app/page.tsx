@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { verifySession, SESSION_COOKIE } from "@/lib/auth";
 import Landing from "./landing";
+import { salesContact } from "@/lib/sales-contact";
 import DeckConsole from "./deck-console";
 import TeamWorkspace from "./deck/team/team-workspace";
 import { ConsoleShell } from "./console-shell";
@@ -30,7 +31,9 @@ export default async function Home() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySession(token);
 
-  if (!session) return <Landing />;
+  // The sales number is read here, per request, so it can be set after a
+  // deploy with a restart (lib/sales-contact.ts).
+  if (!session) return <Landing contact={salesContact(process.env.NEXUS_SALES_WHATSAPP)} />;
 
   // An employee gets their own workspace, not the operator's console.
   //

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
+import type { SalesContact } from "@/lib/sales-contact";
 import "./deck/deck.css";
 import "./landing.css";
 
@@ -396,7 +397,7 @@ function TourArt({ which }: { which: TourKey }) {
   }
 }
 
-export default function Landing() {
+export default function Landing({ contact }: { contact: SalesContact }) {
   const router = useRouter();
   // Starts empty. These fields used to be pre-filled with demo credentials,
   // which was harmless while this page sat behind a redirect and unhelpful the
