@@ -59,6 +59,18 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
     const current = await broadcastStatus(broadcastId);
     if (current === "paused" || current === "stopped") return;
 
+    // A CAMPAIGN THAT IS NOT THERE SENDS NOTHING (3 Nov 2026). The jobs are
+    // queued inside the send request's transaction, so a job can run before that
+    // commits, and a request that throws half-way through queueing rolls its
+    // campaign back while the jobs already queued still run. Thrown, the queue
+    // tries again after its backoff: a late commit is found, a rolled-back
+    // campaign uses up its attempts and nobody is messaged.
+    if (current === null) {
+      throw new Error(
+        `Campaign ${broadcastId} is not in the database (not committed yet, or rolled back); nothing was sent`
+      );
+    }
+
     // NOBODY TO SEND TO (26 Oct 2026). An empty number used to go to Meta, which
     // answered "The parameter to is required" fourteen times on 22 Oct. The
     // audience already excludes these; this is the last line if it ever doesn't.

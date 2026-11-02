@@ -395,14 +395,6 @@ export async function withServingTenant<T>(
   }
 }
 
-/**
- * Points the connection back at the business it was scoped to before a switch.
- * When the switched work has already failed with a database error, the
- * transaction is aborted and this cannot run -- and its own "current
- * transaction is aborted" must not replace the cause in the logs and in the
- * error a person sees (final review, 3 Nov 2026). The transaction is rolled
- * back either way, so nothing is left pointed anywhere.
- */
 let savepoints = 0;
 
 /**
@@ -437,6 +429,14 @@ export async function withSavepoint<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Points the connection back at the business it was scoped to before a switch.
+ * When the switched work has already failed with a database error, the
+ * transaction is aborted and this cannot run -- and its own "current
+ * transaction is aborted" must not replace the cause in the logs and in the
+ * error a person sees (final review, 3 Nov 2026). The transaction is rolled
+ * back either way, so nothing is left pointed anywhere.
+ */
 async function restoreCurrentOrg(client: PoolClient, organizationId: string, afterFailure: boolean): Promise<void> {
   try {
     await client.query("select set_config('app.current_org', $1, true)", [organizationId]);

@@ -183,3 +183,45 @@ test("withSavepoint undoes only its own work and leaves the transaction usable",
   assert.equal(await contactNamed("971594000007"), 1, "the transaction carried on and committed");
   await assert.rejects(lib.withSavepoint(async () => 1), /context/, "without an open transaction it refuses");
 });
+
+test("a campaign job whose campaign is not in the database sends nothing and is tried again", db, async () => {
+  // A send request that threw half-way through queueing now rolls its campaign
+  // back, but the jobs already in Redis still run. The worker can also take a
+  // job before the request that queued it has committed. Either way there is no
+  // campaign to check yet, so the job must not send: thrown, the queue retries.
+  const { processBroadcastSendJob } = await import("../src/queue/broadcast-processor.ts");
+  const sends = [];
+  const realFetch = globalThis.fetch;
+  const realToken = process.env.META_ACCESS_TOKEN;
+  process.env.META_ACCESS_TOKEN = "probe-token-never-sent"; // fetch is replaced below
+  globalThis.fetch = async (url) => {
+    sends.push(String(url));
+    return new Response(JSON.stringify({ messages: [{ id: "wamid.probe" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  let outcome;
+  try {
+    const job = {
+      data: {
+        broadcastId: "91919191-0000-4000-8000-0000000000b1",
+        recipientId: "91919191-0000-4000-8000-0000000000c1",
+        contactWaId: "971594000008",
+        phoneNumberId: "940001",
+        templateName: "probe",
+        templateLanguage: "en",
+        templateParams: [],
+      },
+      opts: { attempts: 3 },
+      attemptsMade: 0,
+    };
+    outcome = await processBroadcastSendJob(job).then(() => "finished", (err) => err.message);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (realToken === undefined) delete process.env.META_ACCESS_TOKEN;
+    else process.env.META_ACCESS_TOKEN = realToken;
+  }
+  assert.deepEqual(sends, [], "a customer was messaged for a campaign the platform has no record of");
+  assert.match(outcome, /not in the database/, "the job finished instead of asking the queue to try again");
+});
