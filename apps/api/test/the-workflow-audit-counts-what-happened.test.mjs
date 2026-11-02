@@ -34,8 +34,10 @@ test("the audit reads inside the business's tenant scope, in its own days", () =
   // whose rows it wants (spec §7.3) — a shared-number customer has rows in more
   // than one business, so a read keyed only on the contact would mix them.
   for (const m of SRC.matchAll(/from (lead_assessments|bookings|lead_labels) (\w+)/g)) {
-    assert.match(SRC.slice(m.index, m.index + 420), new RegExp(`${m[2]}\\.organization_id = \\$1`), `"${m[0]}" is not filtered by the business`);
+    assert.match(SRC.slice(m.index, m.index + 420), new RegExp(`${m[2]}\\.(serving_)?organization_id = \\$1`), `"${m[0]}" is not filtered by the business`);
   }
+  // A score belongs to the business serving its chat (migration 105), not the number's owner.
+  assert.doesNotMatch(SRC, /la\.organization_id = \$1/);
 });
 
 // ---------------------------------------------------------------------------
@@ -111,8 +113,20 @@ insert into lead_assessments (id, organization_id, contact_id, conversation_id, 
   -- Every inbound message is scored: lead one's second message is a second row,
   -- still one lead scored and one hot lead.
   ('a0000000-0000-4000-8000-000000000005', '${SFS}', 'c0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 85, 'urgent', 'purchase_intent', ${dubai(2, "10 hours 6 minutes")}),
-  -- The routed chat is scored under the number's owner, where SFS cannot see it.
+  -- The routed chat is scored under the number's owner, and counts for SFS,
+  -- the business serving it (migration 105).
   ('a0000000-0000-4000-8000-000000000003', '${OTHER}', 'c0000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-000000000003', 90, 'high', 'purchase_intent', ${dubai(3, "9 hours 1 minute")});
+
+-- A sales pitch routed to SFS through the shared number: filed under the
+-- number's owner like every score, and filtered out of SFS's new leads.
+insert into contacts (id, organization_id, channel, external_id, display_name) values
+  ('c0000000-0000-4000-8000-000000000009', '${OTHER}', 'facebook', 'fb-9', 'We sell leads');
+insert into conversations (id, organization_id, routed_organization_id, contact_id, opened_at) values
+  ('d0000000-0000-4000-8000-000000000009', '${OTHER}', '${SFS}', 'c0000000-0000-4000-8000-000000000009', ${dubai(2, "14 hours")});
+insert into messages (organization_id, conversation_id, contact_id, direction, sender_type, body, created_at) values
+  ('${OTHER}', 'd0000000-0000-4000-8000-000000000009', 'c0000000-0000-4000-8000-000000000009', 'inbound', 'contact', 'Buy our lead lists', ${dubai(2, "14 hours")});
+insert into lead_assessments (id, organization_id, contact_id, conversation_id, score, priority, category, created_at) values
+  ('a0000000-0000-4000-8000-000000000009', '${OTHER}', 'c0000000-0000-4000-8000-000000000009', 'd0000000-0000-4000-8000-000000000009', 3, 'low', 'inbound_pitch', ${dubai(2, "14 hours 1 minute")});
 
 insert into lead_labels (organization_id, assessment_id, worth_attention, outcome, labelled_by, created_at, updated_at) values
   ('${SFS}', 'a0000000-0000-4000-8000-000000000001', true, 'won', 'owner', ${dubai(1, "8 hours")}, ${dubai(1, "8 hours")});
@@ -173,18 +187,18 @@ const sfs = (days = 7) =>
 test("counts SFS's real activity and nothing of the other business", db, async () => {
   const a = await sfs();
   assert.equal(a.evidence.leads.total, 3);
-  assert.equal(a.evidence.leads.pitches, 1);
+  assert.equal(a.evidence.leads.pitches, 2);
   assert.equal(a.evidence.leads.byChannel.whatsapp, 2);
   assert.deepEqual(a.evidence.leads.bySource[0], { source: "Bayut", count: 2 });
   assert.deepEqual([a.evidence.replies.byAi, a.evidence.replies.byPerson, a.evidence.replies.unanswered], [1, 1, 1]);
   assert.equal(a.evidence.replies.medianMs, 450_000);
   assert.deepEqual(a.evidence.viewings, { booked: 2, held: 1, noShow: 1, cancelled: 1 });
-  assert.equal(a.evidence.qualifier.scored, 2);
-  assert.equal(a.evidence.qualifier.hot, 1);
+  assert.equal(a.evidence.qualifier.scored, 3);
+  assert.equal(a.evidence.qualifier.hot, 2);
   assert.equal(a.evidence.won, 1);
   assert.equal(a.evidence.contacts.notACustomer, 1);
   assert.equal(a.evidence.contacts.emailOptedOut, 1);
-  assert.deepEqual(a.funnel, { leads: 3, scored: 2, hot: 1, booked: 1, held: 1, won: 1 });
+  assert.deepEqual(a.funnel, { leads: 3, scored: 3, hot: 2, booked: 1, held: 1, won: 1 });
   assert.equal(a.series.leads.length, 7);
   assert.ok(a.series.replyMedian.some((r) => r.medianMs === null), "a day with no replies is null, never 0");
   assert.equal(a.period.bucket, "day");
@@ -194,8 +208,8 @@ test("a chat routed to SFS through a shared number is SFS's lead, not the number
   const a = await sfs();
   assert.equal(a.evidence.leads.byChannel.instagram, 1);
   // SFS's customers are the ones it serves: five on its own number plus the
-  // routed one, whose row belongs to the number's owner.
-  assert.equal(a.evidence.contacts.total, 6);
+  // two routed ones, whose rows belong to the number's owner.
+  assert.equal(a.evidence.contacts.total, 7);
   const other = await getWorkflowAudit({ organizationId: OTHER, slug: "other-firm", name: "Other Firm", timezone: "Asia/Dubai", days: 7 });
   assert.equal(other.evidence.leads.total, 2);
 });
@@ -246,21 +260,27 @@ test("the period and its days begin at Dubai midnight, not UTC midnight", db, as
 
 test("scored and hot count people, not the messages that were scored", db, async () => {
   const a = await sfs();
-  // Lead one's two scored messages (high, then urgent) are one lead scored and one hot lead.
-  assert.equal(a.evidence.qualifier.scored, 2);
-  assert.equal(a.evidence.qualifier.hot, 1);
-  assert.equal(a.series.quality.reduce((sum, b) => sum + b.scored, 0), 2);
-  assert.equal(a.series.quality.reduce((sum, b) => sum + b.hot, 0), 1);
+  // Lead one's two scored messages (high, then urgent) are one lead scored and
+  // one hot lead; with lead two and the routed lead, three scored and two hot.
+  assert.equal(a.evidence.qualifier.scored, 3);
+  assert.equal(a.evidence.qualifier.hot, 2);
+  assert.equal(a.series.quality.reduce((sum, b) => sum + b.scored, 0), 3);
+  assert.equal(a.series.quality.reduce((sum, b) => sum + b.hot, 0), 2);
 });
 
-test("a routed chat's scoring stays with the number's owner, out of SFS's sight", db, async () => {
-  // Pins what the page says aloud on the AI qualifier step: the pipeline scores
-  // a routed chat under the shared number's owner, and lead_assessments are
-  // visible only to that owner, so SFS's routed lead is counted but never scored.
+test("a routed chat's scoring counts for the business serving it", db, async () => {
+  // The pipeline scores a routed chat under the shared number's owner; since
+  // migration 105 the score belongs to the business serving the chat. So SFS's
+  // routed lead is scored and hot, its routed pitch is filtered out, and the
+  // number's owner counts neither.
   const a = await sfs();
   assert.equal(a.evidence.leads.byChannel.instagram, 1);
-  assert.equal(a.evidence.qualifier.scored, 2);
-  assert.equal(a.funnel.scored, 2);
+  assert.equal(a.evidence.leads.byChannel.facebook, undefined, "the routed pitch is no new lead");
+  assert.equal(a.evidence.qualifier.scored, 3);
+  assert.equal(a.funnel.scored, 3);
+  const other = await getWorkflowAudit({ organizationId: OTHER, slug: "other-firm", name: "Other Firm", timezone: "Asia/Dubai", days: 7 });
+  assert.equal(other.evidence.qualifier.scored, 0);
+  assert.equal(other.evidence.leads.pitches, 0);
 });
 
 test("the funnel narrows: each step counts only people who reached every step before it", db, async () => {

@@ -76,7 +76,7 @@ export async function getWorkflowAudit(input: {
          select c.id, c.contact_id, c.opened_at, ct.channel,
                 lower(trim(ct.lead_source)) as source_key, trim(ct.lead_source) as source_text,
                 exists (select 1 from lead_assessments la
-                         where la.organization_id = $1 and la.conversation_id = c.id
+                         where la.serving_organization_id = $1 and la.conversation_id = c.id
                            and la.category = 'inbound_pitch') as is_pitch,
                 (select min(m.created_at) from messages m
                   where m.conversation_id = c.id and m.sender_type = 'contact') as first_in
@@ -90,10 +90,10 @@ export async function getWorkflowAudit(input: {
               conv.source_key, conv.source_text, conv.is_pitch, conv.first_in,
               r.created_at as reply_at, r.sender_type as reply_by,
               exists (select 1 from lead_assessments la
-                       where la.organization_id = $1 and la.contact_id = conv.contact_id
+                       where la.serving_organization_id = $1 and la.contact_id = conv.contact_id
                          and la.category <> 'inbound_pitch' and la.created_at >= conv.first_in) as scored,
               exists (select 1 from lead_assessments la
-                       where la.organization_id = $1 and la.contact_id = conv.contact_id
+                       where la.serving_organization_id = $1 and la.contact_id = conv.contact_id
                          and la.category <> 'inbound_pitch' and la.priority in ('high', 'urgent')
                          and la.created_at >= conv.first_in) as hot,
               exists (select 1 from bookings b
@@ -120,7 +120,8 @@ export async function getWorkflowAudit(input: {
     const pitches = chats.rows.length - leads.length;
 
     // People, not messages: every inbound message is scored, so a buyer who
-    // writes twenty times has twenty rows. Each person scored in the period is
+    // writes twenty times has twenty rows. Scores are read by the business
+    // SERVING the chat (migration 105), so a routed chat's count here too. Each person scored in the period is
     // counted once, on the day of their first score, and is hot if any of
     // their scores in the period was high or urgent.
     const quality = await db.query<{ bucket: string; scored: string; hot: string }>(
@@ -128,7 +129,7 @@ export async function getWorkflowAudit(input: {
          select la.contact_id, min(la.created_at) as first_at,
                 bool_or(la.priority in ('high', 'urgent')) as hot
            from lead_assessments la
-          where la.organization_id = $1 and la.category <> 'inbound_pitch' and la.created_at >= ${START}
+          where la.serving_organization_id = $1 and la.category <> 'inbound_pitch' and la.created_at >= ${START}
           group by la.contact_id
        )
        select ${BUCKET("person.first_at")} as bucket, count(*)::text as scored,

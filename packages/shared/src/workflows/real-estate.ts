@@ -167,7 +167,7 @@ export const REAL_ESTATE_WORKFLOW: Workflow = {
       subtitle: "Budget, timeline, finance",
       coverage: "partly",
       does: "Leads scored; hot (high or urgent); sales pitches filtered out.",
-      missing: "Budget, timeline and finance are not captured. Chats routed in through a shared number are scored under the number's owner, so they are not counted here.",
+      missing: "Budget, timeline and finance are not captured.",
       activity: null,
       link: { href: "/deck/customers", label: "Customers" },
       next: [{ to: "D4" }, { to: "D3", label: "cold" }],
