@@ -18,8 +18,11 @@ test("the front page's figures count up and its lines draw", () => {
   assert.match(deck, /<NumberTile key=\{s\.k\} label=\{s\.k\} value=\{s\.v\}/);
   assert.match(deck, /<AreaChart points=\{days\}/);
   assert.match(read("../app/kit/number-tile.tsx"), /<span data-countup="">\{value\}<\/span>/);
-  // A drawn line needs pathLength="1" so one dash spans it (motion.css).
-  assert.match(read("../app/kit/charts.tsx"), /className="nx-draw kit-line"[^>]*pathLength="1"/);
+  // A drawn line needs pathLength="1" so one dash spans it (motion.css) — the
+  // sparkline, in its fixed box. The chart's line stretches with its card, where
+  // a dash cannot span it, so it draws in by a sweeping clip instead
+  // (the-kit.test.mjs, "a chart's line draws in by a sweep").
+  assert.match(read("../app/kit/charts.tsx"), /className="kit-line kit-reveal"/);
   assert.match(read("../app/kit/number-tile.tsx"), /className="kit-spark nx-draw"[^>]*pathLength="1"/);
 });
 

@@ -99,3 +99,12 @@ test("after Mark done the keyboard stays in the window, though the button it was
   const W = read("app/deck/board/follow-up-window.tsx");
   assert.match(W, /if \(box && !box\.contains\(document\.activeElement\)\) box\.focus\(\);/);
 });
+
+test("a refused change reloads the board, so a follow-up a colleague finished shows as it is", () => {
+  // Final review: completed elsewhere, a follow-up's drop or Mark done was
+  // refused, the stale card sprang back, and its window kept offering Mark done
+  // — the board only reloaded after a change that saved. A reload is a read,
+  // never a second attempt.
+  const P = read("app/deck/board/page.tsx");
+  assert.match(P, /setActionError\(reason\);\s*\/\/[^\n]*\n(\s*\/\/[^\n]*\n)*\s*void load\(business\);\s*return reason;/);
+});

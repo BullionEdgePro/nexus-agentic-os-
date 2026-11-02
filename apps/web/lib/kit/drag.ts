@@ -26,3 +26,32 @@ export function dropTarget(from: string, to: string | null, allowed: boolean): s
   if (!to || to === from || !allowed) return null;
   return to;
 }
+
+/**
+ * The columns as far as they can be seen: each clipped to the board's visible
+ * area, and the ones scrolled out of it dropped. A column off the edge must not
+ * take a drop nobody could see land.
+ */
+export function visibleBoxes(boxes: Box[], clip: Omit<Box, "key"> | null): Box[] {
+  if (!clip) return boxes;
+  return boxes
+    .map((b) => ({
+      key: b.key,
+      left: Math.max(b.left, clip.left),
+      right: Math.min(b.right, clip.right),
+      top: Math.max(b.top, clip.top),
+      bottom: Math.min(b.bottom, clip.bottom),
+    }))
+    .filter((b) => b.right > b.left && b.bottom > b.top);
+}
+
+/**
+ * How far to scroll a board this frame while a card is dragged near its edge:
+ * nothing in the middle, up to `max` pixels at (or past) the edge, negative
+ * towards the left.
+ */
+export function edgeScroll(x: number, left: number, right: number, zone = 48, max = 18): number {
+  if (x > right - zone) return Math.round(Math.min(1, (x - (right - zone)) / zone) * max);
+  if (x < left + zone) return -Math.round(Math.min(1, (left + zone - x) / zone) * max);
+  return 0;
+}

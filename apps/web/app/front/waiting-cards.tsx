@@ -33,6 +33,8 @@ export function WaitingCards({
         {waiting.map((w) => {
           const waited = Math.max(0, now - Date.parse(w.since));
           const who = w.contactName ?? "A customer";
+          // A chat nobody owns is still a customer waiting — said, not hidden.
+          const owner = w.employeeName ? ` for ${w.employeeName}` : ", and nobody has the chat yet";
           return (
             <StatusCard
               key={w.conversationId}
@@ -41,13 +43,17 @@ export function WaitingCards({
               subtitle={w.businessName}
               figure={formatWait(waited)}
               footer={
-                <>
-                  <Initials name={w.employeeName} />
-                  <span dir="auto">{w.employeeName}</span>
-                </>
+                w.employeeName ? (
+                  <>
+                    <Initials name={w.employeeName} />
+                    <span dir="auto">{w.employeeName}</span>
+                  </>
+                ) : (
+                  <span>nobody yet</span>
+                )
               }
               href={`/inbox?conversation=${w.conversationId}`}
-              label={`${who} at ${w.businessName}, waiting ${formatWait(waited)} for ${w.employeeName}. Open the chat.`}
+              label={`${who} at ${w.businessName}, waiting ${formatWait(waited)}${owner}. Open the chat.`}
             />
           );
         })}

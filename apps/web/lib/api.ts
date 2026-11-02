@@ -1015,7 +1015,7 @@ export interface StaffWorkAttention {
   waitingLong: Array<{ conversationId: string; contactName: string | null; employeeName: string; businessSlug: BusinessSlug; since: string }>;
   waitingLongTotal: number;
   /** The six longest waits of any length, oldest first; and how many wait in all. */
-  oldestWaiting: Array<{ conversationId: string; contactName: string | null; employeeName: string; businessSlug: BusinessSlug; businessName: string; since: string }>;
+  oldestWaiting: Array<{ conversationId: string; contactName: string | null; employeeName: string | null; businessSlug: BusinessSlug; businessName: string; since: string }>;
   waitingTotal: number;
   unowned: Array<{ businessSlug: BusinessSlug; businessName: string; count: number }>;
   staffWithoutNumber: number;

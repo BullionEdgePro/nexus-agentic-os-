@@ -125,7 +125,8 @@ const days = [3, 5, 4, 8].map((value, i) => ({ label: `Day ${i + 1}`, value }));
 test("an area chart draws a line that draws in, and can be read by keyboard", () => {
   const html = render(AreaChart, { points: days, ariaLabel: "Conversations per day" });
   assert.match(html, /role="img" aria-label="Conversations per day"/);
-  assert.match(html, /class="nx-draw[^"]*"[^>]*pathLength="1"/);
+  // Draws in by a sweeping clip (see "a chart's line draws in by a sweep").
+  assert.match(html, /<path class="kit-line kit-reveal"/);
   assert.match(html, /tabindex="0"/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(html, /NaN/);
@@ -297,4 +298,79 @@ test("on a phone a month of bars keeps them wide enough to see and tap", () => {
   const kit = read("app/kit/kit.css");
   const phone = kit.slice(kit.indexOf("@media (max-width: 760px)"));
   assert.match(phone, /\.kit-bars-row \{ gap: 2px; \}/);
+});
+
+// ---- Final review fixes ---------------------------------------------------------------------
+
+import { visibleBoxes, edgeScroll } from "@/lib/kit/drag";
+
+test("only the part of a column you can see takes a drop", () => {
+  // Final review: Done sat off the board's right edge at 1024px, and a release
+  // in the window's last pixels dropped onto it — completing a follow-up nobody
+  // could see.
+  const boxes = [
+    { key: "later", left: 700, right: 930, top: 100, bottom: 600 },
+    { key: "done", left: 944, right: 1174, top: 100, bottom: 600 },
+  ];
+  const seen = visibleBoxes(boxes, { left: 200, right: 940, top: 0, bottom: 800 });
+  assert.deepEqual(seen.map((b) => b.key), ["later"]);
+  assert.equal(columnAt(1000, 300, seen), null);
+  // Partly in view: clipped to what shows.
+  const half = visibleBoxes(boxes, { left: 200, right: 1000, top: 0, bottom: 800 });
+  assert.deepEqual(half.find((b) => b.key === "done"), { key: "done", left: 944, right: 1000, top: 100, bottom: 600 });
+  assert.deepEqual(visibleBoxes(boxes, null), boxes);
+});
+
+test("near a board's edge a drag scrolls it, faster the closer it gets", () => {
+  assert.equal(edgeScroll(500, 200, 940), 0);
+  assert.ok(edgeScroll(935, 200, 940) > edgeScroll(900, 200, 940));
+  assert.ok(edgeScroll(900, 200, 940) > 0);
+  assert.ok(edgeScroll(205, 200, 940) < 0);
+  assert.ok(Math.abs(edgeScroll(-50, 200, 940)) <= 18 && edgeScroll(2000, 200, 940) <= 18);
+});
+
+test("the dragged card is drawn on the kit's layer, follows from where it started, and the board scrolls under it", () => {
+  const B = read("app/kit/board.tsx");
+  // Final review: appended to <body>, outside the shell's tokens and fonts, the
+  // card lifted as an unstyled, see-through copy.
+  assert.match(B, /\(kitLayer\(\) \?\? document\.body\)\.append\(ghost\)/);
+  assert.match(B, /visibleBoxes\(/);
+  assert.match(B, /edgeScroll\(/);
+  assert.match(B, /requestAnimationFrame\(/);
+  assert.match(B, /cancelAnimationFrame\(/);
+  // The ghost moves from the card's starting place, so a scroll does not drag it away.
+  assert.match(B, /p\.startLeft/);
+});
+
+import { bandIndex } from "@/lib/kit/chart-math";
+
+test("a chart's line draws in by a sweep, whole at any width", () => {
+  // Final review: the dash trick (pathLength 1 + non-scaling stroke, in a
+  // stretched 600-unit viewBox) left the newest days undrawn on any chart wider
+  // than 600px. The line is revealed by a clip that sweeps across instead.
+  const C = read("app/kit/charts.tsx");
+  assert.match(C, /<path className="kit-line kit-reveal" d=\{smoothPath\(xy\)\} vectorEffect="non-scaling-stroke" \/>/);
+  assert.doesNotMatch(C, /nx-draw kit-line/);
+  const kit = read("app/kit/kit.css");
+  const motion = kit.slice(kit.indexOf("@media (prefers-reduced-motion: no-preference)"));
+  assert.match(motion, /\.kit-reveal \{ animation: kit-reveal/);
+  assert.match(motion, /@keyframes kit-reveal \{ from \{ clip-path: inset\(0 100% 0 0\); \}/);
+});
+
+test("on a touch screen a chart's label stays after the finger lifts, and follows a sliding finger across bars", () => {
+  // Final review: lifting a finger fires pointerleave, which cleared the label
+  // at once; and a touch is captured by the bar it started on, so sliding never
+  // reached the others. Forecast's figures exist only in that label.
+  const C = read("app/kit/charts.tsx");
+  assert.equal((C.match(/if \(event\.pointerType === "mouse"\) setActive\(null\);/g) ?? []).length, 2);
+  assert.match(C, /const i = bandIndex\(event\.clientX - box\.left, box\.width, bars\.length\);\s*if \(i >= 0\) setActive\(i\);/);
+  assert.doesNotMatch(C, /onPointerEnter=\{\(\) => setActive\(i\)\}/);
+  // Which bar a point across the chart falls on.
+  assert.equal(bandIndex(0, 300, 30), 0);
+  assert.equal(bandIndex(15, 300, 30), 1);
+  assert.equal(bandIndex(299.9, 300, 30), 29);
+  assert.equal(bandIndex(-20, 300, 30), 0);
+  assert.equal(bandIndex(400, 300, 30), 29);
+  assert.equal(bandIndex(10, 0, 30), -1);
+  assert.equal(bandIndex(10, 300, 0), -1);
 });

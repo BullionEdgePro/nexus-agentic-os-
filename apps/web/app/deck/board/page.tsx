@@ -207,6 +207,9 @@ export default function BoardPage() {
       setTasks(previous);
       const reason = readableError(err, "That change could not be saved.");
       setActionError(reason);
+      // The refusal may mean the follow-up changed elsewhere (a colleague
+      // finished it): read the board again — a read, never a second attempt.
+      void load(business);
       return reason;
     }
   }

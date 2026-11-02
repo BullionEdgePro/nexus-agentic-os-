@@ -46,3 +46,19 @@ test("the overview carries the days, summed across businesses, to yesterday", ()
   assert.match(M, /zeroFillDays\(/);
   assert.match(read("packages", "shared", "src", "types.ts"), /conversationsByDay: Array<\{ day: string; conversations: number \}>/);
 });
+
+test("a waiting chat nobody owns is still a customer waiting, and the review sandbox never is", () => {
+  // Final review: the waiting list joined employees, so an unassigned chat was
+  // never counted — and the front page said "Every customer has had a reply"
+  // while those customers sat unanswered. The Meta review sandbox, kept out of
+  // every neighbouring query, could take one of the six cards.
+  const SW = read("packages", "db", "src", "staff-work.ts");
+  const q = SW.slice(SW.indexOf("const candidates"), SW.indexOf("const waiting ="));
+  assert.match(q, /left join employees e on e\.id = c\.employee_id/);
+  assert.match(q, /and o\.slug <> 'review-demo'/);
+  // Staff work's list keeps its meaning: waiting on a staff member.
+  assert.match(SW, /const waitingLong = waiting\s*\.filter\(\(row\) => row\.employee_id !== null && /);
+  const owned = (src) => src.slice(src.indexOf("oldestWaiting: Array<{"), src.indexOf("waitingTotal: number"));
+  assert.match(owned(SW), /employeeName: string \| null;/);
+  assert.match(owned(read("apps", "web", "lib", "api.ts")), /employeeName: string \| null;/);
+});

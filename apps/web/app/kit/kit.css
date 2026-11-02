@@ -338,6 +338,10 @@ button.kit-card, a.kit-card { cursor: pointer; }
 @media (prefers-reduced-motion: no-preference) {
   .kit-hbar i { animation: kit-grow-x .7s cubic-bezier(.2, .8, .2, 1) both; }
   @keyframes kit-grow-x { from { scale: 0 1; } }
+  /* A chart's line sweeps in from the left; a dash could not span it once the
+     chart is wider than its viewBox. */
+  .kit-reveal { animation: kit-reveal .9s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes kit-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
   .kit-col, .kit-col-drop { transition: height .18s ease, border-color .15s ease, background .15s ease; }
   .kit-scrim { animation: kit-fade .2s ease-out both; }
   .kit-window { animation: kit-grow .26s cubic-bezier(.2, .9, .3, 1.1) both; }

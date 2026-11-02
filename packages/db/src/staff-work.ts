@@ -77,7 +77,8 @@ export interface StaffWorkAttention {
   oldestWaiting: Array<{
     conversationId: string;
     contactName: string | null;
-    employeeName: string;
+    /** Null when the chat belongs to nobody yet: still a customer waiting. */
+    employeeName: string | null;
     businessSlug: string;
     businessName: string;
     since: string;
@@ -179,8 +180,8 @@ export async function staffWorkOverview(
 
     const candidates = await db.query<{
       id: string;
-      employee_id: string;
-      full_name: string;
+      employee_id: string | null;
+      full_name: string | null;
       slug: string;
       org_name: string;
       display_name: string | null;
@@ -194,11 +195,14 @@ export async function staffWorkOverview(
               exists (select 1 from lead_assessments la
                        where la.conversation_id = c.id and la.category = 'inbound_pitch') as is_pitch
          from conversations c
-         join employees e on e.id = c.employee_id
+         -- A left join: a waiting chat nobody owns is still a customer waiting
+         -- (the front page counts it; Staff work's list keeps to owned ones).
+         left join employees e on e.id = c.employee_id
          join organizations o on o.id = coalesce(c.routed_organization_id, c.organization_id)
          left join contacts ct on ct.id = c.contact_id
          ${LAST_MESSAGE}
         where c.status in ('open', 'pending')
+          and o.slug <> 'review-demo'
           and lm.last_direction = 'inbound'
           and ct.not_a_customer_at is null
           and ${NOT_SNOOZED_SQL}
@@ -240,8 +244,10 @@ export async function staffWorkOverview(
     });
 
     const cutoff = now.getTime() - 2 * 60 * 60_000;
+    // Waiting on a staff member: an unowned chat is the admin's to assign and
+    // is counted under `unowned`, not here.
     const waitingLong = waiting
-      .filter((row) => new Date(row.last_at).getTime() < cutoff)
+      .filter((row) => row.employee_id !== null && new Date(row.last_at).getTime() < cutoff)
       .sort((a, b) => (a.last_at < b.last_at ? -1 : 1));
 
     const unowned = await db.query<{ slug: string; name: string; n: string }>(
@@ -265,7 +271,8 @@ export async function staffWorkOverview(
         waitingLong: waitingLong.slice(0, 10).map((r) => ({
           conversationId: r.id,
           contactName: r.display_name,
-          employeeName: r.full_name,
+          // Owned (filtered above), so the join found the person.
+          employeeName: r.full_name ?? "",
           businessSlug: r.slug,
           since: r.last_at,
         })),

@@ -50,6 +50,16 @@ export function areaPath(points: Array<[number, number]>, baseline: number): str
   return `${smoothPath(points)} L${fmt(last[0])} ${fmt(baseline)} L${fmt(first[0])} ${fmt(baseline)} Z`;
 }
 
+/**
+ * Which of `count` equal bands a point `x` across a `width` falls in, clamped
+ * to the first and last; -1 when there is no width or no band. How a bar chart
+ * picks the bar under a pointer or a sliding finger.
+ */
+export function bandIndex(x: number, width: number, count: number): number {
+  if (width <= 0 || count <= 0) return -1;
+  return Math.max(0, Math.min(count - 1, Math.floor((x / width) * count)));
+}
+
 /** The index of the x nearest the pointer; -1 when there are none. */
 export function nearestIndex(xs: number[], x: number): number {
   let best = -1;

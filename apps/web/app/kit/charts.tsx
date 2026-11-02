@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { areaPath, nearestIndex, niceMax, scaleLinear, smoothPath } from "@/lib/kit/chart-math";
+import { areaPath, bandIndex, nearestIndex, niceMax, scaleLinear, smoothPath } from "@/lib/kit/chart-math";
 
 /**
  * The kit's charts (2 Nov 2026, Cream pages 2a): an area or line chart that
@@ -72,7 +72,11 @@ function SeriesChart({ kind, points, ariaLabel, format = plain }: { kind: "area"
       aria-describedby={live}
       onPointerMove={onMove}
       onPointerDown={onMove}
-      onPointerLeave={() => setActive(null)}
+      // A lifted finger also "leaves"; on a touch screen the label stays until
+      // the chart loses focus (a tap elsewhere).
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setActive(null);
+      }}
       onBlur={() => setActive(null)}
       onKeyDown={stepper(points.length, active, setActive)}
     >
@@ -81,7 +85,9 @@ function SeriesChart({ kind, points, ariaLabel, format = plain }: { kind: "area"
           <line key={f} className="kit-grid" x1={0} x2={W} y1={y(max * f)} y2={y(max * f)} />
         ))}
         {kind === "area" ? <path className="kit-area" d={areaPath(xy, H - PAD.b)} /> : null}
-        <path className="nx-draw kit-line" d={smoothPath(xy)} pathLength="1" vectorEffect="non-scaling-stroke" />
+        {/* Drawn in by a sweeping clip (kit.css), not a dash: a dash cannot span
+            a line whose box stretches wider than the viewBox. */}
+        <path className="kit-line kit-reveal" d={smoothPath(xy)} vectorEffect="non-scaling-stroke" />
         {at ? <line className="kit-guide" x1={at[0]} x2={at[0]} y1={PAD.t} y2={H - PAD.b} vectorEffect="non-scaling-stroke" /> : null}
       </svg>
       {at && active !== null ? (
@@ -144,13 +150,27 @@ export function BarChart({
   const max = niceMax(Math.max(...bars.map((b) => Math.max(b.value, b.high ?? 0))));
   const share = (v: number) => (v / max) * 100;
 
+  // The bar under the pointer, from where it is across the chart — so a finger
+  // sliding along (captured by wherever it went down) still moves the label.
+  const onMove = (event: PointerEvent<HTMLDivElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    const i = bandIndex(event.clientX - box.left, box.width, bars.length);
+    if (i >= 0) setActive(i);
+  };
+
   return (
     <div
       className="kit-chart kit-bars"
       tabIndex={0}
       aria-label={`${ariaLabel}. Use the arrow keys to read each bar.`}
       aria-describedby={live}
-      onPointerLeave={() => setActive(null)}
+      onPointerMove={onMove}
+      onPointerDown={onMove}
+      // A lifted finger also "leaves"; on a touch screen the label stays until
+      // the chart loses focus (a tap elsewhere).
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setActive(null);
+      }}
       onBlur={() => setActive(null)}
       onKeyDown={stepper(bars.length, active, setActive)}
     >
@@ -159,8 +179,6 @@ export function BarChart({
           <div
             key={`${bar.label}-${i}`}
             className={`kit-bar-col${bar.partial ? " partial" : ""}${active === i ? " on" : ""}`}
-            onPointerEnter={() => setActive(i)}
-            onPointerDown={() => setActive(i)}
           >
             {isRange(bar) ? (
               <div className="kit-bar-range" style={{ bottom: pct(share(bar.low)), height: pct(share(bar.high - bar.low)) }}>

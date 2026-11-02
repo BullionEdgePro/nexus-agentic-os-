@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { play } from "@/lib/sound";
-import { columnAt, dropTarget, type Box } from "@/lib/kit/drag";
+import { columnAt, dropTarget, edgeScroll, visibleBoxes, type Box } from "@/lib/kit/drag";
 import type { Tone } from "@/lib/kit/wait-band";
+import { kitLayer } from "./card-window";
 
 /**
  * A board you drag by finger or mouse (2 Nov 2026, Cream pages 2a), as the
@@ -119,16 +120,27 @@ type Press = {
   stopScroll: ((event: TouchEvent) => void) | null;
   /** Lets go of the window's listeners for this press. */
   detach: () => void;
+  /** Where the card was when the drag began: the ghost moves from here, so a scroll does not pull it away. */
+  startLeft: number;
+  startTop: number;
+  /** The board that scrolls sideways under a drag near its edge, and clips which columns can take a drop. */
+  scroller: HTMLElement | null;
+  lastX: number;
+  lastY: number;
+  frame: number | null;
 };
 
 /** How long after a drag ends its click is swallowed, wherever the browser sends it. */
 const SWALLOW_CLICK_MS = 400;
 
-function columnBoxes(): Box[] {
-  return Array.from(document.querySelectorAll<HTMLElement>("[data-column]")).map((el) => {
+/** The columns as far as the board shows them (see visibleBoxes). */
+function columnBoxes(scroller: HTMLElement | null): Box[] {
+  const boxes = Array.from(document.querySelectorAll<HTMLElement>("[data-column]")).map((el) => {
     const r = el.getBoundingClientRect();
     return { key: el.dataset.column!, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
   });
+  const clip = scroller?.getBoundingClientRect();
+  return visibleBoxes(boxes, clip ? { left: clip.left, right: clip.right, top: clip.top, bottom: clip.bottom } : null);
 }
 
 export function useBoardDrag({
@@ -146,7 +158,7 @@ export function useBoardDrag({
   latest.current = { canDrop, onDrop };
 
   const targetAt = (p: Press, x: number, y: number) => {
-    const to = columnAt(x, y, columnBoxes());
+    const to = columnAt(x, y, columnBoxes(p.scroller));
     return dropTarget(p.from, to, to ? latest.current.canDrop(p.id, p.from, to) : false);
   };
 
@@ -155,6 +167,7 @@ export function useBoardDrag({
     press.current = null;
     if (!p) return;
     p.detach();
+    if (p.frame !== null) cancelAnimationFrame(p.frame);
     if (p.hold) clearTimeout(p.hold);
     if (p.stopScroll) document.removeEventListener("touchmove", p.stopScroll);
     p.ghost?.remove();
@@ -186,21 +199,42 @@ export function useBoardDrag({
       // A pointer the browser no longer tracks: the drag still follows moves.
     }
     const rect = p.el.getBoundingClientRect();
+    p.startLeft = rect.left;
+    p.startTop = rect.top;
     const ghost = p.el.cloneNode(true) as HTMLElement;
     ghost.classList.add("kit-ghost");
     ghost.removeAttribute("id");
+    ghost.removeAttribute("data-card");
     ghost.setAttribute("aria-hidden", "true");
     Object.assign(ghost.style, { width: `${rect.width}px`, left: `${rect.left}px`, top: `${rect.top}px` });
-    document.body.append(ghost);
+    // On the shell, like the windows: outside it the card has none of the
+    // tokens or fonts, and lifts as an unstyled, see-through copy.
+    (kitLayer() ?? document.body).append(ghost);
     p.ghost = ghost;
     if (p.touch) navigator.vibrate?.(10);
     setDragging(p.id);
+    // Near the board's edge it scrolls under the card, so a column off to the
+    // side — Done, on a laptop or a phone — can still be reached.
+    const tick = () => {
+      if (press.current !== p) return;
+      if (p.scroller) {
+        const r = p.scroller.getBoundingClientRect();
+        const dx = edgeScroll(p.lastX, r.left, r.right);
+        if (dx !== 0) {
+          p.scroller.scrollLeft += dx;
+          setOver(targetAt(p, p.lastX, p.lastY));
+        }
+      }
+      p.frame = requestAnimationFrame(tick);
+    };
+    p.frame = requestAnimationFrame(tick);
   }
 
   function follow(p: Press, x: number, y: number) {
+    p.lastX = x;
+    p.lastY = y;
     if (p.ghost) {
-      const rect = p.el.getBoundingClientRect();
-      p.ghost.style.transform = `translate(${x - p.offsetX - rect.left}px, ${y - p.offsetY - rect.top}px) rotate(3deg)`;
+      p.ghost.style.transform = `translate(${x - p.offsetX - p.startLeft}px, ${y - p.offsetY - p.startTop}px) rotate(3deg)`;
     }
     setOver(targetAt(p, x, y));
   }
@@ -274,6 +308,12 @@ export function useBoardDrag({
             window.removeEventListener("pointerup", onUp);
             window.removeEventListener("pointercancel", onCancel);
           },
+          startLeft: rect.left,
+          startTop: rect.top,
+          scroller: el.closest<HTMLElement>(".kit-board"),
+          lastX: event.clientX,
+          lastY: event.clientY,
+          frame: null,
         };
         press.current = p;
         if (p.touch) {

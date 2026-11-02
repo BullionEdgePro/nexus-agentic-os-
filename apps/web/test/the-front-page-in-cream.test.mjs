@@ -44,3 +44,11 @@ test("the front page uses the kit: six tiles, the waiting cards, a real conversa
   assert.match(P, /className="kit-hbar"/);
   assert.match(read("app/kit/kit.css"), /\.kit-hbar i \{[^}]*animation: kit-grow-x/);
 });
+
+test("a customer waiting on nobody says so", () => {
+  const now = Date.parse("2026-11-02T12:00:00Z");
+  const waiting = [{ conversationId: "c3", contactName: "Omar", employeeName: null, businessSlug: "juris-prime", businessName: "Juris Prime", since: "2026-11-02T11:00:00Z" }];
+  const html = render(WaitingCards, { waiting, total: 1, now });
+  assert.match(html, /nobody yet/);
+  assert.match(html, /aria-label="Omar at Juris Prime, waiting 1 h, and nobody has the chat yet\. Open the chat\."/);
+});
