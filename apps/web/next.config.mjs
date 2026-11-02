@@ -10,6 +10,16 @@ const nextConfig = {
   // what's actually imported) — keeps the production Docker image small
   // instead of shipping the full monorepo node_modules.
   output: "standalone",
+  // @nexus/shared is TypeScript source whose files import each other as
+  // "./x.js" (the Node ESM style the API runs). The web used to take only types
+  // from it, which compile away; the workflow audit (2 Nov 2026) takes values —
+  // workflowFor in the rail, the status rules on the page — so Next compiles the
+  // package and resolves "./x.js" to the ".ts" beside it.
+  transpilePackages: ["@nexus/shared"],
+  webpack: (config) => {
+    config.resolve.extensionAlias = { ...config.resolve.extensionAlias, ".js": [".ts", ".tsx", ".js"] };
+    return config;
+  },
   experimental: {
     // npm workspaces hoist node_modules to the monorepo root, not apps/web —
     // without this, Next's file tracer mis-resolves the workspace root and

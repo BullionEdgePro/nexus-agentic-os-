@@ -107,6 +107,10 @@ insert into bookings (organization_id, contact_id, starts_at, ends_at, status) v
   ('${SFS}', 'c0000000-0000-4000-8000-000000000001', ${dubai(1, "15 hours")}, ${dubai(1, "16 hours")}, 'completed'),
   ('${SFS}', 'c0000000-0000-4000-8000-000000000005', ${dubai(1, "17 hours")}, ${dubai(1, "18 hours")}, 'no_show'),
   ('${SFS}', 'c0000000-0000-4000-8000-000000000001', ${dubai(2, "15 hours")}, ${dubai(2, "16 hours")}, 'cancelled');
+-- Lead two (scored normal, not hot) has a viewing booked for the day after
+-- tomorrow: not yet a viewing of the period, and not past "hot" in the funnel.
+insert into bookings (organization_id, contact_id, starts_at, ends_at, status) values
+  ('${SFS}', 'c0000000-0000-4000-8000-000000000002', now() + interval '2 days', now() + interval '2 days 1 hour', 'confirmed');
 `;
 
 before(async () => {
@@ -186,4 +190,12 @@ test("90 days reads in Monday weeks", db, async () => {
   assert.equal(a.period.bucket, "week");
   for (const b of a.series.leads) assert.equal(new Date(`${b.bucket}T00:00:00Z`).getUTCDay(), 1, b.bucket);
   assert.equal(a.evidence.leads.total, 3);
+});
+
+test("the funnel narrows: each step counts only people who reached every step before it", db, async () => {
+  const { funnel } = await sfs();
+  // Lead two booked a viewing without being hot; the funnel's "booked" is of the hot.
+  assert.equal(funnel.booked, 1);
+  const steps = [funnel.leads, funnel.scored, funnel.hot, funnel.booked, funnel.held, funnel.won];
+  steps.slice(1).forEach((n, i) => assert.ok(n <= steps[i], `step ${i + 1} (${n}) is more than the step before (${steps[i]})`));
 });

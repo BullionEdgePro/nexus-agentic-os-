@@ -125,7 +125,10 @@ export function AuditCharts({ audit }: { audit: WorkflowAudit }) {
         </dl>
       </ChartCard>
 
-      <ChartCard title="From lead to won" note="The period's new leads, followed; each share is of the step before.">
+      <ChartCard
+        title="From lead to won"
+        note="The period's new leads, followed: each step counts those who reached every step before it, and each share is of the step before."
+      >
         <Funnel funnel={audit.funnel} />
       </ChartCard>
 

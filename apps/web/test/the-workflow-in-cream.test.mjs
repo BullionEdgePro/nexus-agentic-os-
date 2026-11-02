@@ -208,3 +208,23 @@ test("a business with no workflow says so, not an error", () => {
   const html = render(NoWorkflow, {});
   assert.match(html, /No workflow is set up for this business yet\./);
 });
+
+// ---- Task 8: fixes from the browser check ---------------------------------------------------
+
+test("the browser build compiles what the pages import from @nexus/shared", () => {
+  // The rail and the audit pages are the first web code to import VALUES from
+  // @nexus/shared (workflowFor, stepStatus…), not just types. Its source is
+  // TypeScript importing "./x.js", which tsx and tsc resolve and Next's webpack
+  // does not: every page failed to build until Next was told to compile it.
+  const config = read("next.config.mjs");
+  assert.match(config, /transpilePackages: \["@nexus\/shared"\]/);
+  assert.match(config, /extensionAlias[\s\S]{0,80}"\.js": \["\.ts", "\.tsx", "\.js"\]/);
+});
+
+test("a not-tracked card's muted words stay readable: no extra fading on top of the muted grey", () => {
+  // Found in the browser check: on the light theme the kit's .75 / .82 opacity
+  // on the tag and subtitle, over the card's slate, read at 3.6:1 and 4.3:1.
+  const css = read("app/deck/workflow/workflow.css");
+  assert.match(css, /\.wf-untracked \.kit-card-eyebrow,\s*\.wf-untracked \.kit-card-sub \{ opacity: 1; \}/);
+  assert.match(css, /\.wf-untracked \.wf-chip \{[^}]*background: transparent/);
+});

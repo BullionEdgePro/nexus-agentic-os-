@@ -190,6 +190,11 @@ export async function getWorkflowAudit(input: {
       if (!seen || lead.first_in < seen.first_in) people.set(lead.contact_id, lead);
     }
     const cohort = [...people.values()];
+    // A funnel narrows: each step counts the people who reached it AND every
+    // step before it, so a share is never more than the whole. A lead who
+    // booked a viewing without being hot is in the Viewings chart, not here.
+    const reached = (n: number) =>
+      cohort.filter((p) => [p.scored, p.hot, p.booked, p.held, p.won].slice(0, n).every(Boolean)).length;
 
     return {
       business: { slug: input.slug, name: input.name, timezone: input.timezone },
@@ -271,11 +276,11 @@ export async function getWorkflowAudit(input: {
       },
       funnel: {
         leads: cohort.length,
-        scored: cohort.filter((p) => p.scored).length,
-        hot: cohort.filter((p) => p.hot).length,
-        booked: cohort.filter((p) => p.booked).length,
-        held: cohort.filter((p) => p.held).length,
-        won: cohort.filter((p) => p.won).length,
+        scored: reached(1),
+        hot: reached(2),
+        booked: reached(3),
+        held: reached(4),
+        won: reached(5),
       },
     };
   });

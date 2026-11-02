@@ -50,6 +50,9 @@
 .wf-card .kit-card-foot { flex-direction: column; align-items: stretch; gap: 3px; margin-top: auto; min-width: 0; }
 .wf-idle { border: 2px solid var(--st-forest); }
 .wf-untracked { border: 1.5px dashed color-mix(in srgb, var(--slate) 55%, transparent); background: transparent; box-shadow: none; color: var(--slate); }
+/* The card is already muted to slate; the kit's own fading on top of that fell under 4.5:1. */
+.wf-untracked .kit-card-eyebrow, .wf-untracked .kit-card-sub { opacity: 1; }
+.wf-untracked .wf-chip { background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
 
 .wf-chip {
   align-self: flex-start;
