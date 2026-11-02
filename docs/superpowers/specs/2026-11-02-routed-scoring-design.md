@@ -53,9 +53,12 @@ It must be safe to run twice: `if not exists`, `create or replace`, drop-then-cr
    `alter table lead_assessments add column if not exists serving_organization_id uuid references organizations(id);`
 2. **Insert trigger.** A new function `set_serving_organization_for_assessment()`, `before insert
    or update of conversation_id`, sets the column to the conversation's
-   `coalesce(routed_organization_id, organization_id)`. When `conversation_id` is null or the
-   conversation is not found, it falls back to `new.organization_id`. Staff-captured leads
-   (`source = 'employee_direct'`) have no routing, so they serve their own business.
+   `coalesce(routed_organization_id, organization_id)`. When a row is inserted with no
+   `conversation_id`, or its conversation is not found, it falls back to `new.organization_id`.
+   Staff-captured leads (`source = 'employee_direct'`) have no routing, so they serve their own
+   business. When `conversation_id` becomes null on update (the conversation was deleted:
+   `on delete set null`), the row keeps the serving business it had, so a deleted routed chat's
+   scores stay with the business that served it.
 3. **Re-routing cascade.** `cascade_serving_organization()` (defined in 054) is replaced with its
    two existing updates, unchanged, plus:
    `update lead_assessments set serving_organization_id = coalesce(new.routed_organization_id, new.organization_id) where conversation_id = new.id;`
