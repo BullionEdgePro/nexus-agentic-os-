@@ -33,7 +33,7 @@
  * follow up. The predicate is defined once here and reused by everything that
  * asks the question, rather than written out a fourth time.
  */
-import { getPool } from "./client.js";
+import { getPool, withContactOwner } from "./client.js";
 
 /**
  * "Is this contact one of this business's customers?"
@@ -424,11 +424,15 @@ export async function markNotACustomer(
   reason: "platform" | "marked",
   by: string
 ): Promise<boolean> {
-  const { rowCount } = await getPool().query(
-    `update contacts
-        set not_a_customer_at = now(), not_a_customer_reason = $2, not_a_customer_by = $3, updated_at = now()
-      where id = $1 and not_a_customer_at is null`,
-    [contactId, reason, by.slice(0, 120)]
+  // As the contact's owner when the email sweep, scoped to the mailbox's own
+  // business, marks a shared contact it serves (withContactOwner).
+  const { rowCount } = await withContactOwner(contactId, () =>
+    getPool().query(
+      `update contacts
+          set not_a_customer_at = now(), not_a_customer_reason = $2, not_a_customer_by = $3, updated_at = now()
+        where id = $1 and not_a_customer_at is null`,
+      [contactId, reason, by.slice(0, 120)]
+    )
   );
   return (rowCount ?? 0) > 0;
 }

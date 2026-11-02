@@ -18,12 +18,22 @@
 -- may answer its own customer, it could also edit any message in the chats it
 -- serves. (It could not delete one: migration 048 removed the DELETE grant.)
 --
--- Nothing does any of this today. Every UPDATE of these tables runs in the
--- number owner's pipeline, across all tenants, or in a script; no business-
--- scoped route and no withServingTenant body writes them (audited 2026-11-02,
--- spec docs/superpowers/specs/2026-11-02-serving-read-only-design.md §3). It is
--- a door, not a burglary -- found by the review of migration 105, which closed
--- the same door on lead_assessments.
+-- Nothing does any of this today. API requests all run across tenants (the
+-- /api/* tenant middleware never sees :slug), the reply pipeline writes as the
+-- number's owner, webhooks as the row's owner, sweeps across tenants, and no
+-- withServingTenant body writes these tables. The one writer that runs as a
+-- business which may only SERVE the row -- the email sweep, recording a shared
+-- customer's opt-out, bounce, platform mark and lead score -- makes those four
+-- writes as the contact's owner through withContactOwner (packages/db/src/
+-- client.ts), checked against the contact's served_organization_ids. Triggers
+-- run as the invoking role and stay benign. Audit: spec docs/superpowers/specs/
+-- 2026-11-02-serving-read-only-design.md §3. It is a door, not a burglary --
+-- found by the review of migration 105, which closed the same door on
+-- lead_assessments.
+--
+-- A LOCKING READ (select ... for update / for share) now also applies the
+-- UPDATE policy: a serving business's locking read of the owner's rows returns
+-- nothing. Nothing does that today.
 --
 -- ============================================================
 -- RESTRICTIVE POLICIES, ADDED -- THE OLD ONES UNTOUCHED

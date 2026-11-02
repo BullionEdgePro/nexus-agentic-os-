@@ -55,6 +55,10 @@ let dbTurn; // this file's turn at the shared test database
 let withTenant;
 let withAllTenants;
 let getPool;
+let optOutOfEmailCampaigns;
+let markNotACustomer;
+let recordEmailBounce;
+let recordLeadAssessment;
 
 const id = (kind, n) => `${kind}7171710-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
@@ -115,7 +119,8 @@ before(async () => {
     ORGS
   );
   process.env.DATABASE_URL = APP_URL;
-  ({ withTenant, withAllTenants, getPool } = await import("@nexus/db"));
+  ({ withTenant, withAllTenants, getPool, optOutOfEmailCampaigns, markNotACustomer, recordEmailBounce } = await import("@nexus/db"));
+  ({ recordLeadAssessment } = await import("@nexus/leads"));
 });
 
 after(async () => {
@@ -207,4 +212,54 @@ test("the owner and cross-tenant work still update and delete", db, async () => 
 test("106 runs twice", db, async () => {
   await owner.query(SQL);
   await owner.query(SQL);
+});
+
+// ---- the final review's fix ----------------------------------------------------------------------
+
+test("a business's own mailbox still records a shared customer's opt-out, bounce, platform mark and score", db, async () => {
+  // The email sweep runs inside withTenant(<the mailbox's business>), and the
+  // person who replied "stop" may be a contact the number's owner owns and this
+  // business serves. Those four writes are the person's facts; they land as the
+  // owner, switched to only because this business really serves the person.
+  const chat = await routedChat(6);
+  const mailbox = "sales@serving.test";
+  const { rows: sent } = await owner.query(
+    `insert into broadcasts (organization_id, channel, from_mailbox, email_subject, email_body)
+     values ($1, 'email', $2, 'New listings', 'Three new villas this week') returning id`,
+    [SERVING, mailbox]
+  );
+  await owner.query(
+    `insert into broadcast_recipients (broadcast_id, contact_id, to_address, status, sent_at) values ($1, $2, 'shared@customer.test', 'sent', now())`,
+    [sent[0].id, chat.contact]
+  );
+  const stillServing = await withTenant(SERVING, async () => {
+    await optOutOfEmailCampaigns(chat.contact);
+    assert.ok(await recordEmailBounce(mailbox, "shared@customer.test"), "the bounce matched the campaign email");
+    await markNotACustomer(chat.contact, "platform", "platform mail");
+    await recordLeadAssessment({
+      organizationId: SERVING, contactId: chat.contact, conversationId: null, messageId: null,
+      score: 77, priority: "high", category: "purchase_intent", signals: [],
+    });
+    return (await getPool().query(`select current_setting('app.current_org', true) as org`)).rows[0].org;
+  });
+  assert.equal(stillServing, SERVING, "the switch to the owner is undone after each write");
+  const { rows } = await owner.query(
+    `select email_campaigns_opted_out_at, email_bounced_at, not_a_customer_at, lead_score from contacts where id = $1`,
+    [chat.contact]
+  );
+  assert.ok(rows[0].email_campaigns_opted_out_at, "opt-out recorded");
+  assert.ok(rows[0].email_bounced_at, "bounce recorded");
+  assert.ok(rows[0].not_a_customer_at, "platform mark recorded");
+  assert.equal(rows[0].lead_score, 77);
+});
+
+test("a business that does not serve the customer still changes nothing about them", db, async () => {
+  const chat = await routedChat(7); // routed to SERVING, not THIRD
+  await withTenant(THIRD, async () => {
+    await optOutOfEmailCampaigns(chat.contact);
+    await markNotACustomer(chat.contact, "platform", "platform mail");
+  });
+  const { rows } = await owner.query(`select email_campaigns_opted_out_at, not_a_customer_at from contacts where id = $1`, [chat.contact]);
+  assert.equal(rows[0].email_campaigns_opted_out_at, null);
+  assert.equal(rows[0].not_a_customer_at, null);
 });

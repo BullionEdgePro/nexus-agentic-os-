@@ -1,4 +1,4 @@
-import { getPool, withAllTenants } from "./client.js";
+import { getPool, withAllTenants, withContactOwner } from "./client.js";
 import { contactServedBy } from "./contacts.js";
 import { contactOwnedBy } from "./client-book.js";
 import type { BroadcastStatus } from "@nexus/shared";
@@ -243,12 +243,16 @@ export async function markEmailRecipientFailed(recipientId: string, reason: stri
 export async function optOutOfEmailCampaigns(contactId: string): Promise<void> {
   // Cross-tenant on purpose: the contact may be owned by the business that runs
   // the number, not the one whose mailbox read the reply, and the contacts
-  // policy's WITH CHECK would refuse the write from the reader's scope.
+  // policy's WITH CHECK would refuse the write from the reader's scope. Inside
+  // the email sweep's own tenant the outer scope wins, so the write is made as
+  // the contact's owner when this business serves them (withContactOwner).
   await withAllTenants("email opt-out: a customer replied unsubscribe", () =>
-    getPool().query(
-      `update contacts set email_campaigns_opted_out_at = coalesce(email_campaigns_opted_out_at, now())
-        where id = $1`,
-      [contactId]
+    withContactOwner(contactId, () =>
+      getPool().query(
+        `update contacts set email_campaigns_opted_out_at = coalesce(email_campaigns_opted_out_at, now())
+          where id = $1`,
+        [contactId]
+      )
     )
   );
 }
@@ -303,9 +307,11 @@ export async function recordEmailBounce(
         where id = $1`,
       [hit.id]
     );
-    await getPool().query(
-      `update contacts set email_bounced_at = coalesce(email_bounced_at, now()) where id = $1`,
-      [hit.contact_id]
+    // As the contact's owner when this business serves a shared contact (withContactOwner).
+    await withContactOwner(hit.contact_id, () =>
+      getPool().query(`update contacts set email_bounced_at = coalesce(email_bounced_at, now()) where id = $1`, [
+        hit.contact_id,
+      ])
     );
     return { broadcastId: hit.broadcast_id };
   });

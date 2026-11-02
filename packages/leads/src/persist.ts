@@ -1,4 +1,4 @@
-import { getPool } from "@nexus/db";
+import { getPool, withContactOwner } from "@nexus/db";
 import type { LeadAssessment } from "./score.js";
 
 export interface RecordLeadInput extends LeadAssessment {
@@ -39,7 +39,9 @@ export async function recordLeadAssessment(input: RecordLeadInput): Promise<void
   // recent. Someone who asked about a bulk order last week and "thanks" today
   // is still the bulk-order lead; letting a trailing pleasantry reset them to
   // zero would quietly bury the most valuable contacts in the list.
-  await pool.query(
+  // As the contact's owner when a business scores a shared contact it serves
+  // from its own tenant, as the email sweep does (withContactOwner).
+  await withContactOwner(input.contactId, () => pool.query(
     `update contacts
      set lead_score = greatest(coalesce(lead_score, 0), $2),
          lead_priority = case
@@ -53,7 +55,7 @@ export async function recordLeadAssessment(input: RecordLeadInput): Promise<void
          lead_updated_at = now()
      where id = $1`,
     [input.contactId, input.score, input.priority, input.category]
-  );
+  ));
 }
 
 /** Inbound messages this contact has sent before now — the returning-contact signal. */

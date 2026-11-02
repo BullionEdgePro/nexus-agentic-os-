@@ -37,27 +37,71 @@ migration 105, which fixed the same shape for `lead_assessments`.
   tables.
 - The owner's pipeline, cross-tenant requests (`withAllTenants`, `tenant_scope = 'all'`) and the
   migration owner are unaffected.
-- No current write path changes behaviour (§3).
+- No working write path stops working (§3). The one that would have, the email sweep's writes to
+  shared contacts, is kept working by `withContactOwner` (§4).
 
-## 3. Every write path today (audited 2026-11-02)
+## 3. Every write path today (audited 2026-11-02; corrected by the final review)
 
 - **No application code deletes** from these tables. Only the self-check and schema-check scripts
-  do, on their own probe rows, as the owner.
-- **The UPDATEs** run in one of three contexts:
-  - the reply pipeline, inside the number owner's `withTenant`;
-  - cross-tenant requests: every `/api/conversations/...` and `/api/my/...` route, and webhooks;
-  - scripts.
-  No `/api/organizations/:slug/...` route updates these tables, and no `withServingTenant` body
-  writes them.
-- **The two message UPDATEs** are both written by webhook processors running as the owner:
-  delivery statuses (`recordDeliveryStatus`) and social unsends (`eraseUnsentSocialMessage`). The
-  reply path only inserts.
+  do, on their own probe rows, as the owner. Foreign-key cascades bypass row-level security.
+- **Every API request runs across all tenants.** `tenantContext` is mounted at `/api/*`, and Hono
+  middleware there never sees `:slug` (verified with the project's Hono 4.12.31). So it takes the
+  `withAllTenants` branch for every request, including the `/api/organizations/:slug/...` routes
+  that do write these tables on purpose:
+  - a new contact's upsert (`ensureContactForServingBusiness`);
+  - an import's owner assignment (`assignContactOwnerIfUnowned`);
+  - staff lead capture (`captureEmployeeLead`).
+  They are unaffected by 106 today. If `tenantContext` is ever made to see the slug, re-audit them
+  against 106 first: they write shared contacts.
+- **Other UPDATEs** run:
+  - in the reply pipeline, as the number's owner;
+  - in webhooks, as the row's owner (a staff number's receipts as the employee's business, which
+    owns those rows);
+  - in scheduled sweeps, across all tenants;
+  - in scripts.
+  No `withServingTenant` body writes these tables.
+- **The two message UPDATEs** run as the row's owner: delivery statuses (`recordDeliveryStatus`)
+  and social unsends (`eraseUnsentSocialMessage`). The reply path only inserts.
+- **The exception: the email sweep** (`apps/api/src/services/email-sync.ts`) runs inside
+  `withTenant(<the mailbox's business>)`. It writes four facts onto contacts, which may be shared
+  contacts owned by the number's owner and served by that business:
+  - an email opt-out;
+  - a bounce;
+  - a platform-sender mark;
+  - the cached lead score.
+  `optOutOfEmailCampaigns` and `recordEmailBounce` wrap themselves in `withAllTenants`, but nested
+  inside a tenant that deliberately reuses the outer scope.
+  - **Before 106** these writes failed the owner-only `with check` loudly, and a later manual sync
+    (cross-tenant) recorded them.
+  - **Under 106 alone** they would affect zero rows silently, dropping a customer's "stop".
+  - **Kept working by `withContactOwner`** (§4).
+- **Triggers** run as the invoking role, so 106's UPDATE policies govern them:
+  `refresh_contact_served_organizations`, `cascade_serving_organization` and
+  `reopen_resolved_conversation_on_inbound`.
+  - All are benign.
+  - One changes behaviour, for the better. A business inserting a conversation for a shared
+    contact (the email sweep, the email-broadcast processor) used to fail on the served-array
+    trigger's contact update. It now updates zero rows and succeeds. The business is already in
+    that contact's served array, so nothing is lost.
 
-So making UPDATE and DELETE owner-only breaks no working path. Should a business-scoped route ever
-update a routed row, the attempt affects zero rows. Today the owner-only `with check` already
-refuses it with an error.
+Should a business-scoped write ever reach a routed row, it affects zero rows. Today the owner-only
+`with check` refuses it with an error.
 
 ## 4. Decisions taken
+
+- **`withContactOwner(contactId, fn)`** in `packages/db/src/client.ts` is the mirror of
+  `withServingTenant`.
+  - **What it does:** inside an ambient tenant, when that business is in the contact's
+    `served_organization_ids` (checked against the data), it runs `fn` as the contact's owner on
+    the same connection and restores the tenant afterwards. Otherwise `fn` runs as it would have.
+  - **What it wraps:** exactly the four writes that are facts about the person: the opt-out
+    (`optOutOfEmailCampaigns`), the bounce (`recordEmailBounce`'s contact update), the platform
+    mark (`markNotACustomer`) and the best lead score (`recordLeadAssessment`'s contact update).
+  - **Rejected alternatives:**
+    - Making a nested `withAllTenants` switch scope. That reverses a deliberate safety rule:
+      an inner "all" must never widen an outer tenant.
+    - Moving the writes after the sweep's transaction. That restructures the sweep's loop and its
+      failure semantics.
 
 - **Restrictive policies, added; the existing policies untouched.**
   - Each table gains `<table>_owner_updates` (`as restrictive for update`, with `using` and

@@ -392,6 +392,50 @@ export async function withServingTenant<T>(
 }
 
 /**
+ * Runs `fn` as the OWNER of a contact this business serves, on the transaction
+ * already open -- the mirror of `withServingTenant`, for a handful of writes
+ * that are facts about the person rather than about the business: an email
+ * opt-out, a bounce, a platform sender, the best lead score they have reached.
+ *
+ * WHY IT EXISTS (2 Nov 2026). The email sweep runs inside
+ * `withTenant(<the mailbox's business>)`, and the customer who replied "stop"
+ * may be a shared contact the number's owner owns and this business serves.
+ * Migration 106 made such rows owner-only for UPDATE, so those writes affected
+ * zero rows -- silently, where before 106 they failed loudly -- and
+ * `withAllTenants` cannot help: nested inside a tenant it deliberately reuses
+ * the outer scope.
+ *
+ * THE SWITCH IS CHECKED AGAINST THE DATA, as `withServingTenant`'s is: only when
+ * the current business is in the contact's `served_organization_ids`, so it
+ * reaches no person this business is not genuinely serving. Anywhere else --
+ * no ambient tenant, a cross-tenant context, the owner itself, a contact it
+ * does not serve -- `fn` runs exactly as it would have.
+ */
+export async function withContactOwner<T>(contactId: string, fn: () => Promise<T>): Promise<T> {
+  const context = getTenantContext();
+  if (!context || context.scope === "all") return fn();
+
+  const client = context.client;
+  const { rows } = await client.query<{ owner: string }>(
+    `select organization_id as owner from contacts
+      where id = $1 and $2::uuid = any (served_organization_ids)`,
+    [contactId, context.organizationId]
+  );
+  const ownerId = rows[0]?.owner;
+  if (!ownerId || ownerId === context.organizationId) return fn();
+
+  const restore = context.organizationId;
+  try {
+    await client.query("select set_config('app.current_org', $1, true)", [ownerId]);
+    return await runWithContext({ scope: "tenant", organizationId: ownerId, client }, fn);
+  } finally {
+    // Restored even on the throw path, so the rest of the sweep stays scoped
+    // to the mailbox's own business.
+    await client.query("select set_config('app.current_org', $1, true)", [restore]);
+  }
+}
+
+/**
  * Runs `fn` with NO tenant context, on a pool connection like any unauthenticated
  * caller gets.
  *
