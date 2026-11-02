@@ -17,7 +17,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 /** deck.css without its two token blocks — those are checked by the theme test. */
 function deckOutsideTokens() {
   let css = read("../app/deck/deck.css");
-  for (const head of ["\n.deck-root {", 'html[data-theme="dark"] .deck-root:not(.lp):not(.admin-root):not(.pl-root) {']) {
+  for (const head of ["\n.deck-root {", 'html[data-theme="dark"] .deck-root:not(.pl-root) {']) {
     const at = css.indexOf(head);
     const end = css.indexOf("\n}", at);
     css = css.slice(0, at) + css.slice(end + 2);

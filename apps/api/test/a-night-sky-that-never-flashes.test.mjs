@@ -34,8 +34,10 @@ test("the switch survives blocked storage and says what it does", () => {
   assert.match(TOGGLE, /prefers-reduced-motion: reduce/);
 });
 
-test("night is the console's; customers' pages and the admin door keep their look", () => {
-  assert.match(DECK, /html\[data-theme="dark"\] \.deck-root:not\(\.lp\):not\(\.admin-root\):not\(\.pl-root\) \{/);
+// The storefront and the admin door joined the night on 2 Nov 2026 (spec
+// 2026-11-02-storefront-cream-design.md §1); the customer links page keeps its look.
+test("night reaches the console, the storefront and the admin door; the links page keeps its look", () => {
+  assert.match(DECK, /html\[data-theme="dark"\] \.deck-root:not\(\.pl-root\) \{/);
   assert.match(DECK, /color-scheme: dark;/);
 });
 
@@ -54,7 +56,7 @@ test("the words on a button read in both themes", () => {
     return (x + 0.05) / (y + 0.05);
   };
   const day = DECK.slice(DECK.indexOf("\n.deck-root {"));
-  const night = DECK.slice(DECK.indexOf('html[data-theme="dark"] .deck-root:not(.lp)'));
+  const night = DECK.slice(DECK.indexOf('html[data-theme="dark"] .deck-root:not(.pl-root) {'));
   for (const [theme, block] of [["light", day.slice(0, day.indexOf("\n}"))], ["dark", night.slice(0, night.indexOf("\n}"))]]) {
     const text = hex(block, "--on-accent");
     const pill = hex(block, "--signal");

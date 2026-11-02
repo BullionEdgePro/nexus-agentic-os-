@@ -32,7 +32,7 @@ function tokens(body) {
 }
 
 const light = tokens(block(deck, "\n.deck-root {"));
-const dark = { ...light, ...tokens(block(deck, 'html[data-theme="dark"] .deck-root:not(.lp):not(.admin-root):not(.pl-root) {')) };
+const dark = { ...light, ...tokens(block(deck, 'html[data-theme="dark"] .deck-root:not(.pl-root) {')) };
 
 function lum(hex) {
   const h = hex.replace("#", "");

@@ -8,9 +8,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
+import vm from "node:vm";
 
 import { salesContact, SALES_TEXT } from "@/lib/sales-contact";
 import { ContactButton } from "@/app/landing-contact";
+import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
@@ -49,4 +51,59 @@ test("the storefront reads the number on the server, per request", () => {
   const P = read("app/page.tsx");
   assert.match(P, /export const dynamic = "force-dynamic"/);
   assert.match(P, /<Landing contact=\{salesContact\(process\.env\.NEXUS_SALES_WHATSAPP\)\} \/>/);
+});
+
+// Light and dark follow the visitor on the public pages (spec §1).
+const runBoot = ({ saved, dark, storageThrows = false }) => {
+  const attrs = {};
+  const ctx = {
+    document: { documentElement: { setAttribute: (k, v) => (attrs[k] = v) } },
+    localStorage: { getItem: () => { if (storageThrows) throw new Error("blocked"); return saved ?? null; } },
+    matchMedia: (q) => ({ matches: q.includes("dark") && dark }),
+  };
+  vm.runInNewContext(PUBLIC_THEME_BOOT, ctx);
+  return attrs["data-theme"] ?? null;
+};
+
+test("public pages follow the visitor's dark setting when nothing is saved", () => {
+  assert.equal(runBoot({ saved: null, dark: true }), "dark");
+  assert.equal(runBoot({ saved: null, dark: false }), null);
+});
+
+test("a saved choice beats the system; blocked storage still follows the system", () => {
+  assert.equal(runBoot({ saved: "light", dark: true }), null);
+  assert.equal(runBoot({ storageThrows: true, dark: true }), "dark");
+  assert.equal(runBoot({ storageThrows: true, dark: false }), null);
+});
+
+test("both public pages boot it, and Warm Night reaches them", () => {
+  for (const f of ["app/landing.tsx", "app/admin/page.tsx"]) {
+    assert.match(read(f), /<script dangerouslySetInnerHTML=\{\{ __html: PUBLIC_THEME_BOOT \}\} \/>/, f);
+  }
+  const deck = read("app/deck/deck.css");
+  assert.match(deck, /html\[data-theme="dark"\] \.deck-root:not\(\.pl-root\) \{/);
+  assert.doesNotMatch(deck, /:not\(\.lp\):not\(\.admin-root\)/);
+});
+
+// Signing in is a soft refresh, so the system's dark would follow the visitor
+// into the console, whose default with nothing saved is light.
+test("signing in hands the console its own default, not the system's", () => {
+  const run = (saved) => {
+    const removed = [];
+    globalThis.document = { documentElement: { removeAttribute: (k) => removed.push(k) } };
+    globalThis.localStorage = { getItem: () => saved };
+    try {
+      forgetSystemTheme();
+    } finally {
+      delete globalThis.document;
+      delete globalThis.localStorage;
+    }
+    return removed;
+  };
+  assert.deepEqual(run(null), ["data-theme"]);
+  assert.deepEqual(run("dark"), []);
+  assert.deepEqual(run("light"), []);
+  for (const f of ["app/landing.tsx", "app/admin/page.tsx"]) {
+    assert.match(read(f), /forgetSystemTheme\(\);\s*router\./, f);
+  }
 });

@@ -40,8 +40,11 @@ the 404 and error pages (they keep today's look).
   Warm Night to match `prefers-color-scheme`; the sun/moon switch (`app/theme-toggle.tsx`,
   key `nexus-theme`) flips it and is remembered — the same choice the console reads. A saved
   choice applies before first paint (`THEME_BOOT`), as today; the system default is applied
-  by CSS (`@media (prefers-color-scheme: dark)` scoped to `html:not([data-theme="light"])`),
-  so nothing flashes. The console's own default (light when no choice) is unchanged.
+  by a small inline script on the two public pages (`PUBLIC_THEME_BOOT`, `lib/theme.ts`) that
+  sets `data-theme="dark"` without saving it — a script rather than a media query, which would
+  copy the whole Warm Night token block a second time — so nothing flashes. The console's own
+  default (light when no choice) is unchanged: signing in clears a dark that was only the
+  device's (`forgetSystemTheme`).
 - Every animation stops under `prefers-reduced-motion: reduce`. All text ≥ 4.5:1 in both
   themes.
 

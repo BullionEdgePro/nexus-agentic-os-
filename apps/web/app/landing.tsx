@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import type { SalesContact } from "@/lib/sales-contact";
+import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 import "./deck/deck.css";
 import "./landing.css";
 
@@ -451,6 +452,7 @@ export default function Landing({ contact }: { contact: SalesContact }) {
         setBusy(false);
         return;
       }
+      forgetSystemTheme();
       router.refresh();
       router.refresh();
     } catch {
@@ -463,6 +465,7 @@ export default function Landing({ contact }: { contact: SalesContact }) {
 
   return (
     <div className={`deck-root lp ${fontVariables}`}>
+      <script dangerouslySetInnerHTML={{ __html: PUBLIC_THEME_BOOT }} />
       <div className="lp-sky" aria-hidden="true">
         <span className="lp-bloom b1" />
         <span className="lp-bloom b2" />

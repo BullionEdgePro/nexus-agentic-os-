@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fontVariables } from "@/lib/fonts";
+import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 import "../deck/deck.css";
 import "./admin.css";
 
@@ -45,6 +46,7 @@ export default function AdminSignIn() {
         setError(body.error ?? "That email and password don't match.");
         return;
       }
+      forgetSystemTheme();
       router.push("/");
       router.refresh();
     } catch {
@@ -56,6 +58,7 @@ export default function AdminSignIn() {
 
   return (
     <div className={`deck-root admin-root ${fontVariables}`} ref={rootRef}>
+      <script dangerouslySetInnerHTML={{ __html: PUBLIC_THEME_BOOT }} />
       <main className="admin-card">
         <div className="eyebrow">Nexus Agentic OS</div>
         <h1>Administrator sign-in</h1>
