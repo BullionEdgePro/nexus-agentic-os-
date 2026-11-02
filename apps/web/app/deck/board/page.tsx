@@ -49,24 +49,16 @@ import {
   type TaskRecord,
 } from "../../../lib/api";
 import { Automations } from "./automations";
-import { COLUMNS, columnFor, dueDateFor, type ColumnKey } from "./columns";
+import { COLUMNS, COLUMN_TONE, columnFor, dueDateFor, whenLabel, type ColumnKey } from "./columns";
+import { FollowUpWindow } from "./follow-up-window";
+import { BoardCard, BoardColumn, useBoardDrag } from "../../kit/board";
+import { openFromCard } from "../../kit/card-window";
 
 /** The view this browser last chose. Per machine, which is what localStorage means. */
 const VIEW_KEY = "nexus.board.view";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
+import "../../kit/kit.css";
 import "./board.css";
-
-function whenLabel(task: TaskRecord): string {
-  if (!task.dueAt) return "no date";
-  const due = new Date(task.dueAt);
-  if (Number.isNaN(due.getTime())) return "no date";
-  return due.toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default function BoardPage() {
   // Staff see their own board (24 Oct 2026): no switcher across businesses
@@ -80,9 +72,10 @@ export default function BoardPage() {
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [dragging, setDragging] = useState<string | null>(null);
   const [team, setTeam] = useState<Array<{ id: string; fullName: string }>>([]);
-  const [over, setOver] = useState<ColumnKey | null>(null);
+  // The follow-up whose window is open, and the card it grew from. By id, so
+  // the window shows the task as the latest load has it — or says it is gone.
+  const [opened, setOpened] = useState<{ id: string; card: HTMLElement } | null>(null);
 
   useEffect(() => {
     try {
@@ -166,9 +159,15 @@ export default function BoardPage() {
     return out;
   }, [visible]);
 
-  async function moveTo(taskId: string, column: ColumnKey) {
+  /**
+   * Makes the change a drop means, and answers with what went wrong — null when
+   * it saved — so a drag and the window can both report it. The board's error
+   * line shows it either way.
+   */
+  async function moveTo(taskId: string, column: ColumnKey): Promise<string | null> {
     const task = tasks.find((t) => t.id === taskId);
-    if (!task || columnFor(task) === column) return;
+    if (!task) return "That follow-up is no longer on the board.";
+    if (columnFor(task) === column) return null;
 
     // Optimistic, then reconciled by the reload below. A card that sits under
     // the cursor for a second before moving reads as a broken drag.
@@ -203,11 +202,28 @@ export default function BoardPage() {
         await updateTask(taskId, { dueAt: dueDateFor(column) });
       }
       await load(business);
+      return null;
     } catch (err) {
       setTasks(previous);
-      setActionError(readableError(err, "That change could not be saved."));
+      const reason = readableError(err, "That change could not be saved.");
+      setActionError(reason);
+      return reason;
     }
   }
+
+  async function move(taskId: string, column: ColumnKey) {
+    // Thrown, so a drop that did not save plays no chime and the window says why.
+    const failed = await moveTo(taskId, column);
+    if (failed) throw new Error(failed);
+  }
+
+  const drag = useBoardDrag({
+    // Nothing drags OUT of Done (the header says why); the server refuses it too.
+    canDrop: (_id, from) => from !== "done",
+    onDrop: (id, _from, to) => move(id, to as ColumnKey),
+  });
+
+  const openedTask = opened ? tasks.find((t) => t.id === opened.id) ?? null : null;
 
   return (
     <div className="bd">
@@ -252,63 +268,52 @@ export default function BoardPage() {
       ) : loading ? (
         <p className="bd-note">Loading…</p>
       ) : (
-        <div className="bd-cols">
+        <div className="kit-board bd-board">
           {COLUMNS.map((column) => (
-            <section
+            <BoardColumn
               key={column.key}
-              className={`bd-col${over === column.key ? " over" : ""}`}
-              onDragOver={(e) => {
-                if (column.key === "done" || dragging) {
-                  e.preventDefault();
-                  setOver(column.key);
-                }
-              }}
-              onDragLeave={() => setOver((c) => (c === column.key ? null : c))}
-              onDrop={(e) => {
-                e.preventDefault();
-                setOver(null);
-                if (dragging) void moveTo(dragging, column.key);
-                setDragging(null);
-              }}
+              id={column.key}
+              tone={COLUMN_TONE[column.key]}
+              title={column.label}
+              count={grouped[column.key].length}
+              active={drag.over === column.key}
             >
-              <div className="bd-col-head">
-                <h2>
-                  {column.label}
-                  <span className="bd-count">{grouped[column.key].length}</span>
-                </h2>
-                <p>{column.hint}</p>
-              </div>
-
-              <ul>
-                {grouped[column.key].map((task) => (
-                  <li
+              <p className="bd-hint">{column.hint}</p>
+              {grouped[column.key].map((task) => {
+                const owner = task.employeeName ?? "nobody yet";
+                const lines = [task.businessName, owner, whenLabel(task)];
+                return (
+                  <BoardCard
                     key={task.id}
+                    id={task.id}
+                    tone={COLUMN_TONE[column.key]}
+                    title={task.title}
+                    lines={lines}
+                    label={`${task.title}. ${lines.join(", ")}. Open the follow-up.`}
+                    onOpen={(card) => openFromCard(card, () => setOpened({ id: task.id, card }))}
                     // Done cards do not drag: reopening is a different decision
                     // from rescheduling and belongs where it can be explained.
-                    draggable={task.status === "open"}
-                    onDragStart={() => setDragging(task.id)}
-                    onDragEnd={() => {
-                      setDragging(null);
-                      setOver(null);
-                    }}
-                    className={task.status === "open" ? "bd-card" : "bd-card closed"}
-                  >
-                    <p className="bd-title">{task.title}</p>
-                    <p className="bd-meta">
-                      <span>{task.businessName}</span>
-                      <span>{task.employeeName ?? "nobody yet"}</span>
-                      <span>{whenLabel(task)}</span>
-                    </p>
-                  </li>
-                ))}
-                {grouped[column.key].length === 0 ? (
-                  <li className="bd-empty">nothing here</li>
-                ) : null}
-              </ul>
-            </section>
+                    handlers={task.status === "open" ? drag.cardHandlers(task.id, column.key) : undefined}
+                    dragging={drag.dragging === task.id}
+                  />
+                );
+              })}
+              {grouped[column.key].length === 0 ? <p className="bd-empty">nothing here</p> : null}
+            </BoardColumn>
           ))}
         </div>
       )}
+
+      {opened ? (
+        <FollowUpWindow
+          key={opened.id}
+          task={openedTask}
+          origin={opened.card}
+          onClose={() => setOpened(null)}
+          onMove={(to) => move(opened.id, to)}
+          onDone={() => move(opened.id, "done")}
+        />
+      ) : null}
 
       {/* Under the board rather than above it: the columns are what somebody
           came here for, and the rules are what they set up once and then leave

@@ -18,6 +18,25 @@ export const COLUMNS: Array<{ key: ColumnKey; label: string; hint: string }> = [
   { key: "done", label: "Done", hint: "closed, with who closed it" },
 ];
 
+/**
+ * Each column's colour on the board (Cream pages 2a): late is terracotta, today
+ * mustard, later green, finished ink. Here rather than in the page, because a
+ * Next.js page module may export nothing but the page.
+ */
+export const COLUMN_TONE = { overdue: "terra", today: "mustard", later: "forest", done: "ink" } as const;
+
+/** When a follow-up is due, as its card and its window say it. */
+export function whenLabel(task: TaskRecord): string {
+  if (!task.dueAt) return "no date";
+  const due = new Date(task.dueAt);
+  if (Number.isNaN(due.getTime())) return "no date";
+  return due.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function endOfToday(): number {
   const d = new Date();

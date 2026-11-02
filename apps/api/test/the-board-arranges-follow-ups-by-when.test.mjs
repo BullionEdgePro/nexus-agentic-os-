@@ -133,10 +133,15 @@ test("nothing drags out of Done", () => {
   // Reopening undoes an accountability record — completed_by and all — and is a
   // different decision from rescheduling a live one. It belongs on the list,
   // where it can be explained, not on a drag nobody would remember making.
+  //
+  // Since 2 Nov 2026 (Cream pages 2a) the board drags on Pointer Events, so a
+  // closed card is one that is given no drag handlers, and no drop starts from
+  // the Done column even if one were.
   assert.ok(
-    code.includes('draggable={task.status === "open"}'),
+    code.includes('handlers={task.status === "open" ? drag.cardHandlers(task.id, column.key) : undefined}'),
     "closed cards must not be draggable"
   );
+  assert.ok(code.includes('canDrop: (_id, from) => from !== "done"'), "a drop must never start from Done");
 });
 
 test("the reschedule writer refuses a closed follow-up", () => {
