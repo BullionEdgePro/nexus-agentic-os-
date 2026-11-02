@@ -184,3 +184,30 @@ test("a business's staff still claim a shared customer and capture a scored lead
   assert.ok(scored.lead_score > 0, "the lead's score landed on the owner's row");
   void byId;
 });
+
+// ---- the final review's fixes ----------------------------------------------------------------
+
+test("an import still says a shared customer is in someone else's book, when that someone is another firm's", db, async () => {
+  // The holder works for the number's owner, whose staff this business cannot
+  // see; the row must still come back with a reason, not silently unassigned.
+  const theirs = "e8181810-0000-4000-8000-000000000002";
+  await owner.query(`insert into employees (id, organization_id, employee_code, full_name) values ($1, $2, 'ATS2', 'Owner Staff')`, [theirs, OWNER]);
+  const contact = await lib.withTenant(SERVING, () =>
+    lib.ensureContactForServingBusiness({ servingOrganizationId: SERVING, waId: "971593000005" })
+  );
+  await owner.query(`update contacts set owner_employee_id = $2 where id = $1`, [contact.contactId, theirs]);
+  const result = await lib.withTenant(SERVING, () => lib.assignContactOwnerIfUnowned(contact.contactId, STAFF));
+  assert.equal(result.assigned, false);
+  assert.equal(result.currentOwnerName, "another colleague");
+});
+
+test("a database error inside a switch to another business surfaces as itself", db, async () => {
+  // The switch back runs in a transaction the error already aborted; its own
+  // failure must not replace the cause in the logs and in the error a person sees.
+  const shared = await lib.withTenant(SERVING, () =>
+    lib.ensureContactForServingBusiness({ servingOrganizationId: SERVING, waId: "971593000006" })
+  );
+  const broken = () => lib.getPool().query("select * from no_such_table_here");
+  await assert.rejects(lib.withTenant(SERVING, () => lib.withServingTenant(OWNER, broken)), /no_such_table_here/);
+  await assert.rejects(lib.withTenant(SERVING, () => lib.withContactOwner(shared.contactId, broken)), /no_such_table_here/);
+});

@@ -743,9 +743,12 @@ export async function assignContactOwnerIfUnowned(
       where c.id = $1`,
     [contactId]
   );
+  // A holder on another business's staff is invisible to this one's tenant, so
+  // the name may not come back -- the row still says why, as addClient does.
+  const holder = rows[0]?.owner_employee_id ?? null;
   return {
-    assigned: rows[0]?.owner_employee_id === employeeId,
-    currentOwnerName: rows[0]?.owner_employee_id === employeeId ? null : rows[0]?.full_name ?? null,
+    assigned: holder === employeeId,
+    currentOwnerName: holder === null || holder === employeeId ? null : rows[0]?.full_name ?? "another colleague",
   };
 }
 

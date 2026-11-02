@@ -379,15 +379,35 @@ export async function withServingTenant<T>(
   }
 
   const restore = context.organizationId;
+  let failed = false;
   try {
     await client.query("select set_config('app.current_org', $1, true)", [organizationId]);
     return await runWithContext({ scope: "tenant", organizationId, client }, fn);
+  } catch (err) {
+    failed = true;
+    throw err;
   } finally {
     // Restored even on the throw path. Leaving the connection pointed at the
     // serving business would silently re-scope the REST of the owner's
     // transaction — the outbound message, the evaluation, the metric — and
     // those writes would fail the policy one by one with no obvious cause.
-    await client.query("select set_config('app.current_org', $1, true)", [restore]);
+    await restoreCurrentOrg(client, restore, failed);
+  }
+}
+
+/**
+ * Points the connection back at the business it was scoped to before a switch.
+ * When the switched work has already failed with a database error, the
+ * transaction is aborted and this cannot run -- and its own "current
+ * transaction is aborted" must not replace the cause in the logs and in the
+ * error a person sees (final review, 3 Nov 2026). The transaction is rolled
+ * back either way, so nothing is left pointed anywhere.
+ */
+async function restoreCurrentOrg(client: PoolClient, organizationId: string, afterFailure: boolean): Promise<void> {
+  try {
+    await client.query("select set_config('app.current_org', $1, true)", [organizationId]);
+  } catch (err) {
+    if (!afterFailure) throw err;
   }
 }
 
@@ -425,13 +445,17 @@ export async function withContactOwner<T>(contactId: string, fn: () => Promise<T
   if (!ownerId || ownerId === context.organizationId) return fn();
 
   const restore = context.organizationId;
+  let failed = false;
   try {
     await client.query("select set_config('app.current_org', $1, true)", [ownerId]);
     return await runWithContext({ scope: "tenant", organizationId: ownerId, client }, fn);
+  } catch (err) {
+    failed = true;
+    throw err;
   } finally {
     // Restored even on the throw path, so the rest of the sweep stays scoped
     // to the mailbox's own business.
-    await client.query("select set_config('app.current_org', $1, true)", [restore]);
+    await restoreCurrentOrg(client, restore, failed);
   }
 }
 
