@@ -156,3 +156,38 @@ test("a chart card has its title and big figure", () => {
   assert.match(html, /<h3[^>]*>Conversations<\/h3>/);
   assert.match(html, /<span data-countup="">126<\/span>/);
 });
+
+// ---- Task 4: card into a window, and the slide-in panel ------------------------------------
+
+import { CardWindow } from "@/app/kit/card-window";
+import { SlidePanel } from "@/app/kit/slide-panel";
+import { nextFocus } from "@/lib/kit/focus";
+
+test("a window is a named dialog with a Close, and renders nothing when shut", () => {
+  assert.equal(render(CardWindow, { open: false, title: "Call back", onClose() {}, children: "x" }), "");
+  const html = render(CardWindow, { open: true, title: "Call back", onClose() {}, children: "body" });
+  assert.match(html, /role="dialog" aria-modal="true" aria-label="Call back"/);
+  assert.match(html, /aria-label="Close"/);
+  assert.match(html, /body/);
+});
+
+test("a panel is a named dialog too", () => {
+  assert.match(render(SlidePanel, { open: true, title: "Sara Khan", onClose() {}, children: "p" }), /role="dialog" aria-modal="true" aria-label="Sara Khan"/);
+  assert.equal(render(SlidePanel, { open: false, title: "Sara Khan", onClose() {}, children: "p" }), "");
+});
+
+test("Tab stays inside, and Escape, focus return and sounds are wired", () => {
+  const a = { id: "a" }, b = { id: "b" }, c = { id: "c" };
+  assert.equal(nextFocus([a, b, c], c, false), a);
+  assert.equal(nextFocus([a, b, c], a, true), c);
+  assert.equal(nextFocus([a, b, c], null, false), a);
+  const W = read("app/kit/card-window.tsx");
+  assert.match(W, /"Escape"/);
+  assert.match(W, /origin\?\.focus\(\)/);
+  assert.match(W, /play\("pop"\)/);
+  const P = read("app/kit/slide-panel.tsx");
+  assert.match(P, /play\("whoosh"\)/);
+  assert.match(P, /"Escape"/);
+  // Not part 1's nx-pop / nx-sheet, which play their own sound on top.
+  assert.doesNotMatch(W + P, /nx-pop|nx-sheet/);
+});
