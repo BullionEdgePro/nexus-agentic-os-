@@ -51,8 +51,8 @@ export function ComplianceTable({ evidence }: { evidence: WorkflowAudit["evidenc
           </tbody>
         </table>
       </div>
-      <section className="wf-consent" aria-label="What Nexus records about consent">
-        <h4>What Nexus records about consent</h4>
+      <section className="wf-consent" aria-label="What Nexus records about consent, in total">
+        <h4>What Nexus records about consent, in total</h4>
         <dl className="kit-rows wf-rows">
           {consent.map((c) => (
             <Fragment key={c.label}>

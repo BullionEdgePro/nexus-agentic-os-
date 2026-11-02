@@ -76,7 +76,8 @@ export async function getWorkflowAudit(input: {
          select c.id, c.contact_id, c.opened_at, ct.channel,
                 lower(trim(ct.lead_source)) as source_key, trim(ct.lead_source) as source_text,
                 exists (select 1 from lead_assessments la
-                         where la.conversation_id = c.id and la.category = 'inbound_pitch') as is_pitch,
+                         where la.organization_id = $1 and la.conversation_id = c.id
+                           and la.category = 'inbound_pitch') as is_pitch,
                 (select min(m.created_at) from messages m
                   where m.conversation_id = c.id and m.sender_type = 'contact') as first_in
            from conversations c
@@ -89,19 +90,20 @@ export async function getWorkflowAudit(input: {
               conv.source_key, conv.source_text, conv.is_pitch, conv.first_in,
               r.created_at as reply_at, r.sender_type as reply_by,
               exists (select 1 from lead_assessments la
-                       where la.contact_id = conv.contact_id and la.category <> 'inbound_pitch'
-                         and la.created_at >= conv.first_in) as scored,
+                       where la.organization_id = $1 and la.contact_id = conv.contact_id
+                         and la.category <> 'inbound_pitch' and la.created_at >= conv.first_in) as scored,
               exists (select 1 from lead_assessments la
-                       where la.contact_id = conv.contact_id and la.category <> 'inbound_pitch'
-                         and la.priority in ('high', 'urgent') and la.created_at >= conv.first_in) as hot,
+                       where la.organization_id = $1 and la.contact_id = conv.contact_id
+                         and la.category <> 'inbound_pitch' and la.priority in ('high', 'urgent')
+                         and la.created_at >= conv.first_in) as hot,
               exists (select 1 from bookings b
-                       where b.contact_id = conv.contact_id and b.status <> 'cancelled'
-                         and b.created_at >= conv.first_in) as booked,
+                       where b.organization_id = $1 and b.contact_id = conv.contact_id
+                         and b.status <> 'cancelled' and b.created_at >= conv.first_in) as booked,
               exists (select 1 from bookings b
-                       where b.contact_id = conv.contact_id and b.status = 'completed'
-                         and b.created_at >= conv.first_in) as held,
+                       where b.organization_id = $1 and b.contact_id = conv.contact_id
+                         and b.status = 'completed' and b.created_at >= conv.first_in) as held,
               exists (select 1 from lead_labels ll join lead_assessments la on la.id = ll.assessment_id
-                       where la.contact_id = conv.contact_id and ll.outcome = 'won'
+                       where ll.organization_id = $1 and la.contact_id = conv.contact_id and ll.outcome = 'won'
                          and coalesce(ll.updated_at, ll.created_at) >= conv.first_in) as won
          from conv
          left join lateral (
@@ -117,11 +119,21 @@ export async function getWorkflowAudit(input: {
     const leads = chats.rows.filter((row) => !row.is_pitch);
     const pitches = chats.rows.length - leads.length;
 
+    // People, not messages: every inbound message is scored, so a buyer who
+    // writes twenty times has twenty rows. Each person scored in the period is
+    // counted once, on the day of their first score, and is hot if any of
+    // their scores in the period was high or urgent.
     const quality = await db.query<{ bucket: string; scored: string; hot: string }>(
-      `select ${BUCKET("la.created_at")} as bucket, count(*)::text as scored,
-              count(*) filter (where la.priority in ('high', 'urgent'))::text as hot
-         from lead_assessments la
-        where la.organization_id = $1 and la.category <> 'inbound_pitch' and la.created_at >= ${START}
+      `with person as (
+         select la.contact_id, min(la.created_at) as first_at,
+                bool_or(la.priority in ('high', 'urgent')) as hot
+           from lead_assessments la
+          where la.organization_id = $1 and la.category <> 'inbound_pitch' and la.created_at >= ${START}
+          group by la.contact_id
+       )
+       select ${BUCKET("person.first_at")} as bucket, count(*)::text as scored,
+              count(*) filter (where person.hot)::text as hot
+         from person
         group by 1`,
       args
     );

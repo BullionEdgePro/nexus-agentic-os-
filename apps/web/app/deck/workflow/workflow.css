@@ -76,6 +76,7 @@
 
 .wf-window-tag { margin: 0 44px 2px 0; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--slate); }
 .wf-window-sub { margin: 0 0 10px; color: var(--slate); font-size: 14px; }
+.wf-window-caption { margin: 14px 0 -8px; color: var(--slate); font-size: 12.5px; }
 .wf-window .wf-chip { display: inline-block; }
 .wf-chip-working { background: var(--st-forest); color: var(--on-forest); }
 .wf-chip-partly { background: var(--st-mustard); color: var(--on-mustard); }

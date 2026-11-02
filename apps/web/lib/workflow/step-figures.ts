@@ -33,12 +33,12 @@ export function stepFigures(stepId: string, evidence: WorkflowAudit["evidence"])
   ];
   switch (stepId) {
     case "S1":
-      return [fig("Contacts", e.contacts.total), fig("Added", e.contacts.added), fig("With a lead source", e.contacts.withSource)];
+      return [fig("Contacts in total", e.contacts.total), fig("Added", e.contacts.added), fig("With a lead source, in total", e.contacts.withSource)];
     case "S2":
       return [
         fig("Scored", e.qualifier.scored),
-        fig("Opted out of re-engagement", e.contacts.optedOut),
-        fig("Marked not a customer", e.contacts.notACustomer),
+        fig("Opted out, in total", e.contacts.optedOut),
+        fig("Not a customer, in total", e.contacts.notACustomer),
       ];
     case "S3": {
       const c = e.calls;

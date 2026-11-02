@@ -30,6 +30,12 @@ test("the audit reads inside the business's tenant scope, in its own days", () =
   // The pipeline's per-message timer is capped at 24 hours and never sees a
   // person's reply; first replies come from the messages themselves.
   assert.doesNotMatch(SRC, /first_response_ms/);
+  // Row-level security keeps other businesses out, and every query also says
+  // whose rows it wants (spec §7.3) — a shared-number customer has rows in more
+  // than one business, so a read keyed only on the contact would mix them.
+  for (const m of SRC.matchAll(/from (lead_assessments|bookings|lead_labels) (\w+)/g)) {
+    assert.match(SRC.slice(m.index, m.index + 420), new RegExp(`${m[2]}\\.organization_id = \\$1`), `"${m[0]}" is not filtered by the business`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -42,6 +48,8 @@ const db = { skip: !(OWNER_URL && APP_URL) && "set AUDIT_TEST_OWNER_URL and AUDI
 
 const SFS = "51515151-0000-4000-8000-000000000001";
 const OTHER = "51515151-0000-4000-8000-000000000002";
+// A third business, only for the Dubai day edges, so SFS's counts stay as they are.
+const EDGE = "51515151-0000-4000-8000-000000000003";
 
 let owner;
 let getWorkflowAudit;
@@ -53,7 +61,8 @@ const dubai = (daysAgo, plus = "0 minutes") =>
 const SEED = `
 insert into organizations (id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone)
 values ('${SFS}', 'sfs-international', 'SFS International', '900001', '800001', 'Asia/Dubai'),
-       ('${OTHER}', 'other-firm', 'Other Firm', '900002', '800002', 'Asia/Dubai');
+       ('${OTHER}', 'other-firm', 'Other Firm', '900002', '800002', 'Asia/Dubai'),
+       ('${EDGE}', 'edge-firm', 'Edge Firm', '900003', '800003', 'Asia/Dubai');
 
 -- SFS's people
 insert into contacts (id, organization_id, wa_id, channel, display_name, lead_source) values
@@ -98,7 +107,12 @@ insert into messages (organization_id, conversation_id, contact_id, direction, s
 insert into lead_assessments (id, organization_id, contact_id, conversation_id, score, priority, category, created_at) values
   ('a0000000-0000-4000-8000-000000000001', '${SFS}', 'c0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 80, 'high', 'purchase_intent', ${dubai(2, "10 hours 1 minute")}),
   ('a0000000-0000-4000-8000-000000000002', '${SFS}', 'c0000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000002', 40, 'normal', 'purchase_intent', ${dubai(1, "23 hours 31 minutes")}),
-  ('a0000000-0000-4000-8000-000000000004', '${SFS}', 'c0000000-0000-4000-8000-000000000004', 'd0000000-0000-4000-8000-000000000004', 5, 'low', 'inbound_pitch', ${dubai(1, "9 hours 1 minute")});
+  ('a0000000-0000-4000-8000-000000000004', '${SFS}', 'c0000000-0000-4000-8000-000000000004', 'd0000000-0000-4000-8000-000000000004', 5, 'low', 'inbound_pitch', ${dubai(1, "9 hours 1 minute")}),
+  -- Every inbound message is scored: lead one's second message is a second row,
+  -- still one lead scored and one hot lead.
+  ('a0000000-0000-4000-8000-000000000005', '${SFS}', 'c0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 85, 'urgent', 'purchase_intent', ${dubai(2, "10 hours 6 minutes")}),
+  -- The routed chat is scored under the number's owner, where SFS cannot see it.
+  ('a0000000-0000-4000-8000-000000000003', '${OTHER}', 'c0000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-000000000003', 90, 'high', 'purchase_intent', ${dubai(3, "9 hours 1 minute")});
 
 insert into lead_labels (organization_id, assessment_id, worth_attention, outcome, labelled_by, created_at, updated_at) values
   ('${SFS}', 'a0000000-0000-4000-8000-000000000001', true, 'won', 'owner', ${dubai(1, "8 hours")}, ${dubai(1, "8 hours")});
@@ -111,6 +125,22 @@ insert into bookings (organization_id, contact_id, starts_at, ends_at, status) v
 -- tomorrow: not yet a viewing of the period, and not past "hot" in the funnel.
 insert into bookings (organization_id, contact_id, starts_at, ends_at, status) values
   ('${SFS}', 'c0000000-0000-4000-8000-000000000002', now() + interval '2 days', now() + interval '2 days 1 hour', 'confirmed');
+
+-- The Dubai day edges, at the edge firm. 01:30 Dubai yesterday is 21:30 UTC the
+-- day before; 00:30 Dubai on the 7-day period's first day is 20:30 UTC the day
+-- before it; 23:30 Dubai the night before that is outside the period either way.
+insert into contacts (id, organization_id, wa_id, channel, display_name) values
+  ('c0000000-0000-4000-8000-000000000011', '${EDGE}', '971500000011', 'whatsapp', 'Small hours'),
+  ('c0000000-0000-4000-8000-000000000012', '${EDGE}', '971500000012', 'whatsapp', 'First minute'),
+  ('c0000000-0000-4000-8000-000000000013', '${EDGE}', '971500000013', 'whatsapp', 'Night before');
+insert into conversations (id, organization_id, routed_organization_id, contact_id, opened_at) values
+  ('d0000000-0000-4000-8000-000000000011', '${EDGE}', null, 'c0000000-0000-4000-8000-000000000011', ${dubai(1, "1 hour 30 minutes")}),
+  ('d0000000-0000-4000-8000-000000000012', '${EDGE}', null, 'c0000000-0000-4000-8000-000000000012', ${dubai(6, "30 minutes")}),
+  ('d0000000-0000-4000-8000-000000000013', '${EDGE}', null, 'c0000000-0000-4000-8000-000000000013', ${dubai(6, "-30 minutes")});
+insert into messages (organization_id, conversation_id, contact_id, direction, sender_type, body, created_at) values
+  ('${EDGE}', 'd0000000-0000-4000-8000-000000000011', 'c0000000-0000-4000-8000-000000000011', 'inbound', 'contact', 'Up late', ${dubai(1, "1 hour 30 minutes")}),
+  ('${EDGE}', 'd0000000-0000-4000-8000-000000000012', 'c0000000-0000-4000-8000-000000000012', 'inbound', 'contact', 'Just after midnight', ${dubai(6, "30 minutes")}),
+  ('${EDGE}', 'd0000000-0000-4000-8000-000000000013', 'c0000000-0000-4000-8000-000000000013', 'inbound', 'contact', 'Just before', ${dubai(6, "-30 minutes")});
 `;
 
 before(async () => {
@@ -125,8 +155,10 @@ before(async () => {
 after(async () => {
   if (db.skip) return;
   // Messages first: their serving-business key does not cascade.
-  await owner.query(`delete from messages where organization_id in ('${SFS}', '${OTHER}') or serving_organization_id in ('${SFS}', '${OTHER}')`);
-  await owner.query(`delete from organizations where id in ('${SFS}', '${OTHER}')`);
+  await owner.query(
+    `delete from messages where organization_id in ('${SFS}', '${OTHER}', '${EDGE}') or serving_organization_id in ('${SFS}', '${OTHER}', '${EDGE}')`
+  );
+  await owner.query(`delete from organizations where id in ('${SFS}', '${OTHER}', '${EDGE}')`);
   await owner.end();
   const { getPool } = await import("@nexus/db");
   await getPool().end();
@@ -190,6 +222,42 @@ test("90 days reads in Monday weeks", db, async () => {
   assert.equal(a.period.bucket, "week");
   for (const b of a.series.leads) assert.equal(new Date(`${b.bucket}T00:00:00Z`).getUTCDay(), 1, b.bucket);
   assert.equal(a.evidence.leads.total, 3);
+  // The SQL's own week keys meet the page's: every lead lands in a drawn week.
+  assert.equal(a.series.leads.reduce((sum, b) => sum + b.count, 0), a.evidence.leads.total);
+});
+
+test("the period and its days begin at Dubai midnight, not UTC midnight", db, async () => {
+  const a = await getWorkflowAudit({ organizationId: EDGE, slug: "edge-firm", name: "Edge Firm", timezone: "Asia/Dubai", days: 7 });
+  const { rows } = await owner.query(
+    `select to_char((now() at time zone 'Asia/Dubai')::date - 1, 'YYYY-MM-DD') as yesterday,
+            to_char((now() at time zone 'Asia/Dubai')::date - 6, 'YYYY-MM-DD') as first`
+  );
+  const count = (day) => a.series.leads.find((b) => b.bucket === day)?.count;
+  assert.equal(a.period.from, rows[0].first);
+  // 00:30 Dubai on the first day is in; 23:30 the night before is out.
+  assert.equal(a.evidence.leads.total, 2);
+  assert.equal(count(rows[0].first), 1);
+  // 01:30 Dubai yesterday is yesterday, though in UTC it is the day before.
+  assert.equal(count(rows[0].yesterday), 1);
+});
+
+test("scored and hot count people, not the messages that were scored", db, async () => {
+  const a = await sfs();
+  // Lead one's two scored messages (high, then urgent) are one lead scored and one hot lead.
+  assert.equal(a.evidence.qualifier.scored, 2);
+  assert.equal(a.evidence.qualifier.hot, 1);
+  assert.equal(a.series.quality.reduce((sum, b) => sum + b.scored, 0), 2);
+  assert.equal(a.series.quality.reduce((sum, b) => sum + b.hot, 0), 1);
+});
+
+test("a routed chat's scoring stays with the number's owner, out of SFS's sight", db, async () => {
+  // Pins what the page says aloud on the AI qualifier step: the pipeline scores
+  // a routed chat under the shared number's owner, and lead_assessments are
+  // visible only to that owner, so SFS's routed lead is counted but never scored.
+  const a = await sfs();
+  assert.equal(a.evidence.leads.byChannel.instagram, 1);
+  assert.equal(a.evidence.qualifier.scored, 2);
+  assert.equal(a.funnel.scored, 2);
 });
 
 test("the funnel narrows: each step counts only people who reached every step before it", db, async () => {

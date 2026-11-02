@@ -228,3 +228,23 @@ test("a not-tracked card's muted words stay readable: no extra fading on top of 
   assert.match(css, /\.wf-untracked \.kit-card-eyebrow,\s*\.wf-untracked \.kit-card-sub \{ opacity: 1; \}/);
   assert.match(css, /\.wf-untracked \.wf-chip \{[^}]*background: transparent/);
 });
+
+// ---- the final review's fixes -----------------------------------------------------------------
+
+test("the page says where its figures stop: routed chats' scores, and which counts are all-time", () => {
+  // A chat routed in through a shared number is scored under the number's
+  // owner, so SFS never sees its score: said on the qualifier step and beside
+  // the two charts that count scores.
+  const qualifier = render(StepWindow, { step: byId("D2"), evidence: sample().evidence, origin: null, onClose() {} });
+  assert.match(qualifier, /routed in through a shared number are scored under the number&#x27;s owner/);
+  const charts = render(AuditCharts, { audit: sample() });
+  assert.equal((charts.match(/routed in through a shared number/g) ?? []).length, 2);
+  // Every figure says which days it covers (spec §3): the period's say so, the rest say "in total" or "now".
+  const tiles = render(AuditTiles, { audit: sample() });
+  assert.match(tiles, /Hot leads<\/span><span class="kit-tile-figure"><span data-countup="">2<\/span><\/span><span class="kit-tile-note">In the last 30 days/);
+  assert.match(tiles, /Won \(labelled\)<\/span><span class="kit-tile-figure"><span data-countup="">1<\/span><\/span><span class="kit-tile-note">In the last 30 days/);
+  assert.deepEqual(stepFigures("S1", sample().evidence).map((f) => f.label), ["Contacts in total", "Added", "With a lead source, in total"]);
+  assert.deepEqual(stepFigures("S2", sample().evidence).map((f) => f.label), ["Scored", "Opted out, in total", "Not a customer, in total"]);
+  assert.match(qualifier, /Figures are for the chosen period unless they say “in total” or “now”\./);
+  assert.match(render(ComplianceTable, { evidence: sample().evidence }), /What Nexus records about consent, in total/);
+});

@@ -33,6 +33,9 @@ export function StepWindow({
         </p>
         <span className={`wf-chip wf-chip-${status}`}>{STATUS_LOOK[status].word}</span>
         {figures.length ? (
+          <p className="wf-window-caption">Figures are for the chosen period unless they say “in total” or “now”.</p>
+        ) : null}
+        {figures.length ? (
           <dl className="kit-rows wf-rows">
             {figures.map((f) => (
               <Fragment key={f.label}>

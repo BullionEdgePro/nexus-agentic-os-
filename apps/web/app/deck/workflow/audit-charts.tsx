@@ -18,6 +18,9 @@ const DAY_MS = 86_400_000;
 const toMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const n = (value: number) => value.toLocaleString("en-GB");
 
+/** Said wherever scores are counted: the pipeline scores a routed chat under the shared number's owner. */
+const ROUTED = "Chats routed in through a shared number are scored under the number's owner, so they are not counted here.";
+
 /** "1 Nov" for a day, "w/c 26 Oct" for a week. */
 export function bucketLabel(bucket: string, kind: "day" | "week"): string {
   const date = new Date(toMs(bucket)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -43,7 +46,7 @@ export function AuditTiles({ audit }: { audit: WorkflowAudit }) {
         value={median === null ? "—" : formatWait(median)}
         note={median === null ? "No reply to a new lead yet" : `${period}, to new leads`}
       />
-      <NumberTile label="Hot leads" value={n(e.qualifier.hot)} note="Scored high or urgent" />
+      <NumberTile label="Hot leads" value={n(e.qualifier.hot)} note={`${period}, scored high or urgent`} />
       <NumberTile label="Viewings held" value={n(e.viewings.held)} note={period} />
       <NumberTile
         label="Follow-ups overdue now"
@@ -51,7 +54,7 @@ export function AuditTiles({ audit }: { audit: WorkflowAudit }) {
         note={`${n(e.followUps.openNow)} open now`}
         edge={e.followUps.overdueNow > 0 ? "terra" : undefined}
       />
-      <NumberTile label="Won (labelled)" value={n(e.won)} note="Rent or sale isn't recorded" />
+      <NumberTile label="Won (labelled)" value={n(e.won)} note={`${period}; rent or sale isn't recorded`} />
     </section>
   );
 }
@@ -127,7 +130,7 @@ export function AuditCharts({ audit }: { audit: WorkflowAudit }) {
 
       <ChartCard
         title="From lead to won"
-        note="The period's new leads, followed: each step counts those who reached every step before it, and each share is of the step before."
+        note={`The period's new leads, followed: each step counts those who reached every step before it, and each share is of the step before. ${ROUTED}`}
       >
         <Funnel funnel={audit.funnel} />
       </ChartCard>
@@ -153,7 +156,7 @@ export function AuditCharts({ audit }: { audit: WorkflowAudit }) {
       <ChartCard
         title="Lead quality"
         figure={n(e.qualifier.scored)}
-        note={`Leads scored per ${per}, hot shaded. ${n(e.leads.pitches)} sales pitches filtered out.`}
+        note={`People scored per ${per}, hot shaded. ${n(e.leads.pitches)} sales pitches filtered out. ${ROUTED}`}
       >
         <BarChart
           bars={series.quality.map((r) => ({ label: label(r.bucket), value: r.scored, part: r.hot, partial: partial(r.bucket) }))}
