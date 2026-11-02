@@ -252,7 +252,7 @@ const health = new WeakMap<PoolClient, TransactionHealth>();
 const WRITE_COMMANDS = new Set(["INSERT", "UPDATE", "DELETE", "MERGE"]);
 const IN_FAILED_TRANSACTION = "25P02";
 
-/** For a refused statement only, which has no result to say what it was. */
+/** From the SQL: for a refused statement, which has no result, and a with-query whose result says SELECT. */
 function isWriteStatement(sql: string): boolean {
   const scrubbed = scrubSql(sql).replace(/\bfor\s+(no\s+key\s+)?update\b/g, " ");
   return /\b(insert\s+into|update\s+["a-z_]|delete\s+from|merge\s+into)\b/.test(scrubbed);
@@ -267,7 +267,9 @@ function noted<R extends QueryResultRow>(
   if (!record) return query;
   return query.then(
     (result) => {
-      if (WRITE_COMMANDS.has(result.command)) record.wrote = true;
+      // A write inside a with-query (`with i as (insert … returning …) select
+      // … from i`) settles as SELECT, so its SQL is read too (final review).
+      if (WRITE_COMMANDS.has(result.command) || isWriteStatement(sql)) record.wrote = true;
       return result;
     },
     (err: unknown) => {

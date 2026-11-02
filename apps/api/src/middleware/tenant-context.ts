@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler, Next } from "hono";
-import { findOrganizationBySlug, withTenant, withAllTenants } from "@nexus/db";
+import { findOrganizationBySlug, withTenant, withAllTenants, TransactionRolledBack } from "@nexus/db";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -78,7 +78,16 @@ async function inTransaction(
       if (c.error) throw new HandlerFailed();
     });
   } catch (err) {
-    if (!(err instanceof HandlerFailed)) throw err;
+    if (err instanceof HandlerFailed) return;
+    // A handler that already answered with an error keeps its own words (final
+    // review, 3 Nov 2026): the 500 is for a request that would otherwise claim
+    // success. "Another phrase is already switched on" stays a 400 that says
+    // what to do, and the lost write is logged.
+    if (err instanceof TransactionRolledBack && c.res.status >= 400) {
+      logger.error({ err, status: c.res.status }, "A request that answered with an error also lost writes");
+      return;
+    }
+    throw err;
   }
 }
 

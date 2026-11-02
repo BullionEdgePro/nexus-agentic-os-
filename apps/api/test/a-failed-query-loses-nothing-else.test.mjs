@@ -136,6 +136,13 @@ before(async () => {
     await swallow();
     return c.json({ ok: true });
   });
+  // Like editing a phrase and switching it on while another is on: the edit is
+  // written, the switch-on is refused, and the handler says what to do.
+  app.post("/api/organizations/:slug/declines/:waId", async (c) => {
+    await insertContact(c.req.param("waId"));
+    await swallow();
+    return c.json({ error: "Another phrase for this moment is already switched on." }, 400);
+  });
 });
 
 after(async () => {
@@ -388,6 +395,49 @@ test("a slot taken by someone else leaves the rest of the transaction working", 
     failing
   );
   assert.equal(await contactNamed("971595000020"), 1);
+});
+
+test("a handler that already answered with an error keeps its own words", db, async () => {
+  // Final review (3 Nov 2026): the 500 is for a request that would otherwise
+  // claim success. One that already said it failed, and why, keeps saying so.
+  const response = await app.request("/api/organizations/srb-org/declines/971595000009", { method: "POST" });
+  assert.equal(response.status, 400, "a deliberate refusal became a generic 500");
+  assert.deepEqual(await response.json(), { error: "Another phrase for this moment is already switched on." });
+  assert.equal(await contactNamed("971595000009"), 0);
+});
+
+test("a write made inside a with-query counts as a write", db, async () => {
+  // `with i as (insert … returning …) select … from i` settles as SELECT; 16
+  // functions write this way, createBooking and createTask among them.
+  const err = await outcomeOf(
+    lib.withTenant(ORG, async () => {
+      await lib
+        .getPool()
+        .query(
+          `with i as (insert into contacts (organization_id, wa_id, channel, display_name) values ($1, '971595000010', 'whatsapp', 'Probe') returning id) select id from i`,
+          [ORG]
+        );
+      await swallow();
+    }, failing)
+  );
+  assert.notEqual(err, null, "a lost write made in a with-query was reported as a success");
+  assert.equal(err.name, "TransactionRolledBack");
+});
+
+test("auto-assign's failure stays its own, on the live reply path", () => {
+  // It never throws, and it runs inside the message's transaction: a database
+  // error in it let the reply go out while the message and the reply were lost.
+  const availability = source("apps", "api", "src", "services", "availability.ts");
+  const fn = availability.slice(availability.indexOf("export async function autoAssignIfEnabled"));
+  assert.match(fn, /try \{\s*return await isolated\(async \(\) => \{/);
+});
+
+test("a failed send-token lookup cannot abort the send's transaction", () => {
+  // It falls back to the shared token on any error, so a database error there
+  // left every later record of a quick send refused -- and the 500 that now
+  // follows would invite a retry that messages everyone twice.
+  const client = source("apps", "api", "src", "lib", "whatsapp-client.ts");
+  assert.match(client, /await isolated\(\(\) => whatsappSendTokenForNumber\(phoneNumberId\)\)/);
 });
 
 test("a handler that swallowed a failure after writing answers 500", db, async () => {

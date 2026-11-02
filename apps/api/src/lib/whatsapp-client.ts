@@ -1,5 +1,5 @@
 import { env } from "../config/env.js";
-import { whatsappSendTokenForNumber } from "@nexus/db";
+import { isolated, whatsappSendTokenForNumber } from "@nexus/db";
 import { logger } from "./logger.js";
 
 /**
@@ -20,7 +20,9 @@ import { logger } from "./logger.js";
  */
 async function bearerFor(phoneNumberId: string): Promise<string> {
   try {
-    const token = await whatsappSendTokenForNumber(phoneNumberId);
+    // Isolated (final review, 3 Nov 2026): a failed lookup is caught below, and
+    // inside a send's transaction it used to leave every later record refused.
+    const token = await isolated(() => whatsappSendTokenForNumber(phoneNumberId));
     if (token) return token;
   } catch (err) {
     logger.warn({ err, phoneNumberId }, "Could not resolve a per-number send token; using the shared token");

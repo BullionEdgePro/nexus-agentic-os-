@@ -4,6 +4,7 @@ import {
   claimForAutoAssign,
   conversationNeedsAssignee,
   getInboxSettings,
+  isolated,
   listChatsWaitingForAssignee,
   listEmployees,
   stampAutoAssigned,
@@ -143,46 +144,52 @@ export async function autoAssignIfEnabled(
   conversationId: string
 ): Promise<{ id: string; fullName: string } | null> {
   try {
-    if (!(await conversationNeedsAssignee(conversationId))) return null;
+    // Isolated (final review, 3 Nov 2026): this never throws, and it runs inside
+    // the message's transaction, so a database error in it used to let the
+    // reply go out while the message, the conversation and the reply were all
+    // rolled back -- and, in the after-hours sweep, every claim of the run.
+    return await isolated(async () => {
+      if (!(await conversationNeedsAssignee(conversationId))) return null;
 
-    const pick = await withServingTenant(servingOrganizationId, async () => {
-      const settings = await getInboxSettings(servingOrganizationId);
-      if (!settings.autoAssign) return null;
+      const pick = await withServingTenant(servingOrganizationId, async () => {
+        const settings = await getInboxSettings(servingOrganizationId);
+        if (!settings.autoAssign) return null;
 
-      const candidates = (await listEmployees(servingOrganizationId)).filter(
-        (employee) => employee.isActive && employee.twinEnabled
-      );
-      if (candidates.length === 0) return null;
-      const busy = await busyEmployeeIds(candidates.map((employee) => employee.id)).catch(
-        () => new Set<string>()
-      );
-      const now = new Date();
-      const onShift = candidates.filter(
-        (employee) => resolvePresence(employee, now, busy.has(employee.id)).status === "online"
-      );
-      if (onShift.length === 0) return null;
+        const candidates = (await listEmployees(servingOrganizationId)).filter(
+          (employee) => employee.isActive && employee.twinEnabled
+        );
+        if (candidates.length === 0) return null;
+        const busy = await busyEmployeeIds(candidates.map((employee) => employee.id)).catch(
+          () => new Set<string>()
+        );
+        const now = new Date();
+        const onShift = candidates.filter(
+          (employee) => resolvePresence(employee, now, busy.has(employee.id)).status === "online"
+        );
+        if (onShift.length === 0) return null;
 
-      const load = await autoAssignLoad(onShift.map((employee) => employee.id));
-      const ranked = [...onShift].sort((a, b) => {
-        const la = load.get(a.id) ?? { open: 0, lastAutoAt: null };
-        const lb = load.get(b.id) ?? { open: 0, lastAutoAt: null };
-        if (la.open !== lb.open) return la.open - lb.open;
-        const ta = la.lastAutoAt ? Date.parse(la.lastAutoAt) : 0;
-        const tb = lb.lastAutoAt ? Date.parse(lb.lastAutoAt) : 0;
-        if (ta !== tb) return ta - tb;
-        return a.fullName.localeCompare(b.fullName);
+        const load = await autoAssignLoad(onShift.map((employee) => employee.id));
+        const ranked = [...onShift].sort((a, b) => {
+          const la = load.get(a.id) ?? { open: 0, lastAutoAt: null };
+          const lb = load.get(b.id) ?? { open: 0, lastAutoAt: null };
+          if (la.open !== lb.open) return la.open - lb.open;
+          const ta = la.lastAutoAt ? Date.parse(la.lastAutoAt) : 0;
+          const tb = lb.lastAutoAt ? Date.parse(lb.lastAutoAt) : 0;
+          if (ta !== tb) return ta - tb;
+          return a.fullName.localeCompare(b.fullName);
+        });
+        return ranked[0];
       });
-      return ranked[0];
-    });
-    if (!pick) return null;
+      if (!pick) return null;
 
-    const claimed = await claimForAutoAssign(conversationId, pick.id, pick.fullName);
-    if (!claimed) return null;
-    await withServingTenant(servingOrganizationId, () => stampAutoAssigned(pick.id)).catch(() => undefined);
-    logger.info({ conversationId, employeeId: pick.id, servingOrganizationId }, "Chat auto-assigned");
-    // Tell them — in Nexus, and on their phone when the template is approved.
-    alertAssignee({ conversationId, employeeId: pick.id, assignedBy: "Auto-assign" });
-    return { id: pick.id, fullName: pick.fullName };
+      const claimed = await claimForAutoAssign(conversationId, pick.id, pick.fullName);
+      if (!claimed) return null;
+      await withServingTenant(servingOrganizationId, () => stampAutoAssigned(pick.id)).catch(() => undefined);
+      logger.info({ conversationId, employeeId: pick.id, servingOrganizationId }, "Chat auto-assigned");
+      // Tell them — in Nexus, and on their phone when the template is approved.
+      alertAssignee({ conversationId, employeeId: pick.id, assignedBy: "Auto-assign" });
+      return { id: pick.id, fullName: pick.fullName };
+    });
   } catch (err) {
     logger.warn({ err, conversationId, servingOrganizationId }, "Auto-assign skipped — the chat stays unassigned");
     return null;
