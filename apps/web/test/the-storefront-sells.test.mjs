@@ -183,7 +183,6 @@ test("the phone's top bar says WhatsApp in one word", () => {
 test("on a phone the links fold away and taps are big enough", () => {
   const css = read("app/landing.css");
   const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
-  assert.match(phone, /\.lp-nav-links \{[^}]*display: none/);
   assert.match(phone, /min-height: 44px/);
   assert.match(phone, /env\(safe-area-inset-bottom\)/);
 });
@@ -201,7 +200,7 @@ test("the admin entrance is two parts, its sign-in untouched", () => {
   assert.match(A, /id="admin-password"/);
   assert.match(A, /disabled=\{busy \|\| !email\.trim\(\) \|\| !password\}/);
   assert.match(A, /That email and password don't match\./);
-  assert.match(A, /<a className="admin-back" href="\/">\s*Staff sign-in\s*<\/a>/);
+  assert.match(A, /<a className="admin-back" href="\/#signin">\s*Staff sign-in\s*<\/a>/);
   const css = read("app/admin/admin.css");
   assert.doesNotMatch(css, /--btn-grad|--sky/);
   assert.doesNotMatch(css, /rgba\(\s*(94, 196, 255|43, 156, 240|63, 178, 255|143, 211, 255)/);
@@ -260,4 +259,39 @@ test("a jump straight past the closing band (the menu's Sign in) still puts the 
   // The menu's Sign in jumps past the band: only the sign-in and the footer report.
   fire([at(signin, true, 80), at(foot, true, 600)]);
   assert.deepEqual(shown, [false, true, false]);
+});
+
+// Found by the final review.
+test("a local or garbled number falls back to email rather than a broken WhatsApp link", () => {
+  // The country is unknown in a local number, so there is no right wa.me link to make.
+  for (const raw of ["050 123 4567", "0501234567"]) assert.equal(salesContact(raw).kind, "email", raw);
+  assert.equal(salesContact("+971 (0)50 123 4567").href.split("?")[0], "https://wa.me/971501234567");
+  assert.equal(salesContact("+00971501234567").href.split("?")[0], "https://wa.me/971501234567");
+});
+
+test("the sales number reaches the web container on the deploy path", () => {
+  const compose = read("../../docker-compose.prod.yml");
+  const web = compose.slice(compose.indexOf("\n  web:"), compose.indexOf("\n  caddy:"));
+  assert.match(web, /NEXUS_SALES_WHATSAPP: \$\{NEXUS_SALES_WHATSAPP:-\}/);
+  assert.match(read("../../.env.example"), /^NEXUS_SALES_WHATSAPP=$/m);
+});
+
+test("from a tablet down, the section links fold into Menu so the top bar keeps one line", () => {
+  const css = read("app/landing.css");
+  const tablet = [...css.matchAll(/@media \(max-width: 1080px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
+  assert.match(tablet, /\.lp-nav-links,\s*\.lp-link-quiet \{ display: none; \}/);
+  assert.match(tablet, /\.lp-menu \{ display: block;/);
+});
+
+test("on a phone the brand is a full-size tap, and on the smallest it gives up its word for Menu", () => {
+  const css = read("app/landing.css");
+  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
+  assert.match(phone, /\.lp-brand \{[^}]*min-height: 44px/);
+  // Only under 360 px — a 375 px phone keeps the word — and only the word: the
+  // mark is a span too, and must stay.
+  const tiny = css.slice(css.indexOf("@media (max-width: 359px)"));
+  assert.ok(css.includes("@media (max-width: 359px)"));
+  assert.doesNotMatch(css, /@media \(max-width: 380px\)/);
+  // Hidden from the eye only: the link keeps "Nexus Agentic OS" as its name.
+  assert.match(tiny, /\.lp-brand > span:not\(\.lp-mark\) \{[^}]*clip: rect\(0 0 0 0\)/);
 });

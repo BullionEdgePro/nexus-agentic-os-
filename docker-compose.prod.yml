@@ -181,6 +181,10 @@ services:
       # Parent domain, so the session cookie is also sent to api.<domain>.
       # Leading dot form (".example.com") is the portable spelling.
       SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
+      # The storefront's WhatsApp number, international digits (971…). Read per
+      # request; blank keeps every sales button on "Email us". This service has
+      # no env_file, so it has to be listed here to reach the container.
+      NEXUS_SALES_WHATSAPP: ${NEXUS_SALES_WHATSAPP:-}
     depends_on:
       - api
 

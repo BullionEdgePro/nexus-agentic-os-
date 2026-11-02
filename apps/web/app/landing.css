@@ -843,8 +843,6 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
   .lp-circuit { display: none; }
 }
 @media (max-width: 760px) {
-  .lp-nav-links,
-  .lp-link-quiet { display: none; }
   .lp-nav { gap: 12px; padding: 12px 16px; }
   .lp-hero,
   .lp-problems,
@@ -887,16 +885,12 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
   from { opacity: 0; transform: translate(-50%, 16px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
-@media (max-width: 760px) {
-  /* The top bar keeps the brand, the switch, WhatsApp in one word and Menu. */
-  .lp-nav-links { display: none; }
-  .lp-brand small { display: none; }
-  .lp-nav { gap: 8px; padding: 10px 14px; }
-  .lp-nav-cta { gap: 6px; }
-  .lp-nav .nx-theme { min-height: 44px; }
-  .lp-nav .btn { min-height: 44px; padding: 0 14px; }
-  .lp-contact-long { display: none; }
-  .lp-contact-short { display: inline; }
+/* From a tablet down the section links and the quiet Sign in fold into Menu,
+   so the bar keeps one line: with the switch and the full WhatsApp pill they
+   wrapped to two or three lines between 760 and 1080 px. */
+@media (max-width: 1080px) {
+  .lp-nav-links,
+  .lp-link-quiet { display: none; }
   .lp-menu { display: block; position: relative; }
   .lp-menu-btn {
     display: grid;
@@ -926,6 +920,17 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
   .lp-menu-list[hidden] { display: none; }
   .lp-menu-list a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 10px; font-size: 15px; font-weight: 600; color: var(--ink); }
   .lp-menu-list a:hover { background: var(--pebble); }
+}
+@media (max-width: 760px) {
+  /* The top bar keeps the brand, the switch, WhatsApp in one word and Menu. */
+  .lp-brand small { display: none; }
+  .lp-nav { gap: 8px; padding: 10px 14px; }
+  .lp-nav-cta { gap: 6px; }
+  .lp-brand { min-height: 44px; }
+  .lp-nav .nx-theme { min-height: 44px; }
+  .lp-nav .btn { min-height: 44px; padding: 0 14px; }
+  .lp-contact-long { display: none; }
+  .lp-contact-short { display: inline; }
 
   /* Big enough to tap. */
   .lp-tab { min-height: 44px; }
@@ -944,6 +949,11 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
     animation: lp-pill-in .35s var(--ease-out) both;
   }
   .lp-float-contact .btn { min-height: 48px; padding: 0 22px; white-space: nowrap; box-shadow: 0 14px 30px -10px var(--lp-shadow); }
+}
+/* The smallest phones (under 360 px): the mark alone, so Menu stays on screen.
+   The word is hidden from the eye only — it stays the link's name. */
+@media (max-width: 359px) {
+  .lp-brand > span:not(.lp-mark) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -104,9 +104,10 @@ hides over the closing band. Nothing scrolls sideways; tap targets ≥ 44 px.
 - Render tests: the WhatsApp buttons with the setting (wa.me link, encoded prefilled text,
   new tab) and without it (Email us, mailto to the published address); a malformed setting
   falls back to email.
-- Theme: the storefront and /admin carry the Warm Night tokens under
-  `prefers-color-scheme: dark` unless `data-theme="light"`, and under `data-theme="dark"`;
-  the console's default stays light (existing guard tests keep passing).
+- Theme: the public boot script sets `data-theme="dark"` on the storefront and /admin when
+  the device is dark and nothing is saved (and never when a choice is saved or storage is
+  blocked and the device is light), Warm Night reaches both pages, and signing in clears an
+  unsaved dark; the console's default stays light (existing guard tests keep passing).
 - The existing guard tests on the staff-only and admin login paths keep passing unchanged;
   the custom-property and pure-black guards cover the new CSS.
 - Browser (stand-in data, local preview): the storefront and /admin at 1280 px and 375 px in
@@ -116,6 +117,8 @@ hides over the closing band. Nothing scrolls sideways; tap targets ≥ 44 px.
 ## Deploy
 
 Only on the owner's "Deploy it": merge, push main, `scripts/deploy.sh` on the VPS. No
-database change. When the sales number exists, add `NEXUS_SALES_WHATSAPP=<digits>` to the
-server's environment for the web container and restart it; until then the buttons say
-Email us.
+database change. When the sales number exists, add `NEXUS_SALES_WHATSAPP=<international
+digits, e.g. 971…>` to the VPS `.env` (the web service lists it in `docker-compose.prod.yml`,
+since it has no `env_file`) and recreate the container —
+`docker compose -f docker-compose.prod.yml up -d web`; a plain restart does not re-read the
+environment. Until then, or for a local number such as 050…, the buttons say Email us.

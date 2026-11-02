@@ -138,7 +138,8 @@ export default function AdminSignIn() {
             Lost your password? It cannot be recovered — only a hash is stored. Run the
             create-admin script on the server to set a new one.
           </p>
-          <a className="admin-back" href="/">
+          {/* To the team's form itself: the top of "/" is now the sales page. */}
+          <a className="admin-back" href="/#signin">
             Staff sign-in
           </a>
         </main>

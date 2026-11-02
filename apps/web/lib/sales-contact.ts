@@ -17,12 +17,16 @@ export const CONTACT_EMAIL = "jurishostinger11@gmail.com";
 
 export function salesContact(raw: string | undefined): SalesContact {
   // Accept the number the way a person types it: "+971 50 123 4567",
-  // "971-50-1234567", "00971…". wa.me wants the bare international digits.
+  // "971-50-1234567", "00971…", "+971 (0)50…". wa.me wants the bare
+  // international digits — and a country code never starts with 0, so a local
+  // "050 123 4567" (country unknown) writes to email rather than to a wa.me
+  // link WhatsApp would call invalid.
   const digits = (raw ?? "")
     .trim()
+    .replace(/\(0\)/g, "")
     .replace(/[\s\-.()]/g, "")
-    .replace(/^(\+|00)/, "");
-  if (/^\d{8,15}$/.test(digits)) {
+    .replace(/^\+?(00)?/, "");
+  if (/^[1-9]\d{7,14}$/.test(digits)) {
     return { kind: "whatsapp", href: `https://wa.me/${digits}?text=${encodeURIComponent(SALES_TEXT)}` };
   }
   return {
