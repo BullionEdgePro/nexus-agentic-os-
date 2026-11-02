@@ -70,6 +70,19 @@ export interface StaffWorkAttention {
   /** Customers waiting on a staff member for more than two hours, oldest first. */
   waitingLong: Array<{ conversationId: string; contactName: string | null; employeeName: string; businessSlug: string; since: string }>;
   waitingLongTotal: number;
+  /**
+   * The six longest waits of ANY length, oldest first (2 Nov 2026, the front
+   * page's "customers waiting" cards), and how many are waiting in all.
+   */
+  oldestWaiting: Array<{
+    conversationId: string;
+    contactName: string | null;
+    employeeName: string;
+    businessSlug: string;
+    businessName: string;
+    since: string;
+  }>;
+  waitingTotal: number;
   /** Open chats that belong to nobody, per business — the admin's to assign. */
   unowned: Array<{ businessSlug: string; businessName: string; count: number }>;
   staffWithoutNumber: number;
@@ -169,13 +182,14 @@ export async function staffWorkOverview(
       employee_id: string;
       full_name: string;
       slug: string;
+      org_name: string;
       display_name: string | null;
       last_at: string;
       last_body: string | null;
       has_assessment: boolean;
       is_pitch: boolean;
     }>(
-      `select c.id, c.employee_id, e.full_name, o.slug, ct.display_name, lm.last_at, left(lm.last_body, 2000) as last_body,
+      `select c.id, c.employee_id, e.full_name, o.slug, o.name as org_name, ct.display_name, lm.last_at, left(lm.last_body, 2000) as last_body,
               exists (select 1 from lead_assessments la where la.conversation_id = c.id) as has_assessment,
               exists (select 1 from lead_assessments la
                        where la.conversation_id = c.id and la.category = 'inbound_pitch') as is_pitch
@@ -256,6 +270,18 @@ export async function staffWorkOverview(
           since: r.last_at,
         })),
         waitingLongTotal: waitingLong.length,
+        oldestWaiting: [...waiting]
+          .sort((a, b) => (a.last_at < b.last_at ? -1 : 1))
+          .slice(0, 6)
+          .map((r) => ({
+            conversationId: r.id,
+            contactName: r.display_name,
+            employeeName: r.full_name,
+            businessSlug: r.slug,
+            businessName: r.org_name,
+            since: r.last_at,
+          })),
+        waitingTotal: waiting.length,
         unowned: unowned.rows.map((r) => ({ businessSlug: r.slug, businessName: r.name, count: Number(r.n) })),
         staffWithoutNumber: people.filter((p) => !p.whatsappNumber).length,
         pausedCampaigns: people.reduce((sum, p) => sum + p.pausedCampaigns, 0),

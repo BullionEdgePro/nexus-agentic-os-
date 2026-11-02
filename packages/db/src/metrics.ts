@@ -1,6 +1,7 @@
 import { getPool } from "./client.js";
 import type { ConversationMetricInput, OverviewMetrics, SenderType } from "@nexus/shared";
 import { NON_PATTERN_INTENTS } from "@nexus/shared";
+import { zeroFillDays } from "./days.js";
 
 /**
  * Records one analytics row per handled inbound message: token spend,
@@ -38,7 +39,7 @@ export async function recordConversationMetric(input: ConversationMetricInput): 
  */
 export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   const pool = getPool();
-  const [conv, msgs, res, tok, gov, intents, tenants, feed, any] = await Promise.all([
+  const [conv, msgs, res, tok, gov, intents, tenants, feed, any, daily, yesterday] = await Promise.all([
     pool.query<{ n: string }>(`select count(*)::text n from conversations where status in ('open','pending')`),
     pool.query<{ n: string }>(`select count(*)::text n from messages where created_at >= current_date`),
     pool.query<{ ai: string; total: string; avgms: string | null }>(
@@ -82,6 +83,17 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
        order by m.created_at desc limit 5`
     ),
     pool.query<{ n: string }>(`select (select count(*) from messages)::text n`),
+    // Conversations per day for the front page's chart (2 Nov 2026): the
+    // nightly rollup, summed across businesses, for the last 14 complete days.
+    // Today is left out: it is not over, and a half day drawn as a whole one
+    // would look like a collapse.
+    pool.query<{ day: string; c: string }>(
+      `select day::text as day, sum(conversations)::text c
+         from agent_quality_daily
+        where day >= current_date - 14 and day < current_date
+        group by day order by day`
+    ),
+    pool.query<{ d: string }>(`select (current_date - 1)::text d`),
   ]);
 
   const total = Number(res.rows[0]?.total ?? 0);
@@ -107,6 +119,11 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
       body: r.body,
       createdAt: r.created_at,
     })),
+    conversationsByDay: zeroFillDays(
+      daily.rows.map((r) => ({ day: r.day, conversations: Number(r.c) })),
+      yesterday.rows[0]?.d ?? new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+      14
+    ),
   };
 }
 

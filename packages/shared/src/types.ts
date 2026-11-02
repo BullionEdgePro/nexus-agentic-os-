@@ -424,6 +424,8 @@ export interface OverviewMetrics {
   intents: { intent: string; count: number }[];
   tenants: { slug: string; name: string; messageCount: number; openConversations: number }[];
   feed: { org: string; senderType: SenderType; body: string; createdAt: string }[];
+  /** Conversations per day, the last 14 complete days, every day present (2 Nov 2026). */
+  conversationsByDay: Array<{ day: string; conversations: number }>;
 }
 
 // ============================================================
