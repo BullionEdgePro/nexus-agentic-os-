@@ -109,6 +109,17 @@ update lead_assessments
 
 alter table lead_assessments alter column serving_organization_id set not null;
 
+-- A label belongs to the lead's business. Until now only the number's owner
+-- could label a routed lead; such a label moves to the business serving it,
+-- or that business's own label would collide (on assessment_id) with a row its
+-- tenant cannot see.
+update lead_labels l
+   set organization_id = a.serving_organization_id
+  from lead_assessments a
+ where a.id = l.assessment_id
+   and l.organization_id = a.organization_id
+   and a.serving_organization_id <> a.organization_id;
+
 create index if not exists idx_lead_assessments_serving
   on lead_assessments(serving_organization_id, created_at desc);
 

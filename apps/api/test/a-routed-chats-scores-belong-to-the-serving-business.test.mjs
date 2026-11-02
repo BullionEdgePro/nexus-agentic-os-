@@ -203,3 +203,47 @@ test("105 repairs a wrong serving business and can run again", db, async () => {
   assert.equal(await servingOf(doomedScore), SERVING);
   assert.equal(await servingOf(capturedScore), OWNER);
 });
+
+// ---- Task 2: the readers that asked by the number's owner -------------------------------------
+
+const label = (organizationId, assessmentId) => ({
+  organizationId,
+  assessmentId,
+  worthAttention: true,
+  outcome: null,
+  note: null,
+  labelledBy: "staff@localhost.test",
+});
+
+test("each business's lead history shows the scores from the chats it serves", db, async () => {
+  // The same person talks to the owner directly and to the serving firm through the switchboard.
+  const served = await withTenant(SERVING, () => getContact(SERVING, ROUTED_CT));
+  assert.ok(served, "the serving business can open the customer");
+  assert.ok(served.leadHistory.some((l) => l.id === routedScore), "its routed chat's score is in its history");
+  assert.ok(!served.leadHistory.some((l) => l.id === plainScore), "the owner's own chat is not");
+  const owned = await withTenant(OWNER, () => getContact(OWNER, ROUTED_CT));
+  assert.ok(owned.leadHistory.some((l) => l.id === plainScore));
+  assert.ok(!owned.leadHistory.some((l) => l.id === routedScore), "nor is the routed chat in the owner's");
+});
+
+test("a business labels the scores of chats it serves, and nobody else's", db, async () => {
+  assert.equal(await withTenant(SERVING, () => recordLeadLabel(label(SERVING, routedScore))), true);
+  assert.equal(await withTenant(SERVING, () => recordLeadLabel(label(SERVING, plainScore))), false);
+  // The owner can still read the routed row, but the lead is not its to label.
+  assert.equal(await withTenant(OWNER, () => recordLeadLabel(label(OWNER, routedScore))), false);
+});
+
+test("a label the owner left on a routed lead moves with the lead, so its business can relabel it", db, async () => {
+  // Before 105 only the number's owner could label a routed lead. Its label
+  // follows the lead to the business serving it; otherwise that business's
+  // relabel would collide with a row it cannot see.
+  await owner.query(
+    `insert into lead_labels (organization_id, assessment_id, worth_attention, outcome, labelled_by)
+     values ($1, $2, false, null, 'owner@localhost.test')`,
+    [OWNER, doomedScore]
+  );
+  await owner.query(SQL);
+  const { rows } = await owner.query(`select organization_id from lead_labels where assessment_id = $1`, [doomedScore]);
+  assert.equal(rows[0].organization_id, SERVING);
+  assert.equal(await withTenant(SERVING, () => recordLeadLabel(label(SERVING, doomedScore))), true);
+});

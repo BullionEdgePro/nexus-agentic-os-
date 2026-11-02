@@ -210,9 +210,11 @@ export async function getContact(
       category: string;
       created_at: string;
     }>(
+      // The scores of the chats this business serves (migration 105): a routed
+      // chat is scored under the number's owner but belongs to whoever answers it.
       `select id, score, priority, category, created_at
          from lead_assessments
-        where contact_id = $2 and organization_id = $1
+        where contact_id = $2 and serving_organization_id = $1
         order by created_at desc limit 20`,
       [organizationId, contactId]
     ),

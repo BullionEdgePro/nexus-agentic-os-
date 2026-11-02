@@ -21,10 +21,10 @@ export interface LeadLabelInput {
 /**
  * Record or replace a label.
  *
- * Scoped on organization_id in the WHERE of the conflict path as well as the
- * insert, so a mistyped assessment id cannot label another business's lead --
- * RLS would already stop it, and this makes the intent readable without
- * knowing that.
+ * Scoped on the business SERVING the lead (migration 105), so a mistyped
+ * assessment id cannot label another business's lead. This is the guard that
+ * matters now: the number's owner may still read a routed chat's score, but
+ * the lead is the serving business's to label.
  */
 export async function recordLeadLabel(input: LeadLabelInput): Promise<boolean> {
   const { rowCount } = await getPool().query(
@@ -32,7 +32,7 @@ export async function recordLeadLabel(input: LeadLabelInput): Promise<boolean> {
        (organization_id, assessment_id, worth_attention, outcome, note, labelled_by)
      select $1, a.id, $3, $4, $5, $6
        from lead_assessments a
-      where a.id = $2 and a.organization_id = $1
+      where a.id = $2 and a.serving_organization_id = $1
      on conflict (assessment_id) do update
         set worth_attention = excluded.worth_attention,
             outcome         = excluded.outcome,
