@@ -9,10 +9,14 @@ import {
   insertOutboundMessage,
   pauseAiForContact,
   setConversationHandoff,
+  withSavepoint,
 } from "@nexus/db";
 import { sendReplyOnChannel } from "../lib/reply-dispatch.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { logger } from "../lib/logger.js";
+
+type ScheduledConversation = NonNullable<Awaited<ReturnType<typeof findConversationById>>>;
+type RecordedMessage = Awaited<ReturnType<typeof insertOutboundMessage>>;
 
 /**
  * Send the scheduled messages that have come due.
@@ -27,6 +31,14 @@ import { logger } from "../lib/logger.js";
  * A sent message is recorded exactly like a human reply — an outbound row on the
  * thread, the AI paused on the contact, the conversation put in human custody —
  * because that is what it is: a person's words, written earlier.
+ *
+ * SENT TWICE, EVERY MINUTE (3 Nov 2026). The whole sweep is one transaction,
+ * claim included. A record that failed after a send left the transaction
+ * aborted, so marking the row failed failed too, the sweep rolled back, every
+ * row went back to 'pending' — and the next minute sent the earlier messages
+ * again. Each message is now its own savepoint, and how its row ends is
+ * decided by whether it went out: a message that was sent is marked sent even
+ * when its record could not be saved, and is never sent again.
  */
 export async function processScheduledMessageSweep(_job: Job): Promise<void> {
   await withJobHeartbeat("scheduled-messages", () =>
@@ -35,79 +47,89 @@ export async function processScheduledMessageSweep(_job: Job): Promise<void> {
     if (due.length === 0) return;
 
     for (const m of due) {
+      // Set once the message has gone out: from then on it WAS sent, whatever
+      // fails after it.
+      const progress = { wentOut: false, waMessageId: null as string | null };
+      let delivered: { convo: ScheduledConversation; message: RecordedMessage } | null = null;
+      let reason = "";
       try {
-        const convo = await findConversationById(m.conversationId);
-        if (!convo) {
-          await markScheduledMessageFailed(m.id, "The conversation no longer exists.");
-          continue;
-        }
+        delivered = await withSavepoint(async () => {
+          const convo = await findConversationById(m.conversationId);
+          if (!convo) throw new Error("The conversation no longer exists.");
 
-        let dispatched: {
-          waMessageId: string | null;
-          socialMessageId: string | null;
-          emailMessageId: string | null;
-          emailThreadId: string | null;
-        };
-        try {
-          // Sent on the conversation's own channel, like a live reply. A
-          // scheduled reply on a channel that is not connected (or unsupported)
-          // fails here with the dispatcher's reason, which is the honest outcome.
-          dispatched = await sendReplyOnChannel(
-            {
-              organizationId: convo.organizationId,
-              channel: convo.channel,
-              phoneNumberId: convo.phoneNumberId,
-              contactWaId: convo.contactWaId,
-              contactExternalId: convo.contactExternalId,
-              conversationId: convo.id,
-            },
-            m.body
-          );
-        } catch (err) {
-          // The commonest failure is Meta refusing a free-form message outside
-          // the 24-hour window. Its own words are the most useful thing to keep.
-          await markScheduledMessageFailed(m.id, err instanceof Error ? err.message : String(err));
-          logger.warn({ id: m.id, conversationId: convo.id, channel: convo.channel }, "Scheduled message refused");
-          continue;
-        }
-        const waMessageId = dispatched.waMessageId;
+          let dispatched: Awaited<ReturnType<typeof sendReplyOnChannel>>;
+          try {
+            // Sent on the conversation's own channel, like a live reply. A
+            // scheduled reply on a channel that is not connected (or unsupported)
+            // fails here with the dispatcher's reason, which is the honest outcome.
+            dispatched = await sendReplyOnChannel(
+              {
+                organizationId: convo.organizationId,
+                channel: convo.channel,
+                phoneNumberId: convo.phoneNumberId,
+                contactWaId: convo.contactWaId,
+                contactExternalId: convo.contactExternalId,
+                conversationId: convo.id,
+              },
+              m.body
+            );
+          } catch (err) {
+            // The commonest failure is Meta refusing a free-form message outside
+            // the 24-hour window. Its own words are the most useful thing to keep.
+            logger.warn({ id: m.id, conversationId: convo.id, channel: convo.channel }, "Scheduled message refused");
+            throw err;
+          }
+          progress.wentOut = true;
+          progress.waMessageId = dispatched.waMessageId;
 
-        const message = await insertOutboundMessage({
-          organizationId: convo.organizationId,
-          conversationId: convo.id,
-          contactId: convo.contactId,
-          senderType: "human_agent",
-          senderId: m.createdBy ?? undefined,
-          body: m.body,
-          waMessageId: waMessageId ?? undefined,
-          socialMessageId: dispatched.socialMessageId ?? undefined,
-          emailMessageId: dispatched.emailMessageId ?? undefined,
-          emailThreadId: dispatched.emailThreadId ?? undefined,
+          const message = await insertOutboundMessage({
+            organizationId: convo.organizationId,
+            conversationId: convo.id,
+            contactId: convo.contactId,
+            senderType: "human_agent",
+            senderId: m.createdBy ?? undefined,
+            body: m.body,
+            waMessageId: dispatched.waMessageId ?? undefined,
+            socialMessageId: dispatched.socialMessageId ?? undefined,
+            emailMessageId: dispatched.emailMessageId ?? undefined,
+            emailThreadId: dispatched.emailThreadId ?? undefined,
+          });
+
+          // A person's message took this conversation, just on a delay: pause the
+          // agent for the contact and put the thread in human custody, exactly as a
+          // live human reply does.
+          await Promise.all([
+            pauseAiForContact(convo.contactId, 24),
+            setConversationHandoff(convo.id, true, "human_replied", m.createdBy ?? null),
+          ]);
+          return { convo, message };
         });
+      } catch (err) {
+        reason = err instanceof Error ? err.message : String(err);
+      }
 
-        // A person's message took this conversation, just on a delay: pause the
-        // agent for the contact and put the thread in human custody, exactly as a
-        // live human reply does.
-        await Promise.all([
-          pauseAiForContact(convo.contactId, 24),
-          setConversationHandoff(convo.id, true, "human_replied", m.createdBy ?? null),
-        ]);
+      // How the row ends: sent if it went out, even when its record could not
+      // be saved; failed, with the reason, if it never did.
+      try {
+        await withSavepoint(() =>
+          progress.wentOut ? markScheduledMessageSent(m.id, progress.waMessageId) : markScheduledMessageFailed(m.id, reason)
+        );
+      } catch (err) {
+        // Left 'sending': claimed, so it is never sent again, and this says why.
+        logger.error({ id: m.id, err }, "A scheduled message's outcome could not be recorded");
+      }
 
+      if (delivered) {
         await publishInboxEvent({
           type: "message",
-          organizationId: convo.organizationId,
-          organizationSlug: convo.organizationSlug,
-          conversationId: convo.id,
-          message,
-        });
-
-        await markScheduledMessageSent(m.id, waMessageId);
-        logger.info({ id: m.id, conversationId: convo.id }, "Sent a scheduled message");
-      } catch (err) {
-        // Anything past the send point — the recording — failing still marks the
-        // row failed rather than leaving it stuck in 'sending' forever.
-        await markScheduledMessageFailed(m.id, err instanceof Error ? err.message : String(err));
-        logger.error({ id: m.id, err }, "Scheduled message send failed after dispatch");
+          organizationId: delivered.convo.organizationId,
+          organizationSlug: delivered.convo.organizationSlug,
+          conversationId: delivered.convo.id,
+          message: delivered.message,
+        }).catch((err) => logger.warn({ id: m.id, err }, "A sent scheduled message could not be announced to the inbox"));
+        logger.info({ id: m.id, conversationId: delivered.convo.id }, "Sent a scheduled message");
+      } else if (progress.wentOut) {
+        logger.error({ id: m.id, reason }, "A scheduled message was sent but could not be recorded in its conversation");
       }
     }
     })

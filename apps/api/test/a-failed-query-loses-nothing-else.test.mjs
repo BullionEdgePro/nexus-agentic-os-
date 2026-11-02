@@ -277,6 +277,57 @@ test("one person's record failing in a quick send loses that record only", db, a
   assert.equal(await messagesIn(CONV3), 1, "the third person's record was lost with the second's");
 });
 
+test("a scheduled message whose record failed is marked sent and never sent again", db, async () => {
+  // The inbox announcement goes to Redis, which a test database run has none of.
+  mock.module(new URL("../src/lib/pubsub.ts", import.meta.url).href, {
+    namedExports: {
+      INBOX_EVENTS_CHANNEL: "nexus:inbox-events",
+      publishInboxEvent: async () => undefined,
+      subscribeToInboxEvents: () => () => undefined,
+    },
+  });
+  const { processScheduledMessageSweep } = await import("../src/queue/scheduled-messages-processor.ts");
+  for (const [i, person] of people.entries()) {
+    await owner.query(
+      `insert into scheduled_messages (organization_id, conversation_id, contact_id, body, send_at, created_by)
+       values ($1, $2, $3, $4, now() - interval '1 minute', 'owner')`,
+      [ORG, person.conversationId, person.id, `Scheduled ${i + 1}`]
+    );
+  }
+  const statuses = async () =>
+    (await owner.query(`select status from scheduled_messages where organization_id = $1 order by body`, [ORG])).rows.map(
+      (row) => row.status
+    );
+  const before1 = await messagesIn(CONV1);
+  const before3 = await messagesIn(CONV3);
+  const sends = [];
+  const realFetch = globalThis.fetch;
+  const realToken = process.env.META_ACCESS_TOKEN;
+  process.env.META_ACCESS_TOKEN = "probe-token-never-sent"; // fetch is replaced below
+  globalThis.fetch = async (url) => {
+    sends.push(String(url));
+    return new Response(JSON.stringify({ messages: [{ id: `wamid.srb-${sends.length}` }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const logged = mock.method(console, "error", () => undefined);
+  try {
+    const first = await processScheduledMessageSweep({}).then(() => "finished", (err) => err.message);
+    assert.equal(first, "finished", "one failed record took the whole sweep down");
+    assert.deepEqual(await statuses(), ["sent", "sent", "sent"], "a message that went out is not marked sent");
+    assert.equal(await messagesIn(CONV1), before1 + 1);
+    assert.equal(await messagesIn(CONV3), before3 + 1);
+    await processScheduledMessageSweep({});
+    assert.equal(sends.length, 3, "a customer was messaged again");
+  } finally {
+    logged.mock.restore();
+    globalThis.fetch = realFetch;
+    if (realToken === undefined) delete process.env.META_ACCESS_TOKEN;
+    else process.env.META_ACCESS_TOKEN = realToken;
+  }
+});
+
 test("a handler that swallowed a failure after writing answers 500", db, async () => {
   const response = await app.request("/api/organizations/srb-org/swallows/971595000008", { method: "POST" });
   assert.equal(response.status, 500, "the request answered success with its write lost");
