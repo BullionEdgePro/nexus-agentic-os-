@@ -18,8 +18,9 @@ table's single `<table>_tenant_isolation` policy, which covers every command:
 In Postgres a policy's `using` also decides which rows UPDATE and DELETE reach. So under its own
 tenant a serving business can:
 
-- **DELETE** the owner's routed conversations, metrics and messages, and any contact it serves.
-  Deleting a contact cascades into every business's rows for that person.
+- **DELETE** the owner's routed conversations and metrics, and any contact it serves. Deleting a
+  contact cascades into every business's rows for that person. (Not messages: migration 048
+  removed the app role's DELETE grant, so 106's DELETE policy on messages is a second lock.)
 - **UPDATE `organization_id` to itself** and take the row over: the new row passes the owner-only
   `with check`.
 - On messages, **UPDATE or DELETE anything** in the chats it serves, since 058's check admits the
