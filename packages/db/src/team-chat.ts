@@ -36,6 +36,10 @@ export interface TeamMessage {
   clientId: string;
   mentions: string[];
   sharedConversationId: string | null;
+  /** The voice note, photo or file sent with it (migration 104); null once removed. */
+  fileId: string | null;
+  /** The message this one answers, in the same thread; null once removed. */
+  replyToId: string | null;
   createdAt: string;
   deletedAt: string | null;
 }
@@ -86,7 +90,7 @@ const toThread = (row: ThreadRow): TeamThread => ({
   memberB: row.member_b,
 });
 
-interface MessageRow {
+export interface TeamMessageRow {
   id: string;
   thread_id: string;
   author_employee_id: string | null;
@@ -96,13 +100,15 @@ interface MessageRow {
   client_id: string;
   mentions: string[] | null;
   shared_conversation_id: string | null;
+  file_id: string | null;
+  reply_to: string | null;
   created_at: Date | string;
   deleted_at: Date | string | null;
 }
 
 const iso = (value: Date | string) => (value instanceof Date ? value.toISOString() : value);
 
-const toMessage = (row: MessageRow): TeamMessage => ({
+export const toTeamMessage = (row: TeamMessageRow): TeamMessage => ({
   id: row.id,
   threadId: row.thread_id,
   authorEmployeeId: row.author_employee_id,
@@ -112,12 +118,14 @@ const toMessage = (row: MessageRow): TeamMessage => ({
   clientId: row.client_id,
   mentions: row.mentions ?? [],
   sharedConversationId: row.deleted_at ? null : row.shared_conversation_id,
+  fileId: row.deleted_at ? null : (row.file_id ?? null),
+  replyToId: row.deleted_at ? null : (row.reply_to ?? null),
   createdAt: iso(row.created_at),
   deletedAt: row.deleted_at ? iso(row.deleted_at) : null,
 });
 
-const MESSAGE_COLUMNS = `id, thread_id, author_employee_id, author_name, author_is_admin, body, client_id,
-  mentions, shared_conversation_id, created_at, deleted_at`;
+export const TEAM_MESSAGE_COLUMNS = `id, thread_id, author_employee_id, author_name, author_is_admin, body, client_id,
+  mentions, shared_conversation_id, file_id, reply_to, created_at, deleted_at`;
 
 /** The business's room, created the first time anybody opens team chat. */
 export async function ensureRoom(organizationId: string): Promise<TeamThread> {
@@ -225,14 +233,14 @@ export async function listThreadSummaries(organizationId: string, viewer: TeamVi
 
 /** One page of a thread, oldest first; `before` pages back in time. */
 export async function listTeamMessages(threadId: string, before: string | null, limit: number): Promise<TeamMessage[]> {
-  const { rows } = await getPool().query<MessageRow>(
-    `select ${MESSAGE_COLUMNS} from team_messages
+  const { rows } = await getPool().query<TeamMessageRow>(
+    `select ${TEAM_MESSAGE_COLUMNS} from team_messages
       where thread_id = $1 and ($2::timestamptz is null or created_at < $2::timestamptz)
       order by created_at desc
       limit $3`,
     [threadId, before, Math.min(Math.max(limit, 1), 100)]
   );
-  return rows.map(toMessage).reverse();
+  return rows.map(toTeamMessage).reverse();
 }
 
 /**
@@ -248,14 +256,17 @@ export async function postTeamMessage(input: {
   clientId: string;
   mentions: string[];
   sharedConversationId: string | null;
+  /** A file saved with saveTeamFile in the same transaction; the body may then be empty. */
+  fileId?: string | null;
+  replyToId?: string | null;
 }): Promise<{ message: TeamMessage; created: boolean }> {
-  const inserted = await getPool().query<MessageRow>(
+  const inserted = await getPool().query<TeamMessageRow>(
     `insert into team_messages
        (thread_id, organization_id, author_employee_id, author_name, author_is_admin, body, client_id,
-        mentions, shared_conversation_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        mentions, shared_conversation_id, file_id, reply_to)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      on conflict (thread_id, client_id) do nothing
-     returning ${MESSAGE_COLUMNS}`,
+     returning ${TEAM_MESSAGE_COLUMNS}`,
     [
       input.thread.id,
       input.thread.organizationId,
@@ -266,14 +277,16 @@ export async function postTeamMessage(input: {
       input.clientId,
       input.mentions,
       input.sharedConversationId,
+      input.fileId ?? null,
+      input.replyToId ?? null,
     ]
   );
-  if (inserted.rows[0]) return { message: toMessage(inserted.rows[0]), created: true };
-  const { rows } = await getPool().query<MessageRow>(
-    `select ${MESSAGE_COLUMNS} from team_messages where thread_id = $1 and client_id = $2`,
+  if (inserted.rows[0]) return { message: toTeamMessage(inserted.rows[0]), created: true };
+  const { rows } = await getPool().query<TeamMessageRow>(
+    `select ${TEAM_MESSAGE_COLUMNS} from team_messages where thread_id = $1 and client_id = $2`,
     [input.thread.id, input.clientId]
   );
-  return { message: toMessage(rows[0]!), created: false };
+  return { message: toTeamMessage(rows[0]!), created: false };
 }
 
 export async function markTeamRead(thread: TeamThread, reader: string): Promise<void> {
@@ -293,15 +306,26 @@ export async function lastReadBy(threadId: string, reader: string): Promise<stri
   return rows[0] ? iso(rows[0].last_read_at) : null;
 }
 
-/** The author removes their own message. Null when it is not theirs or already gone. */
+/**
+ * The author removes their own message. Null when it is not theirs or already gone.
+ *
+ * Its voice note, photo or file goes with it, in the same statement: a removed
+ * message whose picture could still be fetched by id would not be removed.
+ */
 export async function removeTeamMessage(id: string, employeeId: string): Promise<TeamMessage | null> {
-  const { rows } = await getPool().query<MessageRow>(
-    `update team_messages set deleted_at = now()
-      where id = $1 and author_employee_id = $2 and deleted_at is null
-      returning ${MESSAGE_COLUMNS}`,
+  const { rows } = await getPool().query<TeamMessageRow>(
+    `with removed as (
+       update team_messages set deleted_at = now()
+        where id = $1 and author_employee_id = $2 and deleted_at is null
+        returning ${TEAM_MESSAGE_COLUMNS}
+     ), wiped as (
+       update team_files set bytes = null, preview = null, deleted_at = now()
+        where id in (select file_id from removed where file_id is not null)
+     )
+     select ${TEAM_MESSAGE_COLUMNS} from removed`,
     [id, employeeId]
   );
-  return rows[0] ? toMessage(rows[0]) : null;
+  return rows[0] ? toTeamMessage(rows[0]) : null;
 }
 
 /** Everything unread for a viewer in one business — the sidebar badge. */
