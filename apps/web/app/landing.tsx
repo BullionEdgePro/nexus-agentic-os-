@@ -6,6 +6,7 @@ import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import type { SalesContact } from "@/lib/sales-contact";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
+import { placeNode } from "@/lib/plate";
 import { ThemeToggle } from "./theme-toggle";
 import { ContactButton, ClosingBand, NavMenu, FloatingContact } from "./landing-contact";
 import "./deck/deck.css";
@@ -266,16 +267,11 @@ function RoutingPlate() {
     const layout = () => {
       const bw = el.clientWidth;
       const bh = el.clientHeight;
-      const cx = bw / 2;
-      const cy = bh / 2;
-      const R = Math.min(bw, bh) * 0.36;
+      // The cards' real width (landing.css narrows them on a phone); before
+      // the first draw, the widest they ever are.
+      const cardW = el.querySelector<HTMLElement>(".lp-node-card")?.offsetWidth || 150;
       setSize({ w: bw, h: bh });
-      setNodes(
-        PLATE_NODES.map((meta) => {
-          const a = (meta.ang * Math.PI) / 180;
-          return { meta, x: cx + Math.cos(a) * R * 1.2, y: cy + Math.sin(a) * R };
-        })
-      );
+      setNodes(PLATE_NODES.map((meta) => ({ meta, ...placeNode(meta.ang, bw, bh, cardW) })));
     };
     layout();
     const ro = new ResizeObserver(layout);

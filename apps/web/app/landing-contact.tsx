@@ -138,6 +138,45 @@ export function floatVisible(heroInView: boolean, closeInView: boolean): boolean
 }
 
 /**
+ * The closing band counts as reached while it shows and after it has scrolled
+ * past: below it are the team's sign-in and the footer, where the pill would
+ * only cover links.
+ */
+export function closeReached(entry: { isIntersecting: boolean; boundingClientRect: { top: number } }): boolean {
+  return entry.isIntersecting || entry.boundingClientRect.top < 0;
+}
+
+type Watched = { target: unknown; isIntersecting: boolean; boundingClientRect: { top: number } };
+type ObserverClass = new (cb: (entries: Watched[]) => void) => { observe(el: unknown): void; disconnect(): void };
+
+/**
+ * Whether the pill should show, as the reader moves. Everything from the
+ * closing band down is watched, not just the band: an observer reports an
+ * element only when it crosses the edge of the screen, and a jump straight
+ * past the band — the phone menu's Sign in — never crosses it. Returns the
+ * clean-up.
+ */
+export function watchFloat(
+  hero: unknown,
+  after: unknown[],
+  onChange: (show: boolean) => void,
+  Observer: ObserverClass = IntersectionObserver as unknown as ObserverClass
+): () => void {
+  let heroInView = true;
+  const reached = new Map(after.map((el) => [el, false]));
+  const observer = new Observer((entries) => {
+    for (const entry of entries) {
+      if (entry.target === hero) heroInView = entry.isIntersecting;
+      else reached.set(entry.target, closeReached(entry));
+    }
+    onChange(floatVisible(heroInView, [...reached.values()].some(Boolean)));
+  });
+  observer.observe(hero);
+  for (const el of after) observer.observe(el);
+  return () => observer.disconnect();
+}
+
+/**
  * A phone's WhatsApp pill that follows the reader down the page (landing.css
  * shows it under 760 px only). Nothing is drawn until the page has been
  * watched — so the server, and a browser without IntersectionObserver, draw
@@ -149,19 +188,9 @@ export function FloatingContact({ contact }: { contact: SalesContact }) {
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
     const hero = document.getElementById("top");
-    const close = document.getElementById("talk");
-    if (!hero || !close) return;
-    const seen = { hero: true, close: false };
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target === hero) seen.hero = entry.isIntersecting;
-        else seen.close = entry.isIntersecting;
-      }
-      setShow(floatVisible(seen.hero, seen.close));
-    });
-    observer.observe(hero);
-    observer.observe(close);
-    return () => observer.disconnect();
+    const after = [document.getElementById("talk"), document.getElementById("signin"), document.querySelector(".lp-foot")];
+    if (!hero || !after[0]) return;
+    return watchFloat(hero, after.filter((el): el is Element => el !== null), setShow);
   }, []);
 
   if (!show) return null;

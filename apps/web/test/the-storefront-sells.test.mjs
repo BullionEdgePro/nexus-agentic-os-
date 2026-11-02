@@ -11,7 +11,8 @@ import { createElement } from "react";
 import vm from "node:vm";
 
 import { salesContact, SALES_TEXT } from "@/lib/sales-contact";
-import { ContactButton, ClosingBand, floatVisible, NavMenu, FloatingContact } from "@/app/landing-contact";
+import { ContactButton, ClosingBand, floatVisible, closeReached, watchFloat, NavMenu, FloatingContact } from "@/app/landing-contact";
+import { placeNode } from "@/lib/plate";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -205,4 +206,58 @@ test("the admin entrance is two parts, its sign-in untouched", () => {
   assert.doesNotMatch(css, /--btn-grad|--sky/);
   assert.doesNotMatch(css, /rgba\(\s*(94, 196, 255|43, 156, 240|63, 178, 255|143, 211, 255)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.admin-shell \{[^}]*flex-direction: column/);
+});
+
+// Found in the browser check (Task 7).
+test("the top bar follows the scroll: the page clips sideways without becoming a scroll box", () => {
+  const css = read("app/landing.css");
+  const block = css.slice(css.indexOf(".deck-root.lp {"), css.indexOf("}", css.indexOf(".deck-root.lp {")));
+  // overflow-x: hidden made the page root its own scroll container, so the
+  // sticky top bar stuck inside a box that never scrolls.
+  assert.match(block, /overflow-x: clip;/);
+  assert.doesNotMatch(block, /overflow-x: hidden/);
+  assert.match(css, /\.lp-nav \{[^}]*position: sticky/);
+});
+
+test("on a phone every switchboard card stays inside the plate", () => {
+  const angles = [-90, -18, 54, 126, 198];
+  for (const [bw, bh, cardW] of [[343, 520, 116], [343, 520, 150], [700, 440, 150]]) {
+    for (const ang of angles) {
+      const { x } = placeNode(ang, bw, bh, cardW);
+      assert.ok(x - cardW / 2 >= 8, `${bw}px, ${ang}°: left edge ${x - cardW / 2}`);
+      assert.ok(x + cardW / 2 <= bw - 8, `${bw}px, ${ang}°: right edge ${x + cardW / 2}`);
+    }
+  }
+  // A wide plate keeps its ring exactly as it was drawn.
+  const wide = placeNode(-18, 1180, 440, 150);
+  const R = 440 * 0.36;
+  assert.equal(wide.x, 590 + Math.cos((-18 * Math.PI) / 180) * R * 1.2);
+  assert.equal(wide.y, 220 + Math.sin((-18 * Math.PI) / 180) * R);
+  assert.match(read("app/landing.tsx"), /placeNode\(meta\.ang, bw, bh, /);
+});
+
+test("the floating pill stays away once the closing band is reached, not just while it shows", () => {
+  assert.equal(closeReached({ isIntersecting: true, boundingClientRect: { top: 200 } }), true);
+  assert.equal(closeReached({ isIntersecting: false, boundingClientRect: { top: -900 } }), true);
+  assert.equal(closeReached({ isIntersecting: false, boundingClientRect: { top: 1400 } }), false);
+});
+
+test("a jump straight past the closing band (the menu's Sign in) still puts the pill away", () => {
+  let fire;
+  class FakeObserver {
+    constructor(cb) { fire = cb; }
+    observe() {}
+    disconnect() {}
+  }
+  const hero = { id: "top" }, talk = { id: "talk" }, signin = { id: "signin" }, foot = { id: "foot" };
+  const shown = [];
+  watchFloat(hero, [talk, signin, foot], (v) => shown.push(v), FakeObserver);
+  const at = (target, isIntersecting, top) => ({ target, isIntersecting, boundingClientRect: { top } });
+  // First report: the headline in view, everything after the band below it.
+  fire([at(hero, true, 0), at(talk, false, 3000), at(signin, false, 3600), at(foot, false, 4400)]);
+  // Scrolled down the page: the headline leaves.
+  fire([at(hero, false, -900)]);
+  // The menu's Sign in jumps past the band: only the sign-in and the footer report.
+  fire([at(signin, true, 80), at(foot, true, 600)]);
+  assert.deepEqual(shown, [false, true, false]);
 });
