@@ -17,7 +17,7 @@ import { ThreadMessages } from "../../team-chat-thread";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
-import "./team-chat.css";
+import "../../team-chat/team-chat.css";
 
 /**
  * Team chat — staff of one business talking to each other (24 Oct 2026).
@@ -40,6 +40,8 @@ export default function TeamChatPage() {
   const [draft, setDraft] = useState("");
   const [mentionIds, setMentionIds] = useState<Record<string, string>>({});
   const [opening, setOpening] = useState<string | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const [unreadAtOpen, setUnreadAtOpen] = useState(0);
 
   // The admin chooses a business; staff have exactly one.
   useEffect(() => {
@@ -112,6 +114,14 @@ export default function TeamChatPage() {
   );
   const directWith = (colleagueId: string) =>
     data?.threads.find((t) => t.kind === "direct" && (t.memberA === colleagueId || t.memberB === colleagueId));
+  // How much was unread when a chat was opened: the "N unread messages" strip.
+  const latest = useRef(data);
+  latest.current = data;
+  useEffect(() => {
+    setShowMembers(false);
+    setUnreadAtOpen(latest.current?.threads.find((t) => t.id === activeId)?.unread ?? 0);
+  }, [activeId]);
+
   const mentionable: TeamColleague[] = useMemo(() => {
     if (!active) return [];
     if (active.kind === "room") return colleagues;
@@ -167,6 +177,29 @@ export default function TeamChatPage() {
       : me?.isAdmin
         ? `${active.memberAName ?? "?"} & ${active.memberBName ?? "?"}`
         : (otherOf(active).name ?? "Colleague");
+
+  // The header's members line and list, as WhatsApp's group header shows them.
+  const members: Array<{ id: string; name: string; note: string | null }> = !active
+    ? []
+    : active.kind === "room"
+      ? [
+          ...colleagues.map((c) => ({ id: c.id, name: c.fullName, note: c.onShift ? "on shift" : null })),
+          ...(me?.isAdmin ? [] : [{ id: "me", name: `${me?.name ?? "You"} (you)`, note: null }]),
+        ]
+      : [
+          { id: active.memberA ?? "a", name: active.memberAName ?? "?", note: null },
+          { id: active.memberB ?? "b", name: active.memberBName ?? "?", note: null },
+        ];
+  const headLine = !active
+    ? ""
+    : active.kind === "room"
+      ? [...colleagues.map((c) => c.fullName.split(/\s+/)[0]), ...(me?.isAdmin ? [] : ["you"])].join(", ") ||
+        `Everyone at ${data?.business.name ?? ""}`
+      : me?.isAdmin
+        ? "Direct chat"
+        : colleagues.find((c) => c.id === otherOf(active).id)?.onShift
+          ? "On shift now"
+          : "Off shift — they will see it when they are back";
 
   return (
     <div className={`deck-root ${fontVariables}`}>
@@ -283,22 +316,39 @@ export default function TeamChatPage() {
                     <button type="button" className="tc-back" onClick={() => setActiveId(null)} aria-label="Back to chats">
                       ←
                     </button>
-                    <div>
+                    <span className={`tc-av${active.kind === "room" ? " tc-av-room" : ""}`} aria-hidden="true">
+                      {initials(active.kind === "room" ? data.business.name : threadTitle)}
+                    </span>
+                    <div className="tc-head-who">
                       <h2>{threadTitle}</h2>
-                      <small>
-                        {active.kind === "room"
-                          ? `Everyone at ${data.business.name} · ${colleagues.length + (me?.isAdmin ? 0 : 1)} people`
-                          : me?.isAdmin
-                            ? "Direct chat"
-                            : colleagues.find((c) => c.id === otherOf(active).id)?.onShift
-                              ? "On shift now"
-                              : "Off shift — they will see it when they are back"}
-                      </small>
+                      <button
+                        type="button"
+                        className="tc-head-members"
+                        aria-expanded={showMembers}
+                        onClick={() => setShowMembers((open) => !open)}
+                      >
+                        {headLine}
+                      </button>
                     </div>
                     {socket !== "open" && socket !== "off" ? (
                       <span className="tc-live off">Reconnecting…</span>
                     ) : socket === "open" ? (
                       <span className="tc-live">Live</span>
+                    ) : null}
+                    {showMembers ? (
+                      <ul className="tc-members" aria-label="Members">
+                        {members.map((member) => (
+                          <li key={member.id}>
+                            <span className="tc-av" aria-hidden="true">
+                              {initials(member.name)}
+                            </span>
+                            <span>
+                              {member.name}
+                              {member.note ? <small> · {member.note}</small> : null}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                   </header>
 
@@ -307,6 +357,7 @@ export default function TeamChatPage() {
                     me={me}
                     kind={active.kind}
                     emptyText={active.kind === "room" ? "Nothing said yet. Say hello to the team." : "No messages yet."}
+                    unreadAtOpen={unreadAtOpen}
                   />
 
                   {thread.error ? (

@@ -211,7 +211,7 @@ test("each colleague keeps one colour", () => {
   for (const i of used) assert.ok(i >= 0 && i <= 7);
 });
 
-test("every name colour reads on both bubbles", { todo: "Task 9 writes --tc-name-*" }, () => {
+test("every name colour reads on both bubbles", () => {
   const css = read("app/team-chat/team-chat.css");
   const all = [...css.matchAll(/--tc-name-(\d): (#[0-9A-Fa-f]{6})/g)].map((m) => m[2]);
   const light = all.slice(0, 8);
@@ -271,4 +271,46 @@ test("skin tones and recents", () => {
 
 test("the emoji list loads only when the panel opens", { todo: "Task 10 writes the panel" }, () => {
   assert.match(read("app/team-chat/emoji-panel.tsx"), /fetch\("\/emoji\/en\.json"\)/);
+});
+
+// ---- Task 9: the WhatsApp look ---------------------------------------------------------
+
+test("the thread draws WhatsApp's way: tails on run starts, names in colour, ticks, a day pill and an unread strip", () => {
+  const T = read("app/team-chat-thread.tsx");
+  assert.match(T, /groupRuns\(/);
+  assert.match(T, /data-name=\{[^}]*nameColourIndex\(/);
+  for (let i = 0; i < 8; i += 1) {
+    assert.match(read("app/team-chat/team-chat.css"), new RegExp(`\\.tc-author\\[data-name="${i}"\\] \\{ color: var\\(--tc-name-${i}\\)`));
+  }
+  assert.match(T, /data-state=\{/);
+  assert.match(T, /unread message/);
+  assert.match(T, /import "\.\/team-chat\/team-chat\.css"/);
+  const CSS = read("app/team-chat/team-chat.css");
+  assert.match(CSS, /--tc-wallpaper: url\("data:image\/svg\+xml/);
+  assert.match(CSS, /\.tc-msg\.first[^{]*::before/); // the tail
+  assert.match(CSS, /\.tc-day \{[^}]*position: sticky/);
+  assert.doesNotMatch(CSS, /rgba\(0,\s*0,\s*0/);
+});
+
+test("the bubbles move only when motion is welcome", () => {
+  const CSS = read("app/team-chat/team-chat.css");
+  const at = CSS.indexOf("@media (prefers-reduced-motion: no-preference)");
+  assert.ok(at > 0);
+  assert.match(CSS.slice(at), /tc-rise/);
+  assert.doesNotMatch(CSS.slice(0, at), /animation:/);
+});
+
+test("a quote jumps to the message it quotes, loading earlier pages if it must", () => {
+  const T = read("app/team-chat-thread.tsx");
+  assert.match(T, /scrollIntoView\(\{ block: "center"/);
+  assert.match(T, /thread\.loadEarlier\(\)/);
+  assert.match(T, /That message is older than this chat shows\./);
+});
+
+test("the header lists the members, and the old stylesheet is gone", () => {
+  const PAGE = read("app/deck/team-chat/page.tsx");
+  assert.match(PAGE, /className="tc-members"/);
+  assert.match(PAGE, /aria-expanded=\{showMembers\}/);
+  assert.match(PAGE, /unreadAtOpen=\{/);
+  assert.throws(() => read("app/deck/team-chat/team-chat.css"));
 });
