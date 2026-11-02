@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { teamFileUrl, type TeamChatFile } from "@/lib/api";
-import { formatClock } from "@/lib/team-chat/waveform";
+import { downloadFile } from "./download";
+import { VoiceNote } from "./voice-note";
 
 /**
  * What a team chat message carries besides words (2 Nov 2026): a photo, a
@@ -51,20 +52,6 @@ export function fileIcon(name: string): string {
   return "📄";
 }
 
-/** Download a file under its own name. */
-export async function downloadFile(threadId: string, file: TeamChatFile): Promise<void> {
-  const response = await fetch(teamFileUrl(threadId, file.id), { credentials: "include" });
-  if (!response.ok) throw new Error(`API ${response.status} on the file`);
-  const url = URL.createObjectURL(await response.blob());
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = file.name;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
 function Photo({ file, threadId, onOpen }: { file: TeamChatFile; threadId: string; onOpen?: () => void }) {
   const url = useFileBlob(threadId, file.id, true);
   const ratio = file.width && file.height ? `${file.width} / ${file.height}` : "4 / 3";
@@ -102,19 +89,15 @@ function FileCard({ file, threadId }: { file: TeamChatFile; threadId: string }) 
 export function FileBubble({
   file,
   threadId,
+  mine = false,
   onOpenPhoto,
 }: {
   file: TeamChatFile;
   threadId: string;
+  mine?: boolean;
   onOpenPhoto?: (file: TeamChatFile) => void;
 }) {
   if (file.kind === "photo") return <Photo file={file} threadId={threadId} onOpen={() => onOpenPhoto?.(file)} />;
-  if (file.kind === "voice") {
-    return (
-      <span className="tc-voice-stub">
-        🎤 Voice note {formatClock(file.durationMs ?? 0)}
-      </span>
-    );
-  }
+  if (file.kind === "voice") return <VoiceNote file={file} threadId={threadId} mine={mine} />;
   return <FileCard file={file} threadId={threadId} />;
 }

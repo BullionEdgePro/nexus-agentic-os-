@@ -108,7 +108,7 @@ export function ThreadMessages({
                 ) : (
                   <>
                     {message.replyTo ? <Quote reply={message.replyTo} onJump={() => void jumpTo(message.replyTo!.id)} /> : null}
-                    {message.file ? <FileBubble file={message.file} threadId={message.threadId} /> : null}
+                    {message.file ? <FileBubble file={message.file} threadId={message.threadId} mine={!!mine} /> : null}
                     {message.body ? <p>{message.body}</p> : null}
                     {message.share ? (
                       <a className="tc-share" href={`/inbox?conversation=${message.share.conversationId}`}>

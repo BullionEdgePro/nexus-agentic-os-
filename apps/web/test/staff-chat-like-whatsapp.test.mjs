@@ -355,3 +355,39 @@ test("the emoji keyboard searches, remembers recents safely, and offers skin ton
   assert.match(P, /withTone\(/);
   assert.match(P, /Escape/);
 });
+
+// ---- Task 11: press and hold to record, and playing a note -----------------------------
+
+test("recording picks a type every phone can play, and the mic is let go on every way out", () => {
+  const R = read("app/team-chat/voice-recorder.tsx");
+  assert.match(R, /\["audio\/mp4", "audio\/webm;codecs=opus", "audio\/ogg;codecs=opus"\]/);
+  assert.match(R, /getTracks\(\)\.forEach\(\(t\) => t\.stop\(\)\)/);
+  assert.match(R, /!micOn\(state\.phase\)/);
+  assert.match(R, /onPointerCancel/);
+  assert.match(R, /setPointerCapture/);
+  assert.match(R, /visibilitychange/);
+  assert.match(R, /Hold to record, release to send/);
+  assert.match(R, /‹ Slide to cancel/);
+  assert.match(R, /play\("tick"\)/);
+  assert.match(R, /play\("whoosh"\)/);
+  assert.match(R, /Nexus can't use your microphone\. Allow it in your browser's site settings, then try again\./);
+});
+
+test("a recording with no sound recorded is never sent", () => {
+  const R = read("app/team-chat/voice-recorder.tsx");
+  assert.match(R, /if \(!blob \|\| blob\.size === 0\)/);
+});
+
+test("a voice note is fetched once with credentials, plays one at a time, and falls back to a download", () => {
+  const V = read("app/team-chat/voice-note.tsx");
+  assert.match(V, /credentials: "include"/);
+  assert.match(V, /URL\.createObjectURL/);
+  assert.match(V, /canPlayType\(/);
+  assert.match(V, /playbackRate/);
+  assert.match(V, /nowPlaying/);
+  assert.match(V, /data-voice-note/);
+  // The not-yet-played dot is per device, and never breaks without storage.
+  assert.match(V, /"nexus-voice-played"/);
+  assert.match(V, /try \{[\s\S]{0,200}localStorage/);
+  assert.match(read("app/team-chat/file-bubble.tsx"), /<VoiceNote/);
+});

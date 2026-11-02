@@ -558,6 +558,86 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 .tc-emoji-tones button { width: 42px; height: 42px; border: 0; border-radius: 50%; background: none; font-size: 26px; cursor: pointer; }
 .tc-emoji-tones button:hover { background: var(--pebble); }
 
+/* ---- voice notes ---------------------------------------------------------- */
+
+.tc-rec-bar {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  bottom: 10px;
+  left: 10px;
+  right: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-radius: 24px;
+  background: var(--paper);
+  box-shadow: var(--tc-bubble-lift);
+  font-size: 14px;
+  color: var(--ink);
+}
+.tc-rec-bar.locked { padding: 0 6px; }
+.tc-rec-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: var(--crit); }
+.tc-rec-dot.paused { background: var(--mist); }
+.tc-rec-clock { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 38px; }
+.tc-rec-slide { flex: 1; text-align: center; color: var(--slate); font-size: 13.5px; }
+.tc-rec-label { flex: 1; color: var(--slate); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-rec-lock { position: absolute; right: -46px; top: -40px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--paper); box-shadow: var(--tc-bubble-lift); font-size: 15px; }
+.tc-round.recording { background: var(--crit); color: var(--paper); transform: scale(1.12); }
+.tc-rec-note {
+  position: absolute;
+  z-index: 3;
+  right: 10px;
+  bottom: calc(100% + 2px);
+  max-width: min(340px, calc(100% - 20px));
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: var(--st-ink);
+  color: var(--on-ink);
+  font-size: 12.5px;
+  box-shadow: var(--lift);
+}
+.tc-rec-note.bad { background: var(--st-terra); color: var(--on-terra); }
+
+.tc-voice { display: flex; align-items: center; gap: 8px; min-width: 230px; max-width: 320px; padding: 2px 0; }
+.tc-voice-play {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--st-forest);
+  color: var(--on-forest);
+  font-size: 14px;
+  cursor: pointer;
+}
+.tc-voice-play:disabled { opacity: .7; cursor: progress; }
+.tc-voice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tc-wave { display: flex; align-items: center; gap: 2px; height: 28px; cursor: pointer; touch-action: none; }
+.tc-wave i { flex: 1; min-width: 2px; border-radius: 2px; background: var(--hairline-strong); }
+.tc-wave i.on { background: var(--signal-text); }
+.tc-wave:focus-visible { outline: 2px solid var(--signal-text); outline-offset: 2px; border-radius: 4px; }
+.tc-voice-meta { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--mist); font-variant-numeric: tabular-nums; }
+.tc-voice-new { width: 8px; height: 8px; border-radius: 50%; background: var(--st-forest); }
+.tc-voice-fail { color: var(--crit); }
+.tc-voice-rate {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--signal-soft);
+  color: var(--slate);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tc-voice-note-text { font-size: 12.5px; color: var(--slate); }
+
 /* ---- phone: one pane at a time ------------------------------------------ */
 
 @media (max-width: 759px) {
@@ -577,6 +657,10 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 /* ---- motion: only when welcome ------------------------------------------ */
 
 @media (prefers-reduced-motion: no-preference) {
+  .tc-round { transition: transform .15s ease, background .15s ease; }
+  .tc-rec-dot { animation: tc-blink 1s infinite ease-in-out; }
+  .tc-rec-dot.paused { animation: none; }
+  @keyframes tc-blink { 50% { opacity: .25; } }
   .tc-msg { animation: tc-rise .22s cubic-bezier(.2, .8, .2, 1) backwards; }
   .tc-msg.flash .tc-bubble { animation: tc-flash 1.2s ease-out; }
   .tc-typing i { animation: tc-dot 1.2s infinite ease-in-out; }
