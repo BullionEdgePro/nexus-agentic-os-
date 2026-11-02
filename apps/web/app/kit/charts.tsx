@@ -14,7 +14,8 @@ import { areaPath, bandIndex, nearestIndex, niceMax, scaleLinear, smoothPath } f
 export type Point = { label: string; value: number };
 export type Bar = {
   label: string;
-  value: number;
+  /** null: nothing to measure that day (no reply to time) — an empty slot, never a zero. */
+  value: number | null;
   part?: number;
   low?: number;
   high?: number;
@@ -120,14 +121,18 @@ export function LineChart(props: { points: Point[]; ariaLabel: string; format?: 
 
 const pct = (n: number) => `${Math.max(0, Math.min(100, n))}%`;
 
-const isRange = (bar: Bar): bar is Bar & { low: number; high: number } => bar.low != null && bar.high != null;
+type Measured = Bar & { value: number };
+const isMeasured = (bar: Bar): bar is Measured => bar.value !== null;
+const isRange = (bar: Measured): bar is Measured & { low: number; high: number } => bar.low != null && bar.high != null;
 
 /** What a bar says when hovered, tapped or stepped to: its figures, then its note. */
-export function describeBar(bar: Bar, format: Format, partLabel?: string): string {
+export function describeBar(bar: Bar, format: Format, partLabel?: string, emptyLabel = "no data"): string {
   const part = bar.part ? `, ${format(bar.part)} ${partLabel ?? "of them"}` : "";
-  const figures = isRange(bar)
-    ? `${format(bar.low)}–${format(bar.high)}, most likely ${format(bar.value)}`
-    : `${format(bar.value)}${part}`;
+  const figures = !isMeasured(bar)
+    ? emptyLabel
+    : isRange(bar)
+      ? `${format(bar.low)}–${format(bar.high)}, most likely ${format(bar.value)}`
+      : `${format(bar.value)}${part}`;
   const notes = [bar.note, bar.partial ? "Still in progress, counts only so far" : undefined].filter(Boolean);
   return `${bar.label}: ${figures}${notes.length ? `. ${notes.join(". ")}` : ""}`;
 }
@@ -137,17 +142,21 @@ export function BarChart({
   ariaLabel,
   format = plain,
   partLabel,
+  emptyLabel = "no data",
 }: {
   bars: Bar[];
   ariaLabel: string;
   format?: Format;
   /** What the shaded part of a bar is ("escalated"). */
   partLabel?: string;
+  /** What a bar with no value says ("no replies"). */
+  emptyLabel?: string;
 }) {
   const [active, setActive] = useState<number | null>(null);
   const live = useId();
-  if (bars.length === 0) return <p className="kit-chart-empty">{EMPTY}</p>;
-  const max = niceMax(Math.max(...bars.map((b) => Math.max(b.value, b.high ?? 0))));
+  const measured = bars.filter(isMeasured);
+  if (measured.length === 0) return <p className="kit-chart-empty">{EMPTY}</p>;
+  const max = niceMax(Math.max(...measured.map((b) => Math.max(b.value, b.high ?? 0))));
   const share = (v: number) => (v / max) * 100;
 
   // The bar under the pointer, from where it is across the chart — so a finger
@@ -180,7 +189,9 @@ export function BarChart({
             key={`${bar.label}-${i}`}
             className={`kit-bar-col${bar.partial ? " partial" : ""}${active === i ? " on" : ""}`}
           >
-            {isRange(bar) ? (
+            {!isMeasured(bar) ? (
+              <div className="kit-bar-empty" />
+            ) : isRange(bar) ? (
               <div className="kit-bar-range" style={{ bottom: pct(share(bar.low)), height: pct(share(bar.high - bar.low)) }}>
                 <div
                   className="kit-bar-mid"
@@ -194,10 +205,10 @@ export function BarChart({
             )}
             {active === i ? (
               <span className="kit-tip kit-tip-bar" aria-hidden="true">
-                <b>{isRange(bar) ? `${format(bar.low)}–${format(bar.high)}` : format(bar.value)}</b>
+                <b>{!isMeasured(bar) ? emptyLabel : isRange(bar) ? `${format(bar.low)}–${format(bar.high)}` : format(bar.value)}</b>
                 <span>
                   {bar.label}
-                  {isRange(bar) ? ` · most likely ${format(bar.value)}` : ""}
+                  {isMeasured(bar) && isRange(bar) ? ` · most likely ${format(bar.value)}` : ""}
                   {bar.part ? ` · ${format(bar.part)} ${partLabel ?? "of them"}` : ""}
                 </span>
                 {bar.note ? <span>{bar.note}</span> : null}
@@ -212,7 +223,7 @@ export function BarChart({
         <span>{bars[bars.length - 1]!.label}</span>
       </div>
       <span id={live} className="kit-sr" aria-live="polite">
-        {active !== null ? describeBar(bars[active]!, format, partLabel) : ""}
+        {active !== null ? describeBar(bars[active]!, format, partLabel, emptyLabel) : ""}
       </span>
     </div>
   );

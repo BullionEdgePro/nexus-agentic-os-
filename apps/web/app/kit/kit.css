@@ -188,7 +188,9 @@ button.kit-card, a.kit-card { cursor: pointer; }
 .kit-bar-part { position: absolute; left: 0; right: 0; bottom: 0; background: var(--st-terra); }
 .kit-bar-range { position: absolute; width: min(70%, 34px); border-radius: 8px; background: color-mix(in srgb, var(--st-mustard) 55%, transparent); }
 .kit-bar-mid { position: absolute; left: -3px; right: -3px; height: 3px; margin-bottom: -1.5px; border-radius: 2px; background: var(--st-ink); }
-.kit-bar-col.on .kit-bar, .kit-bar-col.on .kit-bar-range { box-shadow: 0 0 0 2px var(--st-ink); }
+/* A day with nothing to measure: a dashed slot the height of the chart, never a zero bar. */
+.kit-bar-empty { width: min(100%, 34px); height: 100%; border: 1.5px dashed color-mix(in srgb, var(--slate) 45%, transparent); border-radius: 8px 8px 3px 3px; }
+.kit-bar-col.on .kit-bar, .kit-bar-col.on .kit-bar-range, .kit-bar-col.on .kit-bar-empty { box-shadow: 0 0 0 2px var(--st-ink); }
 .kit-bar-col.partial .kit-bar {
   background: repeating-linear-gradient(135deg, var(--st-forest) 0 6px, color-mix(in srgb, var(--st-forest) 45%, var(--paper)) 6px 12px);
 }

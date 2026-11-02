@@ -374,3 +374,20 @@ test("on a touch screen a chart's label stays after the finger lifts, and follow
   assert.equal(bandIndex(10, 0, 30), -1);
   assert.equal(bandIndex(10, 300, 0), -1);
 });
+
+// ---- SFS workflow audit: a bar with no value -------------------------------------------------
+
+import { describeBar as describeAnyBar } from "@/app/kit/charts";
+
+test("a bar with no value is an empty slot, never a zero", () => {
+  // A day with no replies has no reply time. Drawn at zero height it would
+  // read as an instant answer, so it is an empty, outlined slot that says so.
+  const html = render(BarChart, { bars: [{ label: "Mon", value: 4 }, { label: "Tue", value: null }], ariaLabel: "Reply time", emptyLabel: "no replies" });
+  assert.equal((html.match(/class="kit-bar-empty"/g) ?? []).length, 1);
+  assert.equal((html.match(/class="kit-bar nx-grow"/g) ?? []).length, 1);
+  assert.equal(describeAnyBar({ label: "Tue", value: null }, String, undefined, "no replies"), "Tue: no replies");
+  assert.doesNotMatch(html, /NaN/);
+  assert.match(read("app/kit/kit.css"), /\.kit-bar-empty \{/);
+  // Every bar empty: nothing to draw, said as such.
+  assert.match(render(BarChart, { bars: [{ label: "Mon", value: null }], ariaLabel: "Reply time" }), /Not enough days yet to draw a line\./);
+});
