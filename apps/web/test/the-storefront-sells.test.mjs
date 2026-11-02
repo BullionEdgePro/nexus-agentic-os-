@@ -107,3 +107,21 @@ test("signing in hands the console its own default, not the system's", () => {
     assert.match(read(f), /forgetSystemTheme\(\);\s*router\./, f);
   }
 });
+
+// Cream colours, a sunrise by day and a night sky after dark (spec §1).
+test("the storefront wears Cream: no colours of its own, no Clear Sky left", () => {
+  const css = read("app/landing.css");
+  const block = css.slice(css.indexOf(".deck-root.lp {"), css.indexOf("}", css.indexOf(".deck-root.lp {")));
+  for (const own of ["--marble:", "--paper:", "--ink:", "--hairline:", "--slate:"]) assert.ok(!block.includes(own), own);
+  assert.match(block, /--lp-accent: var\(--st-forest\);/);
+  assert.doesNotMatch(css, /--sky|--btn-grad|--signal-deep/);
+  assert.doesNotMatch(css, /#(3b82f6|2563eb|1d4ed8|1e3a8a|93b4ff|eef2fb)\b/i);
+  assert.match(css, /html\[data-theme="dark"\] \.deck-root\.lp \{/);
+  // The console's own serif token: Instrument Serif, with its fallbacks.
+  assert.match(css, /\.lp-hero h1 \{[^}]*font-family: var\(--serif\)/);
+  assert.match(read("app/deck/deck.css"), /--serif: var\(--font-serif\), "Instrument Serif"/);
+  // Calm when asked: the twinkle and the pulses only move with motion welcome.
+  const calm = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(calm, /animation: none/);
+  assert.match(calm, /\.lp-sky::after/);
+});
