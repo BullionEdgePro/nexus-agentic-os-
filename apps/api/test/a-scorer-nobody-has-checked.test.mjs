@@ -169,11 +169,12 @@ test("a label is attributed to a person", () => {
 });
 
 test("a lead belonging to another business cannot be labelled", () => {
-  // The insert selects the assessment by id AND organization, so a mistyped id
-  // writes nothing rather than labelling somebody else's lead. RLS would stop
-  // it too; this makes the intent readable without knowing that.
+  // The insert selects the assessment by id AND the business serving it, so a
+  // mistyped id writes nothing rather than labelling somebody else's lead.
+  // Since migration 105 this is the guard that matters: the number's owner may
+  // read a routed chat's score, but only the business serving it may label it.
   assert.ok(
-    STORE.includes("where a.id = $2 and a.organization_id = $1"),
+    STORE.includes("where a.id = $2 and a.serving_organization_id = $1"),
     "the label is written without checking the assessment belongs to this business"
   );
   assert.ok(
