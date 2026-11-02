@@ -11,7 +11,7 @@ import { createElement } from "react";
 import vm from "node:vm";
 
 import { salesContact, SALES_TEXT } from "@/lib/sales-contact";
-import { ContactButton, ClosingBand } from "@/app/landing-contact";
+import { ContactButton, ClosingBand, floatVisible, NavMenu, FloatingContact } from "@/app/landing-contact";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -150,4 +150,39 @@ test("the storefront's top bar, headline and sign-in are the sales page's", () =
   assert.match(L, /id="email"/);
   assert.match(L, /id="pass"/);
   assert.match(L, /<a href="\/admin">Administrator sign-in<\/a> is separate\./);
+});
+
+// Phones: the links fold into a menu, and a WhatsApp pill follows the reader (spec §3).
+test("the floating pill shows only between the headline and the closing band", () => {
+  assert.equal(floatVisible(true, false), false);
+  assert.equal(floatVisible(false, false), true);
+  assert.equal(floatVisible(false, true), false);
+});
+
+test("the phone menu is a real button with its list, closed at first", () => {
+  const html = render(NavMenu, { links: [{ href: "#tour", label: "Product" }] });
+  assert.match(html, /<button type="button"[^>]*aria-expanded="false"[^>]*aria-controls="lp-menu"/);
+  assert.match(html, /<ul id="lp-menu"[^>]*hidden=""/);
+  assert.match(html, /<a href="#tour">Product<\/a>/);
+  assert.match(read("app/landing-contact.tsx"), /"Escape"/);
+});
+
+test("no IntersectionObserver, no pill — and nothing breaks", () => {
+  assert.equal(render(FloatingContact, { contact: salesContact("971501234567") }), "");
+  assert.match(read("app/landing-contact.tsx"), /typeof IntersectionObserver === "undefined"/);
+  assert.match(read("app/landing.tsx"), /<header className="lp-hero" id="top">/);
+});
+
+test("the phone's top bar says WhatsApp in one word", () => {
+  const html = render(ContactButton, { contact: salesContact("971501234567"), whatsappLabel: "Chat on WhatsApp", shortLabel: "WhatsApp" });
+  assert.match(html, /<span class="lp-contact-long">Chat on WhatsApp<\/span><span class="lp-contact-short">WhatsApp<\/span>/);
+  assert.match(read("app/landing.tsx"), /whatsappLabel="Chat on WhatsApp" shortLabel="WhatsApp"/);
+});
+
+test("on a phone the links fold away and taps are big enough", () => {
+  const css = read("app/landing.css");
+  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
+  assert.match(phone, /\.lp-nav-links \{[^}]*display: none/);
+  assert.match(phone, /min-height: 44px/);
+  assert.match(phone, /env\(safe-area-inset-bottom\)/);
 });

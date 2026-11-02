@@ -875,6 +875,75 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
   .lp-close { width: calc(100% - 32px); margin-top: 64px; padding: 40px 20px; }
 }
 
+/* ---------- phones: a folding menu and a pill that follows ---------- */
+/* On a wide screen the links sit in the top bar, so these stay away. */
+.lp-menu,
+.lp-contact-short,
+.deck-root.lp > .lp-float-contact { display: none; }
+.lp-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@keyframes lp-pill-in {
+  from { opacity: 0; transform: translate(-50%, 16px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (max-width: 760px) {
+  /* The top bar keeps the brand, the switch, WhatsApp in one word and Menu. */
+  .lp-nav-links { display: none; }
+  .lp-brand small { display: none; }
+  .lp-nav { gap: 8px; padding: 10px 14px; }
+  .lp-nav-cta { gap: 6px; }
+  .lp-nav .nx-theme { min-height: 44px; }
+  .lp-nav .btn { min-height: 44px; padding: 0 14px; }
+  .lp-contact-long { display: none; }
+  .lp-contact-short { display: inline; }
+  .lp-menu { display: block; position: relative; }
+  .lp-menu-btn {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--hairline-strong);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .lp-menu-list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    min-width: 220px;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    border-radius: var(--r-sm);
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    box-shadow: var(--lift);
+  }
+  .lp-menu-list[hidden] { display: none; }
+  .lp-menu-list a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 10px; font-size: 15px; font-weight: 600; color: var(--ink); }
+  .lp-menu-list a:hover { background: var(--pebble); }
+
+  /* Big enough to tap. */
+  .lp-tab { min-height: 44px; }
+  .lp-reveal { width: 44px; height: 44px; }
+  .lp-remember { min-height: 44px; }
+  .lp-foot a { display: inline-flex; align-items: center; min-height: 44px; }
+
+  /* The pill: bottom centre, above the phone's own home bar. */
+  .deck-root.lp > .lp-float-contact {
+    display: block;
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 30;
+    transform: translateX(-50%);
+    animation: lp-pill-in .35s var(--ease-out) both;
+  }
+  .lp-float-contact .btn { min-height: 48px; padding: 0 22px; white-space: nowrap; box-shadow: 0 14px 30px -10px var(--lp-shadow); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lp-bloom,
   html[data-theme="dark"] .lp-sky::after,
@@ -898,6 +967,7 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
   .lp-link-pulse,
   .lp-core::after,
   .lp-dot.live,
+  .deck-root.lp > .lp-float-contact,
   .lp-auth::before { animation: none; }
   .lp-app-thread > * { animation: none !important; opacity: 1 !important; transform: none !important; }
   .lp-app-thread > .m4 { display: none; }

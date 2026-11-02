@@ -7,7 +7,7 @@ import { TENANTS } from "@/lib/tenants";
 import type { SalesContact } from "@/lib/sales-contact";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 import { ThemeToggle } from "./theme-toggle";
-import { ContactButton, ClosingBand } from "./landing-contact";
+import { ContactButton, ClosingBand, NavMenu, FloatingContact } from "./landing-contact";
 import "./deck/deck.css";
 import "./landing.css";
 
@@ -27,6 +27,14 @@ import "./landing.css";
 // Motion is the product demonstrating itself: messages arriving in the mock
 // inbox, a pulse travelling the switchboard, circuit traces carrying signal.
 // All of it stops under prefers-reduced-motion.
+
+/** The top bar's section links — in a row on a wide screen, behind Menu on a phone. */
+const NAV_LINKS = [
+  { href: "#tour", label: "Product" },
+  { href: "#switchboard", label: "Switchboard" },
+  { href: "#journey", label: "How it works" },
+  { href: "/links", label: "Customer links" },
+];
 
 const BrandMark = () => (
   <span className="lp-mark" aria-hidden="true">
@@ -485,10 +493,11 @@ export default function Landing({ contact }: { contact: SalesContact }) {
           </span>
         </a>
         <div className="lp-nav-links">
-          <a href="#tour">Product</a>
-          <a href="#switchboard">Switchboard</a>
-          <a href="#journey">How it works</a>
-          <a href="/links">Customer links</a>
+          {NAV_LINKS.map((l) => (
+            <a key={l.href} href={l.href}>
+              {l.label}
+            </a>
+          ))}
         </div>
         {/* Selling first: the contact pill is the button, Sign in is quiet. The
             admin's door is named under the team's sign-in card instead. */}
@@ -497,11 +506,13 @@ export default function Landing({ contact }: { contact: SalesContact }) {
           <a href="#signin" className="lp-link-quiet">
             Sign in
           </a>
-          <ContactButton contact={contact} whatsappLabel="Chat on WhatsApp" />
+          <ContactButton contact={contact} whatsappLabel="Chat on WhatsApp" shortLabel="WhatsApp" />
+          {/* A phone's links, with the team's way in — its quiet link folds away. */}
+          <NavMenu links={[...NAV_LINKS, { href: "#signin", label: "Sign in" }]} />
         </div>
       </nav>
 
-      <header className="lp-hero">
+      <header className="lp-hero" id="top">
         <Circuit side="left" />
         <Circuit side="right" />
         <div className="lp-hero-copy">
@@ -810,6 +821,8 @@ export default function Landing({ contact }: { contact: SalesContact }) {
         <a href="/terms">Terms</a>
         <span className="lp-foot-meta">nexusagenticos.com</span>
       </footer>
+
+      <FloatingContact contact={contact} />
     </div>
   );
 }
