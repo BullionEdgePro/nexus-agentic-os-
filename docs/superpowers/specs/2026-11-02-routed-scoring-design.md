@@ -36,7 +36,10 @@ Meanwhile Zipicka's per-business reads count scores for chats it does not serve.
 - **Follow migration 054's pattern** (approach A).
   - The owner keeps `organization_id`.
   - A `serving_organization_id` column, kept true by trigger, carries the serving business.
-  - The read policy widens to it; writes stay owner-only.
+  - A separate SELECT-only policy lets the serving business read by it; the owner-only policy
+    stays as it was for every command, so inserting, changing and deleting a score stay with
+    the owner. (A widened policy for all commands would also widen what UPDATE and DELETE reach:
+    final review, 2 Nov 2026.)
   - Rejected: writing under the serving business at scoring time (`withServingTenant`). The
     triage menu routes a chat after its first message is scored, and `persist.ts` also updates
     the owner's `contacts` row.
@@ -47,7 +50,10 @@ Meanwhile Zipicka's per-business reads count scores for chats it does not serve.
 ## 4. The database — migration 105
 
 File: `packages/db/migrations/105-a-routed-chats-scores-belong-to-the-serving-business.sql`.
-It must be safe to run twice: `if not exists`, `create or replace`, drop-then-create.
+It must be safe to run twice: `if not exists`, `create or replace`, drop-then-create. It is one
+transaction (`begin; set local lock_timeout = '5s'; … commit;`): applied by hand with `psql`,
+each statement would otherwise commit on its own, leaving a moment with no policy and locks that
+queue behind replies still open on their AI call. On a timeout nothing lands; run it again.
 
 1. **Column.**
    `alter table lead_assessments add column if not exists serving_organization_id uuid references organizations(id);`
@@ -71,14 +77,19 @@ It must be safe to run twice: `if not exists`, `create or replace`, drop-then-cr
    Only rows whose value differs are updated. Then `alter column serving_organization_id set not null`.
 5. **Index.**
    `create index if not exists idx_lead_assessments_serving on lead_assessments(serving_organization_id, created_at desc);`
-6. **Policy.** Drop and recreate `lead_assessments_tenant_isolation`:
-   - **using:** `organization_id` = current org, or `serving_organization_id` = current org, or
-     tenant scope `all`;
-   - **with check:** unchanged and owner-only (`organization_id` = current org, or scope `all`).
-7. **Assert**, as 054 does: no row with a null serving business, and the policy's `qual`
-   mentions `serving_organization_id`.
-
-`lead_labels` needs no change: a label is written by, and belongs to, the business that labels.
+6. **Policies.**
+   - `lead_assessments_tenant_isolation` is dropped and recreated in 052's owner-only shape, for
+     every command: `organization_id` = current org, or scope `all`, in both `using` and
+     `with check`.
+   - A new `lead_assessments_serving_read`, `for select`, using `serving_organization_id` =
+     current org. Permissive policies add up for SELECT only, so it reaches no row for UPDATE or
+     DELETE.
+7. **Assert**, as 054 does: no row with a null serving business; the owner-only policy's `qual`
+   and `with_check` do not mention the serving column; and the SELECT-only policy exists and does.
+8. **Labels follow the lead.** Before 105 only the number's owner could label a routed lead, and a
+   label's upsert collides on `assessment_id` with a row the serving business cannot see. So 105
+   moves an owner-filed label on a routed lead to the business serving it (owner's
+   scorer-accuracy sample loses those; it was labelling other businesses' leads).
 
 ## 5. The readers
 
@@ -161,12 +172,18 @@ Database tests run against a throwaway Postgres with `schema.sql` and every migr
 - **Deploy, on the owner's "Deploy it":**
   1. Merge `sfs-audit` and `routed-scoring` into `main`, then `git push origin main`.
   2. On the VPS: `git pull`, then `scripts/schema-drift-check.sh`.
-  3. Apply 105 by hand with `psql` as the owner.
+  3. Apply 105 by hand with `psql -v ON_ERROR_STOP=1` as the owner, at a quiet moment. It is one
+     transaction with a 5-second lock timeout: if it times out, nothing changed; run it again.
   4. Run the drift check again, then `scripts/deploy.sh`.
   The drift check replays every file in sorted order with no ledger, so staff chat's 104 not yet
-  being merged leaves only a numbering gap.
-- **Rollback.** Recreate the owner-only `lead_assessments_tenant_isolation` policy. The column,
-  index and triggers are harmless left in place.
+  being merged leaves only a numbering gap. Applying 105 before the new code is safe: the trigger
+  fills the column for the old code's writes.
+- **Rollback.** Roll back the code and the policy together: drop `lead_assessments_serving_read`
+  (the owner-only policy is already the old one). A policy-only rollback under the new code
+  brings back the routed-pitch miscount without the page's old warning. The column, index and
+  triggers are harmless left in place. Two things do not roll back: labels moved to the serving
+  business stay there, and a business that serves scores cannot be deleted before those scores
+  (the serving key has no delete action, as with messages).
 
 ## 9. Out of scope
 

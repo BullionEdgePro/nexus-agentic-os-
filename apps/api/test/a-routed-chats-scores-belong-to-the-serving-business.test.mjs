@@ -31,6 +31,18 @@ test("the migration keeps writes owner-only and checks itself", () => {
   assert.match(SQL, /serving_organization_id::text = current_setting\('app\.current_org', true\)/);
   assert.match(SQL, /raise exception/);
   assert.match(SQL, /alter column serving_organization_id set not null/);
+  // The widening is a READ-only policy: a policy for all commands widens which
+  // rows UPDATE and DELETE can reach as well (final review, 2 Nov 2026).
+  assert.match(SQL, /create policy lead_assessments_serving_read on lead_assessments\s+for select/);
+});
+
+test("105 applies as one transaction that gives up rather than queue behind live replies", () => {
+  // Applied by hand with psql, which commits each statement on its own: a gap
+  // between dropping a policy and creating the next denies every write, and a
+  // lock waiting on a reply's open transaction stalls the inbox behind it.
+  const code = SQL.replace(/^\s*--[^\n]*$/gm, "").trim();
+  assert.match(code, /^begin;\s*set local lock_timeout = '5s';/);
+  assert.match(code, /commit;$/);
 });
 
 // ---------------------------------------------------------------------------
@@ -246,4 +258,31 @@ test("a label the owner left on a routed lead moves with the lead, so its busine
   const { rows } = await owner.query(`select organization_id from lead_labels where assessment_id = $1`, [doomedScore]);
   assert.equal(rows[0].organization_id, SERVING);
   assert.equal(await withTenant(SERVING, () => recordLeadLabel(label(SERVING, doomedScore))), true);
+});
+
+// ---- the final review's fixes ----------------------------------------------------------------
+
+test("the serving business may read a routed score, never change or delete it", db, async () => {
+  // A policy for all commands with a widened USING would let the serving
+  // business reach the owner's rows with UPDATE and DELETE too. Its own row, so
+  // a failing run cannot take a score other tests use.
+  const id = "a6161610-0000-4000-8000-000000000009";
+  await owner.query(
+    `insert into lead_assessments (id, organization_id, contact_id, conversation_id, score, priority, category)
+     values ($1, $2, $3, $4, 60, 'normal', 'purchase_intent')`,
+    [id, OWNER, ROUTED_CT, ROUTED_CONV]
+  );
+  assert.equal(await servingOf(id), SERVING);
+  const { getPool } = await import("@nexus/db");
+  const changed = await withTenant(SERVING, async () => {
+    const moved = await getPool().query(`update lead_assessments set organization_id = $2 where id = $1`, [id, SERVING]);
+    const gone = await getPool().query(`delete from lead_assessments where id = $1`, [id]);
+    return [moved.rowCount, gone.rowCount];
+  });
+  assert.deepEqual(changed, [0, 0]);
+  const { rows } = await owner.query(`select organization_id from lead_assessments where id = $1`, [id]);
+  assert.equal(rows[0]?.organization_id, OWNER, "still there, still the owner's");
+  // …while reading it is exactly what the widening is for.
+  const seen = await withTenant(SERVING, async () => (await getPool().query(`select 1 from lead_assessments where id = $1`, [id])).rowCount);
+  assert.equal(seen, 1);
 });

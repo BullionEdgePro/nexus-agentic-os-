@@ -28,8 +28,24 @@
 -- hand a routed chat's scores back to the number's owner. The row keeps the
 -- serving business it had, and the backfill below leaves such rows alone.
 --
+-- READ, NOT WRITE, AND THAT HAS TO BE A SEPARATE POLICY. A policy for all
+-- commands whose USING is widened widens which rows UPDATE and DELETE can
+-- reach too: the serving business could delete the owner's scores or take
+-- them over. So the owner-only policy stays exactly as it was, and the serving
+-- business gets a second, SELECT-only policy (final review, 2 Nov 2026).
+--
+-- ONE TRANSACTION, AND IT GIVES UP RATHER THAN WAITS. Applied by hand with
+-- psql, which otherwise commits each statement on its own: this table is
+-- written by every inbound message, from a reply transaction that stays open
+-- through the AI call, so a lock here can queue the inbox behind a slow reply.
+-- With a lock timeout the whole file either lands at once or not at all; if it
+-- times out, run it again at a quieter moment.
+--
 -- Safe to run twice. Runs after 052 (which resets every policy to the
 -- owner-only shape) and 054 (whose routing cascade this extends).
+
+begin;
+set local lock_timeout = '5s';
 
 -- ------------------------------------------------------------
 -- 1. The column
@@ -124,23 +140,30 @@ create index if not exists idx_lead_assessments_serving
   on lead_assessments(serving_organization_id, created_at desc);
 
 -- ------------------------------------------------------------
--- 4. The policy, widened to the business being served
+-- 4. The policies: owner-only for everything, plus reading for the server
 -- ------------------------------------------------------------
 
 alter table lead_assessments enable row level security;
+
+-- Unchanged from 052's standard shape: inserting, changing and deleting a score
+-- stay with the number's owner, whose transaction the pipeline scores in.
 drop policy if exists lead_assessments_tenant_isolation on lead_assessments;
 create policy lead_assessments_tenant_isolation on lead_assessments
   using (
     organization_id::text = current_setting('app.current_org', true)
-    or serving_organization_id::text = current_setting('app.current_org', true)
     or current_setting('app.tenant_scope', true) = 'all'
   )
-  -- WRITES STAY WITH THE OWNER, as for messages: the pipeline scores inside the
-  -- owner's transaction, and a serving business may read a score, not file one.
   with check (
     organization_id::text = current_setting('app.current_org', true)
     or current_setting('app.tenant_scope', true) = 'all'
   );
+
+-- The business serving the chat may READ its scores. Permissive policies add
+-- up for SELECT only, so this reaches no row for UPDATE or DELETE.
+drop policy if exists lead_assessments_serving_read on lead_assessments;
+create policy lead_assessments_serving_read on lead_assessments
+  for select
+  using (serving_organization_id::text = current_setting('app.current_org', true));
 
 -- ------------------------------------------------------------
 -- 5. Assert
@@ -160,10 +183,18 @@ begin
     select 1 from pg_policies
      where schemaname = 'public' and tablename = 'lead_assessments'
        and policyname = 'lead_assessments_tenant_isolation'
-       and qual like '%serving_organization_id%'
+       and qual not like '%serving_organization_id%'
        and with_check not like '%serving_organization_id%'
+  ) and exists (
+    select 1 from pg_policies
+     where schemaname = 'public' and tablename = 'lead_assessments'
+       and policyname = 'lead_assessments_serving_read'
+       and cmd = 'SELECT'
+       and qual like '%serving_organization_id%'
   ) into policy_ok;
   if not policy_ok then
-    raise exception 'lead_assessments_tenant_isolation must read by the serving business and write by the owner only';
+    raise exception 'lead_assessments must be owner-only for every command, plus a SELECT-only policy for the serving business';
   end if;
 end $$;
+
+commit;
