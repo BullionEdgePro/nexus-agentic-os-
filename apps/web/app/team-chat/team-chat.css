@@ -54,8 +54,8 @@ html[data-theme="dark"] .deck-root {
 .tc-shell {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  height: min(76vh, 800px);
-  min-height: 480px;
+  /* Ends above the floating Ask button, whatever the window's height. */
+  height: clamp(420px, calc(100dvh - 230px), 800px);
   border: 1px solid var(--hairline);
   border-radius: var(--r);
   background: var(--paper);
@@ -193,6 +193,7 @@ html[data-theme="dark"] .deck-root {
 .tc-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px 6% 10px;
   display: flex;
   flex-direction: column;
@@ -209,6 +210,7 @@ html[data-theme="dark"] .deck-root {
   top: 4px;
   z-index: 2;
   align-self: center;
+  width: fit-content;
   margin: 10px 0 6px;
   padding: 5px 12px;
   border-radius: 8px;
@@ -231,12 +233,14 @@ html[data-theme="dark"] .deck-root {
   border-radius: 8px;
 }
 
-.tc-msg { position: relative; display: flex; flex-direction: column; align-items: flex-start; max-width: 74%; margin: 1px 0; }
+.tc-msg { position: relative; display: flex; flex-direction: column; align-items: flex-start; max-width: min(74%, 460px); margin: 1px 0; }
 .tc-msg.first { margin-top: 8px; }
 .tc-msg.mine { align-self: flex-end; align-items: flex-end; margin-left: auto; }
 
 .tc-bubble {
   position: relative;
+  /* Contains the floated time, so it sits inside the bubble's corner. */
+  display: flow-root;
   min-width: 70px;
   max-width: 100%;
   padding: 6px 9px 7px;
@@ -334,7 +338,8 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 
 .tc-photo {
   display: block;
-  width: min(280px, 62vw);
+  width: 280px;
+  max-width: 100%;
   max-height: 340px;
   margin: -2px -5px 4px;
   padding: 0;
@@ -349,7 +354,8 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 220px;
+  width: 240px;
+  max-width: 100%;
   margin: 0 0 4px;
   padding: 9px 10px;
   border: 0;
@@ -601,7 +607,7 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 }
 .tc-rec-note.bad { background: var(--st-terra); color: var(--on-terra); }
 
-.tc-voice { display: flex; align-items: center; gap: 8px; min-width: 230px; max-width: 320px; padding: 2px 0; }
+.tc-voice { display: flex; align-items: center; gap: 8px; width: 250px; max-width: 100%; padding: 2px 0; }
 .tc-voice-play {
   flex: 0 0 auto;
   width: 36px;
@@ -616,9 +622,9 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
   cursor: pointer;
 }
 .tc-voice-play:disabled { opacity: .7; cursor: progress; }
-.tc-voice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.tc-wave { display: flex; align-items: center; gap: 2px; height: 28px; cursor: pointer; touch-action: none; }
-.tc-wave i { flex: 1; min-width: 2px; border-radius: 2px; background: var(--hairline-strong); }
+.tc-voice-body { flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; gap: 3px; }
+.tc-wave { display: flex; align-items: center; gap: 1.5px; height: 28px; overflow: hidden; cursor: pointer; touch-action: none; }
+.tc-wave i { flex: 1; min-width: 1px; border-radius: 2px; background: var(--hairline-strong); }
 .tc-wave i.on { background: var(--signal-text); }
 .tc-wave:focus-visible { outline: 2px solid var(--signal-text); outline-offset: 2px; border-radius: 4px; }
 .tc-voice-meta { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--mist); font-variant-numeric: tabular-nums; }
@@ -700,7 +706,7 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
 .tc-sheet-send input { flex: 1; min-width: 0; padding: 11px 14px; border: 0; border-radius: 24px; background: var(--pebble); color: var(--ink); font: inherit; font-size: 14px; }
 .tc-sheet-send input:focus-visible { outline: 2px solid var(--signal-text); }
 
-.tc-upload { display: flex; align-items: center; gap: 9px; min-width: 200px; margin-bottom: 2px; }
+.tc-upload { display: flex; align-items: center; gap: 9px; width: 220px; max-width: 100%; margin-bottom: 2px; }
 .tc-upload span { flex: 1; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tc-upload-cancel { border: 0; background: none; color: var(--mist); font-size: 15px; cursor: pointer; padding: 2px 4px; }
 .tc-ring { flex: 0 0 auto; }
@@ -818,6 +824,19 @@ html[data-theme="dark"] .deck-root .tc-msg.mine .tc-bubble { background: color-m
   .tc-shell:not(.has-active) .tc-thread { display: none; }
   .tc-back { display: block; }
   .tc-messages { padding: 8px 10px; }
+  /* An open chat is the whole screen on a phone, as in WhatsApp: above the
+     bottom tab bar and the Ask button, with the box at the bottom edge. */
+  .tc-shell.has-active .tc-thread {
+    position: fixed;
+    z-index: 900;
+    inset: 0;
+    height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tc-shell.has-active .tc-thread-head { padding-top: calc(10px + env(safe-area-inset-top)); }
+  /* While a chat is open the bottom bar and Ask step aside, as they do for an
+     open inbox conversation. */
+  body:has(.tc-shell.has-active) :is(.mtabs, .as-open, .shell-rail) { display: none; }
   .tc-msg { max-width: 86%; }
 }
 

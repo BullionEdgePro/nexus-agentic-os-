@@ -226,7 +226,12 @@ export function VoiceRecorder({ onSend, disabled }: { onSend: (note: Note) => vo
     if (disabled || event.button > 0) return;
     if (stateRef.current.phase !== "idle") return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      // Keeps the slide on the button when the finger leaves it.
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // A pointer the browser no longer tracks: the press still records.
+    }
     setHint("");
     dispatch({ type: "press", at: at(), x: event.clientX, y: event.clientY, pointer: event.pointerType === "mouse" ? "mouse" : "touch" });
     void openMic();

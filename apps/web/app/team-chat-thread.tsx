@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { TeamThreadState } from "@/lib/use-team-thread";
 import { groupRuns } from "@/lib/team-chat/runs";
 import { nameColourIndex } from "@/lib/team-chat/name-colour";
@@ -98,8 +98,10 @@ export function ThreadMessages({
         const removed = !!message.deletedAt;
         // Reacting, replying and removing are writing: not for the admin in a direct chat.
         const interactive = thread.canPost ? !removed : false;
+        // A fragment, not a wrapper: the day pill and the bubble sit straight in
+        // the scrolling list, so the pill can float while its day scrolls past.
         return (
-          <div key={message.id}>
+          <Fragment key={message.id}>
             {showDay ? <p className="tc-day">{day}</p> : null}
             {unread.current.id === message.id ? (
               <p className="tc-unread-strip">
@@ -185,7 +187,7 @@ export function ThreadMessages({
                 />
               ) : null}
             </div>
-          </div>
+          </Fragment>
         );
       })}
       {pending.map((p) => (

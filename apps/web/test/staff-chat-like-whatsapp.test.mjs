@@ -457,3 +457,27 @@ test("a phone's own long-press menu does not fight ours", () => {
   assert.match(CSS, /@media \(pointer: coarse\)[\s\S]{0,300}-webkit-touch-callout: none/);
   assert.match(CSS, /\.tc-swipe \{[^}]*touch-action: pan-y/);
 });
+
+// ---- Task 15: what the browser check found ----------------------------------------------
+
+test("on a phone an open chat is the whole screen, and the bottom bar and Ask step aside", () => {
+  const CSS = read("app/team-chat/team-chat.css");
+  const phone = CSS.slice(CSS.indexOf("@media (max-width: 759px)"));
+  assert.match(phone, /\.tc-shell\.has-active \.tc-thread \{[^}]*position: fixed;[^}]*inset: 0;/);
+  assert.match(phone, /body:has\(\.tc-shell\.has-active\) :is\(\.mtabs, \.as-open, \.shell-rail\) \{ display: none; \}/);
+});
+
+test("the chat ends above the floating Ask button, and nothing pushes it sideways", () => {
+  const CSS = read("app/team-chat/team-chat.css");
+  assert.match(CSS, /height: clamp\(420px, calc\(100dvh - 230px\), 800px\);/);
+  assert.match(CSS, /\.tc-messages \{[^}]*overflow-x: hidden;/);
+  assert.match(CSS, /\.tc-voice \{[^}]*max-width: 100%;/);
+  assert.match(CSS, /\.tc-photo \{[^}]*max-width: 100%;/);
+});
+
+test("time and ticks sit inside the bubble, and day pills float over the list", () => {
+  const CSS = read("app/team-chat/team-chat.css");
+  assert.match(CSS, /\.tc-bubble \{[^}]*display: flow-root;/);
+  assert.match(CSS, /\.tc-day \{[^}]*width: fit-content;/);
+  assert.match(read("app/team-chat-thread.tsx"), /<Fragment key=\{message\.id\}>/);
+});

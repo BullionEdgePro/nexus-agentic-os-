@@ -350,9 +350,7 @@ export default function TeamChatPage() {
                       thread={thread}
                       colleagues={mentionable}
                       placeholder={
-                        active.kind === "room"
-                          ? `Message the ${data.business.name} team — type @ to mention someone`
-                          : `Message ${threadTitle}`
+                        active.kind === "room" ? "Message the team · @ to mention" : `Message ${threadTitle.split(/\s+/)[0]}`
                       }
                     />
                   ) : active.kind === "direct" && me?.isAdmin ? (
@@ -387,7 +385,8 @@ function Badges({ thread }: { thread: TeamThreadSummary }) {
 function preview(thread: TeamThreadSummary): string {
   const last = thread.lastMessage;
   if (!last) return thread.kind === "room" ? "Everyone at this business" : "No messages yet";
-  return last.removed ? `${last.authorName}: message removed` : `${last.authorName}: ${last.body}`;
+  // A voice note, photo or file has no words of its own to show here.
+  return last.removed ? `${last.authorName}: message removed` : `${last.authorName}: ${last.body || "📎 sent an attachment"}`;
 }
 
 function initials(name: string | null): string {
