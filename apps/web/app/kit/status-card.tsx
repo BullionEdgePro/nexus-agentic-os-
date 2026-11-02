@@ -9,6 +9,7 @@ import type { Tone } from "@/lib/kit/wait-band";
  */
 export function StatusCard({
   tone,
+  eyebrow,
   title,
   subtitle,
   figure,
@@ -20,6 +21,8 @@ export function StatusCard({
   className,
 }: {
   tone: Tone;
+  /** A small label above the title (a workflow step's tag, "AGENT 05"). */
+  eyebrow?: string;
   title: string;
   subtitle?: string;
   figure?: string;
@@ -36,6 +39,7 @@ export function StatusCard({
   const style: CSSProperties | undefined = transitionName ? ({ viewTransitionName: transitionName } as CSSProperties) : undefined;
   const inner = (
     <>
+      {eyebrow ? <span className="kit-card-eyebrow">{eyebrow}</span> : null}
       <span className="kit-card-title" dir="auto">
         {title}
       </span>

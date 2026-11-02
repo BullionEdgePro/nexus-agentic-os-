@@ -91,6 +91,7 @@ button.kit-card, a.kit-card { cursor: pointer; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.kit-card-eyebrow { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kit-card-sub { display: block; font-size: 12.5px; opacity: .82; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kit-card-figure { display: block; margin-top: 10px; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .kit-card-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; opacity: .9; }
