@@ -39,6 +39,7 @@ import {
   listActiveAutomationsForRun,
   listOpenFindings,
   recordAutomationFailure,
+  withSavepoint,
   withTenant,
   type AutomationRecord,
 } from "@nexus/db";
@@ -131,7 +132,10 @@ export async function runAutomationsFor(organizationId: string): Promise<Automat
         if (!runId) continue;
 
         try {
-          const detail = await perform(automation, finding, organizationId);
+          // Its own savepoint (3 Nov 2026): an action failing on a database
+          // error used to abort the business's run, and the next claim then
+          // rolled back every claim, so the next sweep acted on them all again.
+          const detail = await withSavepoint(() => perform(automation, finding, organizationId));
           outcomes.push({
             automationId: automation.id,
             action: automation.action,

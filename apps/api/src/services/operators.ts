@@ -6,6 +6,7 @@ import {
   reconcileFindings,
   listJobHeartbeats,
   countKnowledgeSourcesAcrossPlatform,
+  isolated,
   withTenant,
   withAllTenants,
   type FindingInput,
@@ -523,8 +524,11 @@ export async function unansweredButNotReported(): Promise<
 
   for (const organization of organizations) {
     try {
-      const rows = await withTenant(organization.id, () =>
-        unansweredButNotReportedFor(organization.id)
+      // Isolated (3 Nov 2026): under the request's one transaction, a business
+      // whose read failed made every read after it fail too, emptying the list
+      // for the rest -- the very thing the catch below exists to prevent.
+      const rows = await isolated(() =>
+        withTenant(organization.id, () => unansweredButNotReportedFor(organization.id))
       );
       for (const row of rows) {
         out.push({

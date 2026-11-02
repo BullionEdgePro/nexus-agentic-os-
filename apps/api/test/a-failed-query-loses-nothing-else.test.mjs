@@ -15,6 +15,42 @@
 // Spec: docs/superpowers/specs/2026-11-03-silent-rollback-design.md
 import { test, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+import { withoutComments } from "../../../scripts/recurrence/source.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const source = (...p) => withoutComments(readFileSync(join(here, "..", "..", "..", ...p), "utf8"));
+
+// ---------------------------------------------------------------------------
+// The best-effort steps that took their whole transaction with them. Their
+// setups are out of reach of a quick test database, so the shape is pinned.
+// ---------------------------------------------------------------------------
+
+test("an automation's failed action is that finding's alone; its claim stays", () => {
+  const runner = source("apps", "api", "src", "services", "automation-runner.ts");
+  assert.match(runner, /withSavepoint\(\(\) => perform\(automation, finding, organizationId\)\)/);
+});
+
+test("a bounce, an opt-out or a lead score that fails never loses the mailbox's mail", () => {
+  const sync = source("apps", "api", "src", "services", "email-sync.ts");
+  const store = sync.slice(sync.indexOf("async function storeInboxMail"));
+  assert.match(store, /withSavepoint\(async \(\) => \{\s*const hit = await recordEmailBounce\(ownerAddress, address\);/);
+  assert.match(store, /withSavepoint\(\(\) => optOutOfEmailCampaigns\(contactId\)\)/);
+  assert.match(store, /withSavepoint\(\(\) =>\s*recordLeadAssessment\(/);
+});
+
+test("the assignment stands when the note of it fails", () => {
+  const employees = source("apps", "api", "src", "routes", "employees.ts");
+  assert.match(employees, /withSavepoint\(\(\) => recordAssignmentEvent\(conversationId, assigneeName, actor\.id, actor\.name\)\)/);
+});
+
+test("one business's failed read leaves the others on the not-reported list", () => {
+  const operators = source("apps", "api", "src", "services", "operators.ts");
+  assert.match(operators, /isolated\(\(\) =>\s*withTenant\(organization\.id, \(\) => unansweredButNotReportedFor\(organization\.id\)\)/);
+});
 
 const OWNER_URL = process.env.AUDIT_TEST_OWNER_URL;
 const APP_URL = process.env.AUDIT_TEST_APP_URL;

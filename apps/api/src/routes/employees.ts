@@ -21,6 +21,7 @@ import {
   connectCalendar,
   disconnectCalendar,
   recordAssignmentEvent,
+  withSavepoint,
 } from "@nexus/db";
 import { randomInt } from "node:crypto";
 import { campaignReadiness } from "../services/campaign-readiness.js";
@@ -1172,9 +1173,10 @@ conversationAssignmentRoute.post("/:conversationId/assign", async (c) => {
 
   // "Priya assigned this chat to Kavya" — on the thread's own timeline, so the
   // next person to open it sees who picked it up. Best-effort: the assignment
-  // stands even if the note of it fails.
+  // stands even if the note of it fails -- which, since 3 Nov 2026, it does: in
+  // its own savepoint, the note failing no longer rolls the assignment back.
   const actor = await actorOf(c);
-  await recordAssignmentEvent(conversationId, assigneeName, actor.id, actor.name).catch((err) =>
+  await withSavepoint(() => recordAssignmentEvent(conversationId, assigneeName, actor.id, actor.name)).catch((err) =>
     logger.warn({ err, conversationId }, "Could not record the assignment on the timeline")
   );
 

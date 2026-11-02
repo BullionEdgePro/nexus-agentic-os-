@@ -41,6 +41,7 @@ import {
   optOutOfEmailCampaigns,
   pauseBroadcastIfFailing,
   withAllTenants as withEveryTenant,
+  withSavepoint,
 } from "@nexus/db";
 import { looksLikeAnOptOut } from "@nexus/agents";
 import { bounceAddresses } from "../lib/campaign-email.js";
@@ -183,12 +184,17 @@ async function storeInboxMail(
       // nothing. Best effort: a bounce that cannot be read is still just mail.
       for (const address of bounceAddresses({ from: m.from, subject: m.subject ?? null, body: m.body || m.snippet || "" })) {
         try {
-          const hit = await recordEmailBounce(ownerAddress, address);
-          if (hit) {
-            await withEveryTenant("email bounce: the breaker for the campaign it came from", () =>
-              pauseBroadcastIfFailing(hit.broadcastId)
-            );
-          }
+          // Its own savepoint, as are the opt-out and the lead score below (3 Nov
+          // 2026): "non-fatal" was not true while one failing aborted the
+          // mailbox's transaction and lost the whole batch of mail with it.
+          await withSavepoint(async () => {
+            const hit = await recordEmailBounce(ownerAddress, address);
+            if (hit) {
+              await withEveryTenant("email bounce: the breaker for the campaign it came from", () =>
+                pauseBroadcastIfFailing(hit.broadcastId)
+              );
+            }
+          });
         } catch (err) {
           logger.warn({ err }, "A bounce could not be recorded (non-fatal)");
         }
@@ -219,7 +225,7 @@ async function storeInboxMail(
       // "Unsubscribe" or "stop" in reply to a campaign email: no more campaign
       // emails. The mail itself is kept like any other — a person wrote it.
       if (inserted && looksLikeAnOptOut(freshPartOfEmail(m.body || m.snippet || ""))) {
-        await optOutOfEmailCampaigns(contactId).catch((err) =>
+        await withSavepoint(() => optOutOfEmailCampaigns(contactId)).catch((err) =>
           logger.warn({ err, contactId }, "Email opt-out could not be recorded (non-fatal)")
         );
       }
@@ -238,7 +244,9 @@ async function storeInboxMail(
         if (fresh) {
           try {
             const assessment = scoreLead({ text: fresh });
-            await recordLeadAssessment({ ...assessment, organizationId: owner.organizationId, contactId, conversationId });
+            await withSavepoint(() =>
+              recordLeadAssessment({ ...assessment, organizationId: owner.organizationId, contactId, conversationId })
+            );
           } catch (err) {
             logger.warn({ err, conversationId }, "Email lead scoring failed (non-fatal)");
           }
