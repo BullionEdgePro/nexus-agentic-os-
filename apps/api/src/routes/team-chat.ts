@@ -6,6 +6,7 @@ import {
   ensureRoom,
   findConversationById,
   findEmployeeById,
+  findMessageByClientId,
   findOrganizationById,
   findOrganizationBySlug,
   findThread,
@@ -18,13 +19,19 @@ import {
   listThreadSummaries,
   markTeamRead,
   postTeamMessage,
+  reactionsFor,
   readerKey,
   removeTeamMessage,
+  replySnippet,
+  saveTeamFile,
   setConversationCollaborators,
   sharedConversationCards,
   teamAccess,
+  teamFileMeta,
+  teamMessagesByIds,
   teamUnread,
   withTenant,
+  type TeamFileMeta,
   type TeamMessage,
   type TeamThread,
   type TeamViewer,
@@ -33,6 +40,7 @@ import { resolvePresence } from "@nexus/employees";
 import type { Employee } from "@nexus/shared";
 import type { SessionScope } from "../lib/session.js";
 import { publishTeamEvent, type TeamEvent } from "../lib/team-events.js";
+import { checkUpload, cleanName, TEAM_LIMITS } from "../lib/team-files.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -136,14 +144,63 @@ async function publish(event: TeamEvent): Promise<void> {
   }
 }
 
-/** Messages with the hand-over card resolved (customer name and channel). */
-async function withCards(messages: TeamMessage[]) {
-  const ids = [...new Set(messages.map((m) => m.sharedConversationId).filter((id): id is string => !!id))];
-  const cards = await sharedConversationCards(ids);
+const publicFile = (meta: TeamFileMeta) => ({
+  id: meta.id,
+  kind: meta.kind,
+  name: meta.name,
+  size: meta.size,
+  mime: meta.mime,
+  durationMs: meta.durationMs,
+  waveform: meta.waveform,
+  width: meta.width,
+  height: meta.height,
+});
+
+const present = (ids: Array<string | null>) => [...new Set(ids.filter((id): id is string => !!id))];
+
+/**
+ * Messages as every screen and live event receives them: the hand-over card
+ * resolved (customer name and channel), the attached file described (never
+ * its bytes), the quoted message as a snippet, and the reactions grouped.
+ */
+async function shapeMessages(organizationId: string, messages: TeamMessage[]) {
+  const cards = await sharedConversationCards(present(messages.map((m) => m.sharedConversationId)));
+  const { files, originals, reactions } = await withTenant(organizationId, async () => {
+    const originals = await teamMessagesByIds(present(messages.map((m) => m.replyToId)));
+    const files = await teamFileMeta(
+      present([...messages.map((m) => m.fileId), ...[...originals.values()].map((m) => m.fileId)])
+    );
+    const reactions = await reactionsFor(messages.map((m) => m.id));
+    return { files, originals, reactions };
+  });
   return messages.map((m) => {
     const card = m.sharedConversationId ? cards.get(m.sharedConversationId) : undefined;
-    return { ...m, share: card && m.sharedConversationId ? { conversationId: m.sharedConversationId, ...card } : null };
+    const file = m.fileId ? files.get(m.fileId) : undefined;
+    const original = m.replyToId ? originals.get(m.replyToId) : undefined;
+    return {
+      ...m,
+      share: card && m.sharedConversationId ? { conversationId: m.sharedConversationId, ...card } : null,
+      file: file && !file.deletedAt ? publicFile(file) : null,
+      replyTo: original
+        ? {
+            id: original.id,
+            authorName: original.authorName,
+            ...replySnippet(original, original.fileId ? (files.get(original.fileId) ?? null) : null),
+          }
+        : null,
+      reactions: reactions.get(m.id) ?? [],
+    };
   });
+}
+
+/** A JSON array sent as one form field (mentions in a multipart send). */
+function jsonList(value: unknown): unknown {
+  if (typeof value !== "string" || !value) return [];
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -233,7 +290,7 @@ teamChatRoute.get("/threads/:id/messages", async (c) => {
     thread,
     canPost: teamAccess(thread, who.viewer).post,
     seenByOther,
-    messages: await withCards(messages),
+    messages: await shapeMessages(thread.organizationId, messages),
   });
 });
 
@@ -249,17 +306,88 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
   // The admin reads a direct chat between two staff; it is not theirs to write in.
   if (!access.post) return c.json(NOT_FOUND, 404);
 
-  const input = (await c.req.json().catch(() => null)) as {
+  // A voice note, photo or file comes as a form (2 Nov 2026); words alone as
+  // JSON, as before. The size is checked from the header BEFORE the body is
+  // read, so a 500 MB upload is refused without being buffered to say so.
+  let input: {
     clientId?: unknown;
     body?: unknown;
     mentions?: unknown;
     shareConversationId?: unknown;
+    replyTo?: unknown;
   } | null;
+  let upload: { kind: unknown; file: File; preview: File | null; fields: Record<string, unknown> } | null = null;
+  if ((c.req.header("content-type") ?? "").startsWith("multipart/form-data")) {
+    const length = c.req.header("content-length");
+    if (!length) return c.json({ error: "That upload has no size; try sending it again." }, 411);
+    if (!/^\d+$/.test(length) || Number(length) > TEAM_LIMITS.requestBytes) {
+      return c.json({ error: "That upload is too large. Files can be up to 16 MB." }, 413);
+    }
+    let form: Record<string, unknown>;
+    try {
+      form = await c.req.parseBody();
+    } catch {
+      return c.json({ error: "That upload could not be read." }, 400);
+    }
+    if (!(form.file instanceof File)) return c.json({ error: "Attach a voice note, a photo or a file." }, 400);
+    input = { clientId: form.clientId, body: form.body ?? "", mentions: jsonList(form.mentions), replyTo: form.replyTo };
+    upload = { kind: form.kind, file: form.file, preview: form.preview instanceof File ? form.preview : null, fields: form };
+  } else {
+    input = (await c.req.json().catch(() => null)) as typeof input;
+  }
   const clientId = typeof input?.clientId === "string" ? input.clientId.trim().slice(0, 80) : "";
   const text = typeof input?.body === "string" ? input.body.trim() : "";
   if (!clientId) return c.json({ error: "This message has no id; reload the page and send it again." }, 400);
-  if (!text) return c.json({ error: "Write a message first." }, 400);
-  if (text.length > 4000) return c.json({ error: "That message is too long (4000 characters at most)." }, 400);
+  if (!text && !upload) return c.json({ error: "Write a message first." }, 400);
+  if (text.length > TEAM_LIMITS.bodyMax) return c.json({ error: "That message is too long (4000 characters at most)." }, 400);
+
+  // A reply quotes a message of THIS thread, never one from another chat.
+  const replyToId = typeof input?.replyTo === "string" && input.replyTo ? input.replyTo : null;
+  if (replyToId) {
+    const original = /^[0-9a-f-]{36}$/i.test(replyToId)
+      ? (await withTenant(thread.organizationId, () => teamMessagesByIds([replyToId]))).get(replyToId)
+      : undefined;
+    if (!original || original.threadId !== thread.id) {
+      return c.json({ error: "That message is not in this chat." }, 400);
+    }
+  }
+
+  let file: {
+    kind: "voice" | "photo" | "file";
+    mime: string;
+    name: string;
+    bytes: Uint8Array;
+    preview: Uint8Array | null;
+    durationMs: number | null;
+    waveform: number[] | null;
+    width: number | null;
+    height: number | null;
+  } | null = null;
+  if (upload) {
+    const bytes = new Uint8Array(await upload.file.arrayBuffer());
+    const preview = upload.preview ? new Uint8Array(await upload.preview.arrayBuffer()) : null;
+    const checked = checkUpload({
+      kind: String(upload.kind ?? ""),
+      bytes,
+      preview,
+      durationMs: upload.fields.durationMs,
+      waveform: upload.fields.waveform,
+      width: upload.fields.width,
+      height: upload.fields.height,
+    });
+    if (!checked.ok) return c.json({ error: checked.error }, 400);
+    file = {
+      kind: checked.kind,
+      mime: checked.mime,
+      name: cleanName(upload.file.name),
+      bytes,
+      preview: checked.kind === "photo" ? preview : null,
+      durationMs: checked.durationMs,
+      waveform: checked.waveform,
+      width: checked.width,
+      height: checked.height,
+    };
+  }
 
   const me = who.role === "staff" ? who.viewer.employeeId : null;
   const employees = await withTenant(thread.organizationId, () => listEmployees(thread.organizationId));
@@ -289,7 +417,12 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
     };
   }
 
+  // One transaction: a retry finds its first send and stores nothing; a new
+  // send stores its file and its message together, or neither.
   const { message, created } = await withTenant(thread.organizationId, async () => {
+    const existing = await findMessageByClientId(thread.id, clientId);
+    if (existing) return { message: existing, created: false };
+    const savedFile = file ? await saveTeamFile({ thread, uploader: readerKey(who.viewer), ...file }) : null;
     const saved = await postTeamMessage({
       thread,
       authorEmployeeId: me,
@@ -299,6 +432,8 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
       clientId,
       mentions,
       sharedConversationId: share?.conversationId ?? null,
+      fileId: savedFile?.id ?? null,
+      replyToId,
     });
     await markTeamRead(thread, readerKey(who.viewer));
     return saved;
@@ -307,7 +442,7 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
   if (created && share?.addCollaborator) {
     await setConversationCollaborators(share.conversationId, [...share.collaborators, share.addCollaborator]);
   }
-  const [shaped] = await withCards([message]);
+  const [shaped] = await shapeMessages(thread.organizationId, [message]);
   if (created) await publish(await eventFor(thread, "team_message", { message: shaped }));
   return c.json({ message: shaped }, created ? 201 : 200);
 });
