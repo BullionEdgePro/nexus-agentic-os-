@@ -125,21 +125,37 @@ export function RailLinks({ role }: { role: "operator" | "employee" }) {
           list like a screen. It now closes the rail, under who is signed in.
           Always a real link to a real route, working without JavaScript. */}
       <div className="rail-foot">
+        {/* Who is signed in gets a row of its own (2 Nov 2026): on one line
+            with the switches and Sign out, the name was squeezed to a sliver
+            and the sky switch drew over it. */}
         <span className="rail-foot-who">
-          <span className="rail-foot-name">{role === "operator" ? "Admin" : "Staff"}</span>
-          <span className="rail-foot-role">{role === "operator" ? "All businesses" : "Your own work"}</span>
-        </span>
-        {/* Light or dark, and sound on or off, beside the way out. */}
-        <ThemeToggle compact />
-        <SoundToggle />
-        <a href="/api/auth/logout" title="Sign out">
-          <span className="rail-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />
+          <span className="rail-foot-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              {role === "operator" ? (
+                <path d="M4 18h16M5 18l-1-9 4.5 3.5L12 6l3.5 6.5L20 9l-1 9" />
+              ) : (
+                <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20a7 7 0 0 1 14 0" />
+              )}
             </svg>
           </span>
-          <span className="rail-label">Sign out</span>
-        </a>
+          <span className="rail-foot-text">
+            <span className="rail-foot-name">{role === "operator" ? "Admin" : "Staff"}</span>
+            <span className="rail-foot-role">{role === "operator" ? "All businesses" : "Your own work"}</span>
+          </span>
+        </span>
+        {/* Light or dark, and sound on or off, beside the way out. */}
+        <div className="rail-foot-controls">
+          <ThemeToggle compact />
+          <SoundToggle />
+          <a href="/api/auth/logout" title="Sign out">
+            <span className="rail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />
+              </svg>
+            </span>
+            <span className="rail-label">Sign out</span>
+          </a>
+        </div>
       </div>
     </>
   );

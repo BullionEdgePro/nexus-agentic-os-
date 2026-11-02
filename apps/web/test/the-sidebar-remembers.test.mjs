@@ -92,3 +92,22 @@ test("the dock shrinks by a root attribute and clears the phone's home bar", () 
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(css, /\.rail-pill\s*\{/);
 });
+
+test("the dock's foot gives who is signed in a row of their own, the controls a row beneath", () => {
+  // Seen 2 Nov 2026: name, both switches and "Sign out" on one line squeezed
+  // "Staff / Your own work" to a sliver, the sky switch drew over it and Sign
+  // out was clipped at the dock's edge.
+  const shell = read("../app/console-shell.tsx");
+  const foot = shell.match(/<div className="rail-foot">[\s\S]*?\n      <\/div>/)[0];
+  assert.match(foot, /<span className="rail-foot-avatar" aria-hidden="true">/);
+  const controls = foot.match(/<div className="rail-foot-controls">[\s\S]*?\n        <\/div>/);
+  assert.ok(controls, "the switches and Sign out are not in their own row");
+  assert.match(controls[0], /<ThemeToggle compact \/>/);
+  assert.match(controls[0], /<SoundToggle \/>/);
+  assert.match(controls[0], /\/api\/auth\/logout/);
+  const css = read("../app/console-shell.css");
+  assert.match(css, /\.deck-root \.rail-foot \{[^}]*flex-direction: column;/);
+  assert.match(css, /\.deck-root \.rail-foot-controls \{[^}]*display: flex;/);
+  // Shrunk to icons the controls stack, as the foot always did.
+  assert.match(css, /html\[data-rail="icons"\] \.deck-root \.rail-foot-controls \{[^}]*flex-direction: column;/);
+});
