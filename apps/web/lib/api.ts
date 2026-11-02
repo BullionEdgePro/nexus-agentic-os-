@@ -1,4 +1,5 @@
 import type {
+  AuditDays,
   BusinessSlug,
   ConversationNote,
   ConversationSummary,
@@ -8,6 +9,7 @@ import type {
   OverviewMetrics,
   ScheduledMessageStatus,
   TimelineItem,
+  WorkflowAudit,
 } from "@nexus/shared";
 
 export type { ConversationNote, InboxSettings, TimelineItem } from "@nexus/shared";
@@ -2508,6 +2510,15 @@ export function getForecast(orgSlug: BusinessSlug): Promise<{
   recent: ScoredForecast[];
 }> {
   return request(`/api/organizations/${orgSlug}/forecast`);
+}
+
+/**
+ * The workflow audit (2 Nov 2026): what the business's own data shows of the
+ * workflow its owner drew, for the last 7, 30 or 90 of its days. An admin may
+ * ask for any business; staff only for their own (the server refuses others).
+ */
+export function getWorkflowAudit(slug: BusinessSlug, days: AuditDays): Promise<WorkflowAudit> {
+  return request(`/api/organizations/${slug}/workflow-audit?days=${days}`);
 }
 
 export function refreshForecast(orgSlug: BusinessSlug): Promise<{
