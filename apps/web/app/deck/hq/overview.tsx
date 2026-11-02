@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { HqCard, HqSeverity } from "@/lib/api";
 
 /**
@@ -24,20 +25,28 @@ const hostOf = (url: string | null) => {
   }
 };
 
-/** A ring that fills to the score: 100 is a full circle. */
+/** A card's top edge in the video's colours (Cream pages 2a): its health at a glance. */
+const EDGE = { good: "forest", warn: "mustard", crit: "terra" } as const;
+
+/**
+ * A ring that fills to the score: 100 is a full circle. Measured as one unit
+ * round (pathLength 1) so it can draw in, from nothing up to the score, when
+ * motion is welcome (hq.css).
+ */
 export function ScoreRing({ score, size = 64 }: { score: number; size?: number }) {
   const r = 26;
-  const circumference = 2 * Math.PI * r;
-  const filled = (Math.max(0, Math.min(100, score)) / 100) * circumference;
+  const fraction = Number((Math.max(0, Math.min(100, score)) / 100).toFixed(3));
   return (
     <svg className={`hq-ring ${scoreTone(score)}`} width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={`Health ${score} out of 100`}>
       <circle className="hq-ring-track" cx="32" cy="32" r={r} />
       <circle
-        className="hq-ring-fill"
+        className="hq-ring-fill nx-draw"
+        pathLength="1"
         cx="32"
         cy="32"
         r={r}
-        strokeDasharray={`${filled} ${circumference}`}
+        strokeDasharray={`${fraction} 1`}
+        style={{ "--ring": fraction } as CSSProperties}
         transform="rotate(-90 32 32)"
       />
       <text x="32" y="37" textAnchor="middle" className="hq-ring-text">{score}</text>
@@ -53,7 +62,7 @@ export function HqOverview({ businesses }: { businesses: HqCard[] }) {
         const host = hostOf(b.websiteUrl);
         const more = b.issueCount - b.topIssues.length;
         return (
-          <li key={b.slug} className={`hq-card tone-${scoreTone(b.score)}`}>
+          <li key={b.slug} className={`hq-card edge-${EDGE[scoreTone(b.score)]}`}>
             <a href={`/deck/hq/${b.slug}`} className="hq-card-link">
               <div className="hq-card-head">
                 {b.logoUrl ? (

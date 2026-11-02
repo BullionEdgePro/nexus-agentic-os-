@@ -56,6 +56,9 @@ test("every custom property a stylesheet reads is one something defines", () => 
     // Set from code at runtime (e.g. the inbox's --vvh, the visible height the
     // phone keyboard shrinks) — defined, just not in a stylesheet.
     for (const m of src.matchAll(/setProperty\(\s*["'](--[\w-]+)["']/g)) defined.add(m[1]);
+    // Or set in a React inline style object (e.g. Business HQ's score ring,
+    // `style={{ "--ring": 0.62 }}`) — the quoted key is the definition.
+    if (/\.tsx$/.test(file)) for (const m of src.matchAll(/["'](--[\w-]+)["']\s*:/g)) defined.add(m[1]);
     for (const m of src.matchAll(/var\(\s*(--[\w-]+)/g)) {
       if (!used.has(m[1])) used.set(m[1], new Set());
       used.get(m[1]).add(file.slice(web.length + 1));
