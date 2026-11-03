@@ -298,6 +298,18 @@ The Pulse, the verdict, the tiles and `isQuiet` pick this up with no further cha
 board counts to its list of period activity. Before staff use the board, the newly built steps honestly
 show as **idle**.
 
+**Dubai compliance table.** It says today that these papers are kept outside Nexus, which would become
+false. So:
+
+- `evidence` also gains `permits: { advertised: number; expired: number }`. These are counts of now:
+  open units in S9 or S10, and how many of them have a permit that expired before today in the
+  business's timezone. `isQuiet` must not count them.
+- The **Form A** and **Trakheesi permit** rows read "On the board: N units advertised · M with an expired
+  permit". When M > 0, M is shown in the warning colour.
+- The **Ejari**, **Form F**, **KYC/AML** and **DLD transfer** rows read "Recorded on each deal on the
+  board".
+- The "Tracking it would need" column goes.
+
 ## 9. Web
 
 - **`apps/web/lib/api.ts`:** the board's types and a call per endpoint.
