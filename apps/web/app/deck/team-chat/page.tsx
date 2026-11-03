@@ -14,10 +14,11 @@ import {
 import { useTeamSocket, type TeamSocketEvent } from "@/lib/use-team-socket";
 import { useTeamThread } from "@/lib/use-team-thread";
 import { ThreadMessages } from "../../team-chat-thread";
+import { TeamComposer } from "../../team-chat/composer";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
-import "./team-chat.css";
+import "../../team-chat/team-chat.css";
 
 /**
  * Team chat — staff of one business talking to each other (24 Oct 2026).
@@ -37,9 +38,9 @@ export default function TeamChatPage() {
   const [data, setData] = useState<TeamThreadsResponse | null>(null);
   const [loadError, setLoadError] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [mentionIds, setMentionIds] = useState<Record<string, string>>({});
   const [opening, setOpening] = useState<string | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const [unreadAtOpen, setUnreadAtOpen] = useState(0);
 
   // The admin chooses a business; staff have exactly one.
   useEffect(() => {
@@ -59,7 +60,7 @@ export default function TeamChatPage() {
     }
   }, [ready, businessParam]);
 
-  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void loadThreads());
+  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void loadThreads(), data?.me.key ?? null);
 
   useEffect(() => {
     setActiveId(null);
@@ -112,6 +113,25 @@ export default function TeamChatPage() {
   );
   const directWith = (colleagueId: string) =>
     data?.threads.find((t) => t.kind === "direct" && (t.memberA === colleagueId || t.memberB === colleagueId));
+  // The visible height, which shrinks when a phone keyboard opens, so an open
+  // chat's box stays above it (as the inbox does; iOS keeps 100dvh unchanged).
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const sync = () => document.documentElement.style.setProperty("--vvh", `${viewport.height}px`);
+    sync();
+    viewport.addEventListener("resize", sync);
+    return () => viewport.removeEventListener("resize", sync);
+  }, []);
+
+  // How much was unread when a chat was opened: the "N unread messages" strip.
+  const latest = useRef(data);
+  latest.current = data;
+  useEffect(() => {
+    setShowMembers(false);
+    setUnreadAtOpen(latest.current?.threads.find((t) => t.id === activeId)?.unread ?? 0);
+  }, [activeId]);
+
   const mentionable: TeamColleague[] = useMemo(() => {
     if (!active) return [];
     if (active.kind === "room") return colleagues;
@@ -138,27 +158,6 @@ export default function TeamChatPage() {
     }
   }
 
-  function send() {
-    const body = draft.trim();
-    const mentions = Object.entries(mentionIds)
-      .filter(([name]) => body.includes(`@${name}`))
-      .map(([, id]) => id);
-    if (!thread.send(body, mentions)) return;
-    setDraft("");
-    setMentionIds({});
-  }
-
-  // "@" at the end of the draft offers colleagues.
-  const mentionQuery = /(?:^|\s)@([\p{L}\p{N} ]{0,30})$/u.exec(draft)?.[1] ?? null;
-  const suggestions =
-    mentionQuery === null
-      ? []
-      : mentionable.filter((c) => c.fullName.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 6);
-  function pickMention(colleague: TeamColleague) {
-    setDraft((text) => text.replace(/@([\p{L}\p{N} ]{0,30})$/u, `@${colleague.fullName} `));
-    setMentionIds((ids) => ({ ...ids, [colleague.fullName]: colleague.id }));
-  }
-
   // ---- render -----------------------------------------------------------
   const threadTitle = !active
     ? ""
@@ -167,6 +166,29 @@ export default function TeamChatPage() {
       : me?.isAdmin
         ? `${active.memberAName ?? "?"} & ${active.memberBName ?? "?"}`
         : (otherOf(active).name ?? "Colleague");
+
+  // The header's members line and list, as WhatsApp's group header shows them.
+  const members: Array<{ id: string; name: string; note: string | null }> = !active
+    ? []
+    : active.kind === "room"
+      ? [
+          ...colleagues.map((c) => ({ id: c.id, name: c.fullName, note: c.onShift ? "on shift" : null })),
+          ...(me?.isAdmin ? [] : [{ id: "me", name: `${me?.name ?? "You"} (you)`, note: null }]),
+        ]
+      : [
+          { id: active.memberA ?? "a", name: active.memberAName ?? "?", note: null },
+          { id: active.memberB ?? "b", name: active.memberBName ?? "?", note: null },
+        ];
+  const headLine = !active
+    ? ""
+    : active.kind === "room"
+      ? [...colleagues.map((c) => c.fullName.split(/\s+/)[0]), ...(me?.isAdmin ? [] : ["you"])].join(", ") ||
+        `Everyone at ${data?.business.name ?? ""}`
+      : me?.isAdmin
+        ? "Direct chat"
+        : colleagues.find((c) => c.id === otherOf(active).id)?.onShift
+          ? "On shift now"
+          : "Off shift — they will see it when they are back";
 
   return (
     <div className={`deck-root ${fontVariables}`}>
@@ -283,22 +305,39 @@ export default function TeamChatPage() {
                     <button type="button" className="tc-back" onClick={() => setActiveId(null)} aria-label="Back to chats">
                       ←
                     </button>
-                    <div>
+                    <span className={`tc-av${active.kind === "room" ? " tc-av-room" : ""}`} aria-hidden="true">
+                      {initials(active.kind === "room" ? data.business.name : threadTitle)}
+                    </span>
+                    <div className="tc-head-who">
                       <h2>{threadTitle}</h2>
-                      <small>
-                        {active.kind === "room"
-                          ? `Everyone at ${data.business.name} · ${colleagues.length + (me?.isAdmin ? 0 : 1)} people`
-                          : me?.isAdmin
-                            ? "Direct chat"
-                            : colleagues.find((c) => c.id === otherOf(active).id)?.onShift
-                              ? "On shift now"
-                              : "Off shift — they will see it when they are back"}
-                      </small>
+                      <button
+                        type="button"
+                        className="tc-head-members"
+                        aria-expanded={showMembers}
+                        onClick={() => setShowMembers((open) => !open)}
+                      >
+                        {headLine}
+                      </button>
                     </div>
                     {socket !== "open" && socket !== "off" ? (
                       <span className="tc-live off">Reconnecting…</span>
                     ) : socket === "open" ? (
                       <span className="tc-live">Live</span>
+                    ) : null}
+                    {showMembers ? (
+                      <ul className="tc-members" aria-label="Members">
+                        {members.map((member) => (
+                          <li key={member.id}>
+                            <span className="tc-av" aria-hidden="true">
+                              {initials(member.name)}
+                            </span>
+                            <span>
+                              {member.name}
+                              {member.note ? <small> · {member.note}</small> : null}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                   </header>
 
@@ -307,6 +346,7 @@ export default function TeamChatPage() {
                     me={me}
                     kind={active.kind}
                     emptyText={active.kind === "room" ? "Nothing said yet. Say hello to the team." : "No messages yet."}
+                    unreadAtOpen={unreadAtOpen}
                   />
 
                   {thread.error ? (
@@ -316,50 +356,14 @@ export default function TeamChatPage() {
                   ) : null}
 
                   {thread.canPost ? (
-                    <form
-                      className="tc-compose"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        send();
-                      }}
-                    >
-                      {suggestions.length > 0 ? (
-                        <ul className="tc-suggest" role="listbox" aria-label="Mention a colleague">
-                          {suggestions.map((c) => (
-                            <li key={c.id}>
-                              <button type="button" onClick={() => pickMention(c)}>
-                                @{c.fullName}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      <textarea
-                        value={draft}
-                        onChange={(event) => {
-                          setDraft(event.target.value);
-                          thread.notifyTyping();
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" && !event.shiftKey) {
-                            event.preventDefault();
-                            if (suggestions.length > 0) pickMention(suggestions[0]!);
-                            else send();
-                          }
-                        }}
-                        placeholder={
-                          active.kind === "room"
-                            ? `Message the ${data.business.name} team — type @ to mention someone`
-                            : `Message ${threadTitle}`
-                        }
-                        rows={2}
-                        maxLength={4000}
-                        aria-label="Message"
-                      />
-                      <button type="submit" disabled={!draft.trim()}>
-                        Send
-                      </button>
-                    </form>
+                    <TeamComposer
+                      key={active.id}
+                      thread={thread}
+                      colleagues={mentionable}
+                      placeholder={
+                        active.kind === "room" ? "Message the team · @ to mention" : `Message ${threadTitle.split(/\s+/)[0]}`
+                      }
+                    />
                   ) : active.kind === "direct" && me?.isAdmin ? (
                     <p className="tc-readonly">
                       Read only — between {active.memberAName} and {active.memberBName}.
@@ -392,7 +396,8 @@ function Badges({ thread }: { thread: TeamThreadSummary }) {
 function preview(thread: TeamThreadSummary): string {
   const last = thread.lastMessage;
   if (!last) return thread.kind === "room" ? "Everyone at this business" : "No messages yet";
-  return last.removed ? `${last.authorName}: message removed` : `${last.authorName}: ${last.body}`;
+  // A voice note, photo or file has no words of its own to show here.
+  return last.removed ? `${last.authorName}: message removed` : `${last.authorName}: ${last.body || "📎 sent an attachment"}`;
 }
 
 function initials(name: string | null): string {

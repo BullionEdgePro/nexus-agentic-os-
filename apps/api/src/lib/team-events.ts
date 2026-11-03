@@ -1,5 +1,5 @@
 import { Redis } from "ioredis";
-import type { TeamMessage } from "@nexus/db";
+import type { TeamMessage, TeamReaction } from "@nexus/db";
 import { env } from "../config/env.js";
 import { logger } from "./logger.js";
 
@@ -11,7 +11,7 @@ import { logger } from "./logger.js";
 export const TEAM_EVENTS_CHANNEL = "nexus:team-events";
 
 export interface TeamEvent {
-  type: "team_message" | "team_message_removed" | "team_read" | "team_typing";
+  type: "team_message" | "team_message_removed" | "team_read" | "team_typing" | "team_reaction";
   organizationId: string;
   organizationSlug: string;
   threadId: string;
@@ -23,6 +23,11 @@ export interface TeamEvent {
   reader?: string;
   /** The typer's name, for "<name> is typing". */
   name?: string;
+  /** team_reaction: the message and all of its reactions now. */
+  messageId?: string;
+  reactions?: TeamReaction[];
+  /** team_read in a room: when everybody had read up to (null while someone never has). */
+  seenByAllAt?: string | null;
 }
 
 function client(): Redis {

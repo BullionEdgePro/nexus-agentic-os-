@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { TeamChatMessage } from "./api";
+import type { TeamChatMessage, TeamReaction } from "./api";
 
 /** What the API publishes on /ws/team (apps/api/src/lib/team-events.ts). */
 export interface TeamSocketEvent {
-  type: "team_message" | "team_message_removed" | "team_read" | "team_typing";
+  type: "team_message" | "team_message_removed" | "team_read" | "team_typing" | "team_reaction";
   organizationId: string;
   organizationSlug: string;
   threadId: string;
@@ -15,6 +15,11 @@ export interface TeamSocketEvent {
   reader?: string;
   /** The typer's name, for team_typing. */
   name?: string;
+  /** team_reaction: the message and all of its reactions now. */
+  messageId?: string;
+  reactions?: TeamReaction[];
+  /** team_read in a room: when everybody had read up to. */
+  seenByAllAt?: string | null;
 }
 
 export type TeamSocketStatus = "off" | "connecting" | "open" | "closed";

@@ -5,6 +5,7 @@ import { getTeamThreads, openDirectChat, readableError, type TeamThreadsResponse
 import { useTeamSocket, type TeamSocketEvent } from "@/lib/use-team-socket";
 import { useTeamThread } from "@/lib/use-team-thread";
 import { ThreadMessages } from "../team-chat-thread";
+import { TeamComposer } from "../team-chat/composer";
 
 /**
  * Team chat beside the work (24 Oct 2026, Focus workspace): the team room and
@@ -19,7 +20,7 @@ export function TeamDock({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<TeamThreadsResponse | null>(null);
   const [loadError, setLoadError] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [unreadAtOpen, setUnreadAtOpen] = useState(0);
   const [opening, setOpening] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -37,7 +38,7 @@ export function TeamDock({ onClose }: { onClose: () => void }) {
     void load();
   }, [load]);
 
-  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void load());
+  const thread = useTeamThread(activeId, data?.me.employeeId ?? null, () => void load(), data?.me.key ?? null);
   const threadRef = useRef(thread);
   threadRef.current = thread;
 
@@ -87,9 +88,12 @@ export function TeamDock({ onClose }: { onClose: () => void }) {
     }
   }
 
-  function send() {
-    if (thread.send(draft)) setDraft("");
-  }
+  // How much was unread when a chat was opened: the "N unread messages" strip.
+  const latest = useRef(data);
+  latest.current = data;
+  useEffect(() => {
+    setUnreadAtOpen(latest.current?.threads.find((t) => t.id === activeId)?.unread ?? 0);
+  }, [activeId]);
 
   const unreadFor = (colleagueId: string) =>
     data?.threads.find((t) => t.kind === "direct" && (t.memberA === colleagueId || t.memberB === colleagueId))?.unread ?? 0;
@@ -98,6 +102,12 @@ export function TeamDock({ onClose }: { onClose: () => void }) {
       ? active.memberBName
       : active.memberAName
     : null;
+  // Who may be @mentioned: the whole team in the room, the other person in a direct chat.
+  const mentionable = !data || !active
+    ? []
+    : active.kind === "room"
+      ? data.colleagues
+      : data.colleagues.filter((c) => c.id === active.memberA || c.id === active.memberB);
 
   return (
     <section className="ibx-dock" aria-label="Team chat">
@@ -147,38 +157,16 @@ export function TeamDock({ onClose }: { onClose: () => void }) {
             me={me}
             kind={active.kind}
             emptyText={active.kind === "room" ? "Nothing said yet. Say hello to the team." : "No messages yet."}
+            unreadAtOpen={unreadAtOpen}
           />
           {thread.error ? <p className="tc-error">{thread.error}</p> : null}
-          {thread.canPost ? (
-            <form
-              className="tc-compose"
-              onSubmit={(event) => {
-                event.preventDefault();
-                send();
-              }}
-            >
-              <textarea
-                value={draft}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  thread.notifyTyping();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    send();
-                  }
-                }}
-                placeholder={active.kind === "room" ? `Message the ${data?.business.name ?? ""} team` : `Message ${otherName ?? "your colleague"}`}
-                rows={2}
-                maxLength={4000}
-                aria-label="Message"
-              />
-              <button type="submit" disabled={!draft.trim()}>
-                Send
-              </button>
-            </form>
-          ) : null}
+          <TeamComposer
+            key={active.id}
+            thread={thread}
+            colleagues={mentionable}
+            placeholder={active.kind === "room" ? `Message the ${data?.business.name ?? ""} team` : `Message ${otherName ?? "your colleague"}`}
+            compact
+          />
         </>
       ) : !loadError ? (
         <p className="tc-empty">Loading…</p>

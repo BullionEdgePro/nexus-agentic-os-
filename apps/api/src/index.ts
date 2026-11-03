@@ -53,6 +53,7 @@ import { listJobHeartbeats } from "@nexus/db";
 import { isJobStalled, type ScheduledJob } from "@nexus/shared";
 import { readQueueHealth } from "./queue/queue-health.js";
 import { tenantContext, webhookContext } from "./middleware/tenant-context.js";
+import { teamUploadGate } from "./lib/team-upload.js";
 
 const app = new Hono();
 
@@ -134,6 +135,12 @@ app.use("/api/catalog/*", operatorOnly);
 // an owner's view, like the marketplace above it.
 app.use("/api/channels", operatorOnly);
 app.use("/api/channels/*", operatorOnly);
+
+// A team chat upload (a voice note, photo or file) is read in full BEFORE the
+// tenant context below checks out a database connection: reading it inside
+// would hold one of the pool's connections for as long as a phone on a weak
+// signal takes to send 16 MB. See lib/team-upload.ts.
+app.use("/api/team-chat/*", teamUploadGate);
 
 // Every /api/* request runs inside a database tenant context — a named one for
 // a single business, an explicitly-reasoned cross-tenant one otherwise. Placed

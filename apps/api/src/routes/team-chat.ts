@@ -6,6 +6,7 @@ import {
   ensureRoom,
   findConversationById,
   findEmployeeById,
+  findMessageByClientId,
   findOrganizationById,
   findOrganizationBySlug,
   findThread,
@@ -18,13 +19,23 @@ import {
   listThreadSummaries,
   markTeamRead,
   postTeamMessage,
+  reactionsFor,
   readerKey,
   removeTeamMessage,
+  removeTeamReaction,
+  replySnippet,
+  saveTeamFile,
+  seenByAllAt,
+  setTeamReaction,
   setConversationCollaborators,
   sharedConversationCards,
   teamAccess,
+  teamFileBytes,
+  teamFileMeta,
+  teamMessagesByIds,
   teamUnread,
   withTenant,
+  type TeamFileMeta,
   type TeamMessage,
   type TeamThread,
   type TeamViewer,
@@ -34,6 +45,8 @@ import { resolvePresence } from "@nexus/employees";
 import type { Employee } from "@nexus/shared";
 import type { SessionScope } from "../lib/session.js";
 import { publishTeamEvent, type TeamEvent } from "../lib/team-events.js";
+import { checkUpload, cleanName, isEmoji, servedHeaders, TEAM_LIMITS } from "../lib/team-files.js";
+import { readTeamUpload } from "../lib/team-upload.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -137,14 +150,63 @@ async function publish(event: TeamEvent): Promise<void> {
   }
 }
 
-/** Messages with the hand-over card resolved (customer name and channel). */
-async function withCards(messages: TeamMessage[]) {
-  const ids = [...new Set(messages.map((m) => m.sharedConversationId).filter((id): id is string => !!id))];
-  const cards = await sharedConversationCards(ids);
+const publicFile = (meta: TeamFileMeta) => ({
+  id: meta.id,
+  kind: meta.kind,
+  name: meta.name,
+  size: meta.size,
+  mime: meta.mime,
+  durationMs: meta.durationMs,
+  waveform: meta.waveform,
+  width: meta.width,
+  height: meta.height,
+});
+
+const present = (ids: Array<string | null>) => [...new Set(ids.filter((id): id is string => !!id))];
+
+/**
+ * Messages as every screen and live event receives them: the hand-over card
+ * resolved (customer name and channel), the attached file described (never
+ * its bytes), the quoted message as a snippet, and the reactions grouped.
+ */
+async function shapeMessages(organizationId: string, messages: TeamMessage[]) {
+  const cards = await sharedConversationCards(present(messages.map((m) => m.sharedConversationId)));
+  const { files, originals, reactions } = await withTenant(organizationId, async () => {
+    const originals = await teamMessagesByIds(present(messages.map((m) => m.replyToId)));
+    const files = await teamFileMeta(
+      present([...messages.map((m) => m.fileId), ...[...originals.values()].map((m) => m.fileId)])
+    );
+    const reactions = await reactionsFor(messages.map((m) => m.id));
+    return { files, originals, reactions };
+  });
   return messages.map((m) => {
     const card = m.sharedConversationId ? cards.get(m.sharedConversationId) : undefined;
-    return { ...m, share: card && m.sharedConversationId ? { conversationId: m.sharedConversationId, ...card } : null };
+    const file = m.fileId ? files.get(m.fileId) : undefined;
+    const original = m.replyToId ? originals.get(m.replyToId) : undefined;
+    return {
+      ...m,
+      share: card && m.sharedConversationId ? { conversationId: m.sharedConversationId, ...card } : null,
+      file: file && !file.deletedAt ? publicFile(file) : null,
+      replyTo: original
+        ? {
+            id: original.id,
+            authorName: original.authorName,
+            ...replySnippet(original, original.fileId ? (files.get(original.fileId) ?? null) : null),
+          }
+        : null,
+      reactions: reactions.get(m.id) ?? [],
+    };
   });
+}
+
+/** A JSON array sent as one form field (mentions in a multipart send). */
+function jsonList(value: unknown): unknown {
+  if (typeof value !== "string" || !value) return [];
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -174,7 +236,9 @@ teamChatRoute.get("/threads", async (c) => {
 
   return c.json({
     business: { slug: organization?.slug ?? "", name: organization?.name ?? "" },
-    me: { employeeId: me, isAdmin: who.role === "admin", name: who.name },
+    // `key` is how this viewer appears in reactions and reads, so a screen can
+    // tell its own reaction from a colleague's (the admin's is admin:<id>).
+    me: { employeeId: me, isAdmin: who.role === "admin", name: who.name, key: readerKey(who.viewer) },
     threads,
     colleagues: employees
       .filter((e) => e.isActive && e.id !== me)
@@ -225,16 +289,18 @@ teamChatRoute.get("/threads/:id/messages", async (c) => {
 
   const me = who.role === "staff" ? who.viewer.employeeId : null;
   const other = thread.kind === "direct" && me ? (thread.memberA === me ? thread.memberB : thread.memberA) : null;
-  const [messages, seenByOther] = await withTenant(thread.organizationId, async () => [
+  const [messages, seenByOther, seenByEveryone] = await withTenant(thread.organizationId, async () => [
     await listTeamMessages(thread.id, before, limit),
     other ? await lastReadBy(thread.id, other) : null,
+    thread.kind === "room" ? await seenByAllAt(thread) : null,
   ] as const);
 
   return c.json({
     thread,
     canPost: teamAccess(thread, who.viewer).post,
     seenByOther,
-    messages: await withCards(messages),
+    seenByAllAt: seenByEveryone,
+    messages: await shapeMessages(thread.organizationId, messages),
   });
 });
 
@@ -250,17 +316,81 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
   // The admin reads a direct chat between two staff; it is not theirs to write in.
   if (!access.post) return c.json(NOT_FOUND, 404);
 
-  const input = (await c.req.json().catch(() => null)) as {
+  // A voice note, photo or file comes as a form (2 Nov 2026); words alone as
+  // JSON, as before. The form is read by readTeamUpload — normally already, by
+  // teamUploadGate, before this request took a database connection — counting
+  // its bytes, so a 500 MB upload is refused without being buffered.
+  let input: {
     clientId?: unknown;
     body?: unknown;
     mentions?: unknown;
     shareConversationId?: unknown;
+    replyTo?: unknown;
   } | null;
+  let upload: { kind: unknown; file: File; preview: File | null; fields: Record<string, unknown> } | null = null;
+  if ((c.req.header("content-type") ?? "").startsWith("multipart/form-data")) {
+    const read = await readTeamUpload(c);
+    if (!read.ok) return c.json({ error: read.error }, read.status);
+    const form = read.form;
+    if (!(form.file instanceof File)) return c.json({ error: "Attach a voice note, a photo or a file." }, 400);
+    input = { clientId: form.clientId, body: form.body ?? "", mentions: jsonList(form.mentions), replyTo: form.replyTo };
+    upload = { kind: form.kind, file: form.file, preview: form.preview instanceof File ? form.preview : null, fields: form };
+  } else {
+    input = (await c.req.json().catch(() => null)) as typeof input;
+  }
   const clientId = typeof input?.clientId === "string" ? input.clientId.trim().slice(0, 80) : "";
   const text = typeof input?.body === "string" ? input.body.trim() : "";
   if (!clientId) return c.json({ error: "This message has no id; reload the page and send it again." }, 400);
-  if (!text) return c.json({ error: "Write a message first." }, 400);
-  if (text.length > 4000) return c.json({ error: "That message is too long (4000 characters at most)." }, 400);
+  if (!text && !upload) return c.json({ error: "Write a message first." }, 400);
+  if (text.length > TEAM_LIMITS.bodyMax) return c.json({ error: "That message is too long (4000 characters at most)." }, 400);
+
+  // A reply quotes a message of THIS thread, never one from another chat.
+  const replyToId = typeof input?.replyTo === "string" && input.replyTo ? input.replyTo : null;
+  if (replyToId) {
+    const original = /^[0-9a-f-]{36}$/i.test(replyToId)
+      ? (await withTenant(thread.organizationId, () => teamMessagesByIds([replyToId]))).get(replyToId)
+      : undefined;
+    if (!original || original.threadId !== thread.id) {
+      return c.json({ error: "That message is not in this chat." }, 400);
+    }
+  }
+
+  let file: {
+    kind: "voice" | "photo" | "file";
+    mime: string;
+    name: string;
+    bytes: Uint8Array;
+    preview: Uint8Array | null;
+    durationMs: number | null;
+    waveform: number[] | null;
+    width: number | null;
+    height: number | null;
+  } | null = null;
+  if (upload) {
+    const bytes = new Uint8Array(await upload.file.arrayBuffer());
+    const preview = upload.preview ? new Uint8Array(await upload.preview.arrayBuffer()) : null;
+    const checked = checkUpload({
+      kind: String(upload.kind ?? ""),
+      bytes,
+      preview,
+      durationMs: upload.fields.durationMs,
+      waveform: upload.fields.waveform,
+      width: upload.fields.width,
+      height: upload.fields.height,
+    });
+    if (!checked.ok) return c.json({ error: checked.error }, 400);
+    file = {
+      kind: checked.kind,
+      mime: checked.mime,
+      name: cleanName(upload.file.name),
+      bytes,
+      preview: checked.kind === "photo" ? preview : null,
+      durationMs: checked.durationMs,
+      waveform: checked.waveform,
+      width: checked.width,
+      height: checked.height,
+    };
+  }
 
   const me = who.role === "staff" ? who.viewer.employeeId : null;
   const employees = await withTenant(thread.organizationId, () => listEmployees(thread.organizationId));
@@ -290,7 +420,12 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
     };
   }
 
+  // One transaction: a retry finds its first send and stores nothing; a new
+  // send stores its file and its message together, or neither.
   const { message, created } = await withTenant(thread.organizationId, async () => {
+    const existing = await findMessageByClientId(thread.id, clientId);
+    if (existing) return { message: existing, created: false };
+    const savedFile = file ? await saveTeamFile({ thread, uploader: readerKey(who.viewer), ...file }) : null;
     const saved = await postTeamMessage({
       thread,
       authorEmployeeId: me,
@@ -300,6 +435,8 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
       clientId,
       mentions,
       sharedConversationId: share?.conversationId ?? null,
+      fileId: savedFile?.id ?? null,
+      replyToId,
     });
     await markTeamRead(thread, readerKey(who.viewer));
     return saved;
@@ -308,7 +445,7 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
   if (created && share?.addCollaborator) {
     await setConversationCollaborators(share.conversationId, [...share.collaborators, share.addCollaborator]);
   }
-  const [shaped] = await withCards([message]);
+  const [shaped] = await shapeMessages(thread.organizationId, [message]);
   if (created) await publish(await eventFor(thread, "team_message", { message: shaped }));
   return c.json({ message: shaped }, created ? 201 : 200);
 });
@@ -322,9 +459,115 @@ teamChatRoute.post("/threads/:id/read", async (c) => {
     return c.json(NOT_FOUND, 404);
   }
   const reader = readerKey(who.viewer);
-  await withTenant(thread.organizationId, () => markTeamRead(thread, reader));
-  await publish(await eventFor(thread, "team_read", { reader }));
+  const seenByEveryone = await withTenant(thread.organizationId, async () => {
+    await markTeamRead(thread, reader);
+    return thread.kind === "room" ? await seenByAllAt(thread) : null;
+  });
+  // In a room, ✓✓ means everybody has read it, so each read says where that now is.
+  await publish(
+    await eventFor(thread, "team_read", { reader, ...(thread.kind === "room" ? { seenByAllAt: seenByEveryone } : {}) })
+  );
   return c.json({ ok: true });
+});
+
+// ---- voice notes, photos and files (2 Nov 2026) ----------------------------
+//
+// Fetched through the thread they belong to, so access is decided exactly as
+// for the thread's messages, and a file id from another chat named under a
+// thread you can read is still "not found". Only real photos and voice notes
+// are served as what they are; everything else downloads, sandboxed.
+
+/** A file of a thread the handler has already let the caller read. */
+async function serveFile(c: Context, thread: TeamThread, which: "bytes" | "preview") {
+  const id = c.req.param("id") ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json(NOT_FOUND, 404);
+  const found = await withTenant(thread.organizationId, () => teamFileBytes(id, which));
+  if (!found || found.meta.threadId !== thread.id) return c.json(NOT_FOUND, 404);
+  // A preview is always the JPEG the sender's device made (checked on upload).
+  const headers =
+    which === "preview"
+      ? servedHeaders({ kind: "photo", mime: "image/jpeg", name: found.meta.name })
+      : servedHeaders(found.meta);
+  return c.body(found.bytes, 200, headers);
+}
+
+teamChatRoute.get("/threads/:threadId/files/:id", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  return serveFile(c, thread, "bytes");
+});
+
+teamChatRoute.get("/threads/:threadId/files/:id/preview", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  return serveFile(c, thread, "preview");
+});
+
+// ---- reactions ---------------------------------------------------------------
+
+/** The message a reaction is for: in this thread, and still standing. */
+async function reactionTarget(c: Context, thread: TeamThread) {
+  const id = c.req.param("id") ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const message = (await withTenant(thread.organizationId, () => teamMessagesByIds([id]))).get(id);
+  if (!message || message.threadId !== thread.id || message.deletedAt) return null;
+  return message;
+}
+
+async function reactionsNow(thread: TeamThread, messageId: string) {
+  return (await reactionsFor([messageId])).get(messageId) ?? [];
+}
+
+teamChatRoute.put("/threads/:threadId/messages/:id/reaction", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  // The admin reads a direct chat; reacting in it is writing in it.
+  if (!teamAccess(thread, who.viewer).post) return c.json(NOT_FOUND, 404);
+  const message = await reactionTarget(c, thread);
+  if (!message) return c.json(NOT_FOUND, 404);
+  const input = (await c.req.json().catch(() => null)) as { emoji?: unknown } | null;
+  if (!isEmoji(input?.emoji)) return c.json({ error: "Pick an emoji to react with." }, 400);
+  const emoji = input.emoji;
+  const reactions = await withTenant(thread.organizationId, async () => {
+    await setTeamReaction({ thread, messageId: message.id, reactor: readerKey(who.viewer), reactorName: who.name, emoji });
+    return reactionsNow(thread, message.id);
+  });
+  await publish(await eventFor(thread, "team_reaction", { messageId: message.id, reactions }));
+  return c.json({ reactions });
+});
+
+teamChatRoute.delete("/threads/:threadId/messages/:id/reaction", async (c) => {
+  const who = await viewerOf(c);
+  if (!who) return c.json(NOT_FOUND, 404);
+  const thread = await readableThread(who, c.req.param("threadId"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  if (!thread || !scope || (scope.role !== "operator" && !sameBusiness(c, thread.organizationId))) {
+    return c.json(NOT_FOUND, 404);
+  }
+  if (!teamAccess(thread, who.viewer).post) return c.json(NOT_FOUND, 404);
+  const message = await reactionTarget(c, thread);
+  if (!message) return c.json(NOT_FOUND, 404);
+  const reactions = await withTenant(thread.organizationId, async () => {
+    await removeTeamReaction(message.id, readerKey(who.viewer));
+    return reactionsNow(thread, message.id);
+  });
+  await publish(await eventFor(thread, "team_reaction", { messageId: message.id, reactions }));
+  return c.json({ reactions });
 });
 
 // "<name> is typing" (24 Oct 2026, Focus workspace). Nothing is stored: the
