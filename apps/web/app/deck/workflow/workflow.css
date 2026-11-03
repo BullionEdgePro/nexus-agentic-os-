@@ -232,3 +232,54 @@
   .wf-skeleton { animation: wf-breathe 1.4s ease-in-out infinite alternate; }
   @keyframes wf-breathe { from { opacity: .55; } to { opacity: 1; } }
 }
+
+/* ---- the workflow board (3 Nov 2026) ---------------------------------------------------- */
+/* Two lanes of steps that take cards. Each lane scrolls sideways inside itself;
+   the page never does. Spec: docs/superpowers/specs/2026-11-03-sfs-workflow-board-design.md §2 */
+.wf-board-panel { display: flex; flex-direction: column; gap: 14px; }
+.wf-board-bar { display: flex; justify-content: flex-end; }
+.wf-board-status { min-height: 1.2em; margin: 0; font-size: 14px; font-weight: 600; color: var(--warn); }
+.wf-board-status:empty { min-height: 0; }
+.wf-board { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.wf-board-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.wf-board-closed, .wf-board-waiting { padding: 14px 16px; border-radius: var(--r-lg); background: var(--pebble); min-width: 0; }
+.wf-board-figs { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; column-gap: 18px; margin: 8px 0 0; }
+.wf-board-figs dt { font-size: 12px; font-weight: 600; color: var(--slate); grid-row: 1; }
+.wf-board-figs dd { margin: 0; font-size: 20px; font-weight: 800; color: var(--ink); grid-row: 2; }
+.wf-board-waiting ol { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wf-board-wait { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 6px 8px; border-radius: var(--r); cursor: pointer; font-size: 14px; color: var(--ink); }
+.wf-board-wait:hover { background: var(--paper); }
+.wf-board-wait:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
+.wf-board-wait-step { color: var(--slate); white-space: nowrap; }
+.wf-board-lane-wrap { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wf-board-lane-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wf-board-auto { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 18px; padding: 10px 14px; border-radius: var(--r-lg); border: 1px dashed var(--hairline); }
+.wf-board-auto-note { flex-basis: 100%; margin: 0; font-size: 12px; font-weight: 600; color: var(--slate); }
+.wf-board-auto-steps { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 0; list-style: none; }
+.wf-board-auto-step { display: flex; flex-direction: column; gap: 1px; min-width: 120px; font-size: 13px; }
+.wf-board-auto-tag { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--slate); }
+.wf-board-auto-name { font-weight: 700; color: var(--ink); }
+.wf-board-auto-fig { color: var(--slate); }
+.wf-board-auto-fig b { color: var(--ink); }
+.wf-board-hot { flex: 1 1 260px; min-width: 0; }
+.wf-board-hot ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wf-board-hot li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.wf-board-lane { grid-template-columns: repeat(var(--cols, 6), minmax(210px, 1fr)); overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 6px; }
+.wf-board-card { display: flex; flex-direction: column; align-items: stretch; gap: 3px; text-align: left; }
+.wf-board-missing { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--slate); vertical-align: middle; }
+.wf-board-badge { align-self: flex-start; margin-top: 4px; padding: 2px 8px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; }
+.wf-board-expired { background: var(--warn); color: var(--paper); }
+.wf-board-expiring { background: var(--warn-soft); color: var(--ink); }
+.wf-board-hidden { margin: 0; padding: 6px 8px; border-radius: var(--r); background: var(--paper); font-size: 13px; color: var(--slate); }
+.wf-board-empty { margin: 0; font-size: 13px; color: var(--slate); }
+.wf-board-move { display: flex; flex-direction: column; gap: 6px; }
+.wf-board-move-label { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--slate); }
+.wf-board-move-row { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 760px) {
+  .wf-board-head { grid-template-columns: minmax(0, 1fr); }
+  .wf-board-figs { grid-template-columns: repeat(2, auto); }
+  .wf-board-figs dt:nth-of-type(n + 3) { grid-row: 3; }
+  .wf-board-figs dd:nth-of-type(n + 3) { grid-row: 4; }
+  .wf-board-lane { grid-template-columns: repeat(var(--cols, 6), minmax(78vw, 1fr)); scroll-snap-type: x mandatory; }
+  .wf-board-lane > .kit-col { scroll-snap-align: start; }
+}

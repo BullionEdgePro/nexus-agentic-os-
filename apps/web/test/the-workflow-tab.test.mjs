@@ -175,7 +175,7 @@ test("while it loads, the panel shows the page's outline, marked busy", () => {
 
 test("the panel asks again on Try again and Refresh, and keeps figures it already has", () => {
   const P = read("app/deck/workflow/panel.tsx");
-  assert.match(P, /export function WorkflowPanel\(\{ slug \}/);
+  assert.match(P, /export function WorkflowPanel\(\{ slug[ ,]/);
   assert.match(P, /getWorkflowAudit\(/);
   assert.match(P, /const asked = \+\+requestId\.current;/);
   assert.match(P, /if \(asked !== requestId\.current\) return;/);
