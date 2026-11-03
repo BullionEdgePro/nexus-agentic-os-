@@ -7,6 +7,7 @@ import {
   isolated,
   listChatsWaitingForAssignee,
   listEmployees,
+  isCreatedSeat,
   stampAutoAssigned,
   withAllTenants,
   withServingTenant,
@@ -162,8 +163,11 @@ export async function autoAssignIfEnabled(
         const settings = await getInboxSettings(servingOrganizationId);
         if (!settings.autoAssign) return null;
 
+        // A seat MADE for an admin (migration 108) is where their own connections
+        // live, not a place on the rota: customers are never handed to it
+        // automatically. A working hire an admin was linked to keeps their place.
         const candidates = (await listEmployees(servingOrganizationId)).filter(
-          (employee) => employee.isActive && employee.twinEnabled
+          (employee) => employee.isActive && employee.twinEnabled && !isCreatedSeat(employee)
         );
         if (candidates.length === 0) return null;
         const busy = await busyEmployeeIds(candidates.map((employee) => employee.id)).catch(

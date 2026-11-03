@@ -101,9 +101,15 @@ test("receipts for a staff member's own number land instead of being dropped", (
   assert.match(fn, /withTenant\(organizationId, \(\) =>/);
 });
 
-test("giving a line to someone brings it back from retirement", () => {
+test("giving a line to someone brings it back from retirement — unless it is a business's line", () => {
+  // Since 3 Nov 2026 a business's old shared line given to a person (an admin's
+  // seat) stays switched off as every business's line; it is theirs alone.
+  // Behaviour pinned end to end in the-old-shared-line-stays-off-for-businesses.
   const fn = EMPLOYEES.slice(EMPLOYEES.indexOf("export async function assignEmployeeWhatsAppNumber("));
-  assert.ok(fn.indexOf("delete from retired_whatsapp_numbers where phone_number_id = $1") > -1);
+  assert.match(
+    fn,
+    /delete from retired_whatsapp_numbers\s+where phone_number_id = \$1\s+and not exists \(select 1 from organizations o where o\.whatsapp_phone_number_id = \$1\)/
+  );
   assert.ok(fn.indexOf("delete from retired_whatsapp_numbers") < fn.indexOf("with freed as"));
 });
 

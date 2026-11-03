@@ -8,6 +8,7 @@ export * from "./metrics.js";
 export * from "./broadcasts.js";
 export * from "./email-campaigns.js";
 export * from "./employees.js";
+export * from "./admin-seats.js";
 export * from "./calendars.js";
 export * from "./routing.js";
 export * from "./admins.js";

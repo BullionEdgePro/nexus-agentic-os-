@@ -264,6 +264,11 @@ export async function findConversationById(conversationId: string): Promise<Conv
         // A line that was switched off at Meta (retired_whatsapp_numbers) is not
         // a number to reply from: it comes back null, and the dispatcher says so
         // in words instead of passing on Meta's "not registered" error.
+        // Unless the chat is PINNED to a line a person now holds (3 Nov 2026):
+        // a business's old shared line, reconnected by an admin, stays switched
+        // off as the business's line but is that person's own — their chats on
+        // it reply from it. An old chat that only falls back to the business's
+        // line (phone_number_id null) still gets nothing.
         `select c.id, c.organization_id, c.contact_id, ct.wa_id, c.channel, ct.external_id, o.slug,
                 case when r.phone_number_id is null
                      then coalesce(c.phone_number_id, o.whatsapp_phone_number_id) end as whatsapp_phone_number_id
@@ -272,6 +277,9 @@ export async function findConversationById(conversationId: string): Promise<Conv
          join contacts ct on ct.id = c.contact_id
          left join retired_whatsapp_numbers r
            on r.phone_number_id = coalesce(c.phone_number_id, o.whatsapp_phone_number_id)
+          and not (c.phone_number_id is not null
+                   and exists (select 1 from employees held
+                                where held.whatsapp_phone_number_id = c.phone_number_id and held.is_active))
          where c.id = $1`,
         [conversationId]
       );

@@ -420,9 +420,12 @@ async function processDeliveryStatuses(
   // everything sent from it — their replies and their campaigns — resolve
   // through the person instead. Before this they were dropped as "unmapped" and
   // every staff reply stayed at 'sent' forever.
+  // Person first, like inbound (3 Nov 2026): a business's old shared line that a
+  // person now holds sends only as theirs, so its receipts belong to their
+  // business — read business-first, they would match no row and be dropped.
   const organizationId =
-    (await findOrganizationByPhoneNumberId(phoneNumberId))?.id ??
     (await findEmployeeByPhoneNumberId(phoneNumberId))?.organizationId ??
+    (await findOrganizationByPhoneNumberId(phoneNumberId))?.id ??
     null;
   if (!organizationId) {
     logger.warn({ phoneNumberId }, "Delivery status for an unmapped phone_number_id");
@@ -653,20 +656,25 @@ async function answerOneMessage(
   // that on 2026-09-30), and the missing `?` crashed the job five times over.
   const contactName = change.value.contacts?.find((c) => c.wa_id === message.from)?.profile?.name;
 
+  // A LINE HELD BY A PERSON WINS (3 Nov 2026). Asked first: is this a number
+  // somebody was given — a staff member's own, or an admin's (their seat,
+  // migration 108)? It may ALSO be a business's old shared line: every business
+  // still points at +971 50 480 5436, switched off on 6 Oct, and a person who
+  // reconnects that number must get its messages, not the five-business
+  // switchboard. Safe because a LIVE shared line is never given to a person —
+  // the Team screen and the connect flow both refuse it — so a held line is
+  // always somebody's own.
+  const staffOwner = await findEmployeeByPhoneNumberId(phoneNumberId);
+  if (staffOwner) {
+    await handleStaffNumberMessage(staffOwner, message, text, contactName);
+    return;
+  }
+
   // Resolved outside any tenant context, and correctly so: `organizations` is
   // the tenant registry, not tenant data. Scoping this lookup would be circular
   // — it is the query that decides which tenant we are.
   const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
   if (!organization) {
-    // Not the shared company line — it may be a staff member's OWN dedicated
-    // number. This branch is why it is safe: the shared number always resolves
-    // to an organization above, so this only ever runs for a number a person
-    // was actually given, and does nothing until one is assigned.
-    const staffOwner = await findEmployeeByPhoneNumberId(phoneNumberId);
-    if (staffOwner) {
-      await handleStaffNumberMessage(staffOwner, message, text, contactName);
-      return;
-    }
     logger.warn({ phoneNumberId }, "No organization mapped to inbound phone_number_id");
     return;
   }

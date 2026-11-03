@@ -40,6 +40,7 @@ interface EmployeeRow {
   whatsapp_quality_rating: string | null;
   can_broadcast: boolean;
   broadcast_monthly_cap: number | null;
+  admin_id: string | null;
 }
 
 const EMPLOYEE_COLUMNS = `
@@ -49,7 +50,7 @@ const EMPLOYEE_COLUMNS = `
   escalation_rules, twin_disclosure, digital_signature, manual_presence, manual_presence_until,
   last_seen_at, last_login_at, last_login_device, human_first, is_active,
   whatsapp_verified_name, whatsapp_connected_at, whatsapp_quality_rating,
-  can_broadcast, broadcast_monthly_cap, whatsapp_business_account_id
+  can_broadcast, broadcast_monthly_cap, whatsapp_business_account_id, admin_id
 `;
 
 function toEmployee(row: EmployeeRow): Employee {
@@ -92,6 +93,7 @@ function toEmployee(row: EmployeeRow): Employee {
     lastLoginDevice: row.last_login_device,
     humanFirst: row.human_first,
     isActive: row.is_active,
+    adminId: row.admin_id ?? null,
   };
 }
 
@@ -279,7 +281,20 @@ export async function assignEmployeeWhatsAppNumber(
 
   // A line handed to a person is live again, even one that was switched off
   // before (migration 094) — the same SIM registered anew.
-  await getPool().query(`delete from retired_whatsapp_numbers where phone_number_id = $1`, [input.phoneNumberId]);
+  //
+  // EXCEPT A BUSINESS'S OLD SHARED LINE (final review, 3 Nov 2026). Every
+  // business still points at +971 50 480 5436, switched off on 6 Oct. When an
+  // admin connects it through their seat it becomes THEIR line, and it must stay
+  // switched off as every business's line — or business campaigns, staff without
+  // a number of their own, old chats and assignment alerts in all five
+  // businesses would start leaving from that person's number. So the marker
+  // stays; the person's own chats reply from it anyway (findConversationById).
+  await getPool().query(
+    `delete from retired_whatsapp_numbers
+      where phone_number_id = $1
+        and not exists (select 1 from organizations o where o.whatsapp_phone_number_id = $1)`,
+    [input.phoneNumberId]
+  );
 
   const { rows } = await getPool().query<EmployeeRow>(
     `with freed as (

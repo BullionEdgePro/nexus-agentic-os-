@@ -492,6 +492,11 @@ export interface Employee {
   jobTitle?: string | null;
   department?: string | null;
   permissions: Record<string, unknown>;
+  /**
+   * The admin account this record is the SEAT of (migration 108): an admin's
+   * own place in a business, so they connect accounts like staff. Null for staff.
+   */
+  adminId?: string | null;
 
   whatsappPhoneNumberId?: string | null;
   whatsappNumber?: string | null;

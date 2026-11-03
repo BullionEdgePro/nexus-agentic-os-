@@ -106,9 +106,11 @@ test("the receipt is applied as the number's OWNER, which is the unusual answer 
     PROCESSOR.indexOf("function describeStatusError")
   );
   assert.match(fn, /findOrganizationByPhoneNumberId/);
-  // Owner first; a staff member's OWN number (no business row) resolves through
-  // the person, so their replies' receipts land too (2026-10-06).
-  assert.ok(fn.indexOf("findOrganizationByPhoneNumberId") < fn.indexOf("findEmployeeByPhoneNumberId"));
+  // A line a person HOLDS resolves through that person first (3 Nov 2026, like
+  // inbound): a business's old shared line reconnected by an admin sends only
+  // as theirs. A shared line nobody holds still resolves to its OWNER, as above;
+  // a staff member's own number has resolved through the person since 2026-10-06.
+  assert.ok(fn.indexOf("findEmployeeByPhoneNumberId") < fn.indexOf("findOrganizationByPhoneNumberId"));
   assert.match(fn, /withTenant\(organizationId,/);
   assert.ok(!/withServingTenant/.test(fn), "the serving business cannot see the owner's outbound row");
 });

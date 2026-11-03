@@ -22,7 +22,40 @@ import {
   readableError,
   type ConnectionProvider,
   type SocialConnection,
+  setConnectionsBusiness,
 } from "@/lib/api";
+
+/** Where an admin's chosen business is remembered in this browser. */
+const BUSINESS_KEY = "nexus-connections-business";
+
+/**
+ * Which business an admin is connecting for (3 Nov 2026). Their connections
+ * live in their seat in that business — a WhatsApp number connected here lands
+ * in that business's inbox and its Bulk "Send from" list.
+ */
+export function BusinessPicker({
+  businesses,
+  value,
+  onChange,
+}: {
+  businesses: Array<{ slug: string; name: string }>;
+  value: string | null;
+  onChange: (slug: string | null) => void;
+}) {
+  return (
+    <label className="cnx-business">
+      <span>Connect for</span>
+      <select value={value ?? ""} onChange={(event) => onChange(event.target.value || null)}>
+        <option value="">Choose a business…</option>
+        {businesses.map((b) => (
+          <option key={b.slug} value={b.slug}>
+            {b.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 /**
  * Accounts a staff member has actually connected — Gmail for their client mail,
@@ -46,12 +79,20 @@ export function ConnectionsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // An admin only (3 Nov 2026): every business, and the one they are connecting
+  // for. Null for staff, who have exactly one.
+  const [businesses, setBusinesses] = useState<Array<{ slug: string; name: string }> | null>(null);
+  const [business, setBusiness] = useState<string | null>(null);
 
   const load = async () => {
     try {
       const data = await getConnections();
+      // Staff never name a business, even on a computer an admin has used.
+      if (!data.businesses) setConnectionsBusiness(null);
       setConnections(data.connections);
       setProviders(data.providers);
+      setBusinesses(data.businesses ?? null);
+      setBusiness(data.business ?? null);
       setError(null);
 
       if (data.connections.some((c) => c.provider === "gmail" && c.usable)) {
@@ -59,17 +100,53 @@ export function ConnectionsPanel() {
           .then((m) => setMail({ messages: m.messages, note: m.note }))
           .catch((err) => setNotice(readableError(err, "Gmail could not be read just now.")));
       }
+      return data;
     } catch (err) {
       const message = readableError(err, "Could not load your connections.");
       // The owner has no personal accounts here. That is a fact about the role,
       // not a failure, so it is shown as a note rather than an error.
       if (/owner has no personal account/i.test(message)) setConnections([]);
       else setError(message);
+      return null;
     }
   };
 
-  useEffect(() => {
+  /** For a card that only needs the list read again. */
+  const reload = async (): Promise<void> => {
+    await load();
+  };
+
+  /** An admin picks the business; remembered per browser, so a sign-in round trip lands back on it. */
+  const choose = (slug: string | null) => {
+    try {
+      if (slug) localStorage.setItem(BUSINESS_KEY, slug);
+      else localStorage.removeItem(BUSINESS_KEY);
+    } catch {
+      // Storage blocked: the choice still holds for this visit.
+    }
+    setConnectionsBusiness(slug);
+    setMail(null);
     void load();
+  };
+
+  useEffect(() => {
+    void (async () => {
+      const data = await load();
+      // An admin's remembered business — applied only once the server has said
+      // this is an admin, and only if that business still exists.
+      if (data?.businesses && !data.business) {
+        let saved: string | null = null;
+        try {
+          saved = localStorage.getItem(BUSINESS_KEY);
+        } catch {
+          // Storage blocked: the admin chooses again.
+        }
+        if (saved && data.businesses.some((b) => b.slug === saved)) {
+          setConnectionsBusiness(saved);
+          await load();
+        }
+      }
+    })();
     // A returning OAuth redirect carries its outcome in the URL. Read once,
     // then stripped, so a refresh does not repeat a stale "connected" banner.
     const params = new URLSearchParams(window.location.search);
@@ -94,9 +171,28 @@ export function ConnectionsPanel() {
 
   if (connections === null || (!gmail && !imap && !whatsapp && !facebook && !instagram)) return null;
 
+  const picker = businesses ? (
+    <BusinessPicker businesses={businesses} value={business} onChange={choose} />
+  ) : null;
+
+  // An admin who has not chosen a business sees the choice, not the cards: a
+  // card would connect an account to nobody.
+  if (businesses && !business) {
+    return (
+      <section className="cnx">
+        <h2>Your accounts</h2>
+        {picker}
+        {notice ? <p className="cnx-note">{notice}</p> : null}
+        {error ? <p className="mc-error">{error}</p> : null}
+        <p className="cnx-note">Choose a business to connect your accounts for.</p>
+      </section>
+    );
+  }
+
   return (
     <section className="cnx">
       <h2>Your accounts</h2>
+      {picker}
 
       {notice ? <p className="cnx-note">{notice}</p> : null}
       {error ? <p className="mc-error">{error}</p> : null}
@@ -199,7 +295,7 @@ export function ConnectionsPanel() {
         <BusinessEmailCard
           provider={imap}
           connection={imapConn}
-          onChange={load}
+          onChange={reload}
           onError={setError}
           onNotice={setNotice}
         />
@@ -213,7 +309,7 @@ export function ConnectionsPanel() {
           setBusy={setBusy}
           onNotice={setNotice}
           onError={setError}
-          onChange={load}
+          onChange={reload}
         />
       ) : null}
 

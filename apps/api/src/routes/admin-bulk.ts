@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import {
   findOrganizationBySlug,
   listEmployees,
+  findEmployeeByPhoneNumberId,
   isWhatsAppNumberRetired,
   listBroadcastTemplates,
   getBroadcastTemplate,
@@ -83,7 +84,15 @@ async function numbersOf(organization: {
       ownerEmployeeId: employee.id,
       wabaId: employee.whatsappBusinessAccountId ?? organization.whatsappBusinessAccountId,
     }));
-  if (organization.whatsappPhoneNumberId && !(await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId))) {
+  // A line a person holds is theirs alone (3 Nov 2026): an admin who reconnects
+  // a business's switched-off shared line through their seat brings it back to
+  // life, and it must not reappear as "the business's own number" in every
+  // business that still points at it — so the lookup is across all businesses.
+  if (
+    organization.whatsappPhoneNumberId &&
+    !(await findEmployeeByPhoneNumberId(organization.whatsappPhoneNumberId)) &&
+    !(await isWhatsAppNumberRetired(organization.whatsappPhoneNumberId))
+  ) {
     numbers.push({
       phoneNumberId: organization.whatsappPhoneNumberId,
       label: "The business's own number",

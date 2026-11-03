@@ -386,6 +386,8 @@ export interface TeamMember {
   id: string;
   employeeCode: string;
   fullName: string;
+  /** Set when this record is an admin's seat (migration 108). */
+  adminId?: string | null;
   email?: string | null;
   jobTitle?: string | null;
   whatsappNumber?: string | null;
@@ -3150,7 +3152,7 @@ export function refreshBulkTemplates(
 
 /** Which Meta business staff should choose when connecting WhatsApp (30 Oct 2026). */
 export function getMainBusinessForStaff(): Promise<{ main: { id: string; name: string } | null }> {
-  return request("/api/connections/whatsapp/main-business");
+  return request(connectionsPath("/api/connections/whatsapp/main-business"));
 }
 
 /** One staff member's WhatsApp, as the owner's setup checklist shows it. */
@@ -3391,15 +3393,35 @@ export interface ConnectionProvider {
   graphVersion?: string;
 }
 
+/**
+ * The business an admin is connecting for (3 Nov 2026). An admin's connections
+ * live in their seat in one business at a time, so every connections call names
+ * it; staff never set it, and their calls are unchanged.
+ */
+let connectionsBusiness: string | null = null;
+
+export function setConnectionsBusiness(slug: string | null): void {
+  connectionsBusiness = slug;
+}
+
+/** A connections path, naming the chosen business when an admin has chosen one. */
+export function connectionsPath(path: string): string {
+  if (!connectionsBusiness) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}business=${encodeURIComponent(connectionsBusiness)}`;
+}
+
 export function getConnections(): Promise<{
   connections: SocialConnection[];
   providers: ConnectionProvider[];
+  /** An admin only: every business, and the one chosen (null when none is). */
+  businesses?: Array<{ slug: string; name: string }>;
+  business?: string | null;
 }> {
-  return request("/api/connections");
+  return request(connectionsPath("/api/connections"));
 }
 
 export function startTikTokConnect(): Promise<{ url: string }> {
-  return request("/api/connections/tiktok/start");
+  return request(connectionsPath("/api/connections/tiktok/start"));
 }
 
 export interface TikTokInsights {
@@ -3421,11 +3443,11 @@ export interface TikTokInsights {
 }
 
 export function getTikTokInsights(): Promise<TikTokInsights> {
-  return request("/api/connections/tiktok/insights");
+  return request(connectionsPath("/api/connections/tiktok/insights"));
 }
 
 export function disconnectTikTok(): Promise<{ ok: boolean }> {
-  return request("/api/connections/tiktok", { method: "DELETE" });
+  return request(connectionsPath("/api/connections/tiktok"), { method: "DELETE" });
 }
 
 export interface ClientMail {
@@ -3440,15 +3462,15 @@ export interface ClientMail {
 }
 
 export function startGmailConnect(): Promise<{ url: string }> {
-  return request("/api/connections/gmail/start");
+  return request(connectionsPath("/api/connections/gmail/start"));
 }
 
 export function startFacebookConnect(): Promise<{ url: string }> {
-  return request("/api/connections/facebook/start");
+  return request(connectionsPath("/api/connections/facebook/start"));
 }
 
 export function startInstagramConnect(): Promise<{ url: string }> {
-  return request("/api/connections/instagram/start");
+  return request(connectionsPath("/api/connections/instagram/start"));
 }
 
 /** How the import of a staff member's past WhatsApp chats is going (28 Oct 2026). */
@@ -3463,12 +3485,12 @@ export interface WhatsAppHistoryStatus {
 }
 
 export function getWhatsAppHistory(): Promise<{ status: WhatsAppHistoryStatus | null; reason?: string }> {
-  return request("/api/connections/whatsapp/history");
+  return request(connectionsPath("/api/connections/whatsapp/history"));
 }
 
 /** Ask WhatsApp for the history again — it only agrees within 24 hours of connecting. */
 export function requestWhatsAppHistory(): Promise<{ status: WhatsAppHistoryStatus }> {
-  return request("/api/connections/whatsapp/history", { method: "POST" });
+  return request(connectionsPath("/api/connections/whatsapp/history"), { method: "POST" });
 }
 
 export function getClientMail(): Promise<{
@@ -3476,7 +3498,7 @@ export function getClientMail(): Promise<{
   addressesSearched: number;
   note: string | null;
 }> {
-  return request("/api/connections/gmail/mail");
+  return request(connectionsPath("/api/connections/gmail/mail"));
 }
 
 export function sendClientEmail(input: {
@@ -3484,11 +3506,11 @@ export function sendClientEmail(input: {
   subject: string;
   body: string;
 }): Promise<{ id: string }> {
-  return request("/api/connections/gmail/send", { method: "POST", body: JSON.stringify(input) });
+  return request(connectionsPath("/api/connections/gmail/send"), { method: "POST", body: JSON.stringify(input) });
 }
 
 export function disconnectGmail(): Promise<{ ok: boolean }> {
-  return request("/api/connections/gmail", { method: "DELETE" });
+  return request(connectionsPath("/api/connections/gmail"), { method: "DELETE" });
 }
 
 /**
@@ -3497,7 +3519,7 @@ export function disconnectGmail(): Promise<{ ok: boolean }> {
  * fear of doubling anything; returns how many messages were newly stored.
  */
 export function syncGmailInbox(): Promise<{ newMessages: number; threads: number }> {
-  return request("/api/connections/gmail/sync", { method: "POST" });
+  return request(connectionsPath("/api/connections/gmail/sync"), { method: "POST" });
 }
 
 /**
@@ -3512,14 +3534,14 @@ export function connectWhatsAppCoexistence(input: {
   wabaId?: string;
   phoneNumberId?: string;
 }): Promise<{ ok: true; number: string; businessWarning?: string | null }> {
-  return request("/api/connections/whatsapp/connect", {
+  return request(connectionsPath("/api/connections/whatsapp/connect"), {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function disconnectWhatsApp(): Promise<{ ok: boolean }> {
-  return request("/api/connections/whatsapp", { method: "DELETE" });
+  return request(connectionsPath("/api/connections/whatsapp"), { method: "DELETE" });
 }
 
 /**
@@ -3532,14 +3554,14 @@ export function connectBusinessEmail(input: {
   email: string;
   password: string;
 }): Promise<{ ok: true; email: string }> {
-  return request("/api/connections/imap/connect", {
+  return request(connectionsPath("/api/connections/imap/connect"), {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function disconnectBusinessEmail(): Promise<{ ok: boolean }> {
-  return request("/api/connections/imap", { method: "DELETE" });
+  return request(connectionsPath("/api/connections/imap"), { method: "DELETE" });
 }
 
 // ============================================================

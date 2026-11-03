@@ -507,7 +507,11 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                     <span className={`dot ${member.presence.shouldTwinRespond ? "" : "live"}`} />
                     <span className="who">
                       <span className="nm">{member.fullName}</span>
-                      <span className="rl">{member.jobTitle ?? member.employeeCode}</span>
+                      {/* An admin's seat (migration 108) says so, so nobody mistakes it for a hire. */}
+                      <span className="rl">
+                        {member.jobTitle ?? member.employeeCode}
+                        {member.adminId && member.jobTitle !== "Admin" ? " · Admin" : ""}
+                      </span>
                     </span>
                     <span className="wa">
                       {member.whatsappReady ? member.whatsappNumber : "no WhatsApp number"}
