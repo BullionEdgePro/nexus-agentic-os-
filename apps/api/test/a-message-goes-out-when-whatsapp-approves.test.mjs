@@ -194,3 +194,35 @@ test("an approval is acted on after every template sync and on Check again", asy
   const refresh = routes.slice(routes.indexOf("/templates/refresh"));
   assert.match(refresh, /releaseApprovedCampaigns\(organization\.id\)/);
 });
+
+test("the customers ticked on the page wait for the message, and nothing goes out yet", db, async () => {
+  const fresh = await template("bulk_zp_probe_new", "PENDING");
+  queued.length = 0;
+  const waiting = await control.createWaitingCampaign({
+    organizationId: ORG,
+    templateId: fresh,
+    fromPhoneNumberId: NUMBER,
+    numberOwnerEmployeeId: null,
+    sentBy: "Probe Admin",
+    contactIds: CONTACTS.map((contact) => contact.id),
+  });
+  assert.equal(waiting?.recipients, 2);
+  assert.equal(await statusOf(waiting.broadcastId), "scheduled");
+  const pending = await owner.query(`select count(*)::int as n from broadcast_recipients where broadcast_id = $1 and status = 'pending'`, [
+    waiting.broadcastId,
+  ]);
+  assert.equal(pending.rows[0].n, 2);
+  assert.equal(queued.length, 0, "a message went out before WhatsApp approved it");
+});
+
+test("the new-message route checks the number first, then makes the ticked customers wait", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { dirname, join } = await import("node:path");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  const routes = readFileSync(join(root, "apps", "api", "src", "routes", "admin-bulk-templates.ts"), "utf8");
+  const create = routes.slice(routes.indexOf('"/:slug/number/:phoneNumberId/templates"'), routes.indexOf("/templates/refresh"));
+  assert.ok(create.indexOf("sendingRefusal(") > -1 && create.indexOf("sendingRefusal(") < create.indexOf("createMetaTemplate("), "the number is not checked before anything is created");
+  assert.match(create, /createWaitingCampaign\(/);
+  assert.match(create, /return c\.json\(\{ name, status: created\.status \?\? "PENDING", waiting \}\)/);
+});

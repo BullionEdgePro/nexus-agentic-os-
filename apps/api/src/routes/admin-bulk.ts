@@ -232,6 +232,23 @@ async function prepareSend(c: Context, body: { phoneNumberId?: unknown; template
  * Refused whole when WhatsApp is blocking the number; the ceiling is reported,
  * as on the staff send, never trimmed.
  */
+/**
+ * Why WhatsApp would refuse a campaign from this number right now, or null.
+ * Send checks it, and so does a new message that will send itself once
+ * approved (3 Nov 2026), before anything is created.
+ */
+export async function sendingRefusal(phoneNumberId: string): Promise<string | null> {
+  const [health, refused, standing] = await Promise.all([
+    readSendingHealth(phoneNumberId),
+    readPaymentRefusal(phoneNumberId),
+    readNumberStanding(phoneNumberId),
+  ]);
+  if (health?.problem) return `WhatsApp is blocking this number: ${health.problem.description}`;
+  if (refused) return "WhatsApp refused this number's last message over payment. Fix the card and send a test first.";
+  if (standing?.quality === "RED") return "WhatsApp rates this number's quality as low (red). Nothing was sent.";
+  return null;
+}
+
 adminBulkRoute.post("/:slug/send", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const prepared = await prepareSend(c, body);
@@ -243,14 +260,8 @@ adminBulkRoute.post("/:slug/send", async (c) => {
   const audience = customers.filter((customer) => chosen.has(customer.id));
   if (audience.length === 0) return c.json({ error: "None of the chosen customers can be messaged." }, 422);
 
-  const [health, refused, standing] = await Promise.all([
-    readSendingHealth(number.phoneNumberId),
-    readPaymentRefusal(number.phoneNumberId),
-    readNumberStanding(number.phoneNumberId),
-  ]);
-  if (health?.problem) return c.json({ error: `WhatsApp is blocking this number: ${health.problem.description}` }, 409);
-  if (refused) return c.json({ error: "WhatsApp refused this number's last message over payment. Fix the card and send a test first." }, 409);
-  if (standing?.quality === "RED") return c.json({ error: "WhatsApp rates this number's quality as low (red). Nothing was sent." }, 409);
+  const refusal = await sendingRefusal(number.phoneNumberId);
+  if (refusal) return c.json({ error: refusal }, 409);
 
   const actor = await actorOf(c);
   const ceiling = await describeDailyCeiling(audience.length, number.phoneNumberId);

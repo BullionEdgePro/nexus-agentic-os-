@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { BusinessTabs } from "@/lib/business-tabs";
 import {
+  controlBroadcast,
   getBulkNumber,
   getBulkOverview,
   getBulkTemplateText,
@@ -56,6 +57,8 @@ const STATUS_WORDS: Record<string, string> = {
   paused: "Paused",
   stopped: "Stopped",
   draft: "Draft",
+  // A new message's campaign, sent once WhatsApp approves it (3 Nov 2026).
+  scheduled: "Waiting for WhatsApp approval",
 };
 
 export default function BulkMessagingPage() {
@@ -327,7 +330,22 @@ export default function BulkMessagingPage() {
                       </ul>
                     ) : null}
                   </td>
-                  <td>{STATUS_WORDS[campaign.status] ?? campaign.status}</td>
+                  <td>
+                    {STATUS_WORDS[campaign.status] ?? campaign.status}
+                    {campaign.status === "scheduled" ? (
+                      <button
+                        type="button"
+                        className="bk-ghost"
+                        onClick={() =>
+                          void controlBroadcast(campaign.id, "stop")
+                            .then(() => loadOverview(business))
+                            .catch((err) => setError(readableError(err, "It could not be cancelled.")))
+                        }
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -403,6 +421,7 @@ function ApprovedSend({
         numberId={numberId}
         pending={view.pending ?? []}
         sampleName={chosen[0]?.displayName ?? null}
+        chosen={chosen.map((person) => person.id)}
         onChanged={onTemplatesChanged}
       />
 

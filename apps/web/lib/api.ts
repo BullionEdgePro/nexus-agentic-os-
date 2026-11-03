@@ -3030,8 +3030,9 @@ export function rewriteBulkDraft(
 export function submitBulkTemplate(
   orgSlug: BusinessSlug,
   phoneNumberId: string,
-  input: { label: string; language: "en" | "ar"; text: string }
-): Promise<{ name: string; status: string }> {
+  /** `sendTo`: the customers to send it to once WhatsApp approves it (3 Nov 2026). */
+  input: { label: string; language: "en" | "ar"; text: string; sendTo?: string[] }
+): Promise<{ name: string; status: string; waiting?: { broadcastId: string; recipients: number } | null }> {
   return request(`/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}/templates`, {
     method: "POST",
     body: JSON.stringify(input),

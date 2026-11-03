@@ -593,8 +593,9 @@ export interface TemplateMirrorInput {
  * anything else as sendable produces a broadcast that fails per recipient after
  * every row has already been written.
  */
-export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promise<void> {
-  await getPool().query(
+/** Returns the row's id: a new message's waiting campaign points at it (3 Nov 2026). */
+export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promise<string> {
+  const { rows } = await getPool().query<{ id: string }>(
     `insert into message_templates
        (organization_id, meta_template_id, meta_template_name, language, category,
         status, is_approved, body_param_count, synced_at, whatsapp_business_account_id)
@@ -607,7 +608,8 @@ export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promis
                    is_approved        = excluded.is_approved,
                    body_param_count   = excluded.body_param_count,
                    whatsapp_business_account_id = excluded.whatsapp_business_account_id,
-                   synced_at          = now()`,
+                   synced_at          = now()
+     returning id`,
     [
       input.organizationId,
       input.metaTemplateId,
@@ -619,6 +621,7 @@ export async function upsertTemplateFromMeta(input: TemplateMirrorInput): Promis
       input.whatsappBusinessAccountId,
     ]
   );
+  return rows[0].id;
 }
 
 /**

@@ -46,12 +46,15 @@ export function NewApproved({
   numberId,
   pending,
   sampleName,
+  chosen,
   onChanged,
 }: {
   business: BusinessSlug;
   numberId: string;
   pending: BulkPendingMessage[];
   sampleName: string | null;
+  /** The customers ticked on the page: offered "then send to them" (3 Nov 2026). */
+  chosen: string[];
   /** Reload the number; with an id, that message was just approved and is chosen. */
   onChanged: (approvedTemplateId?: string) => void;
 }) {
@@ -62,14 +65,22 @@ export function NewApproved({
   const [busy, setBusy] = useState<"submit" | "check" | string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
-  async function submit() {
+  /** `andSend`: also send it to the ticked customers once WhatsApp approves it (3 Nov 2026). */
+  async function submit(andSend: boolean) {
     setBusy("submit");
     setNote(null);
     try {
-      const sent = await submitBulkTemplate(business, numberId, { label: label.trim(), language, text: text.trim() });
+      const sent = await submitBulkTemplate(business, numberId, {
+        label: label.trim(),
+        language,
+        text: text.trim(),
+        sendTo: andSend ? chosen : undefined,
+      });
       setNote({
         ok: true,
-        text: `Sent to WhatsApp as ${sent.name}. Approval usually takes minutes, sometimes a day; it appears in the list above once approved.`,
+        text: sent.waiting
+          ? `Sent to WhatsApp for approval. Once approved — usually within minutes, sometimes a day — it goes to ${sent.waiting.recipients} ${sent.waiting.recipients === 1 ? "customer" : "customers"} by itself. It is under Recent campaigns, where you can cancel it until then.`
+          : `Sent to WhatsApp as ${sent.name}. Approval usually takes minutes, sometimes a day; it appears in the list above once approved.`,
       });
       setLabel("");
       setText("");
@@ -211,18 +222,48 @@ export function NewApproved({
             </div>
           </div>
           <div className="ai-actions">
-            <button
-              type="button"
-              className="cmp-go"
-              disabled={busy !== null || !label.trim() || !text.trim()}
-              onClick={() => void submit()}
-            >
-              {busy === "submit" ? "Sending to WhatsApp…" : "Send to WhatsApp for approval"}
-            </button>
+            {chosen.length ? (
+              <>
+                <button
+                  type="button"
+                  className="cmp-go"
+                  disabled={busy !== null || !label.trim() || !text.trim()}
+                  onClick={() => void submit(true)}
+                >
+                  {busy === "submit"
+                    ? "Sending to WhatsApp…"
+                    : `Send for approval, then send to ${chosen.length} ${chosen.length === 1 ? "customer" : "customers"}`}
+                </button>
+                <button
+                  type="button"
+                  className="bk-ghost"
+                  disabled={busy !== null || !label.trim() || !text.trim()}
+                  onClick={() => void submit(false)}
+                >
+                  Only send for approval
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="cmp-go"
+                disabled={busy !== null || !label.trim() || !text.trim()}
+                onClick={() => void submit(false)}
+              >
+                {busy === "submit" ? "Sending to WhatsApp…" : "Send to WhatsApp for approval"}
+              </button>
+            )}
             <button type="button" className="bk-ghost" onClick={() => setOpen(false)}>
               Close
             </button>
           </div>
+          {chosen.length ? (
+            <p className="ai-sample">
+              WhatsApp checks every new message first, usually within minutes, sometimes a day. Once it is approved it goes to
+              the {chosen.length === 1 ? "customer" : `${chosen.length} customers`} you ticked by itself, and you can cancel it
+              under Recent campaigns until then.
+            </p>
+          ) : null}
         </div>
       )}
 

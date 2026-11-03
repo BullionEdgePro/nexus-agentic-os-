@@ -1,7 +1,10 @@
 import {
   campaignForControl,
   campaignsWaitingForApproval,
+  createAdminBroadcast,
+  createBroadcastRecipients,
   getBroadcastTemplate,
+  getContactsForAudience,
   pendingRecipients,
   setBroadcastStatusIf,
   updateBroadcastRecipientStatus,
@@ -101,6 +104,40 @@ async function queueWhatsAppRecipients(
     });
   }
   return true;
+}
+
+/**
+ * The customers ticked on Bulk messaging, waiting for a new message to be
+ * approved (3 Nov 2026): a campaign created as for Send, then left `scheduled`
+ * so nothing is queued until releaseApprovedCampaigns finds the message
+ * approved. Null when none of the chosen people can be messaged.
+ */
+export async function createWaitingCampaign(input: {
+  organizationId: string;
+  templateId: string;
+  fromPhoneNumberId: string;
+  numberOwnerEmployeeId: string | null;
+  sentBy: string | null;
+  contactIds: string[];
+}): Promise<{ broadcastId: string; recipients: number } | null> {
+  const chosen = new Set(input.contactIds);
+  const audience = (await withTenant(input.organizationId, () => getContactsForAudience(input.organizationId, {}))).filter(
+    (person) => chosen.has(person.id)
+  );
+  if (audience.length === 0) return null;
+  return withTenant(input.organizationId, async () => {
+    const broadcast = await createAdminBroadcast({
+      organizationId: input.organizationId,
+      templateId: input.templateId,
+      fromPhoneNumberId: input.fromPhoneNumberId,
+      numberOwnerEmployeeId: input.numberOwnerEmployeeId,
+      sentBy: input.sentBy,
+      recipients: audience.length,
+    });
+    await createBroadcastRecipients(broadcast.id, audience.map((person) => person.id));
+    await setBroadcastStatusIf(broadcast.id, ["draft"], "scheduled");
+    return { broadcastId: broadcast.id, recipients: audience.length };
+  });
 }
 
 /** WhatsApp's verdicts after which a message can never be sent as it is. */

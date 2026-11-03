@@ -3,11 +3,12 @@ import { connectionSecret, isolated, listBroadcastTemplates, upsertTemplateFromM
 import { bulkTemplateName, staffTemplateBody } from "@nexus/shared";
 import { createMetaTemplate, readTemplateReviews } from "../lib/whatsapp-client.js";
 import { syncStaffAccountTemplates, syncTemplatesForOrganization } from "../services/template-sync.js";
-import { releaseApprovedCampaigns } from "../services/campaign-control.js";
+import { createWaitingCampaign, releaseApprovedCampaigns } from "../services/campaign-control.js";
 import { pendingFrom } from "../lib/pending-templates.js";
 import { actorOf } from "../lib/actor.js";
 import { logger } from "../lib/logger.js";
-import { resolve, templatesFor, tokenFor, type SendingNumber } from "./admin-bulk.js";
+import { resolve, sendingRefusal, templatesFor, tokenFor, type SendingNumber } from "./admin-bulk.js";
+import { chosenIds } from "./my-campaigns.js";
 
 /**
  * New approved messages, written by an admin in Bulk messaging (30 Oct 2026).
@@ -64,6 +65,15 @@ adminBulkTemplatesRoute.post("/:slug/number/:phoneNumberId/templates", async (c)
   const content = staffTemplateBody(typeof body.text === "string" ? body.text : "");
   if ("error" in content) return c.json({ error: content.error }, 400);
 
+  // SEND WHEN APPROVED (3 Nov 2026): the customers ticked on the page wait for
+  // this message and get it once WhatsApp approves it. The number is checked
+  // first, as Send checks it, so nothing is created that could not go out.
+  const sendTo = chosenIds(body.sendTo);
+  if (sendTo && sendTo.size > 0) {
+    const refusal = await sendingRefusal(number.phoneNumberId);
+    if (refusal) return c.json({ error: refusal }, 409);
+  }
+
   const token = await writeTokenFor(organization, number);
   if (!token) return c.json({ error: CANNOT_SUBMIT }, 409);
 
@@ -96,7 +106,7 @@ adminBulkTemplatesRoute.post("/:slug/number/:phoneNumberId/templates", async (c)
   // Mirrored now rather than at the next half-hourly sync, so it shows as
   // "Waiting for WhatsApp" the moment it is sent.
   const metaTemplateId = created.id;
-  await withTenant(organization.id, () =>
+  const templateId = await withTenant(organization.id, () =>
     upsertTemplateFromMeta({
       organizationId: organization.id,
       whatsappBusinessAccountId: wabaId,
@@ -109,11 +119,28 @@ adminBulkTemplatesRoute.post("/:slug/number/:phoneNumberId/templates", async (c)
     })
   );
   const actor = await actorOf(c);
+  const waiting =
+    sendTo && sendTo.size > 0
+      ? await createWaitingCampaign({
+          organizationId: organization.id,
+          templateId,
+          fromPhoneNumberId: number.phoneNumberId,
+          numberOwnerEmployeeId: number.ownerEmployeeId,
+          sentBy: actor.name,
+          contactIds: [...sendTo],
+        })
+      : null;
+  // WhatsApp sometimes approves on the spot: then it goes now, not in 30 minutes.
+  if (waiting && created.status === "APPROVED") {
+    await isolated(() => releaseApprovedCampaigns(organization.id)).catch((err) =>
+      logger.error({ organization: organization.slug, err }, "Releasing campaigns waiting for approval failed")
+    );
+  }
   logger.info(
-    { organization: organization.slug, from: number.phoneNumberId, name, status: created.status, by: actor.name },
+    { organization: organization.slug, from: number.phoneNumberId, name, status: created.status, by: actor.name, waiting },
     "Admin submitted a new approved message to WhatsApp"
   );
-  return c.json({ name, status: created.status ?? "PENDING" });
+  return c.json({ name, status: created.status ?? "PENDING", waiting });
 });
 
 /** Ask WhatsApp again about this number's messages: statuses, and reasons for any refused. */
