@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
 import {
   getTenantContext,
@@ -343,6 +344,7 @@ async function withClient<T>(
     throw err;
   } finally {
     health.delete(client);
+    outermostTurns.delete(client);
     client.release();
   }
 }
@@ -508,24 +510,68 @@ export async function withSavepoint<T>(fn: () => Promise<T>): Promise<T> {
   if (!context) {
     throw new Error("withSavepoint runs inside the transaction a tenant context opens, and there is no context here.");
   }
-  const name = `nexus_savepoint_${++savepoints}`;
-  await context.client.query(`savepoint ${name}`);
-  // Taken once the savepoint is set, so the transaction was healthy here.
-  const record = health.get(context.client);
-  const before = record ? { ...record } : undefined;
+  const { client } = context;
+  return inTurn(client, async () => {
+    const name = `nexus_savepoint_${++savepoints}`;
+    await client.query(`savepoint ${name}`);
+    // Taken once the savepoint is set, so the transaction was healthy here.
+    const record = health.get(client);
+    const before = record ? { ...record } : undefined;
+    try {
+      const result = await fn();
+      await client.query(`release savepoint ${name}`);
+      return result;
+    } catch (err) {
+      const revived = await client.query(`rollback to savepoint ${name}`).then(
+        () => true,
+        () => false
+      );
+      // Healthy again, and what it undid was undone on purpose: neither the
+      // failure nor those writes are anything the commit lost (3 Nov 2026).
+      if (revived && record && before) Object.assign(record, before);
+      throw err;
+    }
+  });
+}
+
+/**
+ * SAVEPOINTS TAKE TURNS (final review of the audit, 3 Nov 2026).
+ *
+ * The savepoints on one connection are a stack: releasing one releases every
+ * savepoint set after it. Two opened side by side -- a Promise.all whose members
+ * each contain a step -- interleaved on the connection, so releasing the first
+ * released the second, whose own release then failed and aborted the
+ * transaction with nothing wrong. Every admin bulk campaign answered 500 that
+ * way, through the send-token lookup's savepoint. So a block waits for its
+ * siblings on the same connection and nests inside its parent, which keeps the
+ * stack a stack.
+ *
+ * A sibling's PLAIN statement issued while a block is open still lands inside
+ * it, and that block rolling back undoes it: keep writes out of a Promise.all
+ * that runs beside contained steps.
+ */
+interface SavepointTurns {
+  client: PoolClient;
+  last: Promise<void>;
+}
+const openBlock = new AsyncLocalStorage<SavepointTurns>();
+const outermostTurns = new WeakMap<PoolClient, SavepointTurns>();
+
+async function inTurn<T>(client: PoolClient, body: () => Promise<T>): Promise<T> {
+  const parent = openBlock.getStore();
+  let turns = parent?.client === client ? parent : outermostTurns.get(client);
+  if (!turns) {
+    turns = { client, last: Promise.resolve() };
+    outermostTurns.set(client, turns);
+  }
+  const previous = turns.last;
+  let finished!: () => void;
+  turns.last = new Promise<void>((resolve) => (finished = resolve));
+  await previous;
   try {
-    const result = await fn();
-    await context.client.query(`release savepoint ${name}`);
-    return result;
-  } catch (err) {
-    const revived = await context.client.query(`rollback to savepoint ${name}`).then(
-      () => true,
-      () => false
-    );
-    // Healthy again, and what it undid was undone on purpose: neither the
-    // failure nor those writes are anything the commit lost (3 Nov 2026).
-    if (revived && record && before) Object.assign(record, before);
-    throw err;
+    return await openBlock.run({ client, last: Promise.resolve() }, body);
+  } finally {
+    finished();
   }
 }
 
@@ -556,30 +602,33 @@ export async function withRecovery<T>(fn: () => Promise<T>): Promise<T> {
   if (!context) {
     throw new Error("withRecovery runs inside the transaction a tenant context opens, and there is no context here.");
   }
-  const name = `nexus_savepoint_${++savepoints}`;
-  await context.client.query(`savepoint ${name}`);
-  const record = health.get(context.client);
-  const before = record ? { ...record } : undefined;
-  try {
-    const result = await fn();
-    await context.client.query(`release savepoint ${name}`);
-    return result;
-  } catch (err) {
-    // Released if the transaction is healthy, keeping the work; refused if it
-    // is aborted, and then rolled back to revive it.
-    const kept = await context.client.query(`release savepoint ${name}`).then(
-      () => true,
-      () => false
-    );
-    if (!kept) {
-      const revived = await context.client.query(`rollback to savepoint ${name}`).then(
+  const { client } = context;
+  return inTurn(client, async () => {
+    const name = `nexus_savepoint_${++savepoints}`;
+    await client.query(`savepoint ${name}`);
+    const record = health.get(client);
+    const before = record ? { ...record } : undefined;
+    try {
+      const result = await fn();
+      await client.query(`release savepoint ${name}`);
+      return result;
+    } catch (err) {
+      // Released if the transaction is healthy, keeping the work; refused if it
+      // is aborted, and then rolled back to revive it.
+      const kept = await client.query(`release savepoint ${name}`).then(
         () => true,
         () => false
       );
-      if (revived && record && before) Object.assign(record, before);
+      if (!kept) {
+        const revived = await client.query(`rollback to savepoint ${name}`).then(
+          () => true,
+          () => false
+        );
+        if (revived && record && before) Object.assign(record, before);
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }
 
 /**

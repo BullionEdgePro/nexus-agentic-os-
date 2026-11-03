@@ -65,6 +65,15 @@ test("a status change stays saved when the reassignment after it is refused", ()
   assert.match(tasks, /withSavepoint\(\(\) => rescheduleTask\(taskId, dueAt, within\)\)/);
 });
 
+test("a campaign's progress update after a send cannot throw it into a re-send", () => {
+  // Final review (3 Nov 2026): the outcome, the breaker and the finish ran after
+  // the 'sent' mark and could still throw, rolling the mark back with them --
+  // and the queue's retry sent the template to the customer again.
+  const sender = source("apps", "api", "src", "queue", "broadcast-processor.ts");
+  assert.match(sender, /await isolated\(async \(\) => \{\s*const outcome = await broadcastOutcome\(broadcastId\);/);
+  assert.doesNotMatch(sender, /it will not be sent again/, "a pending row can be sent again by Resume");
+});
+
 test("an automation's failure note cannot take its claims with it", () => {
   const runner = source("apps", "api", "src", "services", "automation-runner.ts");
   assert.match(runner, /withSavepoint\(\(\) => recordAutomationFailure\(runId, reason\)\)/);
@@ -624,6 +633,47 @@ test("a campaign message that went out is never sent again when its 'sent' mark 
   }
   assert.equal(sends.length, 1);
   assert.equal(outcome, "finished", "the job failed after the send, so the queue would send it again");
+});
+
+// Final review of the audit (3 Nov 2026): savepoints opened side by side on one
+// connection broke each other -- releasing the first released the second, whose
+// own release then failed and aborted the transaction with nothing wrong. Every
+// admin bulk campaign answered 500, through the send-token lookup's savepoint.
+test("two contained steps side by side leave the transaction working", db, async () => {
+  await lib.withTenant(ORG, async () => {
+    await Promise.all([
+      lib.isolated(() => lib.getPool().query("select 1")),
+      lib.isolated(() => lib.getPool().query("select 2")),
+    ]);
+    await insertContact("971595000040");
+  }, failing);
+  assert.equal(await contactNamed("971595000040"), 1);
+});
+
+test("contained steps side by side inside a contained step leave it working", db, async () => {
+  await lib.withTenant(ORG, async () => {
+    await lib.isolated(() =>
+      Promise.all([
+        lib.isolated(() => lib.getPool().query("select 1")),
+        lib.withRecovery(() => lib.getPool().query("select 2")),
+      ])
+    );
+    await insertContact("971595000041");
+  }, failing);
+  assert.equal(await contactNamed("971595000041"), 1);
+});
+
+test("one of two contained steps side by side failing is that step's alone", db, async () => {
+  await lib.withTenant(ORG, async () => {
+    const [first, second] = await Promise.all([
+      lib.isolated(() => lib.getPool().query("select 1/0")).then(() => "ran", () => "failed"),
+      lib.isolated(() => lib.getPool().query("select 2 as n")).then((r) => r.rows[0].n),
+    ]);
+    assert.equal(first, "failed");
+    assert.equal(second, 2);
+    await insertContact("971595000042");
+  }, failing);
+  assert.equal(await contactNamed("971595000042"), 1);
 });
 
 test("withRecovery keeps the work when the transaction survived the failure", db, async () => {

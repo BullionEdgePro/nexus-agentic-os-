@@ -41,7 +41,7 @@ test("a tenant context is a real transaction, committed or rolled back", () => {
   assert.match(CLIENT, /await client\.query\("rollback"\)\.catch/);
   // Release must happen whatever the outcome, or the pool leaks a connection
   // per failed request until it is exhausted.
-  assert.match(CLIENT, /finally \{\s*\n\s*health\.delete\(client\);\s*\n\s*client\.release\(\);/);
+  assert.match(CLIENT, /finally \{\s*\n\s*health\.delete\(client\);\s*\n\s*outermostTurns\.delete\(client\);\s*\n\s*client\.release\(\);/);
 });
 
 test("SET LOCAL is transaction-scoped, so context cannot leak between requests", () => {

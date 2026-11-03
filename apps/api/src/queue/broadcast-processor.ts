@@ -8,6 +8,7 @@ import {
   updateBroadcastStatus,
   withAllTenants,
   withSavepoint,
+  isolated,
 } from "@nexus/db";
 import { sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { isUpstreamUnavailable } from "../scripts/upstream.js";
@@ -137,36 +138,46 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
       } catch (err) {
         logger.error(
           { broadcastId, recipientId, err },
-          "A campaign message was sent but could not be marked sent; it will not be sent again"
+          "A campaign message was sent but could not be marked sent; it stays pending, so check this campaign before resuming it"
         );
         return;
       }
     }
 
-    // COMPLETED IS NOT THE ONLY WAY TO FINISH. This wrote "completed" whenever
-    // nothing was pending, so a campaign in which every message failed ended in
-    // exactly the state of one where every message arrived. `failed` has been an
-    // allowed status since the table was made and nothing had ever set it.
-    const outcome = await broadcastOutcome(broadcastId);
+    // NOTHING AFTER THE SEND THROWS (final review, 3 Nov 2026). The progress
+    // below ran after the 'sent' mark and could still throw, rolling the mark
+    // back with it -- and the queue's retry sent the template again. Contained
+    // and logged instead; the next recipient's job brings the progress up to date.
+    try {
+      await isolated(async () => {
+        // COMPLETED IS NOT THE ONLY WAY TO FINISH. This wrote "completed" whenever
+        // nothing was pending, so a campaign in which every message failed ended in
+        // exactly the state of one where every message arrived. `failed` has been an
+        // allowed status since the table was made and nothing had ever set it.
+        const outcome = await broadcastOutcome(broadcastId);
 
-    // THE CIRCUIT BREAKER (22 Oct 2026). After every recipient, not only a
-    // failed one: refusals Meta reports later by webhook count too (review).
-    const paused = await pauseBroadcastIfFailing(broadcastId);
-    if (paused) {
-      logger.warn(
-        { broadcastId, ...paused, reason: failure ? explainSendError(failure) : "refused after sending (delivery receipts)" },
-        "Campaign paused: most of its messages were refused"
-      );
-      return;
-    }
+        // THE CIRCUIT BREAKER (22 Oct 2026). After every recipient, not only a
+        // failed one: refusals Meta reports later by webhook count too (review).
+        const paused = await pauseBroadcastIfFailing(broadcastId);
+        if (paused) {
+          logger.warn(
+            { broadcastId, ...paused, reason: failure ? explainSendError(failure) : "refused after sending (delivery receipts)" },
+            "Campaign paused: most of its messages were refused"
+          );
+          return;
+        }
 
-    // Finishing never un-pauses: a paused campaign keeps pending recipients and
-    // so is never "done", but a race between its last jobs must not overwrite
-    // the pause either.
-    if (outcome.done && (await broadcastStatus(broadcastId)) === "sending") {
-      const status = outcome.sent === 0 && outcome.failed > 0 ? "failed" : "completed";
-      await updateBroadcastStatus(broadcastId, status);
-      logger.info({ broadcastId, ...outcome, status }, "Broadcast finished");
+        // Finishing never un-pauses: a paused campaign keeps pending recipients and
+        // so is never "done", but a race between its last jobs must not overwrite
+        // the pause either.
+        if (outcome.done && (await broadcastStatus(broadcastId)) === "sending") {
+          const status = outcome.sent === 0 && outcome.failed > 0 ? "failed" : "completed";
+          await updateBroadcastStatus(broadcastId, status);
+          logger.info({ broadcastId, ...outcome, status }, "Broadcast finished");
+        }
+      });
+    } catch (err) {
+      logger.error({ broadcastId, recipientId, err }, "A campaign's progress could not be updated after a send");
     }
   });
 }
