@@ -1,4 +1,10 @@
-import { assignEmployeeWhatsAppNumber, saveConnection, withTenant } from "@nexus/db";
+import {
+  assignEmployeeWhatsAppNumber,
+  saveConnection,
+  withTenant,
+  findOrganizationByPhoneNumberId,
+  isWhatsAppNumberRetired,
+} from "@nexus/db";
 import { requestChatHistory } from "../lib/whatsapp-history.js";
 import { getMainBusiness, wrongBusinessWarning } from "../lib/main-business.js";
 import { readSendingHealth } from "../lib/whatsapp-client.js";
@@ -9,6 +15,24 @@ import {
   subscribeAppToWaba,
 } from "../lib/whatsapp-onboarding.js";
 import { logger } from "../lib/logger.js";
+
+const SHARED_LINE =
+  "That is the shared company number — assigning it would send every customer to one person.";
+
+/**
+ * Why this number may not become one person's line, or null when it may.
+ *
+ * A business's own shared line, still live, carries every customer of every
+ * business on it; giving it to one person would route them all to that person.
+ * The Team screen has always refused that. A shared line that was switched off
+ * (migration 094 — +971 50 480 5436 on 6 Oct) carries nobody any more, so a
+ * person — an admin, through their seat — may connect it as their own.
+ */
+export async function sharedLineRefusal(phoneNumberId: string): Promise<string | null> {
+  const business = await findOrganizationByPhoneNumberId(phoneNumberId);
+  if (!business) return null;
+  return (await isWhatsAppNumberRetired(phoneNumberId)) ? null : SHARED_LINE;
+}
 
 /**
  * Finish a WhatsApp Business app number's Embedded Signup for one staff member.
@@ -48,6 +72,10 @@ export async function connectWhatsAppNumber(
     // withTenant closure below, where TS must still see them as plain strings.
     const connectedWabaId = wabaId;
     const connectedPhoneNumberId = phoneNumberId;
+    // Before Meta is told or anything stored: a business's LIVE shared line is
+    // never one person's (the Team screen's rule, now on both doors).
+    const shared = await sharedLineRefusal(connectedPhoneNumberId);
+    if (shared) return { error: shared };
     await subscribeAppToWaba(connectedWabaId, businessToken);
     const details = await fetchCoexistenceNumber(connectedPhoneNumberId, businessToken);
 

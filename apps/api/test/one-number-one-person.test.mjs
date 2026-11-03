@@ -71,18 +71,24 @@ test("the picker states plainly this is not a personal WhatsApp", () => {
 const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
 const CONV = read("packages", "db", "src", "conversations.ts");
 
-test("a message on a staff number falls through to its owner, and only then", () => {
-  // The safety of the whole feature: the shared number ALWAYS resolves to an
-  // organization first, so this branch runs only for a number a person was
-  // given — dormant until one is assigned, and never able to touch the shared
-  // pipeline.
+test("a message on a person's line goes to that person; a live shared line is never a person's", () => {
+  // The safety of the whole feature, restated 3 Nov 2026 (spec
+  // 2026-11-03-admin-connections-design.md §3): a person's line is checked
+  // FIRST, because an admin may reconnect a business's switched-off shared line
+  // as their own. That is safe only because a LIVE shared line is never given
+  // to a person — the Team screen and the connect flow both refuse it.
   // Anchor on the inbound branch specifically (the delivery-status handler also
   // calls findOrganizationByPhoneNumberId), via the comment that marks it.
-  const idx = PROCESSOR.indexOf("it may be a staff member's OWN");
-  assert.ok(idx > -1, "the staff-number branch comment is missing");
-  const block = PROCESSOR.slice(idx, idx + 500);
-  assert.match(block, /findEmployeeByPhoneNumberId\(phoneNumberId\)/);
+  const idx = PROCESSOR.indexOf("A LINE HELD BY A PERSON WINS");
+  assert.ok(idx > -1, "the person-first branch comment is missing");
+  const block = PROCESSOR.slice(idx, idx + 2000);
+  const person = block.indexOf("findEmployeeByPhoneNumberId(phoneNumberId)");
+  const business = block.indexOf("findOrganizationByPhoneNumberId(phoneNumberId)");
+  assert.ok(person > -1 && business > -1, "both lookups are in the inbound branch");
+  assert.ok(person < business, "the person's line is asked about first");
   assert.match(block, /handleStaffNumberMessage\(staffOwner/);
+  assert.match(read("apps", "api", "src", "services", "whatsapp-connect.ts"), /await sharedLineRefusal\(connectedPhoneNumberId\)/);
+  assert.match(read("apps", "api", "src", "routes", "employees.ts"), /That is the shared company number/);
 });
 
 test("the staff-number path holds the twin out and hands the chat to the person", () => {
