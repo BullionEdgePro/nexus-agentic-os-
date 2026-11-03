@@ -110,7 +110,10 @@ export default function BulkMessagingPage() {
         if (data.pending?.length) {
           void refreshBulkTemplates(business, numberId)
             .then((fresh) => {
-              if (!cancelled) setView((current) => (current ? { ...current, pending: fresh.pending, templates: fresh.templates } : current));
+              if (cancelled) return;
+              setView((current) => (current ? { ...current, pending: fresh.pending, templates: fresh.templates } : current));
+              // A campaign waiting for one of them may just have gone out.
+              if (fresh.released?.length) void loadOverview(business);
             })
             .catch(() => undefined);
         }
@@ -121,7 +124,7 @@ export default function BulkMessagingPage() {
     return () => {
       cancelled = true;
     };
-  }, [business, numberId]);
+  }, [business, numberId, loadOverview]);
 
   const customers = view?.customers ?? [];
   const chosen = customers.filter((customer) => picked.has(customer.id));
@@ -423,6 +426,7 @@ function ApprovedSend({
         sampleName={chosen[0]?.displayName ?? null}
         chosen={chosen.map((person) => person.id)}
         onChanged={onTemplatesChanged}
+        onCampaignsChanged={onSent}
       />
 
       {templateId ? (

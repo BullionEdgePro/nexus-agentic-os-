@@ -43,6 +43,9 @@ export const isPaymentRefusal = (raw: string): boolean =>
 /** A campaign recipient with no WhatsApp number — an email-only customer. */
 export const NO_WHATSAPP_NUMBER = "This customer has no WhatsApp number (email only).";
 
+/** A campaign recipient who replied STOP after the campaign was made (3 Nov 2026). */
+export const ASKED_NOT_TO_BE_MESSAGED = "This customer asked not to be messaged, so it was not sent.";
+
 export function explainSendError(raw: string): string {
   // Meta's generic code 100 says only "invalid parameter"; this one is the empty
   // recipient the 22 Oct campaign met fourteen times, so it is matched by text.

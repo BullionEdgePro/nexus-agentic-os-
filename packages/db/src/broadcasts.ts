@@ -331,6 +331,24 @@ export async function pauseBroadcastIfFailingByMessage(
   });
 }
 
+/**
+ * One recipient as the send job finds it (review, 3 Nov 2026): whether they
+ * are still to be tried, and whether they have since asked not to be messaged.
+ * Locked until the job's transaction ends, so a second job for the same person
+ * -- a release queued twice, a retry -- waits, then finds them already decided.
+ */
+export async function recipientForSend(recipientId: string): Promise<{ status: string; optedOut: boolean } | null> {
+  const { rows } = await getPool().query<{ status: string; opted_out: boolean }>(
+    `select r.status, ct.reengagement_opted_out as opted_out
+       from broadcast_recipients r
+       join contacts ct on ct.id = r.contact_id
+      where r.id = $1
+      for update of r`,
+    [recipientId]
+  );
+  return rows[0] ? { status: rows[0].status, optedOut: rows[0].opted_out } : null;
+}
+
 /** The campaign's current status, read fresh — the worker checks it before every send. */
 export async function broadcastStatus(broadcastId: string): Promise<string | null> {
   const { rows } = await getPool().query<{ status: string }>(`select status from broadcasts where id = $1`, [

@@ -7,7 +7,8 @@ import { createWaitingCampaign, releaseApprovedCampaigns } from "../services/cam
 import { pendingFrom } from "../lib/pending-templates.js";
 import { actorOf } from "../lib/actor.js";
 import { logger } from "../lib/logger.js";
-import { resolve, sendingRefusal, templatesFor, tokenFor, type SendingNumber } from "./admin-bulk.js";
+import { resolve, templatesFor, tokenFor, type SendingNumber } from "./admin-bulk.js";
+import { sendingRefusal } from "../lib/sending-refusal.js";
 import { chosenIds } from "./my-campaigns.js";
 
 /**
@@ -164,15 +165,23 @@ adminBulkTemplatesRoute.post("/:slug/number/:phoneNumberId/templates/refresh", a
     } else {
       await syncTemplatesForOrganization({ id: organization.id, slug: organization.slug, whatsappBusinessAccountId: wabaId });
     }
-    // An approval this check found sends the campaigns waiting for it (3 Nov
-    // 2026). Isolated, and only logged on failure: it must not turn the check
-    // into "WhatsApp is unreachable".
-    await isolated(() => releaseApprovedCampaigns(organization.id)).catch((err) =>
-      logger.error({ organization: organization.slug, err }, "Releasing campaigns waiting for approval failed")
-    );
     const reviews = await readTemplateReviews(wabaId, token);
     const rows = await withTenant(organization.id, () => listBroadcastTemplates(organization.id, wabaId));
-    return c.json({ pending: pendingFrom(rows, organization.slug, reviews), templates: await templatesFor(organization, wabaId) });
+    const templates = await templatesFor(organization, wabaId);
+    // An approval this check found sends the campaigns waiting for it (3 Nov
+    // 2026). Isolated, and only logged on failure: it must not turn the check
+    // into "WhatsApp is unreachable". Last (review, 3 Nov 2026): the jobs it
+    // queues wait for this request to commit, so nothing slow runs in between.
+    const release = await isolated(() => releaseApprovedCampaigns(organization.id)).catch((err) => {
+      logger.error({ organization: organization.slug, err }, "Releasing campaigns waiting for approval failed");
+      return null;
+    });
+    return c.json({
+      pending: pendingFrom(rows, organization.slug, reviews),
+      templates,
+      // What went out, or was held, so Check again can say so rather than offer it again.
+      released: release?.released ?? [], held: release?.held ?? [],
+    });
   } catch (err) {
     logger.warn({ organization: organization.slug, from: number.phoneNumberId, err }, "Checking approved messages with WhatsApp failed");
     return c.json({ error: META_DOWN }, 502);

@@ -11,6 +11,7 @@ import {
   type BulkPendingMessage,
 } from "@/lib/api";
 import { previewTemplate } from "../my-campaigns/my-templates";
+import { templateOptionLabel } from "@/lib/template-option-label";
 import { AiWriter } from "./ai-writer";
 
 /**
@@ -48,6 +49,7 @@ export function NewApproved({
   sampleName,
   chosen,
   onChanged,
+  onCampaignsChanged,
 }: {
   business: BusinessSlug;
   numberId: string;
@@ -57,6 +59,8 @@ export function NewApproved({
   chosen: string[];
   /** Reload the number; with an id, that message was just approved and is chosen. */
   onChanged: (approvedTemplateId?: string) => void;
+  /** Reload Recent campaigns: one started waiting, or went out (review, 3 Nov 2026). */
+  onCampaignsChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
@@ -86,6 +90,7 @@ export function NewApproved({
       setText("");
       setOpen(false);
       onChanged();
+      if (sent.waiting) onCampaignsChanged();
     } catch (err) {
       setNote({ ok: false, text: readableError(err, "It was not sent to WhatsApp.") });
     } finally {
@@ -98,9 +103,24 @@ export function NewApproved({
     setNote(null);
     try {
       const fresh = await refreshBulkTemplates(business, numberId);
+      const released = fresh.released ?? [];
+      const held = fresh.held ?? [];
+      const going = released.reduce((sum, campaign) => sum + campaign.recipients, 0);
+      if (released.length || held.length) onCampaignsChanged();
       const approved = fresh.templates.find((template) => pending.some((waiting) => waiting.name === template.name));
-      if (approved) setNote({ ok: true, text: `WhatsApp approved ${approved.name}. It is chosen above.` });
-      onChanged(approved?.id);
+      const named = approved ? templateOptionLabel(approved.name, approved.language) : "your message";
+      // Gone to the customers ticked when it was written: said so, and not chosen
+      // above, where the same customers still ticked would send it to them again.
+      if (going) {
+        setNote({ ok: true, text: `WhatsApp approved ${named}. It is going to ${going} ${going === 1 ? "customer" : "customers"} now.` });
+        onChanged();
+      } else if (held.length) {
+        setNote({ ok: false, text: `WhatsApp approved ${named}, but it has not gone out yet: ${held[0].reason}` });
+        onChanged();
+      } else {
+        if (approved) setNote({ ok: true, text: `WhatsApp approved ${named}. It is chosen above.` });
+        onChanged(approved?.id);
+      }
     } catch (err) {
       setNote({ ok: false, text: readableError(err, "WhatsApp could not be reached just now. Try Check again in a minute.") });
     } finally {

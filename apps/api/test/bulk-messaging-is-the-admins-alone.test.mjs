@@ -40,9 +40,9 @@ test("an admin send reaches only this business's customers, narrowed by the tick
   assert.match(send, /getContactsForAudience\(organization\.id, \{\}\)/);
   assert.match(send, /customers\.filter\(\(customer\) => chosen\.has\(customer\.id\)\)/);
   // The number's checks live in sendingRefusal since 3 Nov 2026, shared with a
-  // new message that sends itself once approved.
+  // new message that sends itself once approved, and with its release.
   assert.match(send, /const refusal = await sendingRefusal\(number\.phoneNumberId\);\s*if \(refusal\) return c\.json\(\{ error: refusal \}, 409\);/);
-  const checks = ADMIN.slice(ADMIN.indexOf("export async function sendingRefusal"), ADMIN.indexOf('adminBulkRoute.post("/:slug/send"'));
+  const checks = read("apps", "api", "src", "lib", "sending-refusal.ts");
   assert.match(checks, /if \(health\?\.problem\)/);
   assert.match(checks, /if \(refused\)/);
 });

@@ -3042,7 +3042,14 @@ export function submitBulkTemplate(
 export function refreshBulkTemplates(
   orgSlug: BusinessSlug,
   phoneNumberId: string
-): Promise<{ pending: BulkPendingMessage[]; templates: BulkNumberView["templates"] }> {
+): Promise<{
+  pending: BulkPendingMessage[];
+  templates: BulkNumberView["templates"];
+  /** Campaigns this check sent on, now that WhatsApp approved their message (3 Nov 2026). */
+  released?: Array<{ broadcastId: string; templateId: string; recipients: number }>;
+  /** Approved, but kept waiting: WhatsApp would refuse the number right now. */
+  held?: Array<{ broadcastId: string; templateId: string; reason: string }>;
+}> {
   return request(`/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}/templates/refresh`, { method: "POST" });
 }
 

@@ -1128,7 +1128,8 @@ myCampaignsRoute.post("/templates/refresh", async (c) => {
  */
 export function staffTemplateParams(count: number, displayName: string | null): string[] {
   if (count <= 0) return [];
-  const first = displayName?.trim() || "there";
+  // The first name, as the preview shows it and the release fills it (3 Nov 2026).
+  const first = displayName?.trim().split(/\s+/)[0] || "there";
   return [first, ...Array.from({ length: count - 1 }, () => "-")];
 }
 

@@ -27,13 +27,26 @@ let owner;
 let dbTurn;
 let control;
 const queued = [];
+/** Set to make the queue refuse some jobs, as Redis going away half-way would. */
+let failAdd = null;
+/** What the number's readiness check answers; null is "ready to send". */
+let refusal = null;
 
 // The send queue lives in Redis, which a test database run has none of.
 mock.module(new URL("../src/queue/broadcast-queue.ts", import.meta.url).href, {
   namedExports: {
     BROADCAST_SEND_QUEUE: "whatsapp-broadcast-send",
-    getBroadcastSendQueue: () => ({ add: async (_name, data) => void queued.push(data) }),
+    getBroadcastSendQueue: () => ({
+      add: async (_name, data) => {
+        if (failAdd?.(data)) throw new Error("Redis is not answering");
+        queued.push(data);
+      },
+    }),
   },
+});
+// The readiness check asks Meta about the number.
+mock.module(new URL("../src/lib/sending-refusal.ts", import.meta.url).href, {
+  namedExports: { sendingRefusal: async () => refusal },
 });
 mock.module(new URL("../src/queue/email-broadcast-queue.ts", import.meta.url).href, {
   namedExports: {
@@ -65,6 +78,37 @@ const waitingCampaign = async (templateId) => {
   return id;
 };
 const statusOf = async (id) => (await owner.query(`select status from broadcasts where id = $1`, [id])).rows[0].status;
+const approvedCampaign = async (name) => {
+  const id = await template(name, "PENDING");
+  const campaign = await waitingCampaign(id);
+  await owner.query(`update message_templates set status = 'APPROVED', is_approved = true where id = $1`, [id]);
+  return campaign;
+};
+const jobsFor = (campaign) => queued.filter((job) => job.broadcastId === campaign);
+
+/** Run send jobs as the worker would, with Meta stood in; returns who was messaged. */
+const runJobs = async (jobs) => {
+  const { processBroadcastSendJob } = await import("../src/queue/broadcast-processor.ts");
+  const sentTo = [];
+  const realFetch = globalThis.fetch;
+  const realToken = process.env.META_ACCESS_TOKEN;
+  process.env.META_ACCESS_TOKEN = "probe-token-never-sent"; // fetch is replaced below
+  globalThis.fetch = async (_url, init) => {
+    sentTo.push(JSON.parse(init.body).to);
+    return new Response(JSON.stringify({ messages: [{ id: `wamid.gwa.${Date.now()}.${sentTo.length}` }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    for (const data of jobs) await processBroadcastSendJob({ data, opts: { attempts: 3 }, attemptsMade: 0 });
+  } finally {
+    globalThis.fetch = realFetch;
+    if (realToken === undefined) delete process.env.META_ACCESS_TOKEN;
+    else process.env.META_ACCESS_TOKEN = realToken;
+  }
+  return sentTo;
+};
 
 before(async () => {
   if (db.skip) return;
@@ -123,9 +167,14 @@ test("approved, it goes to every chosen customer once, even when released twice"
   const campaign = await waitingCampaign(approved);
   await owner.query(`update message_templates set status = 'APPROVED', is_approved = true where id = $1`, [approved]);
   queued.length = 0;
-  await control.releaseApprovedCampaigns(ORG);
+  const result = await control.releaseApprovedCampaigns(ORG);
   assert.equal(await statusOf(campaign), "sending");
   assert.equal(queued.length, 2, "not every chosen customer was queued");
+  // Check again tells the admin it is going, and to how many.
+  assert.deepEqual(
+    result.released.find((released) => released.broadcastId === campaign),
+    { broadcastId: campaign, templateId: approved, recipients: 2 }
+  );
   const sara = queued.find((job) => job.contactWaId === "971596000101");
   assert.deepEqual(
     { phoneNumberId: sara.phoneNumberId, templateName: sara.templateName, templateLanguage: sara.templateLanguage, templateParams: sara.templateParams },
@@ -193,6 +242,87 @@ test("an approval is acted on after every template sync and on Check again", asy
   const routes = read("apps", "api", "src", "routes", "admin-bulk-templates.ts");
   const refresh = routes.slice(routes.indexOf("/templates/refresh"));
   assert.match(refresh, /releaseApprovedCampaigns\(organization\.id\)/);
+  // Last before the answer (review, 3 Nov 2026): the jobs it queues wait for
+  // the request to commit, so nothing slow may run between the two -- WhatsApp's
+  // review reasons took long enough for the jobs to use up their tries.
+  const release = refresh.indexOf("releaseApprovedCampaigns(");
+  for (const slow of ["readTemplateReviews(", "listBroadcastTemplates(", "templatesFor("]) {
+    assert.ok(refresh.indexOf(slow) > -1 && refresh.indexOf(slow) < release, `${slow} runs after the release`);
+  }
+  assert.match(refresh, /released: release\?\.released \?\? \[\], held: release\?\.held \?\? \[\]/);
+});
+
+test("someone who replied STOP while it waited is not messaged when it goes out", db, async () => {
+  const campaign = await approvedCampaign("bulk_zp_probe_stop");
+  await owner.query(`update contacts set reengagement_opted_out = true where id = $1`, [CONTACTS[1].id]);
+  try {
+    queued.length = 0;
+    await control.releaseApprovedCampaigns(ORG);
+    const sentTo = await runJobs(jobsFor(campaign));
+    assert.deepEqual(sentTo, [CONTACTS[0].waId], "a customer who asked not to be messaged was messaged");
+    const omar = (
+      await owner.query(`select status, delivery_error from broadcast_recipients where broadcast_id = $1 and contact_id = $2`, [
+        campaign,
+        CONTACTS[1].id,
+      ])
+    ).rows[0];
+    assert.equal(omar.status, "failed");
+    assert.match(omar.delivery_error, /asked not to be messaged/i);
+    // Settled, not left pending: the campaign still finishes.
+    assert.equal(await statusOf(campaign), "completed");
+  } finally {
+    await owner.query(`update contacts set reengagement_opted_out = false where id = $1`, [CONTACTS[1].id]);
+  }
+});
+
+test("a release the queue half-refused waits again, and the retry messages each customer once", db, async () => {
+  const campaign = await approvedCampaign("bulk_zp_probe_half");
+  queued.length = 0;
+  failAdd = (job) => job.contactWaId === CONTACTS[1].waId;
+  try {
+    await control.releaseApprovedCampaigns(ORG);
+  } finally {
+    failAdd = null;
+  }
+  assert.equal(await statusOf(campaign), "scheduled", "a campaign half-queued was left Sending with customers never queued");
+  await control.releaseApprovedCampaigns(ORG);
+  assert.equal(await statusOf(campaign), "sending");
+  // Sara was queued by both releases; she is still messaged once.
+  const sentTo = await runJobs(jobsFor(campaign));
+  assert.deepEqual(sentTo.sort(), CONTACTS.map((contact) => contact.waId).sort());
+});
+
+test("a send job for someone already messaged sends nothing", db, async () => {
+  const campaign = await approvedCampaign("bulk_zp_probe_twice");
+  queued.length = 0;
+  await control.releaseApprovedCampaigns(ORG);
+  const jobs = jobsFor(campaign);
+  assert.equal((await runJobs(jobs)).length, 2);
+  assert.deepEqual(await runJobs(jobs), [], "a job run a second time messaged the customer again");
+});
+
+test("a number WhatsApp is blocking holds the campaign, with the reason, until it can send", db, async () => {
+  const campaign = await approvedCampaign("bulk_zp_probe_held");
+  queued.length = 0;
+  refusal = "WhatsApp is blocking this number: probe";
+  let result;
+  try {
+    result = await control.releaseApprovedCampaigns(ORG);
+  } finally {
+    refusal = null;
+  }
+  assert.equal(await statusOf(campaign), "scheduled");
+  assert.equal(jobsFor(campaign).length, 0, "a campaign went out from a number WhatsApp is blocking");
+  assert.equal(result.held.find((held) => held.broadcastId === campaign)?.reason, "WhatsApp is blocking this number: probe");
+  await control.releaseApprovedCampaigns(ORG);
+  assert.equal(await statusOf(campaign), "sending");
+  assert.equal(jobsFor(campaign).length, 2);
+});
+
+test("a customer's first blank is their first name, on every send", async () => {
+  const { staffTemplateParams } = await import("../src/routes/my-campaigns.ts");
+  assert.deepEqual(staffTemplateParams(2, "  Sara   Khan "), ["Sara", "-"]);
+  assert.deepEqual(staffTemplateParams(1, null), ["there"]);
 });
 
 test("the customers ticked on the page wait for the message, and nothing goes out yet", db, async () => {
