@@ -87,6 +87,8 @@ export function ConnectionsPanel() {
   const load = async () => {
     try {
       const data = await getConnections();
+      // Staff never name a business, even on a computer an admin has used.
+      if (!data.businesses) setConnectionsBusiness(null);
       setConnections(data.connections);
       setProviders(data.providers);
       setBusinesses(data.businesses ?? null);
@@ -98,13 +100,20 @@ export function ConnectionsPanel() {
           .then((m) => setMail({ messages: m.messages, note: m.note }))
           .catch((err) => setNotice(readableError(err, "Gmail could not be read just now.")));
       }
+      return data;
     } catch (err) {
       const message = readableError(err, "Could not load your connections.");
       // The owner has no personal accounts here. That is a fact about the role,
       // not a failure, so it is shown as a note rather than an error.
       if (/owner has no personal account/i.test(message)) setConnections([]);
       else setError(message);
+      return null;
     }
+  };
+
+  /** For a card that only needs the list read again. */
+  const reload = async (): Promise<void> => {
+    await load();
   };
 
   /** An admin picks the business; remembered per browser, so a sign-in round trip lands back on it. */
@@ -121,12 +130,23 @@ export function ConnectionsPanel() {
   };
 
   useEffect(() => {
-    try {
-      setConnectionsBusiness(localStorage.getItem(BUSINESS_KEY));
-    } catch {
-      // Storage blocked: the admin chooses again.
-    }
-    void load();
+    void (async () => {
+      const data = await load();
+      // An admin's remembered business — applied only once the server has said
+      // this is an admin, and only if that business still exists.
+      if (data?.businesses && !data.business) {
+        let saved: string | null = null;
+        try {
+          saved = localStorage.getItem(BUSINESS_KEY);
+        } catch {
+          // Storage blocked: the admin chooses again.
+        }
+        if (saved && data.businesses.some((b) => b.slug === saved)) {
+          setConnectionsBusiness(saved);
+          await load();
+        }
+      }
+    })();
     // A returning OAuth redirect carries its outcome in the URL. Read once,
     // then stripped, so a refresh does not repeat a stale "connected" banner.
     const params = new URLSearchParams(window.location.search);
@@ -275,7 +295,7 @@ export function ConnectionsPanel() {
         <BusinessEmailCard
           provider={imap}
           connection={imapConn}
-          onChange={load}
+          onChange={reload}
           onError={setError}
           onNotice={setNotice}
         />
@@ -289,7 +309,7 @@ export function ConnectionsPanel() {
           setBusy={setBusy}
           onNotice={setNotice}
           onError={setError}
-          onChange={load}
+          onChange={reload}
         />
       ) : null}
 

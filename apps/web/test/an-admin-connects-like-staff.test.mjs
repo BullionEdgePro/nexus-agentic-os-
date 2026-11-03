@@ -57,7 +57,18 @@ test("only an admin sees the picker, and an unchosen business shows no cards", (
   assert.match(panel, /Choose a business to connect your accounts for\./);
   // Storage can throw (private mode): both the write and the read are wrapped.
   assert.match(panel, /try \{\s*if \(slug\) localStorage\.setItem\(BUSINESS_KEY, slug\);/);
-  assert.match(panel, /try \{\s*setConnectionsBusiness\(localStorage\.getItem\(BUSINESS_KEY\)\);/);
+  assert.match(panel, /try \{\s*saved = localStorage\.getItem\(BUSINESS_KEY\);/);
+});
+
+// Found in the browser check: on a computer an admin had used, a staff member's
+// calls still named the admin's business — the choice was restored before
+// anyone knew who was asking.
+test("a remembered business is applied only once the server says this is an admin", () => {
+  const panel = read("app/deck/my-clients/connections.tsx");
+  assert.match(panel, /if \(!data\.businesses\) setConnectionsBusiness\(null\);/);
+  assert.match(panel, /if \(data\?\.businesses && !data\.business\) \{/);
+  assert.match(panel, /saved && data\.businesses\.some\(\(b\) => b\.slug === saved\)/);
+  assert.doesNotMatch(panel, /setConnectionsBusiness\(localStorage\.getItem/);
 });
 
 test("an admin's seat says Admin on the Team screen", () => {
