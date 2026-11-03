@@ -21,17 +21,18 @@ const ROUTE = readFileSync(join(here, "..", "src", "routes", "connections.ts"), 
 test("every connections route asks one place whose account it is", () => {
   assert.match(ROUTE, /export async function ownerFor\(/);
   assert.doesNotMatch(ROUTE, /\bownerOf\(/);
-  // Starting a connection makes the admin's seat — TikTok, Facebook/Instagram,
-  // Gmail, the business mailbox, WhatsApp; reading, importing history or
-  // removing never does.
-  assert.equal((ROUTE.match(/ownerFor\(c, \{ create: true \}\)/g) ?? []).length, 5);
+  // Starting a connection makes the admin's seat — TikTok, Gmail, the business
+  // mailbox, WhatsApp; reading, importing history or removing never does, and
+  // Facebook/Instagram are the business's, so they need no seat at all.
+  assert.equal((ROUTE.match(/ownerFor\(c, \{ create: true \}\)/g) ?? []).length, 4);
   assert.ok((ROUTE.match(/ownerFor\(c, \{ create: false \}\)/g) ?? []).length >= 8);
 });
 
-test("a sign-in for an admin's seat comes back to Connections", () => {
-  // Admins cannot open My clients; staff keep it.
+test("a sign-in for an admin comes back to Connections", () => {
+  // Admins cannot open My clients; staff keep it. By the person's own session,
+  // so a seatless Facebook/Instagram sign-in lands right too.
   assert.match(ROUTE, /async function returnPage\(/);
-  assert.match(ROUTE, /adminId \? "\/deck\/connections" : "\/deck\/my-clients"/);
+  assert.match(ROUTE, /scope\.role === "operator" \? "\/deck\/connections" : "\/deck\/my-clients"/);
   assert.equal((ROUTE.match(/const page = await returnPage\(c\);/g) ?? []).length, 3);
   assert.doesNotMatch(ROUTE, /\$\{app\}\/deck\/my-clients\?connected=/);
 });

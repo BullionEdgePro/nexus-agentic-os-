@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { launchWhatsAppSignup } from "@/lib/whatsapp-signup";
 import {
   getConnections,
@@ -83,10 +83,15 @@ export function ConnectionsPanel() {
   // for. Null for staff, who have exactly one.
   const [businesses, setBusinesses] = useState<Array<{ slug: string; name: string }> | null>(null);
   const [business, setBusiness] = useState<string | null>(null);
+  const loadTicket = useRef(0);
 
   const load = async () => {
+    // Only the newest load may write: an admin switching business quickly must
+    // not see a slower answer for the business they just left.
+    const ticket = ++loadTicket.current;
     try {
       const data = await getConnections();
+      if (ticket !== loadTicket.current) return null;
       // Staff never name a business, even on a computer an admin has used.
       if (!data.businesses) setConnectionsBusiness(null);
       setConnections(data.connections);
@@ -102,6 +107,7 @@ export function ConnectionsPanel() {
       }
       return data;
     } catch (err) {
+      if (ticket !== loadTicket.current) return null;
       const message = readableError(err, "Could not load your connections.");
       // The owner has no personal accounts here. That is a fact about the role,
       // not a failure, so it is shown as a note rather than an error.
@@ -197,6 +203,9 @@ export function ConnectionsPanel() {
       {notice ? <p className="cnx-note">{notice}</p> : null}
       {error ? <p className="mc-error">{error}</p> : null}
 
+      {/* The cards start over for each business an admin picks: the WhatsApp
+          history card reads its business once, and must not show the last one's. */}
+      <Fragment key={business ?? "mine"}>
       {gmail ? (
         <div className="cnx-card">
           <div className="cnx-head">
@@ -338,6 +347,7 @@ export function ConnectionsPanel() {
           onError={setError}
         />
       ) : null}
+      </Fragment>
     </section>
   );
 }
