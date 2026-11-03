@@ -1,25 +1,40 @@
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { REAL_ESTATE_WORKFLOW, type WorkflowAudit } from "@nexus/shared";
 
 /**
  * Dubai compliance (2 Nov 2026, SFS workflow audit): the papers the boss's
- * workflow names, each kept outside Nexus today, with the step it belongs to
- * and what tracking it would need — beside what Nexus does record about
- * consent, with its counts. Spec: docs/superpowers/specs/2026-11-02-sfs-audit-design.md §6
+ * workflow names, with the step each belongs to — beside what Nexus records
+ * about consent, with its counts. Spec: docs/superpowers/specs/2026-11-02-sfs-audit-design.md §6
+ *
+ * Since the workflow board (3 Nov 2026) the papers are recorded in Nexus: Form
+ * A and the Trakheesi permit on each unit, the rest on each deal. The permits
+ * are counted as they stand now — units advertised, and how many of those carry
+ * a permit that has lapsed. Spec: docs/superpowers/specs/2026-11-03-sfs-workflow-board-design.md §8
  */
-const ITEMS: { item: string; step: string; needs: string }[] = [
-  { item: "Form A", step: "S8", needs: "The signed Form A per listing." },
-  { item: "Trakheesi permit", step: "S8", needs: "The permit number and expiry per listing." },
-  { item: "Ejari", step: "D7", needs: "The Ejari number per rent deal." },
-  { item: "Form F", step: "D8", needs: "The signed Form F per sale deal." },
-  { item: "KYC/AML", step: "D8", needs: "The KYC/AML check per buyer and seller." },
-  { item: "DLD transfer", step: "D8", needs: "The DLD transfer per sale deal." },
+const ITEMS: { item: string; step: string; on: "unit" | "deal" }[] = [
+  { item: "Form A", step: "S8", on: "unit" },
+  { item: "Trakheesi permit", step: "S8", on: "unit" },
+  { item: "Ejari", step: "D7", on: "deal" },
+  { item: "Form F", step: "D8", on: "deal" },
+  { item: "KYC/AML", step: "D8", on: "deal" },
+  { item: "DLD transfer", step: "D8", on: "deal" },
 ];
 
 const stepName = (id: string) => {
   const step = REAL_ESTATE_WORKFLOW.steps.find((s) => s.id === id);
   return step ? `${step.tag} · ${step.name}` : id;
 };
+
+function permitsLine(permits: WorkflowAudit["evidence"]["permits"] | undefined): ReactNode {
+  const { advertised = 0, expired = 0 } = permits ?? {};
+  const lapsed = `${expired.toLocaleString("en-GB")} with an expired permit`;
+  return (
+    <>
+      On the board: {advertised.toLocaleString("en-GB")} {advertised === 1 ? "unit" : "units"} advertised ·{" "}
+      {expired > 0 ? <span className="wf-warn">{lapsed}</span> : lapsed}
+    </>
+  );
+}
 
 export function ComplianceTable({ evidence }: { evidence: WorkflowAudit["evidence"] }) {
   const consent = [
@@ -36,7 +51,6 @@ export function ComplianceTable({ evidence }: { evidence: WorkflowAudit["evidenc
               <th scope="col">Item</th>
               <th scope="col">Step</th>
               <th scope="col">In Nexus</th>
-              <th scope="col">Tracking it would need</th>
             </tr>
           </thead>
           <tbody>
@@ -44,8 +58,7 @@ export function ComplianceTable({ evidence }: { evidence: WorkflowAudit["evidenc
               <tr key={row.item}>
                 <th scope="row">{row.item}</th>
                 <td>{stepName(row.step)}</td>
-                <td>Kept outside Nexus</td>
-                <td>{row.needs}</td>
+                <td>{row.on === "unit" ? permitsLine(evidence.permits) : "Recorded on each deal on the board"}</td>
               </tr>
             ))}
           </tbody>

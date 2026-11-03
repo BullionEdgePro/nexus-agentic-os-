@@ -168,6 +168,8 @@
 .wf-error-actions { margin-top: 12px; }
 /* Its own class: wf-quiet is the idle card's "nothing in this period" line (review). */
 .wf-quiet-period { margin: -8px 0 18px; font-size: 14px; color: var(--slate); }
+/* A lapsed advertising permit, counted in the compliance table (workflow board, 3 Nov 2026). */
+.wf-warn { color: var(--warn); font-weight: 600; }
 .wf-loading { display: grid; gap: 14px; }
 .wf-skeleton { border-radius: var(--r); background: color-mix(in srgb, var(--slate) 12%, transparent); }
 .wf-skeleton-bar { height: 22px; width: min(100%, 420px); }

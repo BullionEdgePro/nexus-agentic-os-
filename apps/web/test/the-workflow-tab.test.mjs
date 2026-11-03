@@ -32,6 +32,8 @@ const AUDIT = {
     viewings: { booked: 6, held: 4, noShow: 1, cancelled: 1 },
     won: 2,
     followUps: { created: 9, done: 5, openNow: 4, overdueNow: 2 },
+    board: { S5: 2, D4: 1 },
+    permits: { advertised: 0, expired: 0 },
   },
   series: {
     leads: [
@@ -272,6 +274,11 @@ test("a quiet week is quiet even though the business has contacts and open follo
   assert.equal(isQuiet(quietWeek), true);
   assert.equal(isQuiet({ ...quietWeek, evidence: { ...quietWeek.evidence, contacts: { ...quietWeek.evidence.contacts, added: 1 } } }), false);
   assert.equal(isQuiet({ ...quietWeek, evidence: { ...quietWeek.evidence, outreach: { sent: 2, delivered: 0, failed: 0 } } }), false);
+  // Units advertised now are a count of now, not this period's work (3 Nov 2026,
+  // the workflow board); a card moved on the board is.
+  const advertised = { ...quietWeek, evidence: { ...quietWeek.evidence, permits: { advertised: 3, expired: 1 } } };
+  assert.equal(isQuiet(advertised), true);
+  assert.equal(isQuiet({ ...advertised, evidence: { ...advertised.evidence, board: { S8: 1 } } }), false);
 });
 
 test("the biggest drop is the most people lost, not a tiny tail", () => {

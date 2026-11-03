@@ -80,7 +80,20 @@ export function stepFigures(stepId: string, evidence: WorkflowAudit["evidence"])
         fig("Done", e.followUps.done),
         fig("Open now", e.followUps.openNow),
         fig("Overdue now", e.followUps.overdueNow),
+        fig("Deals moved in on the board", e.board?.D9 ?? 0),
       ];
+    // The steps the workflow board fills (3 Nov 2026): cards moved in, in the period.
+    case "S5":
+    case "S6":
+    case "S7":
+    case "S8":
+    case "S9":
+    case "S10":
+    case "D4":
+    case "D6":
+    case "D7":
+    case "D8":
+      return [fig("Moved in on the board", e.board?.[stepId] ?? 0)];
     default:
       return [];
   }

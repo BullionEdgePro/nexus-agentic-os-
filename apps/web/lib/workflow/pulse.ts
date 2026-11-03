@@ -121,7 +121,8 @@ export function leadTrend(series: WorkflowAudit["series"], unit: "day" | "week")
  * Nothing recorded in the period. Only the period's own activity counts
  * (final review, 3 Nov 2026): totals (every contact ever, opted out ever) and
  * counts of now (follow-ups open, chats waiting, in cooldown) are not, and
- * counting them meant no real business could ever have a quiet week.
+ * counting them meant no real business could ever have a quiet week. Cards
+ * moved on the workflow board count; units advertised now (permits) do not.
  */
 export function isQuiet(audit: WorkflowAudit): boolean {
   const e = audit.evidence;
@@ -136,6 +137,7 @@ export function isQuiet(audit: WorkflowAudit): boolean {
     e.viewings.booked, e.viewings.held, e.viewings.noShow, e.viewings.cancelled,
     e.won,
     e.followUps.created, e.followUps.done,
+    ...Object.values(e.board ?? {}),
     ...Object.values(audit.funnel),
     ...audit.series.leads.map((b) => b.count),
   ];
