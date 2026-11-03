@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { laneProgress, whereStuck, leadTrend, isQuiet, updatedLabel } from "@/lib/workflow/pulse";
 import { WorkflowPulse } from "@/app/deck/workflow/pulse";
 import { WorkflowPanel } from "@/app/deck/workflow/panel";
+import { HqBusinessView, tabsFor } from "@/app/deck/hq/[slug]/tabs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -192,4 +193,47 @@ test("the workflow page is titled Workflow and draws the panel", () => {
   assert.match(page, /<h1>Workflow\{/);
   assert.doesNotMatch(page, /Workflow audit/);
   assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} \/>/);
+});
+
+// ---------------------------------------------------------------------------
+// Business HQ's Workflow tab, and the name
+// ---------------------------------------------------------------------------
+
+const HQ = {
+  business: { slug: "sfs-international", name: "SFS International", logoUrl: null, websiteUrl: null },
+  profile: {},
+  checks: {},
+  issues: [],
+  score: 70,
+  keywords: [],
+  socials: [],
+  vault: [],
+  reveals: [],
+  vaultConfigured: true,
+  unlockedSeconds: 0,
+};
+const hq = (tab, business = HQ.business) =>
+  renderToStaticMarkup(createElement(HqBusinessView, { data: { ...HQ, business }, tab, now: new Date("2026-11-03T08:00:00Z"), onTab: () => {}, onChanged: () => {} }));
+
+test("SFS's Business HQ has a Workflow tab; a business without a workflow does not", () => {
+  assert.deepEqual(tabsFor("sfs-international").at(-1), { id: "workflow", label: "Workflow" });
+  assert.deepEqual(tabsFor("zipicka").map((t) => t.id), ["overview", "team", "website", "seo", "social", "vault"]);
+});
+
+test("the Workflow tab draws the live workflow in place, not a link away", () => {
+  const html = hq("workflow");
+  assert.match(html, /role="tab" aria-selected="true"[^>]*>Workflow</);
+  assert.match(html, /aria-busy="true"/, "the panel is not drawn in the tab");
+  assert.doesNotMatch(html, /\/deck\/workflow\?business=/);
+});
+
+test("a #workflow link to a business without a workflow opens on Overview", () => {
+  assert.match(read("app/deck/hq/[slug]/page.tsx"), /tabsFor\(slug\)\.some\(\(t\) => t\.id === fromHash\)/);
+  const html = hq("workflow", { ...HQ.business, slug: "zipicka", name: "Zipicka" });
+  assert.doesNotMatch(html, /aria-busy="true"/);
+  assert.match(html, /role="tab" aria-selected="true"[^>]*>Overview</);
+});
+
+test("the rail item is called Workflow, and keeps its rules", () => {
+  assert.match(read("lib/nav.tsx"), /href: "\/deck\/workflow",\s*label: "Workflow",\s*staffOnly: true,\s*needsWorkflow: true,/);
 });

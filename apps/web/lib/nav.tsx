@@ -357,7 +357,7 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/deck/workflow",
-    label: "Workflow audit",
+    label: "Workflow",
     staffOnly: true,
     needsWorkflow: true,
     // The business's own workflow, checked against what Nexus recorded (2 Nov

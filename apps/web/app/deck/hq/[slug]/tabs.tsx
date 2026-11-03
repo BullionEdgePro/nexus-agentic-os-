@@ -13,17 +13,20 @@ import {
   type HqCheck,
   type HqSocial,
 } from "@/lib/api";
-import { workflowFor } from "@nexus/shared";
+import { workflowFor, type BusinessSlug } from "@nexus/shared";
 import { ScoreRing } from "../overview";
 import { VaultPanel } from "./vault-panel";
 import { OrgChartView } from "../org-chart";
+import { WorkflowPanel } from "../../workflow/panel";
 
 /**
  * One business in Business HQ (spec 2026-10-14-business-hq-design.md §3.2).
- * Five tabs over one response; `tab` and `now` are props so every tab renders
- * the same on the server, in tests and in the browser.
+ * Six tabs over one response, and a seventh, Workflow, for a business whose
+ * owner drew one (3 Nov 2026) -- the live workflow in place, the same panel as
+ * /deck/workflow. `tab` and `now` are props so every tab renders the same on
+ * the server, in tests and in the browser.
  */
-export type HqTab = "overview" | "team" | "website" | "seo" | "social" | "vault";
+export type HqTab = "overview" | "team" | "website" | "seo" | "social" | "vault" | "workflow";
 
 export const TABS: { id: HqTab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -33,6 +36,11 @@ export const TABS: { id: HqTab; label: string }[] = [
   { id: "social", label: "Social media" },
   { id: "vault", label: "Vault & access log" },
 ];
+
+/** The tabs this business has: every business's six, and Workflow where one is drawn. */
+export function tabsFor(slug: string): { id: HqTab; label: string }[] {
+  return workflowFor(slug) ? [...TABS, { id: "workflow", label: "Workflow" }] : TABS;
+}
 
 const DAY = 86_400_000;
 const daysUntil = (iso: string, now: Date) => Math.round((new Date(iso).getTime() - now.getTime()) / DAY);
@@ -85,6 +93,9 @@ export function HqBusinessView({
 }) {
   const [checkMsg, setCheckMsg] = useState("");
   const slug = data.business.slug;
+  const tabs = tabsFor(slug);
+  // A #workflow link to a business without a workflow opens on Overview.
+  const active: HqTab = tabs.some((t) => t.id === tab) ? tab : "overview";
   const lastRun = Object.values(data.checks).map((c) => c?.ranAt).filter(Boolean).sort().pop() ?? null;
 
   async function checkNow() {
@@ -109,32 +120,27 @@ export function HqBusinessView({
               {data.business.websiteUrl ?? "No website recorded"} · last checked {lastRun ? `${shortDate(lastRun)}` : "never"}
             </p>
           </div>
-          {/* The workflow audit, only on a business whose owner drew a workflow. */}
-          {workflowFor(slug) ? (
-            <a className="btn ghost" href={`/deck/workflow?business=${encodeURIComponent(slug)}`}>
-              Workflow audit
-            </a>
-          ) : null}
           <button type="button" className="btn" onClick={checkNow}>Check now</button>
         </div>
         {checkMsg ? <p className="hq-vault-msg" role="status">{checkMsg}</p> : null}
       </header>
 
       <nav className="hq-tabs" role="tablist" aria-label="Business HQ sections">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : undefined} onClick={() => onTab(t.id)}>
+        {tabs.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={active === t.id} className={active === t.id ? "on" : undefined} onClick={() => onTab(t.id)}>
             {t.label}
           </button>
         ))}
       </nav>
 
       <div className="hq-panel" role="tabpanel">
-        {tab === "overview" ? <OverviewTab data={data} now={now} /> : null}
-        {tab === "team" && data.orgChart ? <OrgChartView slug={slug} chart={data.orgChart} onChanged={onChanged} /> : null}
-        {tab === "website" ? <WebsiteTab data={data} now={now} onChanged={onChanged} /> : null}
-        {tab === "seo" ? <SeoTab data={data} now={now} onChanged={onChanged} /> : null}
-        {tab === "social" ? <SocialTab data={data} now={now} onChanged={onChanged} /> : null}
-        {tab === "vault" ? (
+        {active === "overview" ? <OverviewTab data={data} now={now} /> : null}
+        {active === "team" && data.orgChart ? <OrgChartView slug={slug} chart={data.orgChart} onChanged={onChanged} /> : null}
+        {active === "website" ? <WebsiteTab data={data} now={now} onChanged={onChanged} /> : null}
+        {active === "seo" ? <SeoTab data={data} now={now} onChanged={onChanged} /> : null}
+        {active === "social" ? <SocialTab data={data} now={now} onChanged={onChanged} /> : null}
+        {active === "workflow" ? <WorkflowPanel slug={slug as BusinessSlug} /> : null}
+        {active === "vault" ? (
           <>
             <VaultPanel slug={slug} entries={data.vault} configured={data.vaultConfigured} unlockedSeconds={data.unlockedSeconds} now={now} onChanged={onChanged} />
             <RevealLog data={data} />

@@ -4,9 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getHqBusiness, readableError, type HqBusinessDetail } from "@/lib/api";
 import { fontVariables } from "@/lib/fonts";
-import { HqBusinessView, TABS, type HqTab } from "./tabs";
+import { HqBusinessView, tabsFor, type HqTab } from "./tabs";
 import "../../deck.css";
 import "../hq.css";
+// The Workflow tab's panel brings no styles of its own (3 Nov 2026).
+import "../../activity/activity.css";
+import "../../../kit/kit.css";
+import "../../workflow/workflow.css";
 
 /** One business's Business HQ dashboard (admins only). The tab lives in the URL hash. */
 export default function HqBusinessPage() {
@@ -27,7 +31,8 @@ export default function HqBusinessPage() {
   useEffect(() => {
     load();
     const fromHash = window.location.hash.slice(1) as HqTab;
-    if (TABS.some((t) => t.id === fromHash)) setTab(fromHash);
+    // This business's own tabs: #workflow only where a workflow is drawn.
+    if (tabsFor(slug).some((t) => t.id === fromHash)) setTab(fromHash);
   }, [load]);
 
   const changeTab = (next: HqTab) => {
