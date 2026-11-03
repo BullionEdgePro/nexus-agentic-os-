@@ -153,20 +153,28 @@ export function HqBusinessView({
         ))}
       </nav>
 
-      <div className="hq-panel" role="tabpanel">
-        {active === "overview" ? <OverviewTab data={data} now={now} /> : null}
-        {active === "team" && data.orgChart ? <OrgChartView slug={slug} chart={data.orgChart} onChanged={onChanged} /> : null}
-        {active === "website" ? <WebsiteTab data={data} now={now} onChanged={onChanged} /> : null}
-        {active === "seo" ? <SeoTab data={data} now={now} onChanged={onChanged} /> : null}
-        {active === "social" ? <SocialTab data={data} now={now} onChanged={onChanged} /> : null}
-        {active === "workflow" ? <WorkflowPanel slug={slug as BusinessSlug} /> : null}
-        {active === "vault" ? (
-          <>
-            <VaultPanel slug={slug} entries={data.vault} configured={data.vaultConfigured} unlockedSeconds={data.unlockedSeconds} now={now} onChanged={onChanged} />
-            <RevealLog data={data} />
-          </>
-        ) : null}
-      </div>
+      {active === "workflow" ? (
+        // A tab panel of its own, outside .hq-panel: hq.css frames every section
+        // and sizes every h3 there, and the workflow's are its own (final review,
+        // 3 Nov 2026) -- so the tab looks exactly like /deck/workflow.
+        <div className="hq-workflow" role="tabpanel">
+          <WorkflowPanel slug={slug as BusinessSlug} />
+        </div>
+      ) : (
+        <div className="hq-panel" role="tabpanel">
+          {active === "overview" ? <OverviewTab data={data} now={now} /> : null}
+          {active === "team" && data.orgChart ? <OrgChartView slug={slug} chart={data.orgChart} onChanged={onChanged} /> : null}
+          {active === "website" ? <WebsiteTab data={data} now={now} onChanged={onChanged} /> : null}
+          {active === "seo" ? <SeoTab data={data} now={now} onChanged={onChanged} /> : null}
+          {active === "social" ? <SocialTab data={data} now={now} onChanged={onChanged} /> : null}
+          {active === "vault" ? (
+            <>
+              <VaultPanel slug={slug} entries={data.vault} configured={data.vaultConfigured} unlockedSeconds={data.unlockedSeconds} now={now} onChanged={onChanged} />
+              <RevealLog data={data} />
+            </>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

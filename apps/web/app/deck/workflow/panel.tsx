@@ -134,7 +134,7 @@ export function WorkflowPanel({ slug }: { slug: BusinessSlug }) {
               yet <span className="wf-verdict-days">· the last {shown.period.days} days</span>
             </p>
           ) : null}
-          {isQuiet(shown) ? <p className="wf-quiet">Nothing was recorded in the last {shown.period.days} days.</p> : null}
+          {isQuiet(shown) ? <p className="wf-quiet-period">Nothing was recorded in the last {shown.period.days} days.</p> : null}
 
           <WorkflowPulse workflow={workflow} audit={shown} />
 

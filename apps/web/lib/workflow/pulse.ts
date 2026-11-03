@@ -45,7 +45,11 @@ const FUNNEL: { key: keyof WorkflowAudit["funnel"]; label: string }[] = [
 
 const n = (value: number) => value.toLocaleString("en-GB");
 
-/** The steepest fall between consecutive funnel stages, by the share lost; a stage of zero starts none. */
+/**
+ * The biggest fall between consecutive funnel stages, by the PEOPLE lost; a
+ * stage of zero starts none. Not by the share lost (final review, 3 Nov 2026):
+ * no win in a week is normal, and 4 → 0 losing "100%" outranked 59 → 12.
+ */
 function steepestDrop(funnel: WorkflowAudit["funnel"]): StuckItem | null {
   let best: { from: (typeof FUNNEL)[number]; to: (typeof FUNNEL)[number]; lost: number } | null = null;
   for (let i = 0; i + 1 < FUNNEL.length; i++) {
@@ -54,7 +58,7 @@ function steepestDrop(funnel: WorkflowAudit["funnel"]): StuckItem | null {
     const a = funnel[from.key];
     const b = funnel[to.key];
     if (a <= 0 || b >= a) continue;
-    const lost = (a - b) / a;
+    const lost = a - b;
     if (!best || lost > best.lost) best = { from, to, lost };
   }
   if (!best) return null;
@@ -113,17 +117,29 @@ export function leadTrend(series: WorkflowAudit["series"], unit: "day" | "week")
   return { total, peak, points, unit };
 }
 
-/** Nothing at all recorded in the period: every count in the evidence and the funnel is zero. */
+/**
+ * Nothing recorded in the period. Only the period's own activity counts
+ * (final review, 3 Nov 2026): totals (every contact ever, opted out ever) and
+ * counts of now (follow-ups open, chats waiting, in cooldown) are not, and
+ * counting them meant no real business could ever have a quiet week.
+ */
 export function isQuiet(audit: WorkflowAudit): boolean {
-  const anyAboveZero = (value: unknown): boolean =>
-    typeof value === "number"
-      ? value > 0
-      : Array.isArray(value)
-        ? value.some(anyAboveZero)
-        : value !== null && typeof value === "object"
-          ? Object.values(value).some(anyAboveZero)
-          : false;
-  return !anyAboveZero(audit.evidence) && !anyAboveZero(audit.funnel);
+  const e = audit.evidence;
+  const activity = [
+    e.contacts.added,
+    e.outreach.sent, e.outreach.delivered, e.outreach.failed,
+    e.calls.answered, e.calls.noAnswer, e.calls.voicemail, e.calls.busy, e.calls.failed,
+    e.reengagement.sent, e.reengagement.replied, e.reengagement.optedOut,
+    e.leads.total, e.leads.pitches,
+    e.qualifier.scored, e.qualifier.hot,
+    e.replies.byAi, e.replies.byPerson,
+    e.viewings.booked, e.viewings.held, e.viewings.noShow, e.viewings.cancelled,
+    e.won,
+    e.followUps.created, e.followUps.done,
+    ...Object.values(audit.funnel),
+    ...audit.series.leads.map((b) => b.count),
+  ];
+  return activity.every((count) => count === 0);
 }
 
 /** How long ago this browser received the figures -- not a server time. */

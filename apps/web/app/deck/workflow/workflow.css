@@ -166,7 +166,8 @@
 .wf-updated { font-size: 12.5px; color: var(--slate); white-space: nowrap; }
 .wf-error { margin-bottom: 16px; }
 .wf-error-actions { margin-top: 12px; }
-.wf-quiet { margin: -8px 0 18px; font-size: 14px; color: var(--slate); }
+/* Its own class: wf-quiet is the idle card's "nothing in this period" line (review). */
+.wf-quiet-period { margin: -8px 0 18px; font-size: 14px; color: var(--slate); }
 .wf-loading { display: grid; gap: 14px; }
 .wf-skeleton { border-radius: var(--r); background: color-mix(in srgb, var(--slate) 12%, transparent); }
 .wf-skeleton-bar { height: 22px; width: min(100%, 420px); }

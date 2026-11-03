@@ -250,3 +250,55 @@ test("on a narrow screen the chosen tab is scrolled into view", () => {
   assert.match(T, /new ResizeObserver\(keepInSight\)/);
   assert.match(T, /return \(\) => watch\?\.disconnect\(\);/);
 });
+
+// ---------------------------------------------------------------------------
+// From the final review (3 Nov 2026)
+// ---------------------------------------------------------------------------
+
+test("a quiet week is quiet even though the business has contacts and open follow-ups", () => {
+  // Totals and current counts (every contact ever, follow-ups open now, chats
+  // waiting now) are not this period's activity; counting them made the quiet
+  // sentence impossible for any real business.
+  const quietWeek = {
+    ...QUIET,
+    evidence: {
+      ...QUIET.evidence,
+      contacts: { ...QUIET.evidence.contacts, total: 154, withSource: 97, optedOut: 3, notACustomer: 5, emailOptedOut: 1 },
+      reengagement: { ...QUIET.evidence.reengagement, inCooldown: 6 },
+      replies: { ...QUIET.evidence.replies, unanswered: 3 },
+      followUps: { ...QUIET.evidence.followUps, openNow: 4, overdueNow: 2 },
+    },
+  };
+  assert.equal(isQuiet(quietWeek), true);
+  assert.equal(isQuiet({ ...quietWeek, evidence: { ...quietWeek.evidence, contacts: { ...quietWeek.evidence.contacts, added: 1 } } }), false);
+  assert.equal(isQuiet({ ...quietWeek, evidence: { ...quietWeek.evidence, outreach: { sent: 2, delivered: 0, failed: 0 } } }), false);
+});
+
+test("the biggest drop is the most people lost, not a tiny tail", () => {
+  const dropOf = (funnel) => whereStuck(REAL_ESTATE_WORKFLOW, { ...AUDIT, funnel }).find((i) => i.kind === "drop")?.detail;
+  // No wins in a week is normal; 4 → 0 must not outrank 59 → 12.
+  assert.equal(dropOf({ leads: 88, scored: 59, hot: 12, booked: 6, held: 4, won: 0 }), "59 → 12");
+  assert.equal(dropOf({ leads: 40, scored: 30, hot: 12, booked: 2, held: 0, won: 0 }), "30 → 12");
+});
+
+test("the quiet sentence has a class of its own; the cards' idle line keeps its look", () => {
+  const css = read("app/deck/workflow/workflow.css");
+  assert.match(read("app/deck/workflow/panel.tsx"), /<p className="wf-quiet-period">/);
+  assert.match(css, /\.wf-quiet-period \{/);
+  // .wf-quiet is the idle card's "nothing in this period" line: its rules only.
+  const quietRules = css.match(/^[^\n]*\.wf-quiet\b[^-][^\n]*$/gm) ?? [];
+  assert.deepEqual(quietRules.map((r) => r.trim()), [
+    ".wf-needs, .wf-quiet { font-size: 12px; line-height: 1.35; }",
+    ".wf-quiet { opacity: .8; }",
+  ]);
+});
+
+test("inside Business HQ the workflow keeps its own look", () => {
+  // hq.css frames every section and sizes every h3 under .hq-panel; the
+  // workflow's sections, lanes and headings are its own, so its tab is drawn
+  // in a tab panel of its own, outside .hq-panel, and matches the page.
+  const html = hq("workflow");
+  assert.match(html, /<div class="hq-workflow" role="tabpanel">/);
+  assert.doesNotMatch(html, /class="hq-panel"/);
+  assert.match(hq("overview"), /<div class="hq-panel" role="tabpanel">/);
+});
