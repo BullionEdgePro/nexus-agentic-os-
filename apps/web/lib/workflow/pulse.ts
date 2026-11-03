@@ -112,3 +112,24 @@ export function leadTrend(series: WorkflowAudit["series"], unit: "day" | "week")
   for (const b of series.leads) if (b.count > 0 && (!peak || b.count > peak.count)) peak = { bucket: b.bucket, count: b.count };
   return { total, peak, points, unit };
 }
+
+/** Nothing at all recorded in the period: every count in the evidence and the funnel is zero. */
+export function isQuiet(audit: WorkflowAudit): boolean {
+  const anyAboveZero = (value: unknown): boolean =>
+    typeof value === "number"
+      ? value > 0
+      : Array.isArray(value)
+        ? value.some(anyAboveZero)
+        : value !== null && typeof value === "object"
+          ? Object.values(value).some(anyAboveZero)
+          : false;
+  return !anyAboveZero(audit.evidence) && !anyAboveZero(audit.funnel);
+}
+
+/** How long ago this browser received the figures -- not a server time. */
+export function updatedLabel(fetchedAt: number, now: number): string {
+  const ago = Math.max(0, now - fetchedAt);
+  if (ago < 60_000) return "Updated just now";
+  if (ago < 3_600_000) return `Updated ${Math.floor(ago / 60_000)} min ago`;
+  return `Updated ${Math.floor(ago / 3_600_000)} h ago`;
+}

@@ -10,8 +10,12 @@ import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { REAL_ESTATE_WORKFLOW, stepStatus } from "@nexus/shared";
-import { laneProgress, whereStuck, leadTrend } from "@/lib/workflow/pulse";
+import { readFileSync } from "node:fs";
+import { laneProgress, whereStuck, leadTrend, isQuiet, updatedLabel } from "@/lib/workflow/pulse";
 import { WorkflowPulse } from "@/app/deck/workflow/pulse";
+import { WorkflowPanel } from "@/app/deck/workflow/panel";
+
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 const AUDIT = {
   business: { slug: "sfs-international", name: "SFS International", timezone: "Asia/Dubai" },
@@ -140,4 +144,52 @@ test("the pulse draws progress, the stuck list and the trend, with no number of 
   const allowed = new Set(["16", "30", ...JSON.stringify(AUDIT).match(/\d+/g)]);
   const printed = html.replace(/<[^>]+>/g, " ").match(/\d+/g) ?? [];
   for (const n of printed) assert.ok(allowed.has(n) || laneProgress(REAL_ESTATE_WORKFLOW, AUDIT.evidence).some((l) => String(l.total) === n || String(l.working) === n), `${n} is not from the audit`);
+});
+
+// ---------------------------------------------------------------------------
+// The panel: one for the page and for Business HQ, and reliable
+// ---------------------------------------------------------------------------
+
+test("a quiet period is one where every count is zero", () => {
+  assert.equal(isQuiet(QUIET), true);
+  assert.equal(isQuiet(AUDIT), false);
+});
+
+test("Updated says how long ago this browser received the figures", () => {
+  assert.equal(updatedLabel(1_000, 31_000), "Updated just now");
+  assert.equal(updatedLabel(0, 5 * 60_000 + 10_000), "Updated 5 min ago");
+  assert.equal(updatedLabel(0, 2 * 3_600_000 + 60_000), "Updated 2 h ago");
+  assert.equal(updatedLabel(10_000, 0), "Updated just now", "a clock that moved back is not the future");
+});
+
+test("while it loads, the panel shows the page's outline, marked busy", () => {
+  const html = renderToStaticMarkup(createElement(WorkflowPanel, { slug: "sfs-international" }));
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /class="wf-skeleton/);
+  assert.doesNotMatch(html, /could not be loaded/);
+  assert.match(html, />Refresh</);
+});
+
+test("the panel asks again on Try again and Refresh, and keeps figures it already has", () => {
+  const P = read("app/deck/workflow/panel.tsx");
+  assert.match(P, /export function WorkflowPanel\(\{ slug \}/);
+  assert.match(P, /getWorkflowAudit\(/);
+  assert.match(P, /const asked = \+\+requestId\.current;/);
+  assert.match(P, /if \(asked !== requestId\.current\) return;/);
+  assert.match(P, /The workflow could not be loaded\./);
+  assert.match(P, /onClick=\{\(\) => void load\(days\)\}[^>]*>\s*Try again/);
+  assert.match(P, /onClick=\{\(\) => void load\(days\)\}[\s\S]{0,80}>\s*Refresh/);
+  assert.doesNotMatch(P, /setAudit\(null\)/, "a failed refresh blanks the figures already on screen");
+  // Figures for another period, or another business, never sit under this one's pills.
+  assert.match(P, /audit\.period\.days === days && audit\.business\.slug === slug/);
+  assert.match(P, /updatedLabel\(fetchedAt, now\)/);
+  assert.match(P, /Nothing was recorded in the last \{shown\.period\.days\} days\./);
+  assert.match(P, /<WorkflowPulse workflow=\{workflow\} audit=\{shown\} \/>/);
+});
+
+test("the workflow page is titled Workflow and draws the panel", () => {
+  const page = read("app/deck/workflow/page.tsx");
+  assert.match(page, /<h1>Workflow\{/);
+  assert.doesNotMatch(page, /Workflow audit/);
+  assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} \/>/);
 });

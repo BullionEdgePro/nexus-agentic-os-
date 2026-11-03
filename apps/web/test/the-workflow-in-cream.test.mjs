@@ -179,11 +179,12 @@ test("a long lead source never widens its row", () => {
 // ---- Task 7: the page, the sidebar item and the Business HQ link -------------------------------
 
 test("the page loads the audit for its period and ignores answers that arrive late", () => {
-  const P = read("app/deck/workflow/page.tsx");
+  // The page and its panel (panel.tsx, shared with Business HQ since 3 Nov 2026).
+  const P = read("app/deck/workflow/page.tsx") + read("app/deck/workflow/panel.tsx");
   assert.match(P, /getWorkflowAudit\(/);
   assert.match(P, /const asked = \+\+requestId\.current;/);
   assert.match(P, /if \(asked !== requestId\.current\) return;/);
-  assert.match(P, /The audit could not be loaded\./);
+  assert.match(P, /The workflow could not be loaded\./);
   assert.match(P, /<NoWorkflow \/>/);
   assert.match(P, /Loading…/);
   assert.match(P, /const PERIODS: AuditDays\[\] = \[7, 30, 90\];/);

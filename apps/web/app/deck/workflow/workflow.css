@@ -157,6 +157,22 @@
 }
 @media (max-width: 640px) { .wf-vitals-grid { grid-template-columns: minmax(0, 1fr); } }
 
+/* ---- the panel: period, Updated and Refresh, error, quiet, loading ------------- */
+
+.wf-panel { min-width: 0; }
+.wf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 4px; }
+.wf-bar .wf-pills { margin: 4px 0 12px; }
+.wf-fresh { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.wf-updated { font-size: 12.5px; color: var(--slate); white-space: nowrap; }
+.wf-error { margin-bottom: 16px; }
+.wf-error-actions { margin-top: 12px; }
+.wf-quiet { margin: -8px 0 18px; font-size: 14px; color: var(--slate); }
+.wf-loading { display: grid; gap: 14px; }
+.wf-skeleton { border-radius: var(--r); background: color-mix(in srgb, var(--slate) 12%, transparent); }
+.wf-skeleton-bar { height: 22px; width: min(100%, 420px); }
+.wf-skeleton-cards { height: 150px; }
+.wf-skeleton-lanes { height: 260px; }
+
 /* ---- a phone: each lane a list, branches indented in pairs -------------------- */
 
 @media (max-width: 760px) {
@@ -209,4 +225,7 @@
   @keyframes wf-draw { to { stroke-dashoffset: 0; } }
   @keyframes wf-show { to { opacity: 1; } }
   @keyframes wf-flow { to { stroke-dashoffset: 0; } }
+  /* The loading outline breathes while it waits. */
+  .wf-skeleton { animation: wf-breathe 1.4s ease-in-out infinite alternate; }
+  @keyframes wf-breathe { from { opacity: .55; } to { opacity: 1; } }
 }
