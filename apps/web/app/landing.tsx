@@ -4,22 +4,38 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
+import type { SalesContact } from "@/lib/sales-contact";
+import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
+import { placeNode } from "@/lib/plate";
+import { ThemeToggle } from "./theme-toggle";
+import { ContactButton, ClosingBand, NavMenu, FloatingContact } from "./landing-contact";
 import "./deck/deck.css";
 import "./landing.css";
 
 // ============================================================
-// The public front page — "Clear Sky".
+// The public front page — in Cream, and selling (2 Nov 2026, spec
+// 2026-11-02-storefront-cream-design.md).
 // ============================================================
 //
-// Laid out after the team-inbox platforms the owner measures Nexus against
-// (DoubleTick): an editorial serif headline over mono spec labels, a product
-// that is SHOWN working rather than described, a tabbed tour of what it does,
-// and the sign-in at the foot. Everything claimed here is something the
-// platform does today; nothing is a roadmap item wearing present tense.
+// A product site that wins other businesses. Laid out after the team-inbox
+// platforms the owner measures Nexus against (DoubleTick): an editorial serif
+// headline over mono spec labels, a product that is SHOWN working rather than
+// described, a tabbed tour of what it does, and one way in for a business —
+// WhatsApp to a number Nexus answers (landing-contact.tsx) — with the team's
+// sign-in at the foot. Everything claimed here is something the platform does
+// today; nothing is a roadmap item wearing present tense.
 //
 // Motion is the product demonstrating itself: messages arriving in the mock
 // inbox, a pulse travelling the switchboard, circuit traces carrying signal.
 // All of it stops under prefers-reduced-motion.
+
+/** The top bar's section links — in a row on a wide screen, behind Menu on a phone. */
+const NAV_LINKS = [
+  { href: "#tour", label: "Product" },
+  { href: "#switchboard", label: "Switchboard" },
+  { href: "#journey", label: "How it works" },
+  { href: "/links", label: "Customer links" },
+];
 
 const BrandMark = () => (
   <span className="lp-mark" aria-hidden="true">
@@ -251,16 +267,11 @@ function RoutingPlate() {
     const layout = () => {
       const bw = el.clientWidth;
       const bh = el.clientHeight;
-      const cx = bw / 2;
-      const cy = bh / 2;
-      const R = Math.min(bw, bh) * 0.36;
+      // The cards' real width (landing.css narrows them on a phone); before
+      // the first draw, the widest they ever are.
+      const cardW = el.querySelector<HTMLElement>(".lp-node-card")?.offsetWidth || 150;
       setSize({ w: bw, h: bh });
-      setNodes(
-        PLATE_NODES.map((meta) => {
-          const a = (meta.ang * Math.PI) / 180;
-          return { meta, x: cx + Math.cos(a) * R * 1.2, y: cy + Math.sin(a) * R };
-        })
-      );
+      setNodes(PLATE_NODES.map((meta) => ({ meta, ...placeNode(meta.ang, bw, bh, cardW) })));
     };
     layout();
     const ro = new ResizeObserver(layout);
@@ -396,7 +407,7 @@ function TourArt({ which }: { which: TourKey }) {
   }
 }
 
-export default function Landing() {
+export default function Landing({ contact }: { contact: SalesContact }) {
   const router = useRouter();
   // Starts empty. These fields used to be pre-filled with demo credentials,
   // which was harmless while this page sat behind a redirect and unhelpful the
@@ -450,6 +461,7 @@ export default function Landing() {
         setBusy(false);
         return;
       }
+      forgetSystemTheme();
       router.refresh();
       router.refresh();
     } catch {
@@ -462,6 +474,7 @@ export default function Landing() {
 
   return (
     <div className={`deck-root lp ${fontVariables}`}>
+      <script dangerouslySetInnerHTML={{ __html: PUBLIC_THEME_BOOT }} />
       <div className="lp-sky" aria-hidden="true">
         <span className="lp-bloom b1" />
         <span className="lp-bloom b2" />
@@ -476,22 +489,26 @@ export default function Landing() {
           </span>
         </a>
         <div className="lp-nav-links">
-          <a href="#tour">Product</a>
-          <a href="#switchboard">Switchboard</a>
-          <a href="#journey">How it works</a>
-          <a href="/links">Customer links</a>
+          {NAV_LINKS.map((l) => (
+            <a key={l.href} href={l.href}>
+              {l.label}
+            </a>
+          ))}
         </div>
+        {/* Selling first: the contact pill is the button, Sign in is quiet. The
+            admin's door is named under the team's sign-in card instead. */}
         <div className="lp-nav-cta">
-          <a href="/admin" className="lp-link-quiet">
-            Admin
-          </a>
-          <a href="#signin" className="btn">
+          <ThemeToggle compact />
+          <a href="#signin" className="lp-link-quiet">
             Sign in
           </a>
+          <ContactButton contact={contact} whatsappLabel="Chat on WhatsApp" shortLabel="WhatsApp" />
+          {/* A phone's links, with the team's way in — its quiet link folds away. */}
+          <NavMenu links={[...NAV_LINKS, { href: "#signin", label: "Sign in" }]} />
         </div>
       </nav>
 
-      <header className="lp-hero">
+      <header className="lp-hero" id="top">
         <Circuit side="left" />
         <Circuit side="right" />
         <div className="lp-hero-copy">
@@ -506,12 +523,7 @@ export default function Landing() {
             answers in seconds, and a team inbox that never lets anyone wait unseen.
           </p>
           <div className="lp-cta">
-            <a href="#signin" className="btn">
-              Enter the console
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M5 12h14m-6-6 6 6-6 6" />
-              </svg>
-            </a>
+            <ContactButton contact={contact} whatsappLabel="Chat with Nexus on WhatsApp" />
             <a href="#tour" className="btn ghost">
               See it work
             </a>
@@ -658,10 +670,12 @@ export default function Landing() {
         </ol>
       </section>
 
+      <ClosingBand contact={contact} />
+
       <section className="lp-signin" id="signin">
         <div className="lp-signin-copy">
           <span className="lp-kicker">For the team</span>
-          <h2>Your inbox is waiting.</h2>
+          <h2>Staff of a Nexus business?</h2>
           <p>
             Staff sign in with the access code their manager issued. Every business below answers
             through Nexus today.
@@ -803,6 +817,8 @@ export default function Landing() {
         <a href="/terms">Terms</a>
         <span className="lp-foot-meta">nexusagenticos.com</span>
       </footer>
+
+      <FloatingContact contact={contact} />
     </div>
   );
 }

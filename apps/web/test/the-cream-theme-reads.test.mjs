@@ -32,7 +32,7 @@ function tokens(body) {
 }
 
 const light = tokens(block(deck, "\n.deck-root {"));
-const dark = { ...light, ...tokens(block(deck, 'html[data-theme="dark"] .deck-root:not(.lp):not(.admin-root):not(.pl-root) {')) };
+const dark = { ...light, ...tokens(block(deck, 'html[data-theme="dark"] .deck-root:not(.pl-root) {')) };
 
 function lum(hex) {
   const h = hex.replace("#", "");
@@ -93,13 +93,9 @@ test("every text colour reads on its ground in both themes", () => {
   assert.ok(contrast(light["--on-accent"], light["--signal"]) >= 4.5);
 });
 
-test("the storefront keeps its Calm colours until part 3", () => {
+test("the storefront takes the console's Cream tokens", () => {
   const lp = tokens(block(read("../app/landing.css"), ".deck-root.lp {"));
-  assert.equal(lp["--marble"], "#f6f7f9");
-  assert.equal(lp["--paper"], "#ffffff");
-  assert.equal(lp["--ink"], "#111827");
-  assert.equal(lp["--signal"], "#1d4ed8");
-  assert.equal(lp["--sky"], "#3b82f6");
+  for (const own of ["--marble", "--paper", "--ink", "--signal", "--sky"]) assert.equal(lp[own], undefined, own);
 });
 
 test("the phone's status bar takes the dock's near-black", () => {

@@ -1056,16 +1056,17 @@
    and stamped on <html data-theme="dark"> BEFORE first paint by the
    inline script in app/layout.tsx, so there is no white flash.
 
-   Scoped to the console. The public front page, the customer links page
-   and the administrator's door keep their own look: the first two are
-   what customers see, the last is already night.
+   Everywhere but the customer links page, which keeps its own look. The
+   storefront and the administrator's door take it too (2 Nov 2026,
+   spec 2026-11-02-storefront-cream-design.md §1); with no saved choice
+   they follow the visitor's device (PUBLIC_THEME_BOOT, lib/theme.ts).
 
    The rules that carry over: severity still outranks the accent (the
    three severity colours are re-mixed brighter so they read on navy),
    nothing is pure black, and text on a blue gradient uses --on-accent,
    which stays white. */
 
-html[data-theme="dark"] .deck-root:not(.lp):not(.admin-root):not(.pl-root) {
+html[data-theme="dark"] .deck-root:not(.pl-root) {
   color-scheme: dark;
 
   /* Warm Night (1 Nov 2026): the same cream workshop after dark. */
