@@ -124,18 +124,20 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
   const current = opened ? cards.find((c) => c.id === opened.id) ?? null : null;
   const stepName = (id: string) => workflow.steps.find((s) => s.id === id)?.name ?? id;
 
-  /** Runs a change from the card window, then shows the board as saved. */
-  async function fromWindow(card: BoardCard, change: () => Promise<unknown>, done: string) {
+  /** Runs a change from the card window, then shows the board as saved; true when it went through. */
+  async function fromWindow(card: BoardCard, change: () => Promise<unknown>, done: string): Promise<boolean> {
     setDetailMessage("");
     try {
       await change();
-      setDetailMessage(done);
-      await load();
-      void loadHistory(card);
     } catch (err) {
       setDetailMessage(readableError(err));
       if (raced(err)) void load();
+      return false;
     }
+    setDetailMessage(done);
+    await load();
+    void loadHistory(card);
+    return true;
   }
 
   async function create(card: NewCard) {

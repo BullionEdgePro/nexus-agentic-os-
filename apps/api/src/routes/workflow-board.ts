@@ -155,7 +155,9 @@ type CloseAnswer = { ok: true } | { closed: true } | { refused: string } | null;
 
 function answerMove(c: Context, result: MoveAnswer) {
   if (result === null) return c.json({ error: "Card not found" }, 404);
-  if ("moved" in result) return c.json({ error: `Someone moved this card to ${stepName(result.moved)} a moment ago.`, step: result.moved }, 409);
+  // The sentence alone: the console shows a body that is {"error":"…"} and
+  // nothing else, and the board reloads to show where the card went.
+  if ("moved" in result) return c.json({ error: `Someone moved this card to ${stepName(result.moved)} a moment ago.` }, 409);
   if ("closed" in result) return c.json({ error: CLOSED }, 409);
   if ("refused" in result) return c.json({ error: result.refused }, 422);
   return c.json(result.ok);

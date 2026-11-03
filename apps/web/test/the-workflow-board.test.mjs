@@ -13,8 +13,9 @@ import { REAL_ESTATE_WORKFLOW } from "@nexus/shared";
 import { WorkflowBoardView, boardCanDrop } from "@/app/deck/workflow/board/board-view";
 import { MoveMenu } from "@/app/deck/workflow/board/move-menu";
 import { WorkflowPanel } from "@/app/deck/workflow/panel";
-import { CardDetail } from "@/app/deck/workflow/board/card-detail";
+import { CardDetail, draftOf, unsavedChanges } from "@/app/deck/workflow/board/card-detail";
 import { AddCard, toAed } from "@/app/deck/workflow/board/add-card";
+import { readableError } from "@/lib/api";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
@@ -300,4 +301,28 @@ test("a card's words wrap instead of being cut off", () => {
 test("a shut move or closing looks shut, not only unclickable", () => {
   const css = read("app/deck/workflow/workflow.css");
   assert.match(css, /\.wf-board-move \.kit-pill:disabled,\s*\.wf-board-detail \.kit-pill:disabled \{[^}]*opacity: \.45;[^}]*cursor: not-allowed/);
+});
+
+test("a lost race reads as where the card went, in the server's words (final review)", () => {
+  const body = JSON.stringify({ error: "Someone moved this card to Viewing a moment ago." });
+  assert.equal(readableError(new Error(`API 409 on /api/organizations/sfs-international/workflow-board/deals/d1/move: ${body}`)), "Someone moved this card to Viewing a moment ago.");
+});
+
+test("saving sends only what this person touched, never a colleague's change back (final review)", () => {
+  const opened = unit({ id: "u5", step: "S8", purpose: "rent", permitExpiresOn: "2026-12-01" });
+  const draft = { ...draftOf(opened), notes: "Keys with the concierge" };
+  // A colleague moved the expiry while this window was open, and the board reloaded.
+  const reloaded = { ...opened, permitExpiresOn: "2027-01-31" };
+  assert.deepEqual(unsavedChanges(reloaded, draft, reloaded.liveOn, new Set(["notes"])), { changes: { notes: "Keys with the concierge" } });
+  assert.deepEqual(unsavedChanges(reloaded, draft, reloaded.liveOn, new Set()), { changes: {} });
+  // A field this person did change is theirs to save.
+  const mine = { ...draft, permitExpiresOn: "2027-06-30" };
+  assert.deepEqual(unsavedChanges(reloaded, mine, reloaded.liveOn, new Set(["permitExpiresOn"])), { changes: { permitExpiresOn: "2027-06-30" } });
+  assert.deepEqual(unsavedChanges(reloaded, draft, ["bayut"], new Set(["liveOn"])), { changes: { liveOn: ["bayut"] } });
+  assert.deepEqual(unsavedChanges(reloaded, { ...draft, priceAed: "85k" }, [], new Set(["priceAed"])), {
+    problem: "Yearly rent or asking price, AED: Write the amount in dirhams, digits only — 1,200,000 is fine.",
+  });
+  const src = read("app/deck/workflow/board/card-detail.tsx");
+  // What was touched is forgotten only once the save went through.
+  assert.match(src, /if \(await onSave\([^)]*\)\) setTouched\(new Set\(\)\)/);
 });

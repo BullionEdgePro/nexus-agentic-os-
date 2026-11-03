@@ -95,7 +95,8 @@ test("a move that lost the race says where the card went", async () => {
   answers.moveDeal = { moved: "D5" };
   const res = await send(STAFF, "POST", "/sfs-international/workflow-board/deals/d1/move", { from: "D4", to: "D6" });
   assert.equal(res.status, 409);
-  assert.deepEqual(await res.json(), { error: "Someone moved this card to Viewing a moment ago.", step: "D5" });
+  // Exactly the sentence: readableError shows a body that is {"error":"…"} and nothing else (final review).
+  assert.deepEqual(await res.json(), { error: "Someone moved this card to Viewing a moment ago." });
   assert.deepEqual(calls[0][1].slice(0, 7), [SFS.id, "Asia/Dubai", { employeeId: "emp-aisha" }, { employeeId: "emp-aisha", seesAll: false }, "d1", "D4", "D6"]);
 });
 

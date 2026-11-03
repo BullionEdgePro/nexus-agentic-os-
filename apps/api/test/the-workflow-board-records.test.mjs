@@ -112,7 +112,7 @@ before(async () => {
        ($2, $7, '971507300002', 'Lead A two', $8),
        ($3, $7, '971507300003', 'Owner B', $9),
        ($4, $7, '971507300004', 'Hot lead', $8),
-       ($5, $10, '971507300005', 'Routed lead', null),
+       ($5, $10, '971507300005', 'Routed lead', $8),
        ($6, $11, '971507300006', 'Third firm lead', null)`,
     [CA, CA2, CB, CH, CR, CT, SFS, STAFF_A, STAFF_B, OTHER, THIRD]
   );
@@ -172,14 +172,33 @@ test("1. a staff member sees their own book's deals and the whole inventory", db
   assert.ok(preview.units.length >= 1);
 });
 
+test("1b. a colleague's client cannot be put on the board, or named as an owner, by id (final review)", db, async () => {
+  // The unit card hands every staff member Bilal's client's contact id; it must open nothing.
+  assert.equal(await lib.createDeal(SFS, aisha, asAisha, { contactId: CB, purpose: "rent" }), "no-contact");
+  assert.equal(await lib.createDeal(SFS, aisha, asAisha, { contactId: CB, purpose: "sale" }), "no-contact"); // not "duplicate"
+  assert.equal(await lib.createUnit(SFS, aisha, asAisha, { reference: "Probe", ownerContactId: CB }), "no-contact");
+  const mine = await lib.createUnit(SFS, aisha, asAisha, { reference: "Aisha's listing" });
+  assert.equal(await lib.updateUnit(SFS, aisha, asAisha, mine.id, { ownerContactId: CB }), "no-contact");
+  // The operator still can.
+  const forBilal = await lib.createDeal(SFS, bilal, asOperator, { contactId: CB, purpose: "rent" });
+  assert.equal(forBilal.contact.name, "Owner B");
+  await lib.closeDeal(SFS, bilal, asOperator, forBilal.id, "lost", null);
+});
+
 test("2. a deal follows its customer's book, unless it is assigned to you", db, async () => {
-  const worked = await lib.createDeal(SFS, aisha, asAisha, { contactId: CA2, purpose: "sale", agentEmployeeId: STAFF_B });
-  assert.equal(worked.agent?.name, "Bilal");
+  // Nobody named: the deal is worked by whoever holds the customer — shown, not stored (final review).
+  const worked = await lib.createDeal(SFS, aisha, asAisha, { contactId: CA2, purpose: "sale" });
+  assert.equal(worked.agent?.name, "Aisha");
   assert.ok((await board(asAisha)).deals.some((d) => d.id === worked.id));
   await owner.query(`update contacts set owner_employee_id = $1 where id = $2`, [STAFF_B, CA2]);
   assert.ok(!(await board(asAisha)).deals.some((d) => d.id === worked.id));
+  const withBilal = (await board(asBilal)).deals.find((d) => d.id === worked.id);
+  assert.equal(withBilal?.agent?.name, "Bilal");
+  // Named on purpose, it stays with the one named, whoever's book the customer is in.
+  await lib.updateDeal(SFS, bilal, asBilal, worked.id, { agentEmployeeId: STAFF_A });
+  assert.equal((await board(asAisha)).deals.find((d) => d.id === worked.id)?.agent?.name, "Aisha");
   assert.ok((await board(asBilal)).deals.some((d) => d.id === worked.id));
-  // Aisha's own deal stays hers: it is in her book and assigned to her.
+  // Aisha's own deal stays hers: it is in her book.
   assert.ok((await board(asAisha)).deals.some((d) => d.id === dealA.id));
 });
 

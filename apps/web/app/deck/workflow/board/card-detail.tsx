@@ -78,23 +78,37 @@ const DEAL_FIELDS: Field[] = [
   { key: "dldTransferOn", label: "DLD transfer on", type: "date", group: "Papers" },
 ];
 
-type Draft = Record<string, string | boolean>;
+export type Draft = Record<string, string | boolean>;
 
-function draftOf(card: BoardCard, fields: Field[]): Draft {
+const fieldsFor = (card: BoardCard) => (card.kind === "unit" ? UNIT_FIELDS : DEAL_FIELDS);
+
+/** The window's editable values, as the inputs hold them. */
+export function draftOf(card: BoardCard): Draft {
   const values = card as unknown as Record<string, unknown>;
   const draft: Draft = { notes: card.notes ?? "" };
-  for (const f of fields) {
+  for (const f of fieldsFor(card)) {
     const v = values[f.key];
     draft[f.key] = f.type === "flag" ? Boolean(v) : v === null || v === undefined ? "" : String(v);
   }
   return draft;
 }
 
-/** What the draft would save, or the reason it cannot be saved. */
-function changesOf(card: BoardCard, fields: Field[], draft: Draft, liveOn: Portal[]): { changes: Record<string, unknown> } | { problem: string } {
+/**
+ * What a save sends: only the fields this person touched, and of those only
+ * the ones that differ from the card as it stands now — or the reason it
+ * cannot be saved. A field nobody touched here is never sent, so a colleague's
+ * change made while this window was open is not put back (final review).
+ */
+export function unsavedChanges(
+  card: BoardCard,
+  draft: Draft,
+  liveOn: Portal[],
+  touched: Set<string>
+): { changes: Record<string, unknown> } | { problem: string } {
   const values = card as unknown as Record<string, unknown>;
   const changes: Record<string, unknown> = {};
-  for (const f of fields) {
+  for (const f of fieldsFor(card)) {
+    if (!touched.has(f.key)) continue;
     const raw = draft[f.key];
     let next: unknown;
     if (f.type === "flag") next = raw;
@@ -110,8 +124,10 @@ function changesOf(card: BoardCard, fields: Field[], draft: Draft, liveOn: Porta
     if (next !== values[f.key]) changes[f.key] = next;
   }
   const notes = String(draft.notes).trim() === "" ? null : String(draft.notes).trim();
-  if (notes !== card.notes) changes.notes = notes;
-  if (card.kind === "unit" && JSON.stringify([...liveOn].sort()) !== JSON.stringify([...card.liveOn].sort())) changes.liveOn = liveOn;
+  if (touched.has("notes") && notes !== card.notes) changes.notes = notes;
+  if (card.kind === "unit" && touched.has("liveOn") && JSON.stringify([...liveOn].sort()) !== JSON.stringify([...card.liveOn].sort())) {
+    changes.liveOn = liveOn;
+  }
   return { changes };
 }
 
@@ -151,16 +167,19 @@ export function CardDetail({
   timezone: string;
   origin: HTMLElement | null;
   message: string;
-  onSave: (changes: UnitInput | DealInput) => Promise<void>;
+  /** Resolves true once the save went through. */
+  onSave: (changes: UnitInput | DealInput) => Promise<boolean>;
   onMove: (to: string) => void;
   onCloseCard: (reason: string, note: string | null) => void;
   onLink: (unitId: string) => void;
   onUnlink: (unitId: string) => void;
   onDismiss: () => void;
 }) {
-  const fields = card.kind === "unit" ? UNIT_FIELDS : DEAL_FIELDS;
-  const [draft, setDraft] = useState<Draft>(() => draftOf(card, fields));
+  const fields = fieldsFor(card);
+  const [draft, setDraft] = useState<Draft>(() => draftOf(card));
   const [liveOn, setLiveOn] = useState<Portal[]>(card.kind === "unit" ? card.liveOn : []);
+  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  const touch = (key: string) => setTouched((t) => (t.has(key) ? t : new Set(t).add(key)));
   const [note, setNote] = useState("");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
@@ -171,7 +190,7 @@ export function CardDetail({
   const groups = [...new Set(fields.map((f) => f.group))];
 
   async function save() {
-    const result = changesOf(card, fields, draft, liveOn);
+    const result = unsavedChanges(card, draft, liveOn, touched);
     if ("problem" in result) {
       setProblem(result.problem);
       return;
@@ -183,7 +202,7 @@ export function CardDetail({
     setProblem("");
     setBusy(true);
     try {
-      await onSave(result.changes as UnitInput | DealInput);
+      if (await onSave(result.changes as UnitInput | DealInput)) setTouched(new Set());
     } finally {
       setBusy(false);
     }
@@ -192,7 +211,10 @@ export function CardDetail({
   const input = (f: Field) => {
     const id = `${base}-${f.key}`;
     const value = draft[f.key];
-    const set = (v: string | boolean) => setDraft((d) => ({ ...d, [f.key]: v }));
+    const set = (v: string | boolean) => {
+      touch(f.key);
+      setDraft((d) => ({ ...d, [f.key]: v }));
+    };
     if (f.type === "flag") {
       return (
         <label key={f.key} className="wf-board-flag">
@@ -330,7 +352,10 @@ export function CardDetail({
                 <input
                   type="checkbox"
                   checked={liveOn.includes(p)}
-                  onChange={(e) => setLiveOn((now) => (e.target.checked ? [...now, p] : now.filter((x) => x !== p)))}
+                  onChange={(e) => {
+                    touch("liveOn");
+                    setLiveOn((now) => (e.target.checked ? [...now, p] : now.filter((x) => x !== p)));
+                  }}
                 />{" "}
                 {PORTAL_NAME[p]}
               </label>
@@ -339,7 +364,15 @@ export function CardDetail({
         ) : null}
         <section className="wf-window-part wf-board-fields">
           <h3>Notes</h3>
-          <textarea aria-label="Notes" rows={3} value={String(draft.notes)} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} />
+          <textarea
+            aria-label="Notes"
+            rows={3}
+            value={String(draft.notes)}
+            onChange={(e) => {
+              touch("notes");
+              setDraft((d) => ({ ...d, notes: e.target.value }));
+            }}
+          />
           <button type="button" className="btn" disabled={busy} onClick={() => void save()}>
             Save
           </button>

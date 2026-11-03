@@ -149,7 +149,9 @@ const DEAL_SELECT = `
              and b.status = 'confirmed' and b.starts_at >= now()) as next_viewing_at
     from property_deals d
     left join contacts ct on ct.id = d.contact_id
-    left join employees ag on ag.id = d.agent_employee_id
+    -- Worked by whoever was named, else by whoever holds the customer in
+    -- their book here: shown, not stored, so it moves with the book.
+    left join employees ag on ag.id = coalesce(d.agent_employee_id, ct.owner_employee_id) and ag.organization_id = $1
    where d.organization_id = $1 and ${SEES_DEAL}`;
 
 type Row = Record<string, unknown>;
@@ -249,6 +251,18 @@ async function servedContact(organizationId: string, contactId: string): Promise
   return rows[0] ? { ownerEmployeeId: rows[0].owner_employee_id } : null;
 }
 
+/**
+ * A customer this viewer may name: served by the business and, for staff, in
+ * their own book (final review, 3 Nov 2026). A colleague's client reads exactly
+ * like a stranger — the board hands out owners' contact ids, and an id typed
+ * into a request must open nothing the contacts screen would not.
+ */
+async function bookContact(organizationId: string, viewer: Viewer, contactId: string): Promise<{ ownerEmployeeId: string | null } | null> {
+  const contact = await servedContact(organizationId, contactId);
+  if (!contact) return null;
+  return viewer.seesAll || (viewer.employeeId !== null && contact.ownerEmployeeId === viewer.employeeId) ? contact : null;
+}
+
 async function logMove(
   organizationId: string,
   actor: Actor,
@@ -345,7 +359,7 @@ export async function createUnit(
 ): Promise<BoardUnit | Refused | "no-contact"> {
   return withTenant(organizationId, async () => {
     if (!fields.reference?.trim()) return { refused: "A unit needs a reference." };
-    if (fields.ownerContactId && !(await servedContact(organizationId, fields.ownerContactId))) return "no-contact";
+    if (fields.ownerContactId && !(await bookContact(organizationId, viewer, fields.ownerContactId))) return "no-contact";
     const [employeeId, adminId] = actorIds(actor);
     const agent = fields.agentEmployeeId !== undefined ? fields.agentEmployeeId : employeeId;
     if (agent && !(await isStaff(organizationId, agent))) return { refused: NOT_STAFF };
@@ -378,7 +392,7 @@ export async function updateUnit(
     if ((merged.step === "S9" || merged.step === "S10") && (!merged.formASignedOn || !merged.permitNumber?.trim() || !merged.permitExpiresOn)) {
       return { refused: KEEP_PERMIT };
     }
-    if (fields.ownerContactId && !(await servedContact(organizationId, fields.ownerContactId))) return "no-contact";
+    if (fields.ownerContactId && !(await bookContact(organizationId, viewer, fields.ownerContactId))) return "no-contact";
     if (fields.agentEmployeeId && !(await isStaff(organizationId, fields.agentEmployeeId))) return { refused: NOT_STAFF };
     const { sql, args } = setClause(fields, UNIT_COLUMNS, 5);
     const [employeeId, adminId] = actorIds(actor);
@@ -449,10 +463,12 @@ export async function closeUnit(
 }
 
 /**
- * A lead on the board: on D4, or D3 if asked. Worked by whoever holds the
- * customer in their book here, else by the person adding it, unless another is
- * named. A second open deal for the same lead and purpose is "duplicate" —
- * the database's unique index decides, so two people at once make one card.
+ * A lead on the board: on D4, or D3 if asked. Staff add only customers in their
+ * own book; an operator, any customer the business serves. Nobody is stored as
+ * its agent unless named: it is worked by whoever holds the customer, and moves
+ * with the book (final review, 3 Nov 2026). A second open deal for the same
+ * lead and purpose is "duplicate" — the database's unique index decides, so two
+ * people at once make one card.
  */
 export async function createDeal(
   organizationId: string,
@@ -461,17 +477,11 @@ export async function createDeal(
   fields: NewDeal
 ): Promise<BoardDeal | "duplicate" | "no-contact" | Refused> {
   return withTenant(organizationId, async () => {
-    const contact = await servedContact(organizationId, fields.contactId);
-    if (!contact) return "no-contact";
+    if (!(await bookContact(organizationId, viewer, fields.contactId))) return "no-contact";
     const [employeeId, adminId] = actorIds(actor);
-    let agent = fields.agentEmployeeId;
-    if (agent === undefined) {
-      agent = contact.ownerEmployeeId && (await isStaff(organizationId, contact.ownerEmployeeId)) ? contact.ownerEmployeeId : employeeId;
-    } else if (agent && !(await isStaff(organizationId, agent))) {
-      return { refused: NOT_STAFF };
-    }
+    if (fields.agentEmployeeId && !(await isStaff(organizationId, fields.agentEmployeeId))) return { refused: NOT_STAFF };
     const { contactId, purpose, step = "D4", ...rest } = fields;
-    const { sql, args } = setClause({ ...rest, agentEmployeeId: agent }, DEAL_COLUMNS, 7);
+    const { sql, args } = setClause(rest, DEAL_COLUMNS, 7);
     const columns = sql.map((s) => s.split(" = ")[0]);
     const { rows } = await getPool().query<{ id: string }>(
       `insert into property_deals (organization_id, contact_id, purpose, step, created_by_employee_id, created_by_admin_id${columns.map((c) => `, ${c}`).join("")})
@@ -482,8 +492,8 @@ export async function createDeal(
     );
     if (!rows[0]) return "duplicate";
     await logMove(organizationId, actor, { dealId: rows[0].id }, "created", null, step);
-    // The person who added it always gets it back, even when it is now a colleague's.
-    return strip((await readDeal(organizationId, { ...viewer, seesAll: true }, rows[0].id))!);
+    // Read as the viewer: the customer is in their book, or they see everything.
+    return strip((await readDeal(organizationId, viewer, rows[0].id))!);
   });
 }
 
