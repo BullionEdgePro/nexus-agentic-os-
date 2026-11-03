@@ -67,7 +67,17 @@ export interface SendingNumber {
   wabaId: string | null;
 }
 
-/** Every number this business can send from: staff numbers, then its own if still on. */
+/**
+ * Every number this business can send from: the ADMINS' own numbers, then its
+ * own if still on.
+ *
+ * Admins' only (3 Nov 2026, the owner: "make only for admin who can do the bulk
+ * message — Atif and Ralph Ivan for now"). A number is offered when the record
+ * holding it belongs to an admin — their seat (migration 108) or a staff record
+ * linked to their admin account; an ordinary staff member's number is theirs to
+ * chat on, not a bulk sender. Choosing one is refused by resolve() below, since
+ * it only ever accepts a number from this list.
+ */
 async function numbersOf(organization: {
   id: string;
   name?: string;
@@ -77,7 +87,7 @@ async function numbersOf(organization: {
 }): Promise<SendingNumber[]> {
   const employees = await withTenant(organization.id, () => listEmployees(organization.id));
   const numbers: SendingNumber[] = employees
-    .filter((employee) => employee.whatsappPhoneNumberId)
+    .filter((employee) => employee.whatsappPhoneNumberId && employee.adminId)
     .map((employee) => ({
       phoneNumberId: employee.whatsappPhoneNumberId as string,
       label: `${employee.fullName}${employee.whatsappNumber ? ` · ${employee.whatsappNumber}` : ""}`,

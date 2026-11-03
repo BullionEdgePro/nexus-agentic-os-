@@ -176,8 +176,8 @@ export default function BulkMessagingPage() {
           <p className="mc-empty">Loading the numbers…</p>
         ) : numbers.length === 0 ? (
           <p className="mc-empty">
-            This business has no connected WhatsApp number. A staff member connects theirs in Connections, or the
-            business connects its own.
+            No admin number is connected for this business yet. Bulk messages go out from an admin&apos;s own
+            WhatsApp number: open Connections, choose this business under &quot;Connect for&quot;, and connect yours.
           </p>
         ) : (
           <>
