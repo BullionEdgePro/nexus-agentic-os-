@@ -40,6 +40,7 @@ interface EmployeeRow {
   whatsapp_quality_rating: string | null;
   can_broadcast: boolean;
   broadcast_monthly_cap: number | null;
+  admin_id: string | null;
 }
 
 const EMPLOYEE_COLUMNS = `
@@ -49,7 +50,7 @@ const EMPLOYEE_COLUMNS = `
   escalation_rules, twin_disclosure, digital_signature, manual_presence, manual_presence_until,
   last_seen_at, last_login_at, last_login_device, human_first, is_active,
   whatsapp_verified_name, whatsapp_connected_at, whatsapp_quality_rating,
-  can_broadcast, broadcast_monthly_cap, whatsapp_business_account_id
+  can_broadcast, broadcast_monthly_cap, whatsapp_business_account_id, admin_id
 `;
 
 function toEmployee(row: EmployeeRow): Employee {
@@ -92,6 +93,7 @@ function toEmployee(row: EmployeeRow): Employee {
     lastLoginDevice: row.last_login_device,
     humanFirst: row.human_first,
     isActive: row.is_active,
+    adminId: row.admin_id ?? null,
   };
 }
 
