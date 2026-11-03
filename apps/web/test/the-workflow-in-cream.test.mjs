@@ -46,6 +46,8 @@ function sample(overrides = {}) {
       viewings: { booked: 2, held: 2, noShow: 2, cancelled: 2 },
       won: 1,
       followUps: { created: 2, done: 2, openNow: 2, overdueNow: 2 },
+      board: { S8: 2 },
+      permits: { advertised: 3, expired: 1 },
     },
     series: {
       leads: days.map((bucket) => ({ bucket, count: 2 })),
@@ -66,7 +68,9 @@ test("each step is a card in its status's colour, with the boss's words", () => 
   const html = render(WorkflowLanes, { workflow: REAL_ESTATE_WORKFLOW, evidence: sample().evidence, onOpen() {} });
   assert.equal((html.match(/data-step="/g) ?? []).length, 20);
   assert.match(html, /aria-label="INBOUND New lead: Working\. Open the step\."/);
-  assert.match(html, /aria-label="GATE Compliance: Not tracked in Nexus yet\. Open the step\."/);
+  // Compliance is on the board since 3 Nov 2026; the daily report is the one step still outside Nexus.
+  assert.match(html, /aria-label="GATE Compliance: Working\. Open the step\."/);
+  assert.match(html, /aria-label="OUTPUT Daily AI report: Not tracked in Nexus yet\. Open the step\."/);
   assert.match(html, /aria-label="AGENT 05 AI qualifier: Partly\. Open the step\."/);
   assert.match(html, /Form A \+ Trakheesi permit/);
   // The tag is on the card, as on the boss's canvas, and the branches keep their words.
@@ -83,20 +87,23 @@ test("each step is a card in its status's colour, with the boss's words", () => 
   });
   assert.match(quiet, /class="kit-card tone-paper wf-card wf-idle"[^>]*aria-label="QUEUE Nurture: Idle\. Open the step\."/);
   assert.match(html, /class="kit-card tone-forest wf-card"[^>]*aria-label="QUEUE Nurture: Working\. Open the step\."/);
-  assert.match(html, /class="kit-card tone-paper wf-card wf-untracked"[^>]*aria-label="GATE Compliance/);
+  assert.match(html, /class="kit-card tone-paper wf-card wf-untracked"[^>]*aria-label="OUTPUT Daily AI report/);
 });
 
 test("a not-tracked step shows no figures; a partly step says what is missing", () => {
-  assert.deepEqual(stepFigures("S8", sample().evidence), []);
+  assert.deepEqual(stepFigures("D10", sample().evidence), []);
+  // A step the board fills shows how many cards moved into it in the period.
+  assert.deepEqual(stepFigures("S8", sample().evidence), [{ label: "Moved in on the board", value: "2" }]);
+  assert.deepEqual(stepFigures("D9", sample().evidence).at(-1), { label: "Deals moved in on the board", value: "0" });
   assert.deepEqual(stepFigures("D1", sample().evidence)[0], { label: "New leads", value: "3" });
   const html = render(StepWindow, { step: byId("D2"), evidence: sample().evidence, origin: null, onClose() {} });
   assert.match(html, /budget, timeline and finance are not captured/i);
   assert.match(html, /href="\/deck\/customers"/);
   assert.match(render(StepWindow, { step: byId("S4"), evidence: sample().evidence, origin: null, onClose() {} }), /No screen yet/);
   // A not-tracked step's window says what tracking it would need, and shows no figures.
-  const gate = render(StepWindow, { step: byId("S8"), evidence: sample().evidence, origin: null, onClose() {} });
-  assert.match(gate, /Trakheesi permit number and expiry/);
-  assert.doesNotMatch(gate, /<dl/);
+  const report = render(StepWindow, { step: byId("D10"), evidence: sample().evidence, origin: null, onClose() {} });
+  assert.match(report, /A daily summary sent to the owner/);
+  assert.doesNotMatch(report, /<dl/);
 });
 
 test("connectors draw in and the pulse runs only when motion is welcome", () => {
@@ -106,7 +113,9 @@ test("connectors draw in and the pulse runs only when motion is welcome", () => 
   assert.match(motion, /\.wf-pulse/);
   // A pulse rides only a path that leaves a Working card for a step Nexus tracks.
   const html = render(WorkflowLanes, { workflow: REAL_ESTATE_WORKFLOW, evidence: sample().evidence, onOpen() {} });
-  assert.equal((html.match(/class="wf-pulse"/g) ?? []).length, 1);
+  // New lead → AI qualifier; and since the board (3 Nov 2026) Viewing → Offer &
+  // negotiation and Compliance → Listing & ads, whose next steps are now tracked.
+  assert.equal((html.match(/class="wf-pulse"/g) ?? []).length, 3);
 });
 
 // ---- Task 6: tiles, charts, funnel and compliance -------------------------------------------
@@ -161,10 +170,17 @@ test("the funnel says 'x of y' under 20 and % from 20", () => {
   assert.match(render(Funnel, { funnel: { leads: 40, scored: 18, hot: 6, booked: 3, held: 2, won: 1 } }), /45%/);
 });
 
-test("compliance items are kept outside Nexus, beside the consent Nexus does record", () => {
+test("compliance papers are recorded on the board, beside the consent Nexus records", () => {
   const html = render(ComplianceTable, { evidence: sample().evidence });
   for (const item of ["Form A", "Trakheesi permit", "Ejari", "Form F", "KYC/AML", "DLD transfer"]) assert.match(html, new RegExp(item));
-  assert.match(html, /Kept outside Nexus/);
+  // The permits: how many units are advertised now, and how many of those lapsed.
+  assert.equal((html.match(/On the board: 3 units advertised · <span class="wf-warn">1 with an expired permit<\/span>/g) ?? []).length, 2);
+  assert.equal((html.match(/Recorded on each deal on the board/g) ?? []).length, 4);
+  assert.doesNotMatch(html, /Kept outside Nexus/);
+  assert.doesNotMatch(html, /Tracking it would need/);
+  const clean = render(ComplianceTable, { evidence: sample({ evidence: { permits: { advertised: 1, expired: 0 } } }).evidence });
+  assert.match(clean, /On the board: 1 unit advertised · 0 with an expired permit/);
+  assert.doesNotMatch(clean, /wf-warn/);
   assert.match(html, /Opted out of re-engagement/);
   assert.match(html, /Unsubscribed from campaign emails/);
   assert.match(html, /Marked &quot;not a customer&quot;/);

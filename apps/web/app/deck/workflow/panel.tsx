@@ -11,6 +11,7 @@ import { AuditTiles, AuditCharts } from "./audit-charts";
 import { ComplianceTable } from "./compliance";
 import { WorkflowPulse } from "./pulse";
 import { NoWorkflow } from "./empty";
+import { WorkflowBoardPanel } from "./board/board-panel";
 
 /**
  * One business's live workflow (3 Nov 2026, the SFS workflow tab): the panel the
@@ -31,8 +32,16 @@ import { NoWorkflow } from "./empty";
 
 const PERIODS: AuditDays[] = [7, 30, 90];
 
-export function WorkflowPanel({ slug }: { slug: BusinessSlug }) {
+/** The live picture, or the board staff work on (3 Nov 2026); remembered per browser. */
+type View = "picture" | "board";
+const VIEWS: { id: View; label: string }[] = [
+  { id: "picture", label: "Live picture" },
+  { id: "board", label: "Board" },
+];
+
+export function WorkflowPanel({ slug, initialView = "picture" }: { slug: BusinessSlug; initialView?: View }) {
   const workflow = workflowFor(slug);
+  const [view, setView] = useState<View>(initialView);
   const [days, setDays] = useState<AuditDays>(30);
   const [audit, setAudit] = useState<WorkflowAudit | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -75,6 +84,26 @@ export function WorkflowPanel({ slug }: { slug: BusinessSlug }) {
     return () => clearInterval(tick);
   }, []);
 
+  // This browser's last view. Storage can be missing or refuse (a private
+  // window); the panel then simply opens on the live picture.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("nexus.workflow.view");
+      if (saved === "picture" || saved === "board") setView(saved);
+    } catch {
+      /* no storage: keep the default */
+    }
+  }, []);
+
+  function choose(next: View) {
+    setView(next);
+    try {
+      localStorage.setItem("nexus.workflow.view", next);
+    } catch {
+      /* not remembered, still shown */
+    }
+  }
+
   if (!workflow) return <NoWorkflow />;
 
   const shown = audit && audit.period.days === days && audit.business.slug === slug ? audit : null;
@@ -84,22 +113,36 @@ export function WorkflowPanel({ slug }: { slug: BusinessSlug }) {
   return (
     <div className="wf-panel">
       <div className="wf-bar">
-        <div className="kit-pills wf-pills" role="group" aria-label="Period">
-          {PERIODS.map((d) => (
-            <button key={d} type="button" className="kit-pill quiet" aria-pressed={d === days} onClick={() => setDays(d)}>
-              {d} days
+        <div className="kit-pills wf-pills" role="group" aria-label="View">
+          {VIEWS.map((v) => (
+            <button key={v.id} type="button" className="kit-pill quiet" aria-pressed={v.id === view} onClick={() => choose(v.id)}>
+              {v.label}
             </button>
           ))}
         </div>
-        <div className="wf-fresh">
-          {shown && fetchedAt !== null ? <span className="wf-updated">{updatedLabel(fetchedAt, now)}</span> : null}
-          <button type="button" className="kit-pill quiet" disabled={loading} aria-busy={loading} onClick={() => void load(days)}>
-            Refresh
-          </button>
-        </div>
+        {/* The board is always the open cards and the last 30 days: no period to pick. */}
+        {view === "picture" ? (
+          <>
+            <div className="kit-pills wf-pills" role="group" aria-label="Period">
+              {PERIODS.map((d) => (
+                <button key={d} type="button" className="kit-pill quiet" aria-pressed={d === days} onClick={() => setDays(d)}>
+                  {d} days
+                </button>
+              ))}
+            </div>
+            <div className="wf-fresh">
+              {shown && fetchedAt !== null ? <span className="wf-updated">{updatedLabel(fetchedAt, now)}</span> : null}
+              <button type="button" className="kit-pill quiet" disabled={loading} aria-busy={loading} onClick={() => void load(days)}>
+                Refresh
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
 
-      {loadError ? (
+      {view === "board" ? <WorkflowBoardPanel slug={slug} audit={shown} /> : null}
+
+      {view === "board" ? null : loadError ? (
         <div className="act-empty wf-error" role="alert">
           <strong>The workflow could not be loaded.</strong>
           <br />
@@ -118,7 +161,7 @@ export function WorkflowPanel({ slug }: { slug: BusinessSlug }) {
         </div>
       ) : null}
 
-      {!shown ? (
+      {view === "board" ? null : !shown ? (
         loadError ? null : (
           <div className="wf-loading" aria-busy="true" aria-label="Loading the workflow">
             <div className="wf-skeleton wf-skeleton-bar" />

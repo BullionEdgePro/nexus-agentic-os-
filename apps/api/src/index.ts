@@ -37,6 +37,7 @@ import { channelsRoute } from "./routes/channels.js";
 import { phrasesRoute } from "./routes/phrases.js";
 import { forecastsRoute } from "./routes/forecasts.js";
 import { workflowAuditRoute } from "./routes/workflow-audit.js";
+import { workflowBoardRoute } from "./routes/workflow-board.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
 import { hqRoute } from "./routes/hq.js";
@@ -333,6 +334,9 @@ app.route("/api/organizations", forecastsRoute);
 // The workflow audit (2 Nov 2026): the business's own picture of the workflow
 // its owner drew, read in its tenant scope. See routes/workflow-audit.ts.
 app.route("/api/organizations", workflowAuditRoute);
+// The workflow board (3 Nov 2026): staff move units and deals through those
+// steps, in the same scope. See routes/workflow-board.ts.
+app.route("/api/organizations", workflowBoardRoute);
 // What this business says in its own words (045). Mounted here for the same
 // reason as knowledge and procedures — it is the business's own material, its
 // own staff are the people who know whether the wording fits, and the mount is

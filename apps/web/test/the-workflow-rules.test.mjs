@@ -31,6 +31,8 @@ function emptyEvidence() {
     viewings: { booked: 0, held: 0, noShow: 0, cancelled: 0 },
     won: 0,
     followUps: { created: 0, done: 0, openNow: 0, overdueNow: 0 },
+    board: {},
+    permits: { advertised: 0, expired: 0 },
   };
 }
 
@@ -44,11 +46,11 @@ test("the workflow is the boss's 20 steps, word for word", () => {
     ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"]
   );
   const s8 = byId("S8");
-  assert.deepEqual([s8.tag, s8.name, s8.subtitle, s8.coverage], ["GATE", "Compliance", "Form A + Trakheesi permit", "not_tracked"]);
+  assert.deepEqual([s8.tag, s8.name, s8.subtitle, s8.coverage, s8.missing], ["GATE", "Compliance", "Form A + Trakheesi permit", "built", null]);
   const d5 = byId("D5");
   assert.deepEqual([d5.tag, d5.name, d5.subtitle, d5.coverage], ["HUMAN", "Viewing", "AI books slot, agent attends", "built"]);
   const counts = steps.reduce((m, s) => ({ ...m, [s.coverage]: (m[s.coverage] ?? 0) + 1 }), {});
-  assert.deepEqual(counts, { partly: 5, built: 4, not_tracked: 11 });
+  assert.deepEqual(counts, { partly: 4, built: 15, not_tracked: 1 });
   for (const s of steps.filter((s) => s.coverage === "not_tracked")) assert.ok(s.missing && s.activity === null, s.id);
 });
 
@@ -58,11 +60,31 @@ test("a built step is working with activity, idle without; partly and not tracke
   assert.equal(stepStatus(d1, e), "idle");
   assert.equal(stepStatus(d1, { ...e, leads: { ...e.leads, total: 3 } }), "working");
   assert.equal(stepStatus(byId("D2"), e), "partly");
-  assert.equal(stepStatus(byId("S8"), e), "not_tracked");
-  assert.deepEqual(verdict(REAL_ESTATE_WORKFLOW, e), { working: 0, idle: 4, partly: 5, not_tracked: 11 });
+  assert.equal(stepStatus(byId("S8"), e), "idle");
+  assert.equal(stepStatus(byId("S8"), { ...e, board: { S8: 1 } }), "working");
+  assert.equal(stepStatus(byId("D10"), e), "not_tracked");
+  assert.deepEqual(verdict(REAL_ESTATE_WORKFLOW, e), { working: 0, idle: 15, partly: 4, not_tracked: 1 });
   // Nurture and Cold lead read the same re-engagement queue.
   const sent = { ...e, reengagement: { ...e.reengagement, sent: 2 } };
   assert.deepEqual([stepStatus(byId("S4"), sent), stepStatus(byId("D3"), sent)], ["working", "working"]);
+});
+
+test("the board fills the steps nothing else tracked (3 Nov 2026, the workflow board)", () => {
+  const e = emptyEvidence();
+  const s9 = byId("S9");
+  assert.equal(s9.activity({ ...e, board: { S9: 4, S8: 7 } }), 4);
+  assert.equal(s9.does, "Units moved into this step on the board in the period.");
+  assert.equal(byId("D6").does, "Deals moved into this step on the board in the period.");
+  for (const id of ["S5", "S6", "S7", "S8", "S9", "S10", "D4", "D6", "D7", "D8"]) {
+    const step = byId(id);
+    assert.deepEqual([step.coverage, step.missing, step.activity(e)], ["built", null, 0], id);
+  }
+  // CRM & commission: follow-ups as before, and the deals on the board.
+  const d9 = byId("D9");
+  assert.deepEqual([d9.coverage, d9.missing], ["built", null]);
+  assert.equal(d9.activity({ ...e, followUps: { ...e.followUps, created: 2, done: 1 }, board: { D9: 3 } }), 6);
+  // Only the daily report is still outside Nexus.
+  assert.deepEqual(REAL_ESTATE_WORKFLOW.steps.filter((s) => s.coverage === "not_tracked").map((s) => s.id), ["D10"]);
 });
 
 test("a share is 'x of y' under 20 and a percentage from 20", () => {

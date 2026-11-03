@@ -209,6 +209,25 @@ export async function getWorkflowAudit(input: {
     const reached = (n: number) =>
       cohort.filter((p) => [p.scored, p.hot, p.booked, p.held, p.won].slice(0, n).every(Boolean)).length;
 
+    // ---- the workflow board (3 Nov 2026): cards created on or moved into each
+    // step in the period, and the permits of the units advertised now ----
+    const board = await db.query<{ to_step: string; n: number }>(
+      `select m.to_step, count(*)::int as n
+         from workflow_moves m
+        where m.organization_id = $1 and m.kind in ('created', 'moved')
+          and m.at >= ${START} and $4::text is not null
+        group by m.to_step`,
+      args
+    );
+    const permits = await db.query<{ advertised: number; expired: number }>(
+      `select count(*)::int as advertised,
+              count(*) filter (where u.permit_expires_on < (now() at time zone $2)::date)::int as expired
+         from property_units u
+        where u.organization_id = $1 and u.step in ('S9', 'S10') and u.closed_at is null
+          and $3::int is not null and $4::text is not null`,
+      args
+    );
+
     return {
       business: { slug: input.slug, name: input.name, timezone: input.timezone },
       period: { days: input.days, from: fromDay, today, bucket },
@@ -259,6 +278,8 @@ export async function getWorkflowAudit(input: {
           openNow: n("tasks_open"),
           overdueNow: n("tasks_overdue"),
         },
+        board: Object.fromEntries(board.rows.map((row) => [row.to_step, row.n])),
+        permits: { advertised: permits.rows[0]?.advertised ?? 0, expired: permits.rows[0]?.expired ?? 0 },
       },
       series: {
         leads: fillBuckets(

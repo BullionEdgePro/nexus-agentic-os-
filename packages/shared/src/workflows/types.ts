@@ -32,6 +32,10 @@ export type WorkflowAudit = {
     viewings: { booked: number; held: number; noShow: number; cancelled: number };
     won: number;
     followUps: { created: number; done: number; openNow: number; overdueNow: number };
+    /** Cards created on or moved into each step on the workflow board in the period (3 Nov 2026). */
+    board: Record<string, number>;
+    /** Counts of now: open units on S9 or S10, and how many of their permits lapsed before today. */
+    permits: { advertised: number; expired: number };
   };
   series: {
     leads: { bucket: string; count: number }[];

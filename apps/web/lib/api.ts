@@ -1,6 +1,13 @@
 import type {
   AuditDays,
+  Board,
+  BoardDeal,
+  BoardUnit,
   BusinessSlug,
+  CardMove,
+  Portal,
+  PropertyType,
+  Purpose,
   ConversationNote,
   ConversationSummary,
   InboxSettings,
@@ -2519,6 +2526,94 @@ export function getForecast(orgSlug: BusinessSlug): Promise<{
  */
 export function getWorkflowAudit(slug: BusinessSlug, days: AuditDays): Promise<WorkflowAudit> {
   return request(`/api/organizations/${slug}/workflow-audit?days=${days}`);
+}
+
+/**
+ * The workflow board (3 Nov 2026): units and deals that staff move through the
+ * workflow's steps. A move names the step it sets out from; a 409 means
+ * someone moved the card first, a 422 carries the rule's own words.
+ */
+export type UnitInput = Partial<{
+  reference: string;
+  community: string | null;
+  propertyType: PropertyType | null;
+  bedrooms: number | null;
+  priceAed: number | null;
+  cheques: number | null;
+  ejariReady: boolean;
+  titleDeed: boolean;
+  ownerDocs: boolean;
+  formASignedOn: string | null;
+  permitNumber: string | null;
+  permitExpiresOn: string | null;
+  liveOn: Portal[];
+  ownerContactId: string | null;
+  agentEmployeeId: string | null;
+  notes: string | null;
+}>;
+export type DealInput = Partial<{
+  budgetAed: number | null;
+  offerAed: number | null;
+  ejariNumber: string | null;
+  kycDone: boolean;
+  formFSignedOn: string | null;
+  dldTransferOn: string | null;
+  dealValueAed: number | null;
+  commissionAed: number | null;
+  agentEmployeeId: string | null;
+  notes: string | null;
+}>;
+export type CardKind = "units" | "deals";
+
+export function getWorkflowBoard(slug: BusinessSlug): Promise<Board> {
+  return request(`/api/organizations/${slug}/workflow-board`);
+}
+
+export function createBoardUnit(slug: BusinessSlug, input: UnitInput & { reference: string }): Promise<BoardUnit> {
+  return request(`/api/organizations/${slug}/workflow-board/units`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBoardUnit(slug: BusinessSlug, id: string, input: UnitInput): Promise<BoardUnit> {
+  return request(`/api/organizations/${slug}/workflow-board/units/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function createBoardDeal(
+  slug: BusinessSlug,
+  input: DealInput & { contactId: string; purpose: Purpose; step?: "D3" | "D4" }
+): Promise<BoardDeal> {
+  return request(`/api/organizations/${slug}/workflow-board/deals`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBoardDeal(slug: BusinessSlug, id: string, input: DealInput): Promise<BoardDeal> {
+  return request(`/api/organizations/${slug}/workflow-board/deals/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Each path spelled out per kind, so the server's routes can be matched to
+// the screens that reach them (nothing-the-server-can-do-is-unreachable).
+export function moveBoardCard(slug: BusinessSlug, kind: CardKind, id: string, from: string, to: string): Promise<BoardUnit | BoardDeal> {
+  const init = { method: "POST", body: JSON.stringify({ from, to }) };
+  return kind === "units"
+    ? request(`/api/organizations/${slug}/workflow-board/units/${id}/move`, init)
+    : request(`/api/organizations/${slug}/workflow-board/deals/${id}/move`, init);
+}
+
+export function closeBoardCard(slug: BusinessSlug, kind: CardKind, id: string, reason: string, note: string | null): Promise<{ ok: true }> {
+  const init = { method: "POST", body: JSON.stringify({ reason, note }) };
+  return kind === "units"
+    ? request(`/api/organizations/${slug}/workflow-board/units/${id}/close`, init)
+    : request(`/api/organizations/${slug}/workflow-board/deals/${id}/close`, init);
+}
+
+export function linkBoardUnit(slug: BusinessSlug, dealId: string, unitId: string): Promise<BoardDeal> {
+  return request(`/api/organizations/${slug}/workflow-board/deals/${dealId}/units`, { method: "POST", body: JSON.stringify({ unitId }) });
+}
+
+export function unlinkBoardUnit(slug: BusinessSlug, dealId: string, unitId: string): Promise<BoardDeal> {
+  return request(`/api/organizations/${slug}/workflow-board/deals/${dealId}/units/${unitId}`, { method: "DELETE" });
+}
+
+export function getCardHistory(slug: BusinessSlug, kind: CardKind, id: string): Promise<{ moves: CardMove[] }> {
+  return request(`/api/organizations/${slug}/workflow-board/${kind}/${id}/history`);
 }
 
 export function refreshForecast(orgSlug: BusinessSlug): Promise<{

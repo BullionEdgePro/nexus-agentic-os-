@@ -5,6 +5,7 @@ export * from "./types.js";
 export * from "./real-estate.js";
 export * from "./status.js";
 export * from "./buckets.js";
+export * from "./board.js";
 
 /**
  * Which businesses have a workflow drawn (2 Nov 2026): only SFS International,

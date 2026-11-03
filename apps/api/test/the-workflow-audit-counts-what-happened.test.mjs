@@ -19,6 +19,7 @@ import { dirname, join } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..", "..");
 const SRC = readFileSync(join(root, "packages", "db", "src", "workflow-audit.ts"), "utf8");
+const BOARD_MIGRATION = readFileSync(join(root, "packages", "db", "migrations", "107-the-workflow-board.sql"), "utf8");
 
 test("the audit reads inside the business's tenant scope, in its own days", () => {
   assert.match(SRC, /withTenant\(input\.organizationId,/);
@@ -166,6 +167,7 @@ before(async () => {
   // migration one re-applies deadlocks with another's seed (2 Nov 2026).
   dbTurn = await owner.connect();
   await dbTurn.query("select pg_advisory_lock(20261102)");
+  await owner.query(BOARD_MIGRATION); // the database may predate 107; the file is safe to re-run
   await owner.query(SEED);
   process.env.DATABASE_URL = APP_URL;
   ({ getWorkflowAudit } = await import("@nexus/db"));
@@ -298,4 +300,32 @@ test("the funnel narrows: each step counts only people who reached every step be
   assert.equal(funnel.booked, 1);
   const steps = [funnel.leads, funnel.scored, funnel.hot, funnel.booked, funnel.held, funnel.won];
   steps.slice(1).forEach((n, i) => assert.ok(n <= steps[i], `step ${i + 1} (${n}) is more than the step before (${steps[i]})`));
+});
+
+test("cards moved on the board count on their step in the period; advertised permits are counted now", db, async () => {
+  // 3 Nov 2026, the workflow board. A unit created on Compliance yesterday and
+  // one moved there eight days ago; a move in another business; and permits on
+  // units advertised now, closed, and not yet advertised.
+  const today = `(now() at time zone 'Asia/Dubai')::date`;
+  await owner.query(`
+    with u as (insert into property_units (organization_id, step, reference, purpose) values ('${SFS}', 'S8', 'Board unit', 'rent') returning id)
+    insert into workflow_moves (organization_id, unit_id, kind, from_step, to_step, at)
+    select '${SFS}', u.id, k.kind, k.from_step, 'S8', k.at
+      from u, (values ('created', null, ${dubai(1, "10 hours")}), ('moved', 'S6', ${dubai(8, "10 hours")})) as k(kind, from_step, at);
+    with u as (insert into property_units (organization_id, step, reference, purpose) values ('${OTHER}', 'S8', 'Elsewhere', 'rent') returning id)
+    insert into workflow_moves (organization_id, unit_id, kind, to_step, at) select '${OTHER}', u.id, 'created', 'S8', ${dubai(1, "10 hours")} from u;
+    insert into property_units (organization_id, step, reference, purpose, form_a_signed_on, permit_number, permit_expires_on, closed_at, closed_reason) values
+      ('${SFS}', 'S9', 'Lapsed', 'rent', '2026-01-01', '70001', ${today} - 1, null, null),
+      ('${SFS}', 'S10', 'Valid', 'sale', '2026-01-01', '70002', ${today} + 30, null, null),
+      ('${SFS}', 'S10', 'Closed lapsed', 'sale', '2026-01-01', '70003', ${today} - 5, now(), 'sold'),
+      ('${SFS}', 'S8', 'Not advertised yet', 'sale', '2026-01-01', '70004', ${today} - 5, null, null);
+  `);
+  const week = await sfs(7);
+  assert.equal(week.evidence.board.S8, 1);
+  assert.equal(week.evidence.board.S6, undefined);
+  assert.deepEqual(week.evidence.permits, { advertised: 2, expired: 1 });
+  assert.equal((await sfs(30)).evidence.board.S8, 2);
+  const other = await getWorkflowAudit({ organizationId: OTHER, slug: "other-firm", name: "Other Firm", timezone: "Asia/Dubai", days: 7 });
+  assert.equal(other.evidence.board.S8, 1);
+  assert.deepEqual(other.evidence.permits, { advertised: 0, expired: 0 });
 });
