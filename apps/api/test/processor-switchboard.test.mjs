@@ -86,6 +86,9 @@ mock.module(new URL("../src/services/availability.ts", import.meta.url), {
 
 mock.module("@nexus/db", {
   exports: {
+    // Savepoints are a database matter; the stand-in runs the work as it is.
+    isolated: (fn) => fn(),
+    withRecovery: (fn) => fn(),
     // Opt-out writer. Never reached while looksLikeAnOptOut returns false, but
     // the import must resolve.
     optOutOfReengagement: async () => true,

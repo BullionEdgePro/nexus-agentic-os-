@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentConfig, BusinessSlug, InboundMessageEvent } from "@nexus/shared";
+import { isolated } from "@nexus/db";
 import type { AgentReplyResult, ConversationTurn, DomainAgent, ToolContext } from "./types.js";
 import { defaultToolRegistry } from "./tools/registry.js";
 
@@ -96,7 +97,9 @@ export class AnthropicDomainAgent implements DomainAgent {
         let isError = false;
         try {
           if (!tool) throw new Error(`Tool "${block.name}" is not registered`);
-          output = await tool.handler(block.input as Record<string, unknown>, ctx);
+          // Isolated (caught-error audit, 3 Nov 2026): a tool that swallowed a database
+          // error left the reply's transaction refusing everything after it.
+          output = await isolated(() => tool.handler(block.input as Record<string, unknown>, ctx));
         } catch (err) {
           isError = true;
           output = err instanceof Error ? err.message : String(err);

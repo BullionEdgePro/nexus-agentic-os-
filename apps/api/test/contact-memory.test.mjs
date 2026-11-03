@@ -105,7 +105,8 @@ test("the memory is written after the customer has their reply", () => {
 });
 
 test("a recall failure degrades to no memory rather than no reply", () => {
-  assert.match(PROCESSOR, /recallContact\(serving\.id, contactId\)\s*\n?\s*\)\.catch\(\(\) => null\)/);
+  // Inside isolated(() => withServingTenant(…)) since 3 Nov 2026.
+  assert.match(PROCESSOR, /recallContact\(serving\.id, contactId\)\)\s*\n?\s*\)\.catch\(\(\) => null\)/);
 });
 
 test("recall is read in the serving business's own tenant scope", () => {

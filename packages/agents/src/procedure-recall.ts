@@ -1,4 +1,4 @@
-import { getActiveProcedure, getSharedGuidance } from "@nexus/db";
+import { getActiveProcedure, getSharedGuidance, isolated } from "@nexus/db";
 import { classifyIntent } from "./intent.js";
 import { isPatternIntent, type ProcedureStep } from "@nexus/shared";
 
@@ -135,7 +135,7 @@ export async function recallProcedure(
     // Almost always null, and will be for some time: it takes two businesses
     // and twenty conversations on one kind of enquiry, and four of the five
     // here have never had a customer.
-    if (!selectPooledGuidance(await getSharedGuidance(), intent)) return null;
+    if (!selectPooledGuidance(await isolated(() => getSharedGuidance()), intent)) return null;
     return { procedureId: null, intent, source: "pooled", note: POOLED_NOTE };
   } catch {
     return null;

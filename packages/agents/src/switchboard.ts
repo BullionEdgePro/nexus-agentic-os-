@@ -1,4 +1,4 @@
-import { getPool, withServingTenant } from "@nexus/db";
+import { getPool, isolated, withServingTenant } from "@nexus/db";
 import type { AgentConfig, Employee, InboundMessageEvent, Organization } from "@nexus/shared";
 import { composeTwinSystemPrompt } from "@nexus/employees";
 // THE CUSTOMER REPLY PATH RUNS ON ANTHROPIC.
@@ -78,7 +78,7 @@ async function withoutUnperformableTools(config: AgentConfig, organizationId: st
   // one pays nothing for this. Failing OPEN — a rota lookup that throws leaves
   // the tools in place — because the cost of being wrong the other way is an
   // agent that silently stops being able to book for a business that can.
-  const anyone = await hasAnyoneOnARota(organizationId).catch(() => true);
+  const anyone = await isolated(() => hasAnyoneOnARota(organizationId)).catch(() => true);
   if (anyone) return config;
 
   return { ...config, tools: config.tools.filter((tool) => !TOOLS_NEEDING_A_ROTA.has(tool)) };

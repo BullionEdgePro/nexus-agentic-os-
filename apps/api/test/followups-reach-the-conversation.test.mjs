@@ -211,7 +211,8 @@ test("a follow-up lookup cannot delay or break a customer's reply", () => {
   // The inbound path is the one thing that must never degrade. An empty list
   // and a failed lookup are indistinguishable downstream, which is correct:
   // both mean "nothing to add".
-  assert.match(PROCESSOR, /listOpenTasksForContact\(serving\.id, contactId\)\s*\n?\s*\)\.catch\(\(\) => \[\]\)/);
+  // Inside isolated(() => withServingTenant(…)) since 3 Nov 2026.
+  assert.match(PROCESSOR, /listOpenTasksForContact\(serving\.id, contactId\)\)\s*\n?\s*\)\.catch\(\(\) => \[\]\)/);
 });
 
 test("memory, obligations, appointments and the procedure stay separate notes", () => {

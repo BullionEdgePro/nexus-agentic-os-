@@ -70,6 +70,50 @@ test("an automation's failure note cannot take its claims with it", () => {
   assert.match(runner, /withSavepoint\(\(\) => recordAutomationFailure\(runId, reason\)\)/);
 });
 
+// The reply job (caught-error audit, 3 Nov 2026): one transaction holds the
+// customer's message, the reply and its records, and a dozen reads in it are
+// "assume yes if this fails". Any of them failing on a database error took the
+// customer's message out of the inbox while the reply still went to them.
+test("every caught database call in the reply job is contained", () => {
+  const job = source("apps", "api", "src", "queue", "processor.ts");
+  const contained = [
+    /isolated\(\(\) =>\s*withServingTenant\(organizationId, \(\) =>\s*getActivePhrase\(/,
+    /isolated\(\(\) => getConversationRouting\(conversationId\)\)/,
+    /isolated\(\(\) => recordConversationMetric\(input\)\)/,
+    /isolated\(\(\) => wasAccountedFor\(conversationId, replayOf\.recordedAt\)\)/,
+    /isolated\(\(\) => hasActiveEmployees\(answering\)\)/,
+    /isolated\(\(\) => setConversationHandoff\(conversationId, false, "stale_release"\)\)/,
+    /isolated\(\(\) => optOutOfReengagement\(contactId\)\)/,
+    /isolated\(\(\) => findSharedNumberBusinesses\(ctx\.phoneNumberId\)\)/,
+    /isolated\(\(\) => getConversationRouting\(ctx\.conversationId\)\)/,
+    /isolated\(\(\) => findOrganizationById\(routedId\)\)/,
+    /isolated\(\(\) =>\s*findRecentBroadcastSender\(/,
+    /isolated\(\(\) => findOrganizationById\(business\.id\)\)/,
+    /isolated\(\(\) => setConversationRouting\(ctx\.conversationId, organization\.id\)\)/,
+    /isolated\(\(\) => recordTriagePrompt\(ctx\.conversationId\)\)/,
+    /isolated\(\(\) => countPriorInbound\(input\.contactId\)\)/,
+    /isolated\(\(\) =>\s*withServingTenant\(servingOrganizationId, \(\) =>\s*findEmployeeForConversation\(/,
+  ];
+  for (const shape of contained) assert.match(job, shape);
+  // The four enrichments read for the serving business before the model runs.
+  assert.equal((job.match(/isolated\(\(\) =>\s*withServingTenant\(serving\.id, /g) ?? []).length, 4);
+  // The pipeline and the best-effort helpers whose catch keeps going: rolled
+  // back only when the transaction broke, so a Redis blip keeps what was saved.
+  assert.equal((job.match(/withRecovery\(async \(\) => \{/g) ?? []).length, 6);
+});
+
+test("the reply job's helpers outside it contain their caught calls too", () => {
+  const availability = source("apps", "api", "src", "services", "availability.ts");
+  const onShift = availability.slice(availability.indexOf("export async function hasStaffOnShift"));
+  assert.match(onShift, /await isolated\(\(\) =>\s*withServingTenant\(organizationId, async \(\) => \{/);
+  assert.match(onShift, /await isolated\(\(\) => busyEmployeeIds\(/);
+  assert.match(availability, /isolated\(\(\) => withServingTenant\(servingOrganizationId, \(\) => stampAutoAssigned\(pick\.id\)\)\)/);
+  const agents = (...p) => source("packages", "agents", "src", ...p);
+  assert.match(agents("domain-agent.ts"), /output = await isolated\(\(\) => tool\.handler\(/);
+  assert.match(agents("switchboard.ts"), /isolated\(\(\) => hasAnyoneOnARota\(organizationId\)\)/);
+  assert.match(agents("procedure-recall.ts"), /await isolated\(\(\) => getSharedGuidance\(\)\)/);
+});
+
 test("one business's failed read leaves the others on the not-reported list", () => {
   const operators = source("apps", "api", "src", "services", "operators.ts");
   assert.match(operators, /isolated\(\(\) =>\s*withTenant\(organization\.id, \(\) => unansweredButNotReportedFor\(organization\.id\)\)/);
@@ -526,6 +570,33 @@ test("a campaign message that went out is never sent again when its 'sent' mark 
   }
   assert.equal(sends.length, 1);
   assert.equal(outcome, "finished", "the job failed after the send, so the queue would send it again");
+});
+
+test("withRecovery keeps the work when the transaction survived the failure", db, async () => {
+  // A Redis blip after a reply was recorded must not erase the record.
+  await lib.withTenant(ORG, async () => {
+    await lib
+      .withRecovery(async () => {
+        await insertContact("971595000030");
+        throw new Error("not the database");
+      })
+      .catch(() => undefined);
+  }, failing);
+  assert.equal(await contactNamed("971595000030"), 1);
+});
+
+test("withRecovery undoes the work when the transaction broke, so the catch can still write", db, async () => {
+  await lib.withTenant(ORG, async () => {
+    await lib
+      .withRecovery(async () => {
+        await insertContact("971595000031");
+        await lib.getPool().query("select 1/0");
+      })
+      .catch(() => undefined);
+    await insertContact("971595000032"); // the catch's fallback record
+  }, failing);
+  assert.equal(await contactNamed("971595000031"), 0);
+  assert.equal(await contactNamed("971595000032"), 1, "the transaction was still broken after the failure");
 });
 
 test("a handler that swallowed a failure after writing answers 500", db, async () => {

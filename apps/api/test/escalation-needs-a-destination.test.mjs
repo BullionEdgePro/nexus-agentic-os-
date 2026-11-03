@@ -107,7 +107,8 @@ test("a failed staff lookup assumes there IS somebody", () => {
   // toward 'assume somebody is there' rather than silently weakening a reply.
   const all = PROCESSOR.match(/has(?:ActiveEmployees|StaffOnShift)\([^)]*\)/g) ?? [];
   const guarded =
-    PROCESSOR.match(/has(?:ActiveEmployees|StaffOnShift)\([^)]*\)\.catch\(\(\) => true\)/g) ?? [];
+    // `)?`: a call inside isolated() closes it before the catch (3 Nov 2026).
+    PROCESSOR.match(/has(?:ActiveEmployees|StaffOnShift)\([^)]*\)\)?\.catch\(\(\) => true\)/g) ?? [];
   assert.ok(all.length >= 3, "the staff lookup must still be consulted");
   assert.equal(guarded.length, all.length, "every call site must default to true on failure");
 });

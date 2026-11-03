@@ -412,7 +412,8 @@ test("the reply path degrades to no procedure rather than failing", () => {
   // Same treatment as the other three enrichments. A customer waiting on a
   // reply must not wait on a procedure lookup, and must never lose the reply to
   // one.
-  assert.match(PROCESSOR, /recallProcedure\(serving\.id, text\.body\)\s*\n?\s*\)\.catch\(\(\) => null\)/);
+  // Inside isolated(() => withServingTenant(…)) since 3 Nov 2026.
+  assert.match(PROCESSOR, /recallProcedure\(serving\.id, text\.body\)\)\s*\n?\s*\)\.catch\(\(\) => null\)/);
   // And it asks the SERVING business, not the number's owner — read as the
   // owner, RLS returns nothing and the agent silently answers with no
   // procedure, which is indistinguishable from the business having none.

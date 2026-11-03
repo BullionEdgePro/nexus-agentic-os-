@@ -65,18 +65,25 @@ export async function hasStaffOnShift(organizationId: string): Promise<boolean> 
   // comment above this function is the record of what happens when that is got
   // wrong: RLS matches nothing, the query returns an empty array, and the empty
   // array reads as a fact.
-  const { active, busy } = await withServingTenant(organizationId, async () => {
-    const employees = await listEmployees(organizationId);
-    const live = employees.filter((employee) => employee.isActive);
-    if (live.length === 0) return { active: live, busy: new Set<string>() };
-    // A calendar that has never synced contributes an empty set, which means
-    // nobody is blocked by it. That is the right default: this must never make
-    // somebody unavailable on the strength of data it does not have.
-    const inSomething = await busyEmployeeIds(live.map((employee) => employee.id)).catch(
-      () => new Set<string>()
-    );
-    return { active: live, busy: inSomething };
-  });
+  //
+  // Isolated (caught-error audit, 3 Nov 2026): every caller answers "assume
+  // yes" when this fails, inside the reply's transaction, and a database error
+  // left that transaction refusing everything after it -- the customer's
+  // message and the reply were lost while the reply still went out.
+  const { active, busy } = await isolated(() =>
+    withServingTenant(organizationId, async () => {
+      const employees = await listEmployees(organizationId);
+      const live = employees.filter((employee) => employee.isActive);
+      if (live.length === 0) return { active: live, busy: new Set<string>() };
+      // A calendar that has never synced contributes an empty set, which means
+      // nobody is blocked by it. That is the right default: this must never make
+      // somebody unavailable on the strength of data it does not have.
+      const inSomething = await isolated(() => busyEmployeeIds(live.map((employee) => employee.id))).catch(
+        () => new Set<string>()
+      );
+      return { active: live, busy: inSomething };
+    })
+  );
 
   if (active.length === 0) return false;
 
@@ -184,7 +191,7 @@ export async function autoAssignIfEnabled(
 
       const claimed = await claimForAutoAssign(conversationId, pick.id, pick.fullName);
       if (!claimed) return null;
-      await withServingTenant(servingOrganizationId, () => stampAutoAssigned(pick.id)).catch(() => undefined);
+      await isolated(() => withServingTenant(servingOrganizationId, () => stampAutoAssigned(pick.id))).catch(() => undefined);
       logger.info({ conversationId, employeeId: pick.id, servingOrganizationId }, "Chat auto-assigned");
       // Tell them — in Nexus, and on their phone when the template is approved.
       alertAssignee({ conversationId, employeeId: pick.id, assignedBy: "Auto-assign" });

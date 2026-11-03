@@ -38,6 +38,8 @@ import {
   claimForAutoAssign,
   pauseBroadcastIfFailingByMessage,
   assignContactOwnerIfUnowned,
+  isolated,
+  withRecovery,
 } from "@nexus/db";
 import type { SharedNumberBusiness } from "@nexus/db";
 import { findEmployeeByCode, attributeConversation, optOutOfReengagement } from "@nexus/db";
@@ -140,8 +142,8 @@ async function resolvePhrase(
   fallback: string
 ): Promise<string> {
   try {
-    const phrase = await withServingTenant(organizationId, () =>
-      getActivePhrase(organizationId, moment)
+    const phrase = await isolated(() =>
+      withServingTenant(organizationId, () => getActivePhrase(organizationId, moment))
     );
     if (!phrase) return fallback;
     logger.info({ organizationId, moment, phraseId: phrase.id }, "Sent this business's own wording");
@@ -187,7 +189,7 @@ async function businessAnsweringFor(
   ownerId: string
 ): Promise<string> {
   try {
-    const routing = await getConversationRouting(conversationId);
+    const routing = await isolated(() => getConversationRouting(conversationId));
     return routing?.routedOrganizationId ?? ownerId;
   } catch {
     return ownerId;
@@ -261,7 +263,7 @@ function firstResponseMsFrom(inboundTimestamp: string): number | null {
 // best-effort and swallow any failure with a log.
 async function recordMetricBestEffort(input: ConversationMetricInput): Promise<void> {
   try {
-    await recordConversationMetric(input);
+    await isolated(() => recordConversationMetric(input));
   } catch (err) {
     logger.error(
       { conversationId: input.conversationId, err },
@@ -736,7 +738,7 @@ async function answerOneMessage(
   const effectiveMessageId = messageId ?? replayOf?.messageId ?? null;
   if (!messageId) {
     const answered = replayOf
-      ? await wasAccountedFor(conversationId, replayOf.recordedAt).catch(() => true)
+      ? await isolated(() => wasAccountedFor(conversationId, replayOf.recordedAt)).catch(() => true)
       : true;
 
     if (answered) {
@@ -831,7 +833,7 @@ async function answerOneMessage(
     // owner — see businessAnsweringFor. Asking the owner is how this release
     // could never fire for the four businesses that most need it.
     const answering = await businessAnsweringFor(conversationId, organization.id);
-    const someoneCanHandle = await hasActiveEmployees(answering).catch(() => true);
+    const someoneCanHandle = await isolated(() => hasActiveEmployees(answering)).catch(() => true);
     if (!someoneCanHandle) {
       logger.warn(
         { conversationId, organizationId: answering, numberOwner: organization.id },
@@ -840,7 +842,7 @@ async function answerOneMessage(
       // Best-effort: failing to clear the flag must not stop the reply. The
       // worst case is that this runs again on the next message, which is
       // exactly what it is for.
-      await setConversationHandoff(conversationId, false, "stale_release").catch((err) => {
+      await isolated(() => setConversationHandoff(conversationId, false, "stale_release")).catch((err) => {
         logger.error({ err, conversationId }, "Could not clear a stale handoff flag");
       });
       isHumanHandoff = false;
@@ -910,7 +912,7 @@ async function answerOneMessage(
   // question, and an agent reply would be one.
   if (looksLikeAnOptOut(text.body)) {
     try {
-      const changed = await optOutOfReengagement(contactId);
+      const changed = await isolated(() => optOutOfReengagement(contactId));
       logger.info(
         { conversationId, contactId, alreadyOptedOut: !changed },
         "Customer opted out of promotional messages"
@@ -1060,349 +1062,351 @@ async function answerOneMessage(
   // reply to the same inbound message.
   let sentToCustomer = false;
   try {
-    const history = await loadRecentHistory(conversationId);
+    await withRecovery(async () => {
+      const history = await loadRecentHistory(conversationId);
 
-    // Recall is scoped to the SERVING business, not the number owner — the same
-    // person can talk to a shop and a law firm on this one number, and each
-    // must remember them separately. contactId already encodes that (contacts
-    // are unique per organization), so this is belt and braces on a mistake
-    // that would be invisible if made.
-    //
-    // `withServingTenant` on all three enrichments below, for the reason spelled
-    // out on hasStaffOnShift: this transaction is scoped to the number's owner,
-    // and every one of these asks about the serving business. Read as the owner,
-    // RLS returned nothing and each enrichment degraded to "there is nothing to
-    // add" — which is exactly what an empty result legitimately means, so
-    // nothing anywhere could tell the two apart.
-    const recalled = await withServingTenant(serving.id, () =>
-      recallContact(serving.id, contactId)
-    ).catch(() => null);
+      // Recall is scoped to the SERVING business, not the number owner — the same
+      // person can talk to a shop and a law firm on this one number, and each
+      // must remember them separately. contactId already encodes that (contacts
+      // are unique per organization), so this is belt and braces on a mistake
+      // that would be invisible if made.
+      //
+      // `withServingTenant` on all three enrichments below, for the reason spelled
+      // out on hasStaffOnShift: this transaction is scoped to the number's owner,
+      // and every one of these asks about the serving business. Read as the owner,
+      // RLS returned nothing and each enrichment degraded to "there is nothing to
+      // add" — which is exactly what an empty result legitimately means, so
+      // nothing anywhere could tell the two apart.
+      const recalled = await isolated(() =>
+        withServingTenant(serving.id, () => recallContact(serving.id, contactId))
+      ).catch(() => null);
 
-    // What this business still owes this customer.
-    //
-    // Recorded when the promise was made, read on a page someone opens later —
-    // and neither of those is the moment it matters. That moment is this one:
-    // the customer writing back. Without this, "did you call me?" reaches an
-    // agent with no idea a callback was ever owed, and the fluent answer is a
-    // wrong one.
-    //
-    // Failure is soft and silent for the same reason every other enrichment
-    // here is: a customer waiting on a reply must not wait on a follow-up
-    // lookup. An empty list is indistinguishable from a failed one to
-    // everything downstream, which is correct — both mean "nothing to add".
-    const owed = await withServingTenant(serving.id, () =>
-      listOpenTasksForContact(serving.id, contactId)
-    ).catch(() => []);
-    const owedNote = describeOpenFollowUps(
-      owed.map((task) => ({
-        title: task.title,
-        dueAt: task.dueAt,
-        isOverdue: task.isOverdue,
-        owner: task.employeeName,
-      })),
-      serving.timezone ?? "Asia/Dubai"
-    );
-    // What this customer already has in the diary.
-    //
-    // The moment an appointment matters most is when the person who made it
-    // writes back — "what time am I coming in?", "can we move it?". Without
-    // this the agent answers that fluently and wrongly, and worse, happily
-    // books a second appointment on top of the first. The exclusion constraint
-    // would not stop it: two bookings for the same customer with two different
-    // employees are not a double-booking as far as the database is concerned.
-    const bookedNote = await withServingTenant(serving.id, () =>
-      upcomingBookingsNote(serving.id, contactId, serving.timezone ?? "Asia/Dubai")
-    ).catch(() => null);
+      // What this business still owes this customer.
+      //
+      // Recorded when the promise was made, read on a page someone opens later —
+      // and neither of those is the moment it matters. That moment is this one:
+      // the customer writing back. Without this, "did you call me?" reaches an
+      // agent with no idea a callback was ever owed, and the fluent answer is a
+      // wrong one.
+      //
+      // Failure is soft and silent for the same reason every other enrichment
+      // here is: a customer waiting on a reply must not wait on a follow-up
+      // lookup. An empty list is indistinguishable from a failed one to
+      // everything downstream, which is correct — both mean "nothing to add".
+      const owed = await isolated(() =>
+        withServingTenant(serving.id, () => listOpenTasksForContact(serving.id, contactId))
+      ).catch(() => []);
+      const owedNote = describeOpenFollowUps(
+        owed.map((task) => ({
+          title: task.title,
+          dueAt: task.dueAt,
+          isOverdue: task.isOverdue,
+          owner: task.employeeName,
+        })),
+        serving.timezone ?? "Asia/Dubai"
+      );
+      // What this customer already has in the diary.
+      //
+      // The moment an appointment matters most is when the person who made it
+      // writes back — "what time am I coming in?", "can we move it?". Without
+      // this the agent answers that fluently and wrongly, and worse, happily
+      // books a second appointment on top of the first. The exclusion constraint
+      // would not stop it: two bookings for the same customer with two different
+      // employees are not a double-booking as far as the database is concerned.
+      const bookedNote = await isolated(() =>
+        withServingTenant(serving.id, () => upcomingBookingsNote(serving.id, contactId, serving.timezone ?? "Asia/Dubai"))
+      ).catch(() => null);
 
-    // How this business works through this kind of enquiry (F10), or failing
-    // that what the platform has seen of enquiries like it (F5).
-    //
-    // The only one of these four enrichments that changes the SHAPE of the
-    // reply rather than adding a fact to it. It used to also be the only one a
-    // person had to switch on before it could do anything, and that is no
-    // longer quite true: where a business has no procedure of its own, pooled
-    // guidance can speak without anyone at that business having approved it.
-    // See the fencing in procedure-recall.ts — own material first, two-tenant
-    // and twenty-sample floors, no numbers into the prompt, and no procedure id
-    // stamped, because no procedure was applied. Null for almost every message
-    // either way: today no business has an active procedure and no pattern is
-    // deep enough to qualify.
-    //
-    // Same failure-soft treatment as the other three, and the same
-    // `withServingTenant` for the same reason: read as the number's owner, RLS
-    // returns nothing and the agent answers with no procedure — which is
-    // exactly what "this business has none" looks like, so nothing downstream
-    // could tell the two apart.
-    const procedure = await withServingTenant(serving.id, () =>
-      recallProcedure(serving.id, text.body)
-    ).catch(() => null);
+      // How this business works through this kind of enquiry (F10), or failing
+      // that what the platform has seen of enquiries like it (F5).
+      //
+      // The only one of these four enrichments that changes the SHAPE of the
+      // reply rather than adding a fact to it. It used to also be the only one a
+      // person had to switch on before it could do anything, and that is no
+      // longer quite true: where a business has no procedure of its own, pooled
+      // guidance can speak without anyone at that business having approved it.
+      // See the fencing in procedure-recall.ts — own material first, two-tenant
+      // and twenty-sample floors, no numbers into the prompt, and no procedure id
+      // stamped, because no procedure was applied. Null for almost every message
+      // either way: today no business has an active procedure and no pattern is
+      // deep enough to qualify.
+      //
+      // Same failure-soft treatment as the other three, and the same
+      // `withServingTenant` for the same reason: read as the number's owner, RLS
+      // returns nothing and the agent answers with no procedure — which is
+      // exactly what "this business has none" looks like, so nothing downstream
+      // could tell the two apart.
+      const procedure = await isolated(() =>
+        withServingTenant(serving.id, () => recallProcedure(serving.id, text.body))
+      ).catch(() => null);
 
-    // Each note is prepended fenced separately rather than merged. They are
-    // different kinds of fact carrying different instructions — memory is what
-    // we know about this person, follow-ups are what we owe them and must not
-    // claim to have done, appointments are what is already agreed, a procedure
-    // is the order to work in and not a source of facts — and running them
-    // together would blur which caution applies to which.
-    //
-    // The procedure goes LAST, nearest the customer's message. The other three
-    // are context to hold in mind; this one is an instruction about what to do
-    // next, and instructions belong closest to the thing they act on.
-    // CAN THIS REPLY PROMISE A PERSON? Asked with the SAME function the
-    // escalation itself uses, so the agent's words and the platform's behaviour
-    // cannot disagree. `hasActiveEmployees` would be the wrong question: a firm
-    // with staff who are all off-shift still cannot take a handover tonight,
-    // and flagHandoffBestEffort checks presence, not employment.
-    //
-    // NO withServingTenant HERE, and it took an existing test to notice. The
-    // widening is INSIDE hasStaffOnShift -- the Scoped-inner pattern -- and
-    // wrapping it again is a no-op at best: a withTenant nested in a withTenant
-    // deliberately reuses the outer context, which is the very bug the comment
-    // on that function is about. I reached for the wrapper by matching the
-    // SHAPE of the defect class without checking whether this function already
-    // handled it, and the only thing it achieved was moving the .catch off the
-    // call it guards. `a failed staff lookup assumes there IS somebody` failed
-    // on exactly that.
-    //
-    // FAILURE-SOFT IN THE SAME DIRECTION AS THE ESCALATION. On error assume
-    // somebody IS there, exactly as flagHandoffBestEffort does: a transient
-    // database blip must not make five agents start telling customers there is
-    // nobody to help them.
-    const canPromiseAPerson = await hasStaffOnShift(serving.id).catch(() => true);
+      // Each note is prepended fenced separately rather than merged. They are
+      // different kinds of fact carrying different instructions — memory is what
+      // we know about this person, follow-ups are what we owe them and must not
+      // claim to have done, appointments are what is already agreed, a procedure
+      // is the order to work in and not a source of facts — and running them
+      // together would blur which caution applies to which.
+      //
+      // The procedure goes LAST, nearest the customer's message. The other three
+      // are context to hold in mind; this one is an instruction about what to do
+      // next, and instructions belong closest to the thing they act on.
+      // CAN THIS REPLY PROMISE A PERSON? Asked with the SAME function the
+      // escalation itself uses, so the agent's words and the platform's behaviour
+      // cannot disagree. `hasActiveEmployees` would be the wrong question: a firm
+      // with staff who are all off-shift still cannot take a handover tonight,
+      // and flagHandoffBestEffort checks presence, not employment.
+      //
+      // NO withServingTenant HERE, and it took an existing test to notice. The
+      // widening is INSIDE hasStaffOnShift -- the Scoped-inner pattern -- and
+      // wrapping it again is a no-op at best: a withTenant nested in a withTenant
+      // deliberately reuses the outer context, which is the very bug the comment
+      // on that function is about. I reached for the wrapper by matching the
+      // SHAPE of the defect class without checking whether this function already
+      // handled it, and the only thing it achieved was moving the .catch off the
+      // call it guards. `a failed staff lookup assumes there IS somebody` failed
+      // on exactly that.
+      //
+      // FAILURE-SOFT IN THE SAME DIRECTION AS THE ESCALATION. On error assume
+      // somebody IS there, exactly as flagHandoffBestEffort does: a transient
+      // database blip must not make five agents start telling customers there is
+      // nobody to help them.
+      const canPromiseAPerson = await hasStaffOnShift(serving.id).catch(() => true);
 
-    const notes = [
-      recalled ? recallNote(recalled) : null,
-      owedNote,
-      bookedNote,
-      // Nearest the customer's message after the procedure, because like the
-      // procedure it is an instruction about what to do rather than a fact to
-      // hold in mind -- and it overrides an instruction the system prompt gives
-      // unconditionally.
-      canPromiseAPerson ? null : describeNobodyToEscalateTo(),
-      // Placed after the escalation note so that when there IS nobody to hand
-      // to, the instruction not to promise a person is read first. A referral
-      // names one specific colleague, and naming somebody who cannot be reached
-      // is the exact failure the note above exists to prevent.
-      referrer?.note ?? null,
-      procedure?.note ?? null,
-    ].filter((note): note is string => note !== null);
+      const notes = [
+        recalled ? recallNote(recalled) : null,
+        owedNote,
+        bookedNote,
+        // Nearest the customer's message after the procedure, because like the
+        // procedure it is an instruction about what to do rather than a fact to
+        // hold in mind -- and it overrides an instruction the system prompt gives
+        // unconditionally.
+        canPromiseAPerson ? null : describeNobodyToEscalateTo(),
+        // Placed after the escalation note so that when there IS nobody to hand
+        // to, the instruction not to promise a person is read first. A referral
+        // names one specific colleague, and naming somebody who cannot be reached
+        // is the exact failure the note above exists to prevent.
+        referrer?.note ?? null,
+        procedure?.note ?? null,
+      ].filter((note): note is string => note !== null);
 
-    const withRecall = notes.length
-      ? [...notes.map((content) => ({ role: "assistant" as const, content })), ...history]
-      : history;
+      const withRecall = notes.length
+        ? [...notes.map((content) => ({ role: "assistant" as const, content })), ...history]
+        : history;
 
-    const result = await agent.respond(
-      {
-        // The routed tenant, not the number owner: this scopes knowledge
-        // retrieval, so passing the owner here would let a shared number answer
-        // a legal question out of the retail knowledge base.
-        organizationId: serving.id,
-        contactWaId: message.from,
-        contactName,
-        messageId: message.id,
-        // An attachment reaches the model as its label plus a note it cannot
-        // see the file, so it never describes a photo it was never shown. The
-        // note is for the model only: the stored message is the label alone.
-        text: withAttachmentNote(message, text.body),
-        timestamp: message.timestamp,
-        // Carried so book_appointment can write a row naming an actual person.
-        // A booking tool that had to resolve the customer itself would have to
-        // guess from the wa_id, and on a shared number the same number is a
-        // different contact for a different business. Passing what this job
-        // already resolved is the only version with no guess in it.
-        contactId,
+      const result = await agent.respond(
+        {
+          // The routed tenant, not the number owner: this scopes knowledge
+          // retrieval, so passing the owner here would let a shared number answer
+          // a legal question out of the retail knowledge base.
+          organizationId: serving.id,
+          contactWaId: message.from,
+          contactName,
+          messageId: message.id,
+          // An attachment reaches the model as its label plus a note it cannot
+          // see the file, so it never describes a photo it was never shown. The
+          // note is for the model only: the stored message is the label alone.
+          text: withAttachmentNote(message, text.body),
+          timestamp: message.timestamp,
+          // Carried so book_appointment can write a row naming an actual person.
+          // A booking tool that had to resolve the customer itself would have to
+          // guess from the wa_id, and on a shared number the same number is a
+          // different contact for a different business. Passing what this job
+          // already resolved is the only version with no guess in it.
+          contactId,
+          conversationId,
+        },
+        withRecall
+      );
+
+      if (!result.text) return;
+
+      // THE JUDGE WAS BEING ASKED TO AUDIT GROUNDED ANSWERS WITH THE GROUNDING
+      // REMOVED.
+      //
+      // This call passed only the draft and the conversation history. Every fact
+      // the agent correctly took from the knowledge base therefore looked, to the
+      // judge, like an assertion supported by nothing — which biases it toward
+      // "high" on exactly the replies that did their job properly. High escalates
+      // for every tenant outside the tolerant allowlist.
+      //
+      // Retrieval happens inside `agent.respond`, so the passages are not in
+      // scope here as a variable; they are in the tool calls the agent actually
+      // made. Reconstructing the context from those is the honest definition of
+      // "what this reply should be grounded in" — it is what the agent read, not
+      // what a second search might have found.
+      const retrieved = result.toolCalls
+        .filter((call) => call.name === "search_knowledge")
+        .map((call) => (typeof call.output === "string" ? call.output : JSON.stringify(call.output)))
+        .join("\n\n");
+
+      // Did retrieval work, and can anyone tell?
+      //
+      // Read from the tool's own `outcome` field rather than by matching its note,
+      // so a reworded message never silently reclassifies an outage as a miss.
+      // Worst outcome wins across calls: one failed lookup means this reply was
+      // partly ungrounded, whatever the others returned.
+      const retrievalCalls = result.toolCalls.filter((call) => call.name === "search_knowledge");
+      const outcomes = retrievalCalls.map((call) => {
+        const output = call.output as { outcome?: string } | string | undefined;
+        return typeof output === "object" && output !== null ? output.outcome : undefined;
+      });
+      // Worst wins, and 'degraded' sits between 'failed' and 'hit' rather than
+      // beside either. The ordering lives in @nexus/shared as a pure function
+      // because it is a judgement about what an operator gets to see, not a
+      // formatting detail — see worstRetrievalOutcome.
+      const retrievalOutcome = worstRetrievalOutcome(outcomes);
+
+      const evaluation = await evaluateOutgoingMessage({
+        draftReply: result.text,
+        conversationHistory: history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
+        // Empty when the agent answered without searching, which is a real state
+        // and correctly reads as "nothing supports this" rather than as missing
+        // plumbing.
+        ragContext: retrieved || undefined,
+        // Who is speaking. Without it, an agent naming its own company scores as
+        // a hallucination — see HallucinationCheckInput.businessName.
+        businessName: serving.name,
+        // What the business says about ITSELF. Without it the judge marks the
+        // firm's own address and phone number as unverified -- the same defect
+        // businessName fixed for the company's NAME, one step further out, and
+        // it fired on the path that matters most: an urgent matter with nobody
+        // on the rota, where the agent is instructed to give exactly those
+        // details.
+        businessFacts: agent.config.systemPrompt,
+      });
+
+      // Deterministic backstop for the twin's identity rules: the prompt forbids
+      // reproducing the employee's digital signature, but a prompt is guidance,
+      // not a guarantee. Signing machine-generated text with a person's
+      // attestation is a misrepresentation we refuse to send, so it escalates
+      // to that human exactly like a governance failure would.
+      const signatureLeak = employee ? containsDigitalSignature(result.text, employee) : false;
+      if (signatureLeak) {
+        logger.error(
+          { conversationId, employeeId: employee?.id },
+          "Twin reply reproduced the employee's digital signature — blocked and escalated"
+        );
+      }
+
+      // Governance is the routed tenant's, not the number owner's — this is the
+      // whole reason routing happens before the reply is composed. `juris-prime-legal`
+      // escalates at medium hallucination risk and `zipicka` does not; using the
+      // owner's slug here would silently apply retail thresholds to legal answers.
+      const shouldEscalate = shouldEscalateReply(evaluation, serving.slug) || signatureLeak;
+
+      // Escalating to nobody is worse than not escalating.
+      //
+      // Asked of the SERVING business, not the number owner: on a shared number
+      // the law firm may have staff while the retailer does not, and the question
+      // is whether anyone can pick up THIS conversation.
+      //
+      // Failure is treated as "there is somebody" — the conservative reading. A
+      // failed lookup wrongly assumed empty would send a customer a weaker reply
+      // and skip a handoff that was warranted; wrongly assumed staffed, it
+      // behaves exactly as the system did before this change.
+      // ONE ANSWER PER REPLY, not two. `canPromiseAPerson` asked this same
+      // question earlier in this same message, to decide whether the agent may
+      // promise anybody. Asking again here is a second round trip and, worse, a
+      // second source of truth: a shift boundary falling between the two calls
+      // would let the agent be told it may promise a colleague while this line
+      // decides there is nobody, in one reply.
+      //
+      // The `shouldEscalate` guard is kept because it is what makes the ordinary
+      // path -- every reply the agent actually answers -- cost nothing here.
+      const canHandOver = shouldEscalate ? canPromiseAPerson : false;
+
+      // The business's own wording for whichever of the two moments this is,
+      // falling back to the platform default. Resolved only when escalating, so
+      // the ordinary path — every reply the agent actually answers — costs
+      // nothing at all.
+      const finalText = shouldEscalate
+        ? canHandOver
+          ? await resolvePhrase(serving.id, "handing_over", FALLBACK_REPLY)
+          : await resolvePhrase(serving.id, "no_one_available", FALLBACK_REPLY_NO_STAFF)
+        : result.text;
+
+      if (shouldEscalate && !canHandOver) {
+        logger.warn(
+          { conversationId, business: serving.slug },
+          "Escalation wanted but no active staff — keeping the agent live rather than promising a specialist who does not exist"
+        );
+      }
+
+      const waMessageId = await sendWhatsAppText(phoneNumberId, message.from, finalText);
+      sentToCustomer = true;
+
+      // Recorded here, run after the transaction closes. See the note below the
+      // withTenant block for why it cannot be fired from inside it.
+      deferred.memory = { organizationId: serving.id, contactId, conversationId };
+
+      const outboundDto = await insertOutboundMessage({
+        organizationId: organization.id,
         conversationId,
-      },
-      withRecall
-    );
+        contactId,
+        senderType: shouldEscalate ? "system" : "ai_agent",
+        senderId: shouldEscalate ? undefined : agent.config.id,
+        body: finalText,
+        employeeId: employee?.id ?? null,
+        // Meta's receipt. Without it this row says 'sent' and can never be
+        // corrected, because the status webhook identifies a message by this id
+        // and nothing else — see migration 048.
+        waMessageId: waMessageId ?? undefined,
+      });
 
-    if (!result.text) return;
+      await insertEvaluation(organization.id, outboundDto.id, evaluation);
 
-    // THE JUDGE WAS BEING ASKED TO AUDIT GROUNDED ANSWERS WITH THE GROUNDING
-    // REMOVED.
-    //
-    // This call passed only the draft and the conversation history. Every fact
-    // the agent correctly took from the knowledge base therefore looked, to the
-    // judge, like an assertion supported by nothing — which biases it toward
-    // "high" on exactly the replies that did their job properly. High escalates
-    // for every tenant outside the tolerant allowlist.
-    //
-    // Retrieval happens inside `agent.respond`, so the passages are not in
-    // scope here as a variable; they are in the tool calls the agent actually
-    // made. Reconstructing the context from those is the honest definition of
-    // "what this reply should be grounded in" — it is what the agent read, not
-    // what a second search might have found.
-    const retrieved = result.toolCalls
-      .filter((call) => call.name === "search_knowledge")
-      .map((call) => (typeof call.output === "string" ? call.output : JSON.stringify(call.output)))
-      .join("\n\n");
-
-    // Did retrieval work, and can anyone tell?
-    //
-    // Read from the tool's own `outcome` field rather than by matching its note,
-    // so a reworded message never silently reclassifies an outage as a miss.
-    // Worst outcome wins across calls: one failed lookup means this reply was
-    // partly ungrounded, whatever the others returned.
-    const retrievalCalls = result.toolCalls.filter((call) => call.name === "search_knowledge");
-    const outcomes = retrievalCalls.map((call) => {
-      const output = call.output as { outcome?: string } | string | undefined;
-      return typeof output === "object" && output !== null ? output.outcome : undefined;
-    });
-    // Worst wins, and 'degraded' sits between 'failed' and 'hit' rather than
-    // beside either. The ordering lives in @nexus/shared as a pure function
-    // because it is a judgement about what an operator gets to see, not a
-    // formatting detail — see worstRetrievalOutcome.
-    const retrievalOutcome = worstRetrievalOutcome(outcomes);
-
-    const evaluation = await evaluateOutgoingMessage({
-      draftReply: result.text,
-      conversationHistory: history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
-      // Empty when the agent answered without searching, which is a real state
-      // and correctly reads as "nothing supports this" rather than as missing
-      // plumbing.
-      ragContext: retrieved || undefined,
-      // Who is speaking. Without it, an agent naming its own company scores as
-      // a hallucination — see HallucinationCheckInput.businessName.
-      businessName: serving.name,
-      // What the business says about ITSELF. Without it the judge marks the
-      // firm's own address and phone number as unverified -- the same defect
-      // businessName fixed for the company's NAME, one step further out, and
-      // it fired on the path that matters most: an urgent matter with nobody
-      // on the rota, where the agent is instructed to give exactly those
-      // details.
-      businessFacts: agent.config.systemPrompt,
-    });
-
-    // Deterministic backstop for the twin's identity rules: the prompt forbids
-    // reproducing the employee's digital signature, but a prompt is guidance,
-    // not a guarantee. Signing machine-generated text with a person's
-    // attestation is a misrepresentation we refuse to send, so it escalates
-    // to that human exactly like a governance failure would.
-    const signatureLeak = employee ? containsDigitalSignature(result.text, employee) : false;
-    if (signatureLeak) {
-      logger.error(
-        { conversationId, employeeId: employee?.id },
-        "Twin reply reproduced the employee's digital signature — blocked and escalated"
-      );
-    }
-
-    // Governance is the routed tenant's, not the number owner's — this is the
-    // whole reason routing happens before the reply is composed. `juris-prime-legal`
-    // escalates at medium hallucination risk and `zipicka` does not; using the
-    // owner's slug here would silently apply retail thresholds to legal answers.
-    const shouldEscalate = shouldEscalateReply(evaluation, serving.slug) || signatureLeak;
-
-    // Escalating to nobody is worse than not escalating.
-    //
-    // Asked of the SERVING business, not the number owner: on a shared number
-    // the law firm may have staff while the retailer does not, and the question
-    // is whether anyone can pick up THIS conversation.
-    //
-    // Failure is treated as "there is somebody" — the conservative reading. A
-    // failed lookup wrongly assumed empty would send a customer a weaker reply
-    // and skip a handoff that was warranted; wrongly assumed staffed, it
-    // behaves exactly as the system did before this change.
-    // ONE ANSWER PER REPLY, not two. `canPromiseAPerson` asked this same
-    // question earlier in this same message, to decide whether the agent may
-    // promise anybody. Asking again here is a second round trip and, worse, a
-    // second source of truth: a shift boundary falling between the two calls
-    // would let the agent be told it may promise a colleague while this line
-    // decides there is nobody, in one reply.
-    //
-    // The `shouldEscalate` guard is kept because it is what makes the ordinary
-    // path -- every reply the agent actually answers -- cost nothing here.
-    const canHandOver = shouldEscalate ? canPromiseAPerson : false;
-
-    // The business's own wording for whichever of the two moments this is,
-    // falling back to the platform default. Resolved only when escalating, so
-    // the ordinary path — every reply the agent actually answers — costs
-    // nothing at all.
-    const finalText = shouldEscalate
-      ? canHandOver
-        ? await resolvePhrase(serving.id, "handing_over", FALLBACK_REPLY)
-        : await resolvePhrase(serving.id, "no_one_available", FALLBACK_REPLY_NO_STAFF)
-      : result.text;
-
-    if (shouldEscalate && !canHandOver) {
-      logger.warn(
-        { conversationId, business: serving.slug },
-        "Escalation wanted but no active staff — keeping the agent live rather than promising a specialist who does not exist"
-      );
-    }
-
-    const waMessageId = await sendWhatsAppText(phoneNumberId, message.from, finalText);
-    sentToCustomer = true;
-
-    // Recorded here, run after the transaction closes. See the note below the
-    // withTenant block for why it cannot be fired from inside it.
-    deferred.memory = { organizationId: serving.id, contactId, conversationId };
-
-    const outboundDto = await insertOutboundMessage({
-      organizationId: organization.id,
-      conversationId,
-      contactId,
-      senderType: shouldEscalate ? "system" : "ai_agent",
-      senderId: shouldEscalate ? undefined : agent.config.id,
-      body: finalText,
-      employeeId: employee?.id ?? null,
-      // Meta's receipt. Without it this row says 'sent' and can never be
-      // corrected, because the status webhook identifies a message by this id
-      // and nothing else — see migration 048.
-      waMessageId: waMessageId ?? undefined,
-    });
-
-    await insertEvaluation(organization.id, outboundDto.id, evaluation);
-
-    await publishInboxEvent({
-      type: "message",
-      organizationId: organization.id,
-      organizationSlug: organization.slug,
-      conversationId,
-      message: outboundDto,
-    });
-
-    // Only pause the agent when somebody can take its place. Pausing with an
-    // empty rota does not hand the conversation over — it ends it.
-    if (shouldEscalate && canHandOver) {
-      await setConversationHandoff(conversationId, true, "agent_escalated");
       await publishInboxEvent({
-        type: "handoff_changed",
+        type: "message",
         organizationId: organization.id,
         organizationSlug: organization.slug,
         conversationId,
-        isHumanHandoff: true,
+        message: outboundDto,
       });
-      logger.warn(
-        { conversationId, evaluation },
-        "AI reply blocked by governance evaluation, escalated to human handoff"
-      );
-    }
 
-    // Analytics: token spend, who owns the resolution now, the classified
-    // intent, and time-to-first-response. Best-effort — see recordMetricBestEffort.
-    await recordMetricBestEffort({
-      organizationId: organization.id,
-      conversationId,
-      intent: classifyIntent({ text: message.text?.body, toolCalls: result.toolCalls }).intent,
-      resolvedBy: shouldEscalate ? "human_agent" : "ai_agent",
-      // A model reply went out and this row's token counts are that reply's.
-      // The value matters because of what its ABSENCE used to mean — see the
-      // catch below and migration 049.
-      replyOutcome: "agent" as const,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      firstResponseMs: firstResponseMsFrom(message.timestamp),
-      // Stamped whether or not the reply survived governance. An escalated
-      // reply is one the procedure shaped and a human still had to take over —
-      // the single most informative outcome it can have. Recording only the
-      // ones that went out would make "ended without a human" true of nearly
-      // every stamped conversation by construction. See migration 036.
-      //
-      // Note this may disagree with `intent` on the same row: selection ran on
-      // the text before the agent replied, the recording runs after and can see
-      // which tool fired. The stamp records what was APPLIED, which is the
-      // thing the counters are meant to count.
-      procedureId: procedure?.procedureId ?? null,
-      retrievalOutcome,
+      // Only pause the agent when somebody can take its place. Pausing with an
+      // empty rota does not hand the conversation over — it ends it.
+      if (shouldEscalate && canHandOver) {
+        await setConversationHandoff(conversationId, true, "agent_escalated");
+        await publishInboxEvent({
+          type: "handoff_changed",
+          organizationId: organization.id,
+          organizationSlug: organization.slug,
+          conversationId,
+          isHumanHandoff: true,
+        });
+        logger.warn(
+          { conversationId, evaluation },
+          "AI reply blocked by governance evaluation, escalated to human handoff"
+        );
+      }
+
+      // Analytics: token spend, who owns the resolution now, the classified
+      // intent, and time-to-first-response. Best-effort — see recordMetricBestEffort.
+      await recordMetricBestEffort({
+        organizationId: organization.id,
+        conversationId,
+        intent: classifyIntent({ text: message.text?.body, toolCalls: result.toolCalls }).intent,
+        resolvedBy: shouldEscalate ? "human_agent" : "ai_agent",
+        // A model reply went out and this row's token counts are that reply's.
+        // The value matters because of what its ABSENCE used to mean — see the
+        // catch below and migration 049.
+        replyOutcome: "agent" as const,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        firstResponseMs: firstResponseMsFrom(message.timestamp),
+        // Stamped whether or not the reply survived governance. An escalated
+        // reply is one the procedure shaped and a human still had to take over —
+        // the single most informative outcome it can have. Recording only the
+        // ones that went out would make "ended without a human" true of nearly
+        // every stamped conversation by construction. See migration 036.
+        //
+        // Note this may disagree with `intent` on the same row: selection ran on
+        // the text before the agent replied, the recording runs after and can see
+        // which tool fired. The stamp records what was APPLIED, which is the
+        // thing the counters are meant to count.
+        procedureId: procedure?.procedureId ?? null,
+        retrievalOutcome,
+      });
     });
   } catch (err) {
     logger.error({ conversationId, sentToCustomer, err }, "AI reply pipeline failed");
@@ -1530,7 +1534,7 @@ async function resolveServingOrganization(ctx: {
 }): Promise<ServingDecision> {
   let businesses: SharedNumberBusiness[];
   try {
-    businesses = await findSharedNumberBusinesses(ctx.phoneNumberId);
+    businesses = await isolated(() => findSharedNumberBusinesses(ctx.phoneNumberId));
   } catch (err) {
     logger.error(
       { conversationId: ctx.conversationId, err },
@@ -1545,7 +1549,7 @@ async function resolveServingOrganization(ctx: {
 
   let state = null;
   try {
-    state = await getConversationRouting(ctx.conversationId);
+    state = await isolated(() => getConversationRouting(ctx.conversationId));
   } catch (err) {
     logger.error({ conversationId: ctx.conversationId, err }, "Routing state read failed");
   }
@@ -1570,7 +1574,8 @@ async function resolveServingOrganization(ctx: {
     let routed: Awaited<ReturnType<typeof findOrganizationById>> = null;
     let lookupFailed = false;
     try {
-      routed = await findOrganizationById(state.routedOrganizationId);
+      const routedId = state.routedOrganizationId;
+      routed = await isolated(() => findOrganizationById(routedId));
     } catch (err) {
       lookupFailed = true;
       logger.error(
@@ -1614,9 +1619,8 @@ async function resolveServingOrganization(ctx: {
   // It also runs before the triage-attempt counter below, so a broadcast reply
   // never burns one of a customer's three chances to be understood.
   if (ctx.contactId) {
-    const priorContact = await findRecentBroadcastSender(
-      ctx.contactId,
-      BROADCAST_ROUTING_WINDOW_HOURS
+    const priorContact = await isolated(() =>
+      findRecentBroadcastSender(ctx.contactId, BROADCAST_ROUTING_WINDOW_HOURS)
     ).catch(() => null);
 
     const sender = priorContact
@@ -1709,7 +1713,7 @@ async function commitRoute(
   business: SharedNumberBusiness,
   matched: string[]
 ): Promise<ServingDecision> {
-  const organization = await findOrganizationById(business.id).catch(() => null);
+  const organization = await isolated(() => findOrganizationById(business.id)).catch(() => null);
   if (!organization) {
     // Classified to a tenant we then could not load. Serving the owner is
     // wrong-but-answering; the alternative is silence, and the misroute is
@@ -1722,7 +1726,7 @@ async function commitRoute(
   }
 
   try {
-    await setConversationRouting(ctx.conversationId, organization.id);
+    await isolated(() => setConversationRouting(ctx.conversationId, organization.id));
   } catch (err) {
     // The routing decision stands for this message even if it failed to
     // persist; the next message simply re-classifies.
@@ -1771,7 +1775,7 @@ async function askWhichBusiness(
   }
 
   try {
-    await recordTriagePrompt(ctx.conversationId);
+    await isolated(() => recordTriagePrompt(ctx.conversationId));
   } catch (err) {
     // The customer has the menu but we did not record asking. Their reply will
     // not be read as an ordinal, so they get asked once more — mildly annoying,
@@ -1780,20 +1784,22 @@ async function askWhichBusiness(
   }
 
   try {
-    const outboundDto = await insertOutboundMessage({
-      organizationId: ctx.owner.id,
-      conversationId: ctx.conversationId,
-      contactId: ctx.contactId,
-      senderType: "system",
-      body,
-      waMessageId: waMessageId ?? undefined,
-    });
-    await publishInboxEvent({
-      type: "message",
-      organizationId: ctx.owner.id,
-      organizationSlug: ctx.owner.slug,
-      conversationId: ctx.conversationId,
-      message: outboundDto,
+    await withRecovery(async () => {
+      const outboundDto = await insertOutboundMessage({
+        organizationId: ctx.owner.id,
+        conversationId: ctx.conversationId,
+        contactId: ctx.contactId,
+        senderType: "system",
+        body,
+        waMessageId: waMessageId ?? undefined,
+      });
+      await publishInboxEvent({
+        type: "message",
+        organizationId: ctx.owner.id,
+        organizationSlug: ctx.owner.slug,
+        conversationId: ctx.conversationId,
+        message: outboundDto,
+      });
     });
   } catch (err) {
     logger.error({ conversationId: ctx.conversationId, err }, "Failed to record triage question");
@@ -1815,27 +1821,29 @@ async function scoreLeadBestEffort(input: {
   text: string;
 }): Promise<void> {
   try {
-    let priorInboundCount = 0;
-    try {
-      // Subtract the message just recorded so "prior" really means prior.
-      priorInboundCount = Math.max(0, (await countPriorInbound(input.contactId)) - 1);
-    } catch (err) {
-      logger.debug({ err }, "Prior-message count unavailable; scoring without it");
-    }
+    await withRecovery(async () => {
+      let priorInboundCount = 0;
+      try {
+        // Subtract the message just recorded so "prior" really means prior.
+        priorInboundCount = Math.max(0, (await isolated(() => countPriorInbound(input.contactId))) - 1);
+      } catch (err) {
+        logger.debug({ err }, "Prior-message count unavailable; scoring without it");
+      }
 
-    const assessment = scoreLead({ text: input.text, priorInboundCount });
-    await recordLeadAssessment({
-      ...assessment,
-      organizationId: input.organizationId,
-      contactId: input.contactId,
-      conversationId: input.conversationId,
-      messageId: input.messageId,
+      const assessment = scoreLead({ text: input.text, priorInboundCount });
+      await recordLeadAssessment({
+        ...assessment,
+        organizationId: input.organizationId,
+        contactId: input.contactId,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+      });
+
+      logger.debug(
+        { conversationId: input.conversationId, score: assessment.score, priority: assessment.priority },
+        "Lead assessed"
+      );
     });
-
-    logger.debug(
-      { conversationId: input.conversationId, score: assessment.score, priority: assessment.priority },
-      "Lead assessed"
-    );
   } catch (err) {
     logger.error({ conversationId: input.conversationId, err }, "Lead scoring failed (non-fatal)");
   }
@@ -1876,75 +1884,77 @@ async function resolveReferrer(
   if (!code) return null;
 
   try {
-    const employee = await findEmployeeByCode(serving.id, code);
-    if (!employee) {
-      // Recorded rather than shrugged at. A published link whose code resolves
-      // to nobody is a link on somebody's Instagram bio quietly wasting every
-      // lead it brings, and the only way anyone finds out is this line.
-      logger.warn(
-        { conversationId, servingSlug: serving.slug, code },
-        "A published staff link names a code no employee at this business has — lead left unattributed"
-      );
-      return null;
-    }
+    return await withRecovery(async () => {
+      const employee = await findEmployeeByCode(serving.id, code);
+      if (!employee) {
+        // Recorded rather than shrugged at. A published link whose code resolves
+        // to nobody is a link on somebody's Instagram bio quietly wasting every
+        // lead it brings, and the only way anyone finds out is this line.
+        logger.warn(
+          { conversationId, servingSlug: serving.slug, code },
+          "A published staff link names a code no employee at this business has — lead left unattributed"
+        );
+        return null;
+      }
 
-    const attribution = await attributeConversation({
-      conversationId,
-      organizationId: serving.id,
-      employeeId: employee.id,
-      contactId,
-      // Only an ACTIVE colleague takes a client. A link belonging to somebody
-      // who has left still tells us where the lead came from, and must not put
-      // a new customer into the book of a person who is gone.
-      claimContact: employee.isActive,
-    });
-
-    if (attribution.conflictWith) {
-      logger.info(
-        { conversationId, code, heldBy: attribution.conflictWith },
-        "Referred customer is already another colleague's client — conversation attributed, book unchanged"
-      );
-    }
-
-    if (!employee.isActive) {
-      logger.info(
-        { conversationId, code },
-        "Referral link belongs to a former employee — recorded, but no handover offered"
-      );
-      return null;
-    }
-
-    const handoffLink = personalHandoffLink({
-      employeeName: employee.fullName,
-      whatsappNumber: employee.whatsappNumber,
-      businessName: serving.name,
-    });
-
-    logger.info(
-      {
+      const attribution = await attributeConversation({
         conversationId,
-        servingSlug: serving.slug,
-        employeeCode: employee.employeeCode,
-        claimed: attribution.claimed,
-        canHandOff: handoffLink !== null,
-      },
-      "Conversation attributed to the staff member whose link brought it"
-    );
+        organizationId: serving.id,
+        employeeId: employee.id,
+        contactId,
+        // Only an ACTIVE colleague takes a client. A link belonging to somebody
+        // who has left still tells us where the lead came from, and must not put
+        // a new customer into the book of a person who is gone.
+        claimContact: employee.isActive,
+      });
 
-    return {
-      employeeId: employee.id,
-      note: describeReferringColleague({
+      if (attribution.conflictWith) {
+        logger.info(
+          { conversationId, code, heldBy: attribution.conflictWith },
+          "Referred customer is already another colleague's client — conversation attributed, book unchanged"
+        );
+      }
+
+      if (!employee.isActive) {
+        logger.info(
+          { conversationId, code },
+          "Referral link belongs to a former employee — recorded, but no handover offered"
+        );
+        return null;
+      }
+
+      const handoffLink = personalHandoffLink({
         employeeName: employee.fullName,
-        handoffLink,
-        // TRUE EXACTLY ONCE PER CONVERSATION. `attributeConversation` guards its
-        // write on `referred_by_employee_id is null`, so this is the message
-        // that carried the tag -- the first one. That is what makes "hand over
-        // immediately" mean the first reply rather than every reply: a link
-        // repeated in each message stops reading as help and starts reading as
-        // an attempt to end the conversation.
-        firstReply: attribution.recorded,
-      }),
-    };
+        whatsappNumber: employee.whatsappNumber,
+        businessName: serving.name,
+      });
+
+      logger.info(
+        {
+          conversationId,
+          servingSlug: serving.slug,
+          employeeCode: employee.employeeCode,
+          claimed: attribution.claimed,
+          canHandOff: handoffLink !== null,
+        },
+        "Conversation attributed to the staff member whose link brought it"
+      );
+
+      return {
+        employeeId: employee.id,
+        note: describeReferringColleague({
+          employeeName: employee.fullName,
+          handoffLink,
+          // TRUE EXACTLY ONCE PER CONVERSATION. `attributeConversation` guards its
+          // write on `referred_by_employee_id is null`, so this is the message
+          // that carried the tag -- the first one. That is what makes "hand over
+          // immediately" mean the first reply rather than every reply: a link
+          // repeated in each message stops reading as help and starts reading as
+          // an attempt to end the conversation.
+          firstReply: attribution.recorded,
+        }),
+      };
+    });
   } catch (err) {
     logger.error(
       { conversationId, code, err },
@@ -1963,8 +1973,8 @@ async function resolveAssignedEmployee(
     // where RLS shows none of a routed business's employees — so for four of the
     // five businesses an assigned person came back null and their twin never
     // answered. Same trap as hasStaffOnShift, same fix.
-    const employee = await withServingTenant(servingOrganizationId, () =>
-      findEmployeeForConversation(conversationId)
+    const employee = await isolated(() =>
+      withServingTenant(servingOrganizationId, () => findEmployeeForConversation(conversationId))
     );
     return employee?.isActive ? employee : null;
   } catch (err) {
@@ -1984,42 +1994,44 @@ async function sendFallbackBestEffort(
   contactId: string
 ): Promise<boolean> {
   try {
-    // Same question as the governance path, for the same reason: this promises
-    // a specialist and then pauses the agent, and with an empty rota that
-    // combination abandons the customer while looking healthy. Failure reads as
-    // "there is somebody", preserving the previous behaviour rather than
-    // silently weakening the reply on a transient error.
-    const canHandOver = await hasStaffOnShift(organization.id).catch(() => true);
-    // The AI-failure path, which is the one that matters most for this: it is
-    // reached when the model is unreachable or out of credit, so it can be
-    // EVERY reply for hours. That is precisely when a law firm's customers
-    // should not all be told a retailer's sentence.
-    const text = canHandOver
-      ? await resolvePhrase(organization.id, "handing_over", FALLBACK_REPLY)
-      : await resolvePhrase(organization.id, "no_one_available", FALLBACK_REPLY_NO_STAFF);
+    return await withRecovery(async () => {
+      // Same question as the governance path, for the same reason: this promises
+      // a specialist and then pauses the agent, and with an empty rota that
+      // combination abandons the customer while looking healthy. Failure reads as
+      // "there is somebody", preserving the previous behaviour rather than
+      // silently weakening the reply on a transient error.
+      const canHandOver = await hasStaffOnShift(organization.id).catch(() => true);
+      // The AI-failure path, which is the one that matters most for this: it is
+      // reached when the model is unreachable or out of credit, so it can be
+      // EVERY reply for hours. That is precisely when a law firm's customers
+      // should not all be told a retailer's sentence.
+      const text = canHandOver
+        ? await resolvePhrase(organization.id, "handing_over", FALLBACK_REPLY)
+        : await resolvePhrase(organization.id, "no_one_available", FALLBACK_REPLY_NO_STAFF);
 
-    const waMessageId = await sendWhatsAppText(phoneNumberId, contactWaId, text);
-    const outboundDto = await insertOutboundMessage({
-      organizationId: organization.id,
-      conversationId,
-      contactId,
-      senderType: "system",
-      body: text,
-      // The fallback is the message most worth following. It goes out when the
-      // model is unreachable, so it can be every reply for hours — and if the
-      // number is also failing to deliver, this is the one path where nobody
-      // would ever find out.
-      waMessageId: waMessageId ?? undefined,
+      const waMessageId = await sendWhatsAppText(phoneNumberId, contactWaId, text);
+      const outboundDto = await insertOutboundMessage({
+        organizationId: organization.id,
+        conversationId,
+        contactId,
+        senderType: "system",
+        body: text,
+        // The fallback is the message most worth following. It goes out when the
+        // model is unreachable, so it can be every reply for hours — and if the
+        // number is also failing to deliver, this is the one path where nobody
+        // would ever find out.
+        waMessageId: waMessageId ?? undefined,
+      });
+      await publishInboxEvent({
+        type: "message",
+        organizationId: organization.id,
+        organizationSlug: organization.slug,
+        conversationId,
+        message: outboundDto,
+      });
+      await flagHandoffBestEffort(organization, conversationId);
+      return true;
     });
-    await publishInboxEvent({
-      type: "message",
-      organizationId: organization.id,
-      organizationSlug: organization.slug,
-      conversationId,
-      message: outboundDto,
-    });
-    await flagHandoffBestEffort(organization, conversationId);
-    return true;
   } catch (err) {
     // We could not even deliver the fallback — this contact has received
     // NO response at all and needs a human to notice and follow up
@@ -2050,30 +2062,32 @@ async function sendFallbackBestEffort(
  */
 async function flagHandoffBestEffort(organization: Organization, conversationId: string): Promise<void> {
   try {
-    // THE BUSINESS THAT WOULD TAKE IT, not the number's owner. Every caller
-    // here passes the owner because that is what the pipeline has in hand, and
-    // on a shared number that is Zipicka for all five businesses — so pausing
-    // the agent on ABR's conversation was being decided by whether ZIPICKA has
-    // somebody at their desk. See businessAnsweringFor.
-    const answering = await businessAnsweringFor(conversationId, organization.id);
-    // Conservative on failure: assume somebody is there, which preserves the
-    // behaviour this function had before the guard existed.
-    const canHandOver = await hasStaffOnShift(answering).catch(() => true);
-    if (!canHandOver) {
-      logger.warn(
-        { conversationId, business: organization.slug, answering },
-        "Not pausing the agent — no active staff, so a handoff would abandon this conversation rather than transfer it"
-      );
-      return;
-    }
+    await withRecovery(async () => {
+      // THE BUSINESS THAT WOULD TAKE IT, not the number's owner. Every caller
+      // here passes the owner because that is what the pipeline has in hand, and
+      // on a shared number that is Zipicka for all five businesses — so pausing
+      // the agent on ABR's conversation was being decided by whether ZIPICKA has
+      // somebody at their desk. See businessAnsweringFor.
+      const answering = await businessAnsweringFor(conversationId, organization.id);
+      // Conservative on failure: assume somebody is there, which preserves the
+      // behaviour this function had before the guard existed.
+      const canHandOver = await hasStaffOnShift(answering).catch(() => true);
+      if (!canHandOver) {
+        logger.warn(
+          { conversationId, business: organization.slug, answering },
+          "Not pausing the agent — no active staff, so a handoff would abandon this conversation rather than transfer it"
+        );
+        return;
+      }
 
-    await setConversationHandoff(conversationId, true, "agent_escalated");
-    await publishInboxEvent({
-      type: "handoff_changed",
-      organizationId: organization.id,
-      organizationSlug: organization.slug,
-      conversationId,
-      isHumanHandoff: true,
+      await setConversationHandoff(conversationId, true, "agent_escalated");
+      await publishInboxEvent({
+        type: "handoff_changed",
+        organizationId: organization.id,
+        organizationSlug: organization.slug,
+        conversationId,
+        isHumanHandoff: true,
+      });
     });
   } catch (err) {
     logger.error({ conversationId, err }, "Failed to flag conversation for human handoff after AI failure");

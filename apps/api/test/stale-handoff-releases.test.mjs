@@ -53,7 +53,8 @@ test("the stale flag is cleared, so the row stops claiming a human is involved",
   // person handing the conversation back.
   assert.match(GATE, /setConversationHandoff\(conversationId, false, "stale_release"\)/);
   // Best-effort: failing to clear must not cost the customer their reply.
-  assert.match(GATE, /setConversationHandoff\([^)]*\)\.catch\(/);
+  // `)?`: inside isolated() since 3 Nov 2026, which closes before the catch.
+  assert.match(GATE, /setConversationHandoff\([^)]*\)\)?\.catch\(/);
 });
 
 test("a deliberate, time-boxed pause is left alone", () => {
@@ -70,7 +71,8 @@ test("a database failure keeps the customer's conversation as it was", () => {
   // Same reasoning as the escalation guard: if the staff lookup cannot answer,
   // assume staff exist. Guessing "nobody is here" on a transient error would
   // hand the conversation back to the agent behind a human's back.
-  assert.match(GATE, /hasActiveEmployees\(answering\)\.catch\(\(\) => true\)/);
+  // In isolated() since 3 Nov 2026, so its failure cannot abort the reply.
+  assert.match(GATE, /isolated\(\(\) => hasActiveEmployees\(answering\)\)\.catch\(\(\) => true\)/);
   console.log("PASS: a mute nobody can lift is not a mute");
 });
 

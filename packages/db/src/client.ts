@@ -540,6 +540,49 @@ export function isolated<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * Runs `fn` in a savepoint that is rolled back ONLY when the transaction broke
+ * (caught-error audit, 3 Nov 2026).
+ *
+ * For a block whose catch carries on with more work -- the reply pipeline sends
+ * a fallback and records it. A failure that left the transaction healthy (the
+ * model or Meta unreachable, Redis down) keeps what `fn` saved, exactly as with
+ * no savepoint: a reply recorded before a Redis blip stays recorded. A database
+ * failure aborts the transaction, and then the savepoint is rolled back, so the
+ * catch can still write and the commit no longer loses the customer's message
+ * along with everything else. Inside a context only, like `withSavepoint`.
+ */
+export async function withRecovery<T>(fn: () => Promise<T>): Promise<T> {
+  const context = getTenantContext();
+  if (!context) {
+    throw new Error("withRecovery runs inside the transaction a tenant context opens, and there is no context here.");
+  }
+  const name = `nexus_savepoint_${++savepoints}`;
+  await context.client.query(`savepoint ${name}`);
+  const record = health.get(context.client);
+  const before = record ? { ...record } : undefined;
+  try {
+    const result = await fn();
+    await context.client.query(`release savepoint ${name}`);
+    return result;
+  } catch (err) {
+    // Released if the transaction is healthy, keeping the work; refused if it
+    // is aborted, and then rolled back to revive it.
+    const kept = await context.client.query(`release savepoint ${name}`).then(
+      () => true,
+      () => false
+    );
+    if (!kept) {
+      const revived = await context.client.query(`rollback to savepoint ${name}`).then(
+        () => true,
+        () => false
+      );
+      if (revived && record && before) Object.assign(record, before);
+    }
+    throw err;
+  }
+}
+
+/**
  * Points the connection back at the business it was scoped to before a switch.
  * When the switched work has already failed with a database error, the
  * transaction is aborted and this cannot run -- and its own "current
