@@ -5,6 +5,7 @@ import {
   broadcastOutcome,
   broadcastStatus,
   pauseBroadcastIfFailing,
+  recipientForSend,
   updateBroadcastStatus,
   withAllTenants,
   withSavepoint,
@@ -13,7 +14,7 @@ import {
 import { sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
 import { isUpstreamUnavailable } from "../scripts/upstream.js";
 import { logger } from "../lib/logger.js";
-import { explainSendError, isPaymentRefusal, NO_WHATSAPP_NUMBER } from "../lib/send-errors.js";
+import { ASKED_NOT_TO_BE_MESSAGED, explainSendError, isPaymentRefusal, NO_WHATSAPP_NUMBER } from "../lib/send-errors.js";
 import { notePaymentRefusal } from "../lib/payment-refusal.js";
 
 /**
@@ -73,6 +74,20 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
       );
     }
 
+    // NOT YET (3 Nov 2026). A campaign waiting for WhatsApp to approve its
+    // message is `scheduled`; release moves it to `sending` in the same
+    // transaction that queues its jobs, so a job that runs first sees it still
+    // waiting. Thrown, the queue tries again once the release has committed.
+    if (current === "scheduled") {
+      throw new Error(`Campaign ${broadcastId} is still waiting for WhatsApp to approve its message; nothing was sent`);
+    }
+
+    // ONCE PER PERSON (review, 3 Nov 2026). A release the queue half-refused is
+    // queued again, and a job can run twice; the person's own row, locked until
+    // this job ends, says whether they are still to be tried.
+    const recipient = await recipientForSend(recipientId);
+    if (recipient?.status !== "pending") return;
+
     // NOBODY TO SEND TO (26 Oct 2026). An empty number used to go to Meta, which
     // answered "The parameter to is required" fourteen times on 22 Oct. The
     // audience already excludes these; this is the last line if it ever doesn't.
@@ -84,47 +99,56 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
     let failure: string | null = null;
     let wentOut = false;
     let waMessageId: string | null = null;
-    try {
-      // The receipt was already being returned and thrown away: the reply path was
-      // wired to it on 17 August and this one was not. Without it 'sent' here can
-      // only ever mean "Meta accepted", which on a campaign — sent by definition
-      // to people who have NOT written in 24 hours — is the least trustworthy
-      // moment to stop asking.
-      waMessageId = await sendWhatsAppTemplate(
-        phoneNumberId,
-        contactWaId,
-        templateName,
-        templateLanguage,
-        templateParams ?? []
-      );
-      wentOut = true;
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      // Refused at send time over payment: remembered for the number, so the
-      // readiness screen says so before the next campaign (payment-refusal.ts).
-      if (isPaymentRefusal(reason)) await notePaymentRefusal(phoneNumberId, reason).catch(() => undefined);
-
-      // `attemptsMade` counts the attempt that has just failed. On the last one
-      // there is nothing left to wait for, so the row must be settled rather
-      // than left pending for ever — a recipient stuck at pending would also
-      // hold the whole broadcast open, since completion is "nothing pending".
-      const attemptsAllowed = job.opts.attempts ?? 1;
-      const canRetry = isUpstreamUnavailable(err) && job.attemptsMade + 1 < attemptsAllowed;
-
-      if (canRetry) {
-        logger.warn(
-          { broadcastId, recipientId, attempt: job.attemptsMade + 1, of: attemptsAllowed, err },
-          "Broadcast send failed transiently — leaving pending for the queue to retry"
+    if (recipient.optedOut) {
+      // STOP MEANS STOP (review, 3 Nov 2026). A campaign that waited for
+      // WhatsApp's approval was chosen up to a day before it goes; someone who
+      // replied STOP since is settled as not sent, and the progress below still
+      // runs, so a campaign whose last person this is still finishes.
+      await updateBroadcastRecipientStatus(recipientId, "failed", null, ASKED_NOT_TO_BE_MESSAGED);
+      failure = ASKED_NOT_TO_BE_MESSAGED;
+    } else {
+      try {
+        // The receipt was already being returned and thrown away: the reply path was
+        // wired to it on 17 August and this one was not. Without it 'sent' here can
+        // only ever mean "Meta accepted", which on a campaign — sent by definition
+        // to people who have NOT written in 24 hours — is the least trustworthy
+        // moment to stop asking.
+        waMessageId = await sendWhatsAppTemplate(
+          phoneNumberId,
+          contactWaId,
+          templateName,
+          templateLanguage,
+          templateParams ?? []
         );
-        // Rethrown so BullMQ counts a failure and schedules the backoff. The row
-        // stays `pending`, which is true: nothing has been decided about this
-        // person yet.
-        throw err;
-      }
+        wentOut = true;
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        // Refused at send time over payment: remembered for the number, so the
+        // readiness screen says so before the next campaign (payment-refusal.ts).
+        if (isPaymentRefusal(reason)) await notePaymentRefusal(phoneNumberId, reason).catch(() => undefined);
 
-      logger.error({ broadcastId, recipientId, err }, "Broadcast send failed for recipient");
-      await updateBroadcastRecipientStatus(recipientId, "failed", null, reason);
-      failure = reason;
+        // `attemptsMade` counts the attempt that has just failed. On the last one
+        // there is nothing left to wait for, so the row must be settled rather
+        // than left pending for ever — a recipient stuck at pending would also
+        // hold the whole broadcast open, since completion is "nothing pending".
+        const attemptsAllowed = job.opts.attempts ?? 1;
+        const canRetry = isUpstreamUnavailable(err) && job.attemptsMade + 1 < attemptsAllowed;
+
+        if (canRetry) {
+          logger.warn(
+            { broadcastId, recipientId, attempt: job.attemptsMade + 1, of: attemptsAllowed, err },
+            "Broadcast send failed transiently — leaving pending for the queue to retry"
+          );
+          // Rethrown so BullMQ counts a failure and schedules the backoff. The row
+          // stays `pending`, which is true: nothing has been decided about this
+          // person yet.
+          throw err;
+        }
+
+        logger.error({ broadcastId, recipientId, err }, "Broadcast send failed for recipient");
+        await updateBroadcastRecipientStatus(recipientId, "failed", null, reason);
+        failure = reason;
+      }
     }
 
     // THE 'SENT' MARK IS NOT PART OF THE SEND (caught-error audit, 3 Nov 2026).

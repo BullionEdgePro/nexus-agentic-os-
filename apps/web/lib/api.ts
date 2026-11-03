@@ -3015,7 +3015,8 @@ export interface BulkWriterBrief {
   language?: "en" | "ar";
 }
 
-export function writeBulkDrafts(orgSlug: BusinessSlug, input: BulkWriterBrief): Promise<{ drafts: string[] }> {
+/** `note`: the AI declined the brief and said why (3 Nov 2026); there are no drafts then. */
+export function writeBulkDrafts(orgSlug: BusinessSlug, input: BulkWriterBrief): Promise<{ drafts: string[]; note?: string | null }> {
   return request(`/api/bulk/${orgSlug}/write`, { method: "POST", body: JSON.stringify(input) });
 }
 
@@ -3029,8 +3030,9 @@ export function rewriteBulkDraft(
 export function submitBulkTemplate(
   orgSlug: BusinessSlug,
   phoneNumberId: string,
-  input: { label: string; language: "en" | "ar"; text: string }
-): Promise<{ name: string; status: string }> {
+  /** `sendTo`: the customers to send it to once WhatsApp approves it (3 Nov 2026). */
+  input: { label: string; language: "en" | "ar"; text: string; sendTo?: string[] }
+): Promise<{ name: string; status: string; waiting?: { broadcastId: string; recipients: number } | null }> {
   return request(`/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}/templates`, {
     method: "POST",
     body: JSON.stringify(input),
@@ -3040,7 +3042,14 @@ export function submitBulkTemplate(
 export function refreshBulkTemplates(
   orgSlug: BusinessSlug,
   phoneNumberId: string
-): Promise<{ pending: BulkPendingMessage[]; templates: BulkNumberView["templates"] }> {
+): Promise<{
+  pending: BulkPendingMessage[];
+  templates: BulkNumberView["templates"];
+  /** Campaigns this check sent on, now that WhatsApp approved their message (3 Nov 2026). */
+  released?: Array<{ broadcastId: string; templateId: string; recipients: number }>;
+  /** Approved, but kept waiting: WhatsApp would refuse the number right now. */
+  held?: Array<{ broadcastId: string; templateId: string; reason: string }>;
+}> {
   return request(`/api/bulk/${orgSlug}/number/${encodeURIComponent(phoneNumberId)}/templates/refresh`, { method: "POST" });
 }
 

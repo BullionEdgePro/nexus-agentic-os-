@@ -356,6 +356,40 @@ export async function setBroadcastStatusIf(
   return (rowCount ?? 0) > 0;
 }
 
+/**
+ * A business's WhatsApp campaigns waiting for their message to be approved
+ * (3 Nov 2026): `scheduled` with no time, so they go out when WhatsApp approves
+ * the template, with that template's current review status.
+ */
+export async function campaignsWaitingForApproval(organizationId: string): Promise<
+  Array<{ id: string; templateId: string; fromPhoneNumberId: string | null; templateStatus: string | null; templateApproved: boolean }>
+> {
+  const { rows } = await getPool().query<{
+    id: string;
+    template_id: string;
+    from_phone_number_id: string | null;
+    template_status: string | null;
+    is_approved: boolean;
+  }>(
+    `select b.id, b.template_id, b.from_phone_number_id, t.status as template_status, t.is_approved
+       from broadcasts b
+       join message_templates t on t.id = b.template_id
+      where b.organization_id = $1
+        and b.status = 'scheduled'
+        and b.scheduled_at is null
+        and b.channel = 'whatsapp'
+      order by b.created_at`,
+    [organizationId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    templateId: row.template_id,
+    fromPhoneNumberId: row.from_phone_number_id,
+    templateStatus: row.template_status,
+    templateApproved: row.is_approved,
+  }));
+}
+
 /** The campaign row as resume/stop need it: whose it is, which channel, what it sends. */
 export async function campaignForControl(broadcastId: string): Promise<{
   id: string;

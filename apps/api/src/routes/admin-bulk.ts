@@ -28,6 +28,7 @@ import { fetchTemplateText } from "../lib/template-text.js";
 import { noteTestSend, readTestSend } from "../lib/campaign-test-status.js";
 import { readPaymentRefusal, notePaymentRefusal } from "../lib/payment-refusal.js";
 import { explainSendError, isPaymentRefusal } from "../lib/send-errors.js";
+import { sendingRefusal } from "../lib/sending-refusal.js";
 import { actorOf } from "../lib/actor.js";
 import { pendingFrom } from "../lib/pending-templates.js";
 import { env } from "../config/env.js";
@@ -243,14 +244,8 @@ adminBulkRoute.post("/:slug/send", async (c) => {
   const audience = customers.filter((customer) => chosen.has(customer.id));
   if (audience.length === 0) return c.json({ error: "None of the chosen customers can be messaged." }, 422);
 
-  const [health, refused, standing] = await Promise.all([
-    readSendingHealth(number.phoneNumberId),
-    readPaymentRefusal(number.phoneNumberId),
-    readNumberStanding(number.phoneNumberId),
-  ]);
-  if (health?.problem) return c.json({ error: `WhatsApp is blocking this number: ${health.problem.description}` }, 409);
-  if (refused) return c.json({ error: "WhatsApp refused this number's last message over payment. Fix the card and send a test first." }, 409);
-  if (standing?.quality === "RED") return c.json({ error: "WhatsApp rates this number's quality as low (red). Nothing was sent." }, 409);
+  const refusal = await sendingRefusal(number.phoneNumberId);
+  if (refusal) return c.json({ error: refusal }, 409);
 
   const actor = await actorOf(c);
   const ceiling = await describeDailyCeiling(audience.length, number.phoneNumberId);

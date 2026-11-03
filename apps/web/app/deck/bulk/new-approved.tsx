@@ -11,6 +11,7 @@ import {
   type BulkPendingMessage,
 } from "@/lib/api";
 import { previewTemplate } from "../my-campaigns/my-templates";
+import { templateOptionLabel } from "@/lib/template-option-label";
 import { AiWriter } from "./ai-writer";
 
 /**
@@ -46,14 +47,20 @@ export function NewApproved({
   numberId,
   pending,
   sampleName,
+  chosen,
   onChanged,
+  onCampaignsChanged,
 }: {
   business: BusinessSlug;
   numberId: string;
   pending: BulkPendingMessage[];
   sampleName: string | null;
+  /** The customers ticked on the page: offered "then send to them" (3 Nov 2026). */
+  chosen: string[];
   /** Reload the number; with an id, that message was just approved and is chosen. */
   onChanged: (approvedTemplateId?: string) => void;
+  /** Reload Recent campaigns: one started waiting, or went out (review, 3 Nov 2026). */
+  onCampaignsChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
@@ -62,19 +69,28 @@ export function NewApproved({
   const [busy, setBusy] = useState<"submit" | "check" | string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
-  async function submit() {
+  /** `andSend`: also send it to the ticked customers once WhatsApp approves it (3 Nov 2026). */
+  async function submit(andSend: boolean) {
     setBusy("submit");
     setNote(null);
     try {
-      const sent = await submitBulkTemplate(business, numberId, { label: label.trim(), language, text: text.trim() });
+      const sent = await submitBulkTemplate(business, numberId, {
+        label: label.trim(),
+        language,
+        text: text.trim(),
+        sendTo: andSend ? chosen : undefined,
+      });
       setNote({
         ok: true,
-        text: `Sent to WhatsApp as ${sent.name}. Approval usually takes minutes, sometimes a day; it appears in the list above once approved.`,
+        text: sent.waiting
+          ? `Sent to WhatsApp for approval. Once approved — usually within minutes, sometimes a day — it goes to ${sent.waiting.recipients} ${sent.waiting.recipients === 1 ? "customer" : "customers"} by itself. It is under Recent campaigns, where you can cancel it until then.`
+          : `Sent to WhatsApp as ${sent.name}. Approval usually takes minutes, sometimes a day; it appears in the list above once approved.`,
       });
       setLabel("");
       setText("");
       setOpen(false);
       onChanged();
+      if (sent.waiting) onCampaignsChanged();
     } catch (err) {
       setNote({ ok: false, text: readableError(err, "It was not sent to WhatsApp.") });
     } finally {
@@ -87,9 +103,24 @@ export function NewApproved({
     setNote(null);
     try {
       const fresh = await refreshBulkTemplates(business, numberId);
+      const released = fresh.released ?? [];
+      const held = fresh.held ?? [];
+      const going = released.reduce((sum, campaign) => sum + campaign.recipients, 0);
+      if (released.length || held.length) onCampaignsChanged();
       const approved = fresh.templates.find((template) => pending.some((waiting) => waiting.name === template.name));
-      if (approved) setNote({ ok: true, text: `WhatsApp approved ${approved.name}. It is chosen above.` });
-      onChanged(approved?.id);
+      const named = approved ? templateOptionLabel(approved.name, approved.language) : "your message";
+      // Gone to the customers ticked when it was written: said so, and not chosen
+      // above, where the same customers still ticked would send it to them again.
+      if (going) {
+        setNote({ ok: true, text: `WhatsApp approved ${named}. It is going to ${going} ${going === 1 ? "customer" : "customers"} now.` });
+        onChanged();
+      } else if (held.length) {
+        setNote({ ok: false, text: `WhatsApp approved ${named}, but it has not gone out yet: ${held[0].reason}` });
+        onChanged();
+      } else {
+        if (approved) setNote({ ok: true, text: `WhatsApp approved ${named}. It is chosen above.` });
+        onChanged(approved?.id);
+      }
     } catch (err) {
       setNote({ ok: false, text: readableError(err, "WhatsApp could not be reached just now. Try Check again in a minute.") });
     } finally {
@@ -211,18 +242,48 @@ export function NewApproved({
             </div>
           </div>
           <div className="ai-actions">
-            <button
-              type="button"
-              className="cmp-go"
-              disabled={busy !== null || !label.trim() || !text.trim()}
-              onClick={() => void submit()}
-            >
-              {busy === "submit" ? "Sending to WhatsApp…" : "Send to WhatsApp for approval"}
-            </button>
+            {chosen.length ? (
+              <>
+                <button
+                  type="button"
+                  className="cmp-go"
+                  disabled={busy !== null || !label.trim() || !text.trim()}
+                  onClick={() => void submit(true)}
+                >
+                  {busy === "submit"
+                    ? "Sending to WhatsApp…"
+                    : `Send for approval, then send to ${chosen.length} ${chosen.length === 1 ? "customer" : "customers"}`}
+                </button>
+                <button
+                  type="button"
+                  className="bk-ghost"
+                  disabled={busy !== null || !label.trim() || !text.trim()}
+                  onClick={() => void submit(false)}
+                >
+                  Only send for approval
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="cmp-go"
+                disabled={busy !== null || !label.trim() || !text.trim()}
+                onClick={() => void submit(false)}
+              >
+                {busy === "submit" ? "Sending to WhatsApp…" : "Send to WhatsApp for approval"}
+              </button>
+            )}
             <button type="button" className="bk-ghost" onClick={() => setOpen(false)}>
               Close
             </button>
           </div>
+          {chosen.length ? (
+            <p className="ai-sample">
+              WhatsApp checks every new message first, usually within minutes, sometimes a day. Once it is approved it goes to
+              the {chosen.length === 1 ? "customer" : `${chosen.length} customers`} you ticked by itself, and you can cancel it
+              under Recent campaigns until then.
+            </p>
+          ) : null}
         </div>
       )}
 

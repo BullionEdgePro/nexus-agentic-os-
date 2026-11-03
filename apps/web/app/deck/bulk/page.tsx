@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { BusinessTabs } from "@/lib/business-tabs";
 import {
+  controlBroadcast,
   getBulkNumber,
   getBulkOverview,
   getBulkTemplateText,
@@ -22,6 +23,7 @@ import { standingOf } from "@/lib/client-filters";
 import { fontVariables } from "@/lib/fonts";
 import { play } from "@/lib/sound";
 import { tenantName } from "@/lib/tenants";
+import { templateOptionLabel } from "@/lib/template-option-label";
 import { AddNumbers } from "./add-numbers";
 import { AiWriter } from "./ai-writer";
 import { NewApproved } from "./new-approved";
@@ -55,6 +57,8 @@ const STATUS_WORDS: Record<string, string> = {
   paused: "Paused",
   stopped: "Stopped",
   draft: "Draft",
+  // A new message's campaign, sent once WhatsApp approves it (3 Nov 2026).
+  scheduled: "Waiting for WhatsApp approval",
 };
 
 export default function BulkMessagingPage() {
@@ -106,7 +110,10 @@ export default function BulkMessagingPage() {
         if (data.pending?.length) {
           void refreshBulkTemplates(business, numberId)
             .then((fresh) => {
-              if (!cancelled) setView((current) => (current ? { ...current, pending: fresh.pending, templates: fresh.templates } : current));
+              if (cancelled) return;
+              setView((current) => (current ? { ...current, pending: fresh.pending, templates: fresh.templates } : current));
+              // A campaign waiting for one of them may just have gone out.
+              if (fresh.released?.length) void loadOverview(business);
             })
             .catch(() => undefined);
         }
@@ -117,7 +124,7 @@ export default function BulkMessagingPage() {
     return () => {
       cancelled = true;
     };
-  }, [business, numberId]);
+  }, [business, numberId, loadOverview]);
 
   const customers = view?.customers ?? [];
   const chosen = customers.filter((customer) => picked.has(customer.id));
@@ -326,7 +333,22 @@ export default function BulkMessagingPage() {
                       </ul>
                     ) : null}
                   </td>
-                  <td>{STATUS_WORDS[campaign.status] ?? campaign.status}</td>
+                  <td>
+                    {STATUS_WORDS[campaign.status] ?? campaign.status}
+                    {campaign.status === "scheduled" ? (
+                      <button
+                        type="button"
+                        className="bk-ghost"
+                        onClick={() =>
+                          void controlBroadcast(campaign.id, "stop")
+                            .then(() => loadOverview(business))
+                            .catch((err) => setError(readableError(err, "It could not be cancelled.")))
+                        }
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -390,7 +412,7 @@ function ApprovedSend({
           <option value="">Choose an approved message…</option>
           {view.templates.map((template) => (
             <option key={template.id} value={template.id}>
-              {template.name} ({template.language})
+              {templateOptionLabel(template.name, template.language)}
             </option>
           ))}
         </select>
@@ -402,7 +424,9 @@ function ApprovedSend({
         numberId={numberId}
         pending={view.pending ?? []}
         sampleName={chosen[0]?.displayName ?? null}
+        chosen={chosen.map((person) => person.id)}
         onChanged={onTemplatesChanged}
+        onCampaignsChanged={onSent}
       />
 
       {templateId ? (

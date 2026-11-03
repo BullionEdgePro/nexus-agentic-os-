@@ -17,6 +17,9 @@ import { previewTemplate } from "../my-campaigns/my-templates";
 
 type Change = "shorter" | "formal" | "arabic";
 
+/** The name a preview shows, as previewTemplate fills it in. */
+const firstName = (name: string) => name.trim().split(/\s+/)[0];
+
 function Choice<T extends string>({
   label,
   options,
@@ -77,6 +80,8 @@ export function AiWriter({
   const language = languageProp ?? ownLanguage;
   const setLanguage = (next: "en" | "ar") => (onLanguageChange ? onLanguageChange(next) : setOwnLanguage(next));
   const [drafts, setDrafts] = useState<string[]>([]);
+  // What the AI said when it declined the brief (3 Nov 2026): read, never used.
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState<"write" | Change | null>(null);
   const [error, setError] = useState("");
 
@@ -84,9 +89,11 @@ export function AiWriter({
     setBusy("write");
     setError("");
     setDrafts([]);
+    setNote("");
     try {
       const data = await writeBulkDrafts(business, { kind, brief: brief.trim(), tone, length, language });
       setDrafts(data.drafts);
+      setNote(data.note ?? "");
     } catch (err) {
       setError(readableError(err, "The AI is not available right now — write the message yourself."));
     } finally {
@@ -144,6 +151,14 @@ export function AiWriter({
               Close
             </button>
           </div>
+          {note ? (
+            <p className="ai-note" dir="auto">
+              {note}
+            </p>
+          ) : null}
+          {drafts.length && sampleName ? (
+            <p className="ai-sample">As {firstName(sampleName)} would see it — each customer gets their own name.</p>
+          ) : null}
           {drafts.length ? (
             <div className="ai-drafts">
               {drafts.map((draft, index) => (
