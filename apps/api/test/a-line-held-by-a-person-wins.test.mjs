@@ -103,3 +103,18 @@ test("a business's live line cannot be connected to a person; a switched-off one
   assert.equal(await connect.sharedLineRefusal("930101"), null);
   assert.equal(await connect.sharedLineRefusal("939999"), null, "a number no business owns");
 });
+
+test("Bulk does not offer the business's own number when a person — in ANY business — holds it", () => {
+  const numbers = body(src("routes", "admin-bulk.ts"), "async function numbersOf(");
+  // Every business still points at the old shared line; once one person holds
+  // it, it is theirs alone — listed under them, and in no business as "own".
+  assert.match(
+    numbers,
+    /if \(\s*organization\.whatsappPhoneNumberId &&\s*!\(await findEmployeeByPhoneNumberId\(organization\.whatsappPhoneNumberId\)\) &&\s*!\(await isWhatsAppNumberRetired\(organization\.whatsappPhoneNumberId\)\)\s*\)/
+  );
+});
+
+test("an admin's seat is never auto-assigned customers", () => {
+  const availability = src("services", "availability.ts");
+  assert.match(availability, /\(employee\) => employee\.isActive && employee\.twinEnabled && !employee\.adminId/);
+});

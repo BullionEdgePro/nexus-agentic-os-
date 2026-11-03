@@ -162,8 +162,10 @@ export async function autoAssignIfEnabled(
         const settings = await getInboxSettings(servingOrganizationId);
         if (!settings.autoAssign) return null;
 
+        // An admin's seat (migration 108) is where their own connections live,
+        // not a place on the rota: customers are never handed to it automatically.
         const candidates = (await listEmployees(servingOrganizationId)).filter(
-          (employee) => employee.isActive && employee.twinEnabled
+          (employee) => employee.isActive && employee.twinEnabled && !employee.adminId
         );
         if (candidates.length === 0) return null;
         const busy = await busyEmployeeIds(candidates.map((employee) => employee.id)).catch(
