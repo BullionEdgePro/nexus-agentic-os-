@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   findOrganizationBySlug,
+  releaseEmptySeats,
   findOrganizationById,
   findConversationById,
   listEmployees,
@@ -90,6 +91,10 @@ employeesRoute.get("/:slug/employees", async (c) => {
   const organization = await findOrganizationBySlug(c.req.param("slug"));
   if (!organization) return c.json({ error: "Organization not found" }, 404);
 
+  // An admin seat a cancelled or abandoned sign-in left empty is cleared
+  // before the roster is read, so it never shows on Team. In its own savepoint:
+  // a failure here must not take the roster down with it.
+  await isolated(() => releaseEmptySeats(organization.id)).catch(() => 0);
   const employees = await listEmployees(organization.id);
 
   // A COLLEAGUE SEES A NAME, NOT A FILE (2026-09-28). Staff screens read this

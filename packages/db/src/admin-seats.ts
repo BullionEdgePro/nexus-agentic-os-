@@ -24,14 +24,46 @@ export function isCreatedSeat(employee: { adminId?: string | null; employeeCode:
   return !!employee.adminId && employee.employeeCode === `admin-${employee.adminId.slice(0, 8)}`;
 }
 
-/** The admin's seat in this business, or null when they have not connected anything here yet. */
+/**
+ * The admin's seat in this business, or null when they have not connected
+ * anything here yet — or the owner removed the seat on Team, which inbound
+ * routing already treats as gone, so Connections must not say "Connected".
+ */
 export async function findAdminSeat(adminId: string, organizationId: string): Promise<Employee | null> {
   return withTenant(organizationId, async () => {
     const { rows } = await getPool().query<{ id: string }>(
-      `select id from employees where organization_id = $1 and admin_id = $2 limit 1`,
+      `select id from employees where organization_id = $1 and admin_id = $2 and is_active = true limit 1`,
       [organizationId, adminId]
     );
     return rows[0] ? findEmployeeById(rows[0].id) : null;
+  });
+}
+
+/**
+ * Clear the admin seats in this business that hold nothing (3 Nov 2026).
+ *
+ * A seat is made when an admin STARTS connecting, because a sign-in carries
+ * whose account it is. A cancelled, failed or abandoned sign-in left it behind,
+ * empty, as an "Admin" on Team. Only a seat MADE for an admin goes — never a
+ * working hire an admin was linked to — and only one with no connection, no
+ * WhatsApp number, no chat and no customer, made longer ago than any sign-in
+ * can take (the signed state lives ten minutes). Returns how many went.
+ */
+export async function releaseEmptySeats(organizationId: string): Promise<number> {
+  return withTenant(organizationId, async () => {
+    const { rowCount } = await getPool().query(
+      `delete from employees e
+        where e.organization_id = $1
+          and e.admin_id is not null
+          and e.employee_code = 'admin-' || left(e.admin_id::text, 8)
+          and e.created_at < now() - interval '15 minutes'
+          and e.whatsapp_phone_number_id is null
+          and not exists (select 1 from social_connections s where s.employee_id = e.id)
+          and not exists (select 1 from conversations c where c.employee_id = e.id)
+          and not exists (select 1 from contacts ct where ct.owner_employee_id = e.id)`,
+      [organizationId]
+    );
+    return rowCount ?? 0;
   });
 }
 
@@ -55,8 +87,12 @@ export async function ensureAdminSeat(
 ): Promise<Employee> {
   return withTenant(organizationId, async () => {
     const pool = getPool();
+    // Connecting again brings back a seat the owner removed on Team: it is the
+    // admin's own action, and their earlier connections come back with it.
     const linked = await pool.query<{ id: string }>(
-      `select id from employees where organization_id = $1 and admin_id = $2 limit 1`,
+      `update employees set is_active = true, updated_at = now()
+        where organization_id = $1 and admin_id = $2
+        returning id`,
       [organizationId, admin.id]
     );
     let id = linked.rows[0]?.id;

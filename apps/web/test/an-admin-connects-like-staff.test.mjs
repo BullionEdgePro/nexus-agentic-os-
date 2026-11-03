@@ -76,3 +76,13 @@ test("an admin's seat says Admin on the Team screen", () => {
   assert.match(team, /member\.adminId && member\.jobTitle !== "Admin" \? " · Admin" : ""/);
   assert.match(read("lib/api.ts"), /export interface TeamMember \{[\s\S]*?adminId\?: string \| null;/);
 });
+
+// Deferred minors of the final review, fixed 3 Nov 2026.
+test("switching business never shows the last one's figures", () => {
+  const panel = read("app/deck/my-clients/connections.tsx");
+  // A slower, older load cannot overwrite a newer one.
+  assert.match(panel, /const ticket = \+\+loadTicket\.current;/);
+  assert.match(panel, /if \(ticket !== loadTicket\.current\) return null;/);
+  // The cards start over for each business (the WhatsApp history card reads once).
+  assert.match(panel, /<Fragment key=\{business \?\? "mine"\}>/);
+});

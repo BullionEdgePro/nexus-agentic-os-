@@ -16,6 +16,7 @@ import {
   findAdminById,
   findAdminSeat,
   ensureAdminSeat,
+  releaseEmptySeats,
   withTenant,
   isolated,
   withRecovery,
@@ -125,22 +126,29 @@ const NO_PERSONAL_ACCOUNT =
  *
  * An operator session without an admin account (the retired shared password)
  * has nobody to file a connection under, and is refused as before.
+ *
+ * `businessLevel`: the account is the BUSINESS's (Facebook Page, Instagram), so
+ * an admin needs no seat for it — the owner is the business itself.
  */
 export async function ownerFor(
   c: { get: (k: string) => unknown; req: { query: (k: string) => string | undefined } },
-  opts: { create: boolean }
+  opts: { create: boolean; businessLevel?: boolean }
 ): Promise<Owner | OwnerRefusal> {
   const scope = scopeOf(c);
   if (scope.role === "employee") {
-    if (!scope.organizationId || !scope.employeeId) return { error: NO_PERSONAL_ACCOUNT, status: 403 };
+    if (!scope.organizationId || !scope.employeeId) {
+      return { error: "Your sign-in is incomplete — sign out and sign in again.", status: 403 };
+    }
     return { organizationId: scope.organizationId, employeeId: scope.employeeId };
   }
   if (!scope.adminId) return { error: NO_PERSONAL_ACCOUNT, status: 403 };
 
   const slug = c.req.query("business");
   if (!slug) return { error: "Choose which business to connect for.", status: 400 };
-  const organization = await findOrganizationBySlug(slug);
+  const organization = slug === "review-demo" ? null : await findOrganizationBySlug(slug);
+  // The review sandbox (Meta's App Reviewer) is no business to connect for.
   if (!organization) return { error: "Business not found.", status: 404 };
+  if (opts.businessLevel) return { organizationId: organization.id, employeeId: null };
 
   if (opts.create) {
     const admin = await findAdminById(scope.adminId);
@@ -161,21 +169,18 @@ function isRefusal(owner: Owner | OwnerRefusal): owner is OwnerRefusal {
 }
 
 /**
- * Where a sign-in comes back to. Staff go to My clients, as always; an admin's
- * seat comes back to Connections, because admins cannot open My clients. Read
- * from the signed state, so it is decided before the callback has verified
- * anything else — and any doubt falls back to the staff page.
+ * Where a sign-in comes back to: the page its person can open. Staff go to My
+ * clients, as always; an admin comes back to Connections, which is the only one
+ * of the two an admin can open. The callback runs with the person's own session
+ * (requireAuth), so the role is known — whether or not the sign-in made a seat
+ * (a Facebook Page or Instagram for an admin makes none).
  */
+export function returnPageFor(scope: SessionScope): "/deck/connections" | "/deck/my-clients" {
+  return scope.role === "operator" ? "/deck/connections" : "/deck/my-clients";
+}
+
 async function returnPage(c: Context): Promise<string> {
-  try {
-    const stored = /(?:^|;\s*)nexus_oauth_state=([^;]+)/.exec(c.req.header("cookie") ?? "")?.[1];
-    const state = readState(stored ? decodeURIComponent(stored) : undefined);
-    if (!state?.employeeId) return "/deck/my-clients";
-    const employee = await findEmployeeById(state.employeeId);
-    return employee?.adminId ? "/deck/connections" : "/deck/my-clients";
-  } catch {
-    return "/deck/my-clients";
-  }
+  return returnPageFor(scopeOf(c));
 }
 
 interface StatePayload {
@@ -234,13 +239,18 @@ connectionsRoute.get("/", async (c) => {
   let adminView: { businesses: Array<{ slug: string; name: string }>; business: string | null } | null = null;
   let owner: Owner | OwnerRefusal | null = null;
   if (scope.role === "operator" && scope.adminId) {
-    const organizations = await listOrganizations();
+    // Live businesses only (listOrganizations reads active ones) — and not the
+    // review sandbox, which belongs to Meta's App Reviewer.
+    const organizations = (await listOrganizations()).filter((o) => o.slug !== "review-demo");
     const chosen = organizations.find((o) => o.slug === c.req.query("business")) ?? null;
     adminView = {
       businesses: organizations.map((o) => ({ slug: o.slug, name: o.name })),
       business: chosen?.slug ?? null,
     };
     if (chosen) {
+      // A seat a cancelled or abandoned sign-in left empty goes first — in its
+      // own savepoint, so a failure cannot take the listing down with it.
+      await isolated(() => releaseEmptySeats(chosen.id)).catch(() => 0);
       // No seat there yet is simply nothing of theirs connected: employeeId
       // stays null and is never read as "theirs" below.
       const seat = await findAdminSeat(scope.adminId, chosen.id);
@@ -373,10 +383,7 @@ connectionsRoute.get("/", async (c) => {
 // ============================================================
 
 connectionsRoute.get("/tiktok/start", async (c) => {
-  const scope = scopeOf(c);
-  const owner = await ownerFor(c, { create: true });
-  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
-
+  // Said before an admin's seat is made: nothing can be connected anyway.
   if (!tiktokConfigured()) {
     return c.json(
       {
@@ -386,6 +393,8 @@ connectionsRoute.get("/tiktok/start", async (c) => {
       503
     );
   }
+  const owner = await ownerFor(c, { create: true });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const verifier = makeVerifier();
   const state = signState({
@@ -510,7 +519,8 @@ async function startFacebookLogin(
   target: "facebook" | "instagram",
   scopes: string[]
 ) {
-  const owner = await ownerFor(c, { create: true });
+  // The Page and the Instagram account are the business's: an admin needs no seat.
+  const owner = await ownerFor(c, { create: false, businessLevel: true });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   if (!facebookConfigured()) {
@@ -691,7 +701,6 @@ connectionsRoute.get("/facebook/callback", async (c) => {
 // ============================================================
 
 connectionsRoute.get("/tiktok/insights", async (c) => {
-  const scope = scopeOf(c);
   const owner = await ownerFor(c, { create: false });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
@@ -744,7 +753,6 @@ connectionsRoute.get("/tiktok/insights", async (c) => {
 });
 
 connectionsRoute.delete("/tiktok", async (c) => {
-  const scope = scopeOf(c);
   const owner = await ownerFor(c, { create: false });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
@@ -759,10 +767,7 @@ connectionsRoute.delete("/tiktok", async (c) => {
 // ============================================================
 
 connectionsRoute.get("/gmail/start", async (c) => {
-  const scope = scopeOf(c);
-  const owner = await ownerFor(c, { create: true });
-  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
-
+  // Said before an admin's seat is made: nothing can be connected anyway.
   if (!gmailConfigured()) {
     return c.json(
       {
@@ -772,6 +777,8 @@ connectionsRoute.get("/gmail/start", async (c) => {
       503
     );
   }
+  const owner = await ownerFor(c, { create: true });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const state = signState({
     organizationId: owner.organizationId,
@@ -877,7 +884,6 @@ connectionsRoute.get("/gmail/callback", async (c) => {
  * otherwise mean every message in the mailbox.
  */
 connectionsRoute.get("/gmail/mail", async (c) => {
-  const scope = scopeOf(c);
   const owner = await ownerFor(c, { create: false });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
@@ -925,7 +931,6 @@ connectionsRoute.get("/gmail/mail", async (c) => {
  * clothes — and it would send as that person, from their real mailbox.
  */
 connectionsRoute.post("/gmail/send", async (c) => {
-  const scope = scopeOf(c);
   const owner = await ownerFor(c, { create: false });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
@@ -1001,7 +1006,6 @@ connectionsRoute.post("/gmail/sync", async (c) => {
 });
 
 connectionsRoute.delete("/gmail", async (c) => {
-  const scope = scopeOf(c);
   const owner = await ownerFor(c, { create: false });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
@@ -1143,7 +1147,6 @@ connectionsRoute.post("/whatsapp/history", async (c) => {
  * unknown label beats refusing one over a cosmetic lookup.
  */
 connectionsRoute.post("/whatsapp/connect", async (c) => {
-  const scope = scopeOf(c);
   const owner = await ownerFor(c, { create: true });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
   if (!owner.employeeId) {
@@ -1178,7 +1181,6 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
 });
 
 connectionsRoute.delete("/whatsapp", async (c) => {
-  const scope = scopeOf(c);
   const owner = await ownerFor(c, { create: false });
   if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
   if (!owner.employeeId) {

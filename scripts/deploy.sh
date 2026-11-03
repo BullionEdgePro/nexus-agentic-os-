@@ -21,6 +21,16 @@ git pull --ff-only origin main || {
   exit 1
 }
 
+# THE DATABASE FIRST (3 Nov 2026). Code that reads a column its migration has not
+# added yet fails on every query that touches it -- since migration 108, that is
+# every read of a staff record, the first query of every inbound message.
+# Migrations are applied by hand, as the owner, before this script (DEPLOY.md);
+# so it checks that they were, and builds and restarts nothing otherwise.
+./scripts/schema-drift-check.sh || {
+  echo "The database does not match the code: apply the new migration(s) first (DEPLOY.md), then run this again. Nothing was built or restarted."
+  exit 1
+}
+
 GIT_COMMIT=$(git rev-parse --short HEAD)
 export GIT_COMMIT
 echo "Building $GIT_COMMIT"

@@ -669,9 +669,11 @@ const unownedFollowUp: Operator = {
   description:
     "An open follow-up with no owner. Only reported for businesses that actually have staff to assign it to.",
   run: async (organizationId) => {
+    // A seat MADE for an admin (migration 108) is nobody to assign work to.
     const { rows: staff } = await getPool().query<{ n: string }>(
       `select count(*)::text as n from employees
-        where organization_id = $1 and is_active = true`,
+        where organization_id = $1 and is_active = true
+          and not (admin_id is not null and employee_code = 'admin-' || left(admin_id::text, 8))`,
       [organizationId]
     );
     if (Number(staff[0]?.n ?? 0) === 0) return [];
