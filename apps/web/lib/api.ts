@@ -3015,7 +3015,8 @@ export interface BulkWriterBrief {
   language?: "en" | "ar";
 }
 
-export function writeBulkDrafts(orgSlug: BusinessSlug, input: BulkWriterBrief): Promise<{ drafts: string[] }> {
+/** `note`: the AI declined the brief and said why (3 Nov 2026); there are no drafts then. */
+export function writeBulkDrafts(orgSlug: BusinessSlug, input: BulkWriterBrief): Promise<{ drafts: string[]; note?: string | null }> {
   return request(`/api/bulk/${orgSlug}/write`, { method: "POST", body: JSON.stringify(input) });
 }
 

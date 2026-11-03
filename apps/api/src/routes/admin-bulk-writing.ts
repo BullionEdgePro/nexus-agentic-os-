@@ -54,9 +54,10 @@ adminBulkWritingRoute.post("/:slug/write", async (c) => {
     length: body.length === "detailed" ? "detailed" : "short",
     language: body.language === "ar" ? "ar" : "en",
   };
-  const drafts = await writeDrafts(request, voice);
-  if (!drafts) return c.json({ error: AI_AWAY }, 503);
-  return c.json({ drafts });
+  const result = await writeDrafts(request, voice);
+  if (!result) return c.json({ error: AI_AWAY }, 503);
+  // A declined brief comes back as a note to read, not as a draft (3 Nov 2026).
+  return c.json({ drafts: result.drafts, note: result.note });
 });
 
 adminBulkWritingRoute.post("/:slug/rewrite", async (c) => {
@@ -77,5 +78,7 @@ adminBulkWritingRoute.post("/:slug/rewrite", async (c) => {
 
   const rewritten = await rewriteDraft(kind, text, change, voice, reason);
   if (!rewritten) return c.json({ error: AI_AWAY }, 503);
+  // Declined: said as a sentence the page shows, never put in the editor.
+  if (typeof rewritten === "object" && "note" in rewritten) return c.json({ error: rewritten.note }, 422);
   return c.json({ text: rewritten });
 });

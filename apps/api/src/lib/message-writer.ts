@@ -49,6 +49,9 @@ export function writerSystemPrompt(kind: WriterKind, voice: BusinessVoice): stri
     "Use {name} where the customer's first name belongs; it is filled in for each customer. Use no other placeholder, brackets or blanks to fill in.",
     "Never invent prices, dates, offers, links or phone numbers. Use only facts from the brief, exactly as written.",
     "No all-capital words, and at most two emoji.",
+    // A refusal must not look like a draft (3 Nov 2026): live, an explanation came
+    // back as one draft with Use this, one click from a message to every customer.
+    `If the brief does not fit ${voice.name} or cannot be written honestly, reply with one line that starts with CANNOT: and says why in one sentence, and nothing else.`,
   ];
   if (kind === "quick") {
     rules.push("Each message stays under 600 characters.");
@@ -120,6 +123,24 @@ export function parseDrafts(text: string, kind: WriterKind): string[] {
     .slice(0, 3);
 }
 
+/** The reason, when the AI declined with a CANNOT: line; null otherwise. */
+function declinedIn(text: string): string | null {
+  const declined = text.trim().replace(/^["“”'\s]+/, "").match(/^CANNOT:\s*([\s\S]*?)["“”]*$/i);
+  return declined ? declined[1].trim() : null;
+}
+
+/**
+ * A reply as drafts, or as a note when the AI declined -- never a refusal dressed
+ * as a draft (3 Nov 2026). Three drafts were asked for, separated by ---, so a
+ * reply that is one block is the AI talking to the admin, not a message.
+ */
+export function readDrafts(text: string, kind: WriterKind): { drafts: string[]; note: string | null } {
+  const note = declinedIn(text);
+  if (note !== null) return { drafts: [], note };
+  if (!/^\s*-{3,}\s*$/m.test(text)) return { drafts: [], note: text.trim() };
+  return { drafts: parseDrafts(text, kind), note: null };
+}
+
 const WRITER_TURNS_PER_HOUR = 30;
 const writerTurns = new Map<string, number[]>();
 
@@ -139,12 +160,15 @@ export function takeWriterTurn(adminKey: string, now = Date.now()): boolean {
   return true;
 }
 
-/** Three drafts for a brief, or null when the AI is unavailable or wrote nothing usable. */
-export async function writeDrafts(brief: WriterBrief, voice: BusinessVoice): Promise<string[] | null> {
+/** Three drafts for a brief, or the AI's note when it declined; null when it is unavailable or wrote nothing usable. */
+export async function writeDrafts(
+  brief: WriterBrief,
+  voice: BusinessVoice
+): Promise<{ drafts: string[]; note: string | null } | null> {
   const reply = await completeText({ system: writerSystemPrompt(brief.kind, voice), prompt: draftRequest(brief), ...CALL });
   if (!reply) return null;
-  const drafts = parseDrafts(reply, brief.kind);
-  return drafts.length ? drafts : null;
+  const read = readDrafts(reply, brief.kind);
+  return read.drafts.length || read.note ? read : null;
 }
 
 /** The editor's message changed as asked, or null when the AI is unavailable or its answer is unusable. */
@@ -154,8 +178,10 @@ export async function rewriteDraft(
   change: RewriteChange,
   voice: BusinessVoice,
   reason?: string
-): Promise<string | null> {
+): Promise<string | { note: string } | null> {
   const reply = await completeText({ system: writerSystemPrompt(kind, voice), prompt: rewriteRequest(kind, text, change, reason), ...CALL });
   if (!reply) return null;
+  const note = declinedIn(reply);
+  if (note !== null) return { note };
   return parseDrafts(reply, kind)[0] ?? null;
 }

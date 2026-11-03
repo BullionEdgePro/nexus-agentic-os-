@@ -14,6 +14,7 @@ import {
   WRITER_MODEL,
   draftRequest,
   parseDrafts,
+  readDrafts,
   rewriteRequest,
   takeWriterTurn,
   writerSystemPrompt,
@@ -89,4 +90,39 @@ test("the writer routes check the limit before calling the model, and say so whe
   assert.match(route, /The AI is not available right now — write the message yourself\./);
   assert.match(route, /429/);
   assert.match(read("apps", "api", "src", "index.ts"), /app\.route\("\/api\/bulk", adminBulkWritingRoute\);/);
+});
+
+// A refusal is a note, never a draft (3 Nov 2026). Live, a brief that did not
+// fit the business came back as one "draft" with Use this: one click put the
+// AI's explanation into a message meant for every customer.
+test("the writer is told how to decline, in a line that cannot be mistaken for a message", () => {
+  const voice = { name: "Zipicka", tagline: null, summary: null };
+  assert.match(writerSystemPrompt("approved", voice), /CANNOT:/);
+  assert.match(writerSystemPrompt("quick", voice), /CANNOT:/);
+});
+
+test("a CANNOT reply is a note and no drafts", () => {
+  assert.deepEqual(readDrafts("CANNOT: Zipicka sells beauty and pet products, not villas.", "approved"), {
+    drafts: [],
+    note: "Zipicka sells beauty and pet products, not villas.",
+  });
+  assert.deepEqual(readDrafts('  "CANNOT: that offer is not in the brief."', "quick"), { drafts: [], note: "that offer is not in the brief." });
+});
+
+test("one block where three drafts were asked for is a note, not a draft", () => {
+  const reply = "I can't write these drafts because the brief doesn't match Zipicka. Send a Zipicka brief and I will.";
+  assert.deepEqual(readDrafts(reply, "approved"), { drafts: [], note: reply });
+});
+
+test("three drafts still come back as three drafts", () => {
+  const reply = "Hi there, free delivery this week on orders over Dhs 50.\n---\nHello {name}, free delivery this week!\n---\nShopping this week? Delivery is free over Dhs 50.";
+  const read = readDrafts(reply, "quick");
+  assert.equal(read.drafts.length, 3);
+  assert.equal(read.note, null);
+});
+
+test("the route answers the note beside the drafts, and a declined rewrite as a sentence", () => {
+  const route = read("apps", "api", "src", "routes", "admin-bulk-writing.ts");
+  assert.match(route, /c\.json\(\{ drafts: result\.drafts, note: result\.note \}\)/);
+  assert.match(route, /"note" in rewritten/);
 });
