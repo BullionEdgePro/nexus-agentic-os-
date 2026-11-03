@@ -46,6 +46,8 @@ const metaOf = (f) => {
 
 mock.module("@nexus/db", {
   exports: {
+    // Savepoints are a database matter; the stand-in runs the work as it is.
+    isolated: (fn) => fn(),
     teamAccess,
     readerKey,
     directPair,
