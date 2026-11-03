@@ -22,6 +22,7 @@ import { standingOf } from "@/lib/client-filters";
 import { fontVariables } from "@/lib/fonts";
 import { play } from "@/lib/sound";
 import { tenantName } from "@/lib/tenants";
+import { templateOptionLabel } from "@/lib/template-option-label";
 import { AddNumbers } from "./add-numbers";
 import { AiWriter } from "./ai-writer";
 import { NewApproved } from "./new-approved";
@@ -390,7 +391,7 @@ function ApprovedSend({
           <option value="">Choose an approved message…</option>
           {view.templates.map((template) => (
             <option key={template.id} value={template.id}>
-              {template.name} ({template.language})
+              {templateOptionLabel(template.name, template.language)}
             </option>
           ))}
         </select>
