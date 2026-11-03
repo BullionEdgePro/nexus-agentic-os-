@@ -346,7 +346,10 @@ test("the callback redirect points at the console, not the API", () => {
   // back() sends the browser to a /deck page. If it used the API host the person
   // would land on JSON or a 404 after consenting.
   assert.match(ROUTE, /const app = appBaseUrl\(\);/);
-  assert.match(ROUTE, /\$\{app\}\/deck\/my-clients\?connected=/);
+  // Which /deck page depends on who signed in (3 Nov 2026): My clients for
+  // staff, Connections for an admin's seat. A console page either way.
+  assert.match(ROUTE, /\$\{app\}\$\{page\}\?connected=/);
+  assert.match(ROUTE, /adminId \? "\/deck\/connections" : "\/deck\/my-clients"/);
 });
 
 test("the gmail redirect_uri is built from the API base, not the app base", () => {

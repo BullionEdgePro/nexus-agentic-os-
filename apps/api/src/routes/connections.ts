@@ -11,6 +11,11 @@ import {
   clientEmailAddresses,
   assignEmployeeWhatsAppNumber,
   findEmployeeById,
+  findOrganizationBySlug,
+  listOrganizations,
+  findAdminById,
+  findAdminSeat,
+  ensureAdminSeat,
   withTenant,
   isolated,
   withRecovery,
@@ -100,20 +105,77 @@ function scopeOf(c: { get: (k: string) => unknown }): SessionScope {
   return (c.get("scope") as SessionScope | undefined) ?? { sub: "unknown", role: "employee" };
 }
 
+type Owner = { organizationId: string; employeeId: string | null };
+type OwnerRefusal = { error: string; status: 400 | 403 | 404 };
+
+const NO_PERSONAL_ACCOUNT =
+  "Connections belong to a staff member's own accounts. An owner has no personal account here — a staff member connects theirs from their own sign-in.";
+
 /**
  * Whose connections these are.
  *
- * A staff member gets their own; the owner gets the business's. Null employeeId
- * is the business, matching the column and every other "mine versus the
- * business's" split on this platform.
+ * A staff member: their own. An admin: their SEAT in the business named by
+ * `?business=<slug>` (migration 108, 3 Nov 2026) — an ordinary staff record
+ * linked to the admin account, so every connection below works for them
+ * exactly as it does for staff. Starting or finishing a connection makes the
+ * seat (`create: true`); reading or removing never does, so looking at a
+ * business does not put an admin on its team. A missing seat is "nothing
+ * connected", never `employeeId: null` — null is the business's own
+ * Facebook/Instagram here.
+ *
+ * An operator session without an admin account (the retired shared password)
+ * has nobody to file a connection under, and is refused as before.
  */
-function ownerOf(scope: SessionScope): { organizationId: string; employeeId: string | null } | null {
+export async function ownerFor(
+  c: { get: (k: string) => unknown; req: { query: (k: string) => string | undefined } },
+  opts: { create: boolean }
+): Promise<Owner | OwnerRefusal> {
+  const scope = scopeOf(c);
   if (scope.role === "employee") {
-    if (!scope.organizationId || !scope.employeeId) return null;
+    if (!scope.organizationId || !scope.employeeId) return { error: NO_PERSONAL_ACCOUNT, status: 403 };
     return { organizationId: scope.organizationId, employeeId: scope.employeeId };
   }
-  // An operator connecting acts for a business, which they must name.
-  return null;
+  if (!scope.adminId) return { error: NO_PERSONAL_ACCOUNT, status: 403 };
+
+  const slug = c.req.query("business");
+  if (!slug) return { error: "Choose which business to connect for.", status: 400 };
+  const organization = await findOrganizationBySlug(slug);
+  if (!organization) return { error: "Business not found.", status: 404 };
+
+  if (opts.create) {
+    const admin = await findAdminById(scope.adminId);
+    if (!admin) return { error: NO_PERSONAL_ACCOUNT, status: 403 };
+    const seat = await ensureAdminSeat(
+      { id: admin.id, fullName: admin.fullName, email: admin.email },
+      organization.id
+    );
+    return { organizationId: organization.id, employeeId: seat.id };
+  }
+  const seat = await findAdminSeat(scope.adminId, organization.id);
+  if (!seat) return { error: "Nothing is connected for this business yet.", status: 404 };
+  return { organizationId: organization.id, employeeId: seat.id };
+}
+
+function isRefusal(owner: Owner | OwnerRefusal): owner is OwnerRefusal {
+  return "error" in owner;
+}
+
+/**
+ * Where a sign-in comes back to. Staff go to My clients, as always; an admin's
+ * seat comes back to Connections, because admins cannot open My clients. Read
+ * from the signed state, so it is decided before the callback has verified
+ * anything else — and any doubt falls back to the staff page.
+ */
+async function returnPage(c: Context): Promise<string> {
+  try {
+    const stored = /(?:^|;\s*)nexus_oauth_state=([^;]+)/.exec(c.req.header("cookie") ?? "")?.[1];
+    const state = readState(stored ? decodeURIComponent(stored) : undefined);
+    if (!state?.employeeId) return "/deck/my-clients";
+    const employee = await findEmployeeById(state.employeeId);
+    return employee?.adminId ? "/deck/connections" : "/deck/my-clients";
+  } catch {
+    return "/deck/my-clients";
+  }
 }
 
 interface StatePayload {
@@ -165,35 +227,55 @@ function readState(raw: string | undefined): StatePayload | null {
 
 connectionsRoute.get("/", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
 
-  if (!owner) {
-    return c.json({
-      // The owner has no employee record, so there is no personal account to
-      // connect. Said plainly rather than returning an empty list, which reads
-      // as "you have connected nothing".
-      error:
-        "Connections belong to a staff member's own accounts. An owner has no personal account here — a staff member connects theirs from their own sign-in.",
-    }, 403);
+  // An admin chooses which business they are connecting for: the listing names
+  // every business and the one chosen. A stale choice (a business that is gone)
+  // reads as no choice, so the screen shows the picker rather than an error.
+  let adminView: { businesses: Array<{ slug: string; name: string }>; business: string | null } | null = null;
+  let owner: Owner | OwnerRefusal | null = null;
+  if (scope.role === "operator" && scope.adminId) {
+    const organizations = await listOrganizations();
+    const chosen = organizations.find((o) => o.slug === c.req.query("business")) ?? null;
+    adminView = {
+      businesses: organizations.map((o) => ({ slug: o.slug, name: o.name })),
+      business: chosen?.slug ?? null,
+    };
+    if (chosen) {
+      // No seat there yet is simply nothing of theirs connected: employeeId
+      // stays null and is never read as "theirs" below.
+      const seat = await findAdminSeat(scope.adminId, chosen.id);
+      owner = { organizationId: chosen.id, employeeId: seat?.id ?? null };
+    }
+  } else {
+    owner = await ownerFor(c, { create: false });
   }
 
-  const connections = await withTenant(owner.organizationId, () =>
-    listConnections(owner.organizationId, owner.employeeId)
-  );
+  if (owner && isRefusal(owner)) {
+    // The owner has no employee record, so there is no personal account to
+    // connect. Said plainly rather than returning an empty list, which reads
+    // as "you have connected nothing".
+    return c.json({ error: owner.error }, owner.status);
+  }
+
+  const connections =
+    owner && owner.employeeId
+      ? await withTenant(owner.organizationId, () => listConnections(owner.organizationId, owner.employeeId))
+      : [];
 
   // Facebook and Instagram are connected at the BUSINESS level (employee_id null),
   // so a staff member's own list above never contains them — which is why the
   // panel could not show whether the Page/IG was connected. Fetch the business's
   // own connections too and surface just those two, so each card can display
   // "Connected — <account>" the same way Gmail and WhatsApp already do.
-  const businessConnections = await withTenant(owner.organizationId, () =>
-    listConnections(owner.organizationId, null)
-  );
-  const pageConnections = businessConnections.filter(
-    (conn) => conn.provider === "facebook" || conn.provider === "instagram"
-  );
+  const pageConnections =
+    owner && owner.organizationId
+      ? (await withTenant(owner.organizationId, () => listConnections(owner.organizationId, null))).filter(
+          (conn) => conn.provider === "facebook" || conn.provider === "instagram"
+        )
+      : [];
 
   return c.json({
+    ...(adminView ?? {}),
     connections: [...connections, ...pageConnections],
     providers: [
       {
@@ -292,8 +374,8 @@ connectionsRoute.get("/", async (c) => {
 
 connectionsRoute.get("/tiktok/start", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member can connect their own account." }, 403);
+  const owner = await ownerFor(c, { create: true });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   if (!tiktokConfigured()) {
     return c.json(
@@ -331,8 +413,9 @@ connectionsRoute.get("/tiktok/start", async (c) => {
 
 connectionsRoute.get("/tiktok/callback", async (c) => {
   const app = appBaseUrl();
+  const page = await returnPage(c);
   const back = (message: string) =>
-    c.redirect(`${app}/deck/my-clients?connected=${encodeURIComponent(message)}`, 302);
+    c.redirect(`${app}${page}?connected=${encodeURIComponent(message)}`, 302);
 
   // TikTok reports a refusal by redirecting here with an error, not by failing.
   const refused = c.req.query("error");
@@ -422,13 +505,13 @@ connectionsRoute.get("/tiktok/callback", async (c) => {
 // Facebook and Instagram are TWO separate connects that share one Facebook-Login
 // redirect_uri and callback. Each asks only for its own channel's scopes; the
 // signed state carries `target` so the callback knows which row to write.
-function startFacebookLogin(
+async function startFacebookLogin(
   c: Context,
   target: "facebook" | "instagram",
   scopes: string[]
 ) {
-  const owner = ownerOf(scopeOf(c));
-  if (!owner) return c.json({ error: "Only a staff member can connect the business's account." }, 403);
+  const owner = await ownerFor(c, { create: true });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   if (!facebookConfigured()) {
     return c.json(
@@ -469,8 +552,9 @@ connectionsRoute.get("/facebook/callback", async (c) => {
   // connected by a STAFF member from /deck/my-clients, and /deck/channels is
   // operator-only — sending staff there dropped them on "You don't have access to
   // that business" instead of the success message. The panel reads ?connected=.
+  const page = await returnPage(c);
   const back = (message: string) =>
-    c.redirect(`${app}/deck/my-clients?connected=${encodeURIComponent(message)}`, 302);
+    c.redirect(`${app}${page}?connected=${encodeURIComponent(message)}`, 302);
 
   const refused = c.req.query("error");
   if (refused) {
@@ -608,8 +692,8 @@ connectionsRoute.get("/facebook/callback", async (c) => {
 
 connectionsRoute.get("/tiktok/insights", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member has a connected account here." }, 403);
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const secret = await withTenant(owner.organizationId, () =>
     connectionSecret(owner.organizationId, owner.employeeId, "tiktok")
@@ -661,8 +745,8 @@ connectionsRoute.get("/tiktok/insights", async (c) => {
 
 connectionsRoute.delete("/tiktok", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member can disconnect their own account." }, 403);
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const removed = await withTenant(owner.organizationId, () =>
     removeConnection(owner.organizationId, owner.employeeId, "tiktok")
@@ -676,8 +760,8 @@ connectionsRoute.delete("/tiktok", async (c) => {
 
 connectionsRoute.get("/gmail/start", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member can connect their own mailbox." }, 403);
+  const owner = await ownerFor(c, { create: true });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   if (!gmailConfigured()) {
     return c.json(
@@ -710,8 +794,9 @@ connectionsRoute.get("/gmail/start", async (c) => {
 
 connectionsRoute.get("/gmail/callback", async (c) => {
   const app = appBaseUrl();
+  const page = await returnPage(c);
   const back = (message: string) =>
-    c.redirect(`${app}/deck/my-clients?connected=${encodeURIComponent(message)}`, 302);
+    c.redirect(`${app}${page}?connected=${encodeURIComponent(message)}`, 302);
 
   const refused = c.req.query("error");
   if (refused) {
@@ -793,8 +878,8 @@ connectionsRoute.get("/gmail/callback", async (c) => {
  */
 connectionsRoute.get("/gmail/mail", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member has a connected mailbox here." }, 403);
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const token = await gmailToken(owner);
   if ("error" in token) return c.json({ error: token.error }, token.status);
@@ -841,8 +926,8 @@ connectionsRoute.get("/gmail/mail", async (c) => {
  */
 connectionsRoute.post("/gmail/send", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member can send from their own mailbox." }, 403);
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const body = await c.req.json().catch(() => ({}));
   const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
@@ -888,8 +973,8 @@ connectionsRoute.post("/gmail/send", async (c) => {
  * safe to call often. Returns how many messages were newly stored.
  */
 connectionsRoute.post("/gmail/sync", async (c) => {
-  const owner = ownerOf(scopeOf(c));
-  if (!owner) return c.json({ error: "Only a staff member can sync their own mailbox." }, 403);
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const token = await gmailToken(owner);
   if ("error" in token) return c.json({ error: token.error }, token.status);
@@ -917,8 +1002,8 @@ connectionsRoute.post("/gmail/sync", async (c) => {
 
 connectionsRoute.delete("/gmail", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner) return c.json({ error: "Only a staff member can disconnect their own mailbox." }, 403);
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const removed = await withTenant(owner.organizationId, () =>
     removeConnection(owner.organizationId, owner.employeeId, "gmail")
@@ -941,8 +1026,9 @@ connectionsRoute.delete("/gmail", async (c) => {
  * never persisted and never logged.
  */
 connectionsRoute.post("/imap/connect", async (c) => {
-  const owner = ownerOf(scopeOf(c));
-  if (!owner || !owner.employeeId) {
+  const owner = await ownerFor(c, { create: true });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
+  if (!owner.employeeId) {
     return c.json({ error: "Only a staff member can connect their own mailbox." }, 403);
   }
 
@@ -991,8 +1077,8 @@ connectionsRoute.post("/imap/connect", async (c) => {
 });
 
 connectionsRoute.delete("/imap", async (c) => {
-  const owner = ownerOf(scopeOf(c));
-  if (!owner) return c.json({ error: "Only a staff member can disconnect their own mailbox." }, 403);
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
 
   const removed = await withTenant(owner.organizationId, () =>
     removeConnection(owner.organizationId, owner.employeeId, "imap")
@@ -1005,9 +1091,10 @@ connectionsRoute.delete("/imap", async (c) => {
 // ============================================================
 
 /** The staff member's own connected number, or why there is none. */
-async function ownWhatsAppNumber(c: Parameters<typeof scopeOf>[0]) {
-  const owner = ownerOf(scopeOf(c));
-  if (!owner || !owner.employeeId) return { error: "Only a staff member has a WhatsApp history here." } as const;
+async function ownWhatsAppNumber(c: Context) {
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return { error: owner.error } as const;
+  if (!owner.employeeId) return { error: "Only a staff member has a WhatsApp history here." } as const;
   const employeeId = owner.employeeId;
   const employee = await withTenant(owner.organizationId, () => findEmployeeById(employeeId));
   if (!employee?.whatsappPhoneNumberId) return { error: "Connect your WhatsApp Business number first." } as const;
@@ -1057,8 +1144,9 @@ connectionsRoute.post("/whatsapp/history", async (c) => {
  */
 connectionsRoute.post("/whatsapp/connect", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner || !owner.employeeId) {
+  const owner = await ownerFor(c, { create: true });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
+  if (!owner.employeeId) {
     return c.json({ error: "Only a staff member can connect their own WhatsApp." }, 403);
   }
   if (!whatsappCoexistenceConfigured()) {
@@ -1091,8 +1179,9 @@ connectionsRoute.post("/whatsapp/connect", async (c) => {
 
 connectionsRoute.delete("/whatsapp", async (c) => {
   const scope = scopeOf(c);
-  const owner = ownerOf(scope);
-  if (!owner || !owner.employeeId) {
+  const owner = await ownerFor(c, { create: false });
+  if (isRefusal(owner)) return c.json({ error: owner.error }, owner.status);
+  if (!owner.employeeId) {
     return c.json({ error: "Only a staff member can disconnect their own WhatsApp." }, 403);
   }
   const employeeId = owner.employeeId;
