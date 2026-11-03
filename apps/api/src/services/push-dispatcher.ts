@@ -70,6 +70,7 @@ async function handleEvent(event: InboxSocketEvent): Promise<void> {
     employeeId: employee.id,
     active: employee.isActive,
     onShift: resolvePresence(employee, now).status !== "offline",
+    adminId: employee.adminId ?? null,
   }));
   const ctx: PushContext = {
     direction,

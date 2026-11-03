@@ -420,9 +420,12 @@ async function processDeliveryStatuses(
   // everything sent from it — their replies and their campaigns — resolve
   // through the person instead. Before this they were dropped as "unmapped" and
   // every staff reply stayed at 'sent' forever.
+  // Person first, like inbound (3 Nov 2026): a business's old shared line that a
+  // person now holds sends only as theirs, so its receipts belong to their
+  // business — read business-first, they would match no row and be dropped.
   const organizationId =
-    (await findOrganizationByPhoneNumberId(phoneNumberId))?.id ??
     (await findEmployeeByPhoneNumberId(phoneNumberId))?.organizationId ??
+    (await findOrganizationByPhoneNumberId(phoneNumberId))?.id ??
     null;
   if (!organizationId) {
     logger.warn({ phoneNumberId }, "Delivery status for an unmapped phone_number_id");

@@ -15,6 +15,15 @@ import type { Employee } from "@nexus/shared";
  * business's.
  */
 
+/**
+ * A seat MADE for an admin (ensureAdminSeat's own insert), as opposed to a
+ * working hire's record an admin was linked to. Only a made seat stays off the
+ * auto-assignment rota; a linked hire keeps their place on it.
+ */
+export function isCreatedSeat(employee: { adminId?: string | null; employeeCode: string }): boolean {
+  return !!employee.adminId && employee.employeeCode === `admin-${employee.adminId.slice(0, 8)}`;
+}
+
 /** The admin's seat in this business, or null when they have not connected anything here yet. */
 export async function findAdminSeat(adminId: string, organizationId: string): Promise<Employee | null> {
   return withTenant(organizationId, async () => {

@@ -19,8 +19,8 @@ export interface PushContext {
   assigneeEmployeeId: string | null;
   /** for kind "assigned" */
   newAssigneeEmployeeId: string | null;
-  /** the serving business's staff */
-  staff: { employeeId: string; active: boolean; onShift: boolean }[];
+  /** the serving business's staff; adminId is set on an admin's seat (migration 108) */
+  staff: { employeeId: string; active: boolean; onShift: boolean; adminId?: string | null }[];
   /** "o:<adminId>" of every owner */
   ownerSubjects: string[];
 }
@@ -35,17 +35,23 @@ const employee = (id: string) => `e:${id}`;
 
 export function decideRecipients(ctx: PushContext): PushRecipients[] {
   const isActive = (id: string | null) => !!id && ctx.staff.some((s) => s.employeeId === id && s.active);
+  // Nobody signs in AS an admin's seat: its chats reach the admin's own devices
+  // ("o:<adminId>") as well, or messages on their line would arrive silently.
+  const holder = (id: string) => {
+    const adminId = ctx.staff.find((s) => s.employeeId === id)?.adminId;
+    return adminId ? [employee(id), `o:${adminId}`] : [employee(id)];
+  };
 
   if (ctx.kind === "assigned") {
     return isActive(ctx.newAssigneeEmployeeId)
-      ? [{ subjects: [employee(ctx.newAssigneeEmployeeId!)], requiresMode: "mine" }]
+      ? [{ subjects: holder(ctx.newAssigneeEmployeeId!), requiresMode: "mine" }]
       : [];
   }
 
   if (ctx.kind !== "message" || ctx.direction !== "inbound") return [];
 
   if (isActive(ctx.assigneeEmployeeId)) {
-    return [{ subjects: [employee(ctx.assigneeEmployeeId!)], requiresMode: "mine" }];
+    return [{ subjects: holder(ctx.assigneeEmployeeId!), requiresMode: "mine" }];
   }
 
   const onShift = ctx.staff.filter((s) => s.active && s.onShift).map((s) => employee(s.employeeId));

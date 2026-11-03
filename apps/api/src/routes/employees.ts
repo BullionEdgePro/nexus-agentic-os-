@@ -38,7 +38,7 @@ import { getMainBusiness, setMainBusiness } from "../lib/main-business.js";
 import { readPaymentRefusal } from "../lib/payment-refusal.js";
 import { readHistoryStatus } from "../lib/whatsapp-history.js";
 import { whatsappCoexistenceConfigured, whatsappEmbeddedConfig } from "../lib/whatsapp-onboarding.js";
-import { connectWhatsAppNumber } from "../services/whatsapp-connect.js";
+import { connectWhatsAppNumber, sharedLineRefusal } from "../services/whatsapp-connect.js";
 import {
   buildDirectContact,
   normalizeWhatsAppNumber,
@@ -678,6 +678,12 @@ employeesRoute.patch("/:slug/employees/:employeeId/whatsapp-number", async (c) =
       : null;
 
   if (phoneNumberId) {
+    // ANY business's live line, not just this one's (3 Nov 2026): every
+    // business sits on one WhatsApp account, and inbound now asks who holds a
+    // line before which business owns it — so another business's live line
+    // given to a person here would take all of that business's messages.
+    const shared = await sharedLineRefusal(phoneNumberId);
+    if (shared) return c.json({ error: shared }, 422);
     if (phoneNumberId === organization.whatsappPhoneNumberId) {
       return c.json(
         { error: "That is the shared company number — assigning it would send every customer to one person." },
@@ -825,6 +831,9 @@ async function ownDedicatedNumber(
   if (phoneNumberId === organization.whatsappPhoneNumberId) {
     return { error: "That is the shared company number." } as const;
   }
+  // Any other business's live line is refused too (see the PATCH above).
+  const shared = await sharedLineRefusal(phoneNumberId);
+  if (shared) return { error: shared } as const;
   const live = await listWabaNumbers(organization.whatsappBusinessAccountId);
   const match = live.find((n) => n.phoneNumberId === phoneNumberId);
   if (!match) return { error: "That number is not on this WhatsApp account." } as const;

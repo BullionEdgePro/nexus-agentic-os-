@@ -115,6 +115,8 @@ test("Bulk does not offer the business's own number when a person — in ANY bus
 });
 
 test("an admin's seat is never auto-assigned customers", () => {
+  // Only a seat MADE for an admin; a working hire an admin was linked to keeps
+  // their place on the rota (final review, 3 Nov 2026).
   const availability = src("services", "availability.ts");
-  assert.match(availability, /\(employee\) => employee\.isActive && employee\.twinEnabled && !employee\.adminId/);
+  assert.match(availability, /\(employee\) => employee\.isActive && employee\.twinEnabled && !isCreatedSeat\(employee\)/);
 });
