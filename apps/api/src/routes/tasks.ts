@@ -14,6 +14,7 @@ import {
   getConversationRouting,
   withSavepoint,
   type TaskStatus,
+  isolated,
 } from "@nexus/db";
 import { completeText } from "@nexus/agents";
 import type { SessionScope } from "../lib/session.js";
@@ -274,7 +275,8 @@ conversationTasksRoute.post("/:id/tasks/understand", async (c) => {
   const conversationId = c.req.param("id");
   const conversation = await findConversationById(conversationId);
   if (!conversation) return c.json({ error: "Conversation not found" }, 404);
-  const routing = await getConversationRouting(conversationId).catch(() => null);
+  // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+  const routing = await isolated(() => getConversationRouting(conversationId)).catch(() => null);
   const serving = await findOrganizationById(routing?.routedOrganizationId ?? conversation.organizationId);
   const timeZone = serving?.timezone || "Asia/Dubai";
 

@@ -1,5 +1,5 @@
 import { completeText } from "./anthropic-text.js";
-import { listOpenTasksForConversation, type TaskRecord } from "@nexus/db";
+import { isolated, listOpenTasksForConversation, type TaskRecord } from "@nexus/db";
 import { loadRecentHistory } from "./switchboard.js";
 
 /**
@@ -165,14 +165,16 @@ export async function buildHandoverBrief(conversationId: string): Promise<Handov
   let followUps: OpenFollowUp[] = [];
   let followUpsUnavailable = false;
   try {
-    followUps = (await listOpenTasksForConversation(conversationId)).map(toFollowUp);
+    // Both reads isolated (caught-error audit, 3 Nov 2026): caught here, a
+    // failure used to roll back the handoff the request had just written.
+    followUps = (await isolated(() => listOpenTasksForConversation(conversationId))).map(toFollowUp);
   } catch {
     followUpsUnavailable = true;
   }
 
   let history: Awaited<ReturnType<typeof loadRecentHistory>>;
   try {
-    history = await loadRecentHistory(conversationId, 30);
+    history = await isolated(() => loadRecentHistory(conversationId, 30));
   } catch {
     return EMPTY("Could not read the conversation history.", 0, followUps, followUpsUnavailable);
   }

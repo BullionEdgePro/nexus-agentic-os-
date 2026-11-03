@@ -12,6 +12,8 @@ import {
   assignEmployeeWhatsAppNumber,
   findEmployeeById,
   withTenant,
+  isolated,
+  withRecovery,
 } from "@nexus/db";
 import { readHistoryStatus, requestChatHistory } from "../lib/whatsapp-history.js";
 import { connectWhatsAppNumber } from "../services/whatsapp-connect.js";
@@ -625,8 +627,11 @@ connectionsRoute.get("/tiktok/insights", async (c) => {
       fetchTikTokVideos(secret.accessToken, secret.scopes),
     ]);
 
-    await withTenant(owner.organizationId, () =>
-      recordSync(owner.organizationId, owner.employeeId, "tiktok", null)
+    // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+    await isolated(() =>
+      withTenant(owner.organizationId, () =>
+        recordSync(owner.organizationId, owner.employeeId, "tiktok", null)
+      )
     );
 
     return c.json({
@@ -810,8 +815,11 @@ connectionsRoute.get("/gmail/mail", async (c) => {
 
   try {
     const messages = await fetchClientMail(token.accessToken, addresses);
-    await withTenant(owner.organizationId, () =>
-      recordSync(owner.organizationId, owner.employeeId, "gmail", null)
+    // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+    await isolated(() =>
+      withTenant(owner.organizationId, () =>
+        recordSync(owner.organizationId, owner.employeeId, "gmail", null)
+      )
     );
     return c.json({ messages, addressesSearched: addresses.length, note: null });
   } catch (err) {
@@ -887,9 +895,14 @@ connectionsRoute.post("/gmail/sync", async (c) => {
   if ("error" in token) return c.json({ error: token.error }, token.status);
 
   try {
-    const result = await runEmailSync(owner, token.accessToken);
-    await withTenant(owner.organizationId, () =>
-      recordSync(owner.organizationId, owner.employeeId, "gmail", null)
+    // Rolled back only if the sync broke the transaction, so mail already
+    // stored survives a Gmail failure and the catch can still record why.
+    const result = await withRecovery(() => runEmailSync(owner, token.accessToken));
+    // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+    await isolated(() =>
+      withTenant(owner.organizationId, () =>
+        recordSync(owner.organizationId, owner.employeeId, "gmail", null)
+      )
     );
     return c.json(result);
   } catch (err) {

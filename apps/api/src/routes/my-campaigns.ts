@@ -24,6 +24,7 @@ import {
   openWindowConversations,
   lastInboundByContact,
   insertOutboundMessage,
+  isolated,
 } from "@nexus/db";
 import { sendReplyOnChannel } from "../lib/reply-dispatch.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
@@ -1155,7 +1156,8 @@ export async function describeDailyCeiling(
     const limit = standing?.dailyLimit ?? null;
     if (limit === null) return null;
 
-    const usedToday = await dailyReachUsed(fromPhoneNumberId);
+    // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+    const usedToday = await isolated(() => dailyReachUsed(fromPhoneNumberId));
     const remainingToday = Math.max(0, limit - usedToday);
     if (audienceSize <= remainingToday) return null;
 

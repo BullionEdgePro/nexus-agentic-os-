@@ -62,8 +62,9 @@ test("the freshness comes from the heartbeat, not from the findings", () => {
   assert.match(ROUTE, /lastSweptAt = sweep\?\.lastFinishedAt \?\? null/);
 
   // A failure reading heartbeats must not take out the findings page, which is
-  // useful with or without this field.
-  assert.match(ROUTE, /listJobHeartbeats\(\)\.catch\(\(\) => \[\]\)/);
+  // useful with or without this field. Isolated since 3 Nov 2026, which is what
+  // actually makes that true inside the request's one transaction.
+  assert.match(ROUTE, /isolated\(\(\) => listJobHeartbeats\(\)\)\.catch\(\(\) => \[\]\)/);
 });
 
 test("the tolerance is not re-implemented in the browser", () => {

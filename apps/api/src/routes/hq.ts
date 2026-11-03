@@ -27,6 +27,7 @@ import {
   type HqProfileFields,
   type HqSocialPlatform,
   type VaultSection,
+  isolated,
 } from "@nexus/db";
 import { looksLikeCardNumber, safeHttpUrl, buildOrgChart, wouldCreateLoop, type OrgChart } from "@nexus/shared";
 import { resolvePresence } from "@nexus/employees";
@@ -209,7 +210,7 @@ hqRoute.get("/:slug", async (c) => {
   if (!business) return c.json({ error: "Business not found" }, 404);
   const adminId = adminIdOf(c);
 
-  const [{ issues, score }, profile, checks, keywords, socials, vault, reveals, connections] = await Promise.all([
+  const [{ issues, score }, profile, checks, keywords, socials, vault, reveals] = await Promise.all([
     judgeBusiness(business.id),
     getHqProfile(business.id),
     latestHqChecks(business.id),
@@ -217,8 +218,12 @@ hqRoute.get("/:slug", async (c) => {
     listHqSocialAccounts(business.id),
     listVaultEntries(business.id),
     listVaultReveals(business.id),
-    withTenant(business.id, () => listConnections(business.id, null)).catch(() => []),
   ]);
+  // After the Promise.all and isolated (3 Nov 2026): side by side on one
+  // connection a savepoint cannot contain it, and its failure refused the rest.
+  const connections = await isolated(() =>
+    withTenant(business.id, () => listConnections(business.id, null))
+  ).catch(() => []);
 
   // The Facebook Page and Instagram account already connected to Nexus fill
   // the social tab until somebody records them by hand.

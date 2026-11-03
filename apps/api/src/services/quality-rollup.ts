@@ -4,6 +4,7 @@ import {
   rollUpProcedureOutcomes,
   rollUpSharedPatterns,
   withTenant,
+  isolated,
 } from "@nexus/db";
 import { logger } from "../lib/logger.js";
 
@@ -30,7 +31,9 @@ export async function rollUpRecentQuality(windowDays = WINDOW_DAYS): Promise<num
       const day = date.toISOString().slice(0, 10);
 
       try {
-        await withTenant(organization.id, () => rollUpQualityDay(organization.id, day));
+        // Isolated: under POST /api/quality/refresh this runs in the request's
+        // transaction, where one failed day refused every day after it (3 Nov 2026).
+        await isolated(() => withTenant(organization.id, () => rollUpQualityDay(organization.id, day)));
         written++;
       } catch (err) {
         // One business or one day failing must not abandon the rest. A thrown
@@ -53,7 +56,7 @@ export async function rollUpRecentQuality(windowDays = WINDOW_DAYS): Promise<num
     // procedure's history, not a figure per day, and recomputing them three
     // times per business per run would just do identical work twice.
     try {
-      await withTenant(organization.id, () => rollUpProcedureOutcomes(organization.id));
+      await isolated(() => withTenant(organization.id, () => rollUpProcedureOutcomes(organization.id)));
     } catch (err) {
       // Never fatal to the quality rollups above, which are the ones an owner
       // actually looks at.
@@ -66,7 +69,7 @@ export async function rollUpRecentQuality(windowDays = WINDOW_DAYS): Promise<num
   // two schedules over one source would let the two views disagree, and the
   // disagreement would be invisible.
   try {
-    const shared = await rollUpSharedPatterns();
+    const shared = await isolated(() => rollUpSharedPatterns());
     logger.info(shared, "Shared patterns recomputed");
   } catch (err) {
     // Never fatal to the per-tenant rollups above, which are the ones an owner

@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { findEmployeeById, findAdminById } from "@nexus/db";
+import { findEmployeeById, findAdminById, isolated } from "@nexus/db";
 import type { SessionScope } from "./session.js";
 
 /**
@@ -29,11 +29,14 @@ export async function actorOf(c: Context): Promise<Actor> {
   if (!scope) return { id: null, name: null, reader: null };
 
   if (scope.role === "employee" && scope.employeeId) {
-    const employee = await findEmployeeById(scope.employeeId).catch(() => null);
+    // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+    const employeeId = scope.employeeId;
+    const employee = await isolated(() => findEmployeeById(employeeId)).catch(() => null);
     return { id: scope.employeeId, name: employee?.fullName ?? null, reader: readerOf(scope) };
   }
 
-  const admin = scope.adminId ? await findAdminById(scope.adminId).catch(() => null) : null;
+  const adminId = scope.adminId;
+  const admin = adminId ? await isolated(() => findAdminById(adminId)).catch(() => null) : null;
   return {
     id: scope.adminId ?? scope.sub,
     name: admin?.fullName ?? "The owner",

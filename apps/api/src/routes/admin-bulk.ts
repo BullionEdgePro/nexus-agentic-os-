@@ -17,6 +17,7 @@ import {
   isWaIdOptedOut,
   dailyReachUsed,
   withTenant,
+  isolated,
 } from "@nexus/db";
 import { attributeTemplate, isHiddenTemplate } from "@nexus/shared";
 import { readSendingHealth, readNumberStanding, sendWhatsAppTemplate } from "../lib/whatsapp-client.js";
@@ -161,19 +162,21 @@ adminBulkRoute.get("/:slug/number/:phoneNumberId", async (c) => {
   const { organization, number } = resolved;
   if (!number) return c.json({ error: "Choose a number." }, 400);
 
-  const [templates, customers, health, refused, standing, usedToday, templateRows] = await Promise.all([
+  const [templates, customers, health, refused, standing, templateRows] = await Promise.all([
     templatesFor(organization, number.wabaId),
     customersFor(organization.id, number.phoneNumberId),
     readSendingHealth(number.phoneNumberId),
     readPaymentRefusal(number.phoneNumberId),
     readNumberStanding(number.phoneNumberId),
-    // A floor: counted from campaign recipients only (see describeDailyCeiling).
-    dailyReachUsed(number.phoneNumberId).catch(() => null),
     // The admin's new messages still waiting for WhatsApp (30 Oct 2026). From
     // the mirror, so opening a number costs no call to Meta; the page asks
     // WhatsApp itself (Check again) only when something is waiting.
     withTenant(organization.id, () => listBroadcastTemplates(organization.id, number.wabaId)),
   ]);
+  // A floor: counted from campaign recipients only (see describeDailyCeiling).
+  // After the Promise.all and isolated (3 Nov 2026): side by side on one
+  // connection a savepoint cannot contain it, and its failure refused the rest.
+  const usedToday = await isolated(() => dailyReachUsed(number.phoneNumberId)).catch(() => null);
   const blocked = health?.problem?.description ?? (refused ? "WhatsApp refused this number's last message over payment — fix the card, then send a test." : null);
   return c.json({
     templates,

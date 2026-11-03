@@ -36,6 +36,7 @@ import {
   snoozeConversation,
   snoozeWindowError,
   wakeConversation,
+  isolated,
 } from "@nexus/db";
 import type { ConversationEvent, TimelineItem } from "@nexus/shared";
 import { completeText } from "@nexus/agents";
@@ -124,12 +125,13 @@ function iso(value: string | Date): string {
 }
 
 async function buildTimeline(conversationId: string): Promise<TimelineItem[]> {
-  const [events, custody, calls] = await Promise.all([
-    listConversationEvents(conversationId).catch(() => [] as ConversationEvent[]),
-    listCustody(conversationId, 100).catch(() => [] as CustodyEvent[]),
-    listCallLogs(conversationId).catch(() => [] as CallLog[]),
-  ]);
-  const names = await resolveActorNames(custody.map((ev) => ev.actor ?? "")).catch(
+  // One after another, each isolated (caught-error audit, 3 Nov 2026): side by
+  // side on one connection, a failed read made every read queued after it fail
+  // too, and a savepoint cannot contain a query running beside it.
+  const events = await isolated(() => listConversationEvents(conversationId)).catch(() => [] as ConversationEvent[]);
+  const custody = await isolated(() => listCustody(conversationId, 100)).catch(() => [] as CustodyEvent[]);
+  const calls = await isolated(() => listCallLogs(conversationId)).catch(() => [] as CallLog[]);
+  const names = await isolated(() => resolveActorNames(custody.map((ev) => ev.actor ?? ""))).catch(
     () => new Map<string, string>()
   );
 
@@ -154,10 +156,10 @@ async function buildTimeline(conversationId: string): Promise<TimelineItem[]> {
 
 conversationsRoute.get("/:id/messages", async (c) => {
   const conversationId = c.req.param("id");
-  const [messages, timeline] = await Promise.all([
-    getMessagesForConversation(conversationId),
-    buildTimeline(conversationId),
-  ]);
+  // In turn, not side by side: the timeline's reads are isolated, and a
+  // savepoint cannot contain a query running beside it (3 Nov 2026).
+  const messages = await getMessagesForConversation(conversationId);
+  const timeline = await buildTimeline(conversationId);
   return c.json({ messages, timeline });
 });
 
@@ -725,7 +727,8 @@ conversationsRoute.get("/:id/details", async (c) => {
   // OWNER's roster, so on a routed chat the picker listed the wrong business's
   // people. Names still resolve from both rosters, so a collaborator added
   // before this fix keeps a name rather than turning into a mystery id.
-  const routing = await getConversationRouting(conversationId).catch(() => null);
+  // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+  const routing = await isolated(() => getConversationRouting(conversationId)).catch(() => null);
   const servingOrgId = routing?.routedOrganizationId ?? details.organizationId;
   const assignableTeam = (await listOrgStaffNames(servingOrgId))
     .filter((e) => e.isActive)
@@ -758,7 +761,8 @@ conversationsRoute.patch("/:id/collaborators", async (c) => {
   if (!details) return c.json({ error: "Conversation not found" }, 404);
 
   // The serving business's active staff — the same set the details panel offers.
-  const routing = await getConversationRouting(conversationId).catch(() => null);
+  // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+  const routing = await isolated(() => getConversationRouting(conversationId)).catch(() => null);
   const roster = await listOrgStaffNames(routing?.routedOrganizationId ?? details.organizationId);
   const active = new Map(roster.filter((e) => e.isActive).map((e) => [e.id, e.name]));
   const seen = new Set<string>();

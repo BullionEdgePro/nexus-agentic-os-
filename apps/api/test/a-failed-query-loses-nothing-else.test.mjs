@@ -114,6 +114,60 @@ test("the reply job's helpers outside it contain their caught calls too", () => 
   assert.match(agents("procedure-recall.ts"), /await isolated\(\(\) => getSharedGuidance\(\)\)/);
 });
 
+// The request paths (caught-error audit, 3 Nov 2026): a caught read or best-effort
+// write inside a request's one transaction left the rest of the request refused --
+// a quick send's records lost, an assignment not saved, a page answering 500.
+test("every caught database call on a request path is contained", () => {
+  const src = (...p) => source("apps", "api", "src", ...p);
+  const expect = {
+    "lib/actor.ts": [/isolated\(\(\) => findEmployeeById\(employeeId\)\)\.catch/, /isolated\(\(\) => findAdminById\(adminId\)\)\.catch/],
+    "routes/employees.ts": [/isolated\(\(\) => getConversationRouting\(conversationId\)\)/],
+    "routes/my-campaigns.ts": [/isolated\(\(\) => dailyReachUsed\(/],
+    "routes/team-chat.ts": [/isolated\(\(\) => getConversationRouting\(shareId\)\)\.catch/],
+    "routes/tasks.ts": [/isolated\(\(\) => getConversationRouting\(conversationId\)\)\.catch/],
+    "routes/connections.ts": [
+      /isolated\(\(\) =>\s*withTenant\(owner\.organizationId, \(\) =>\s*recordSync\(owner\.organizationId, owner\.employeeId, "tiktok", null\)/,
+      /withRecovery\(\(\) => runEmailSync\(owner, token\.accessToken\)\)/,
+    ],
+    "services/email-sync.ts": [/isolated\(\(\) =>\s*withTenant\(owner\.organizationId, \(\) =>\s*refreshStoredAccessToken\(/],
+    "services/quality-rollup.ts": [
+      /isolated\(\(\) => withTenant\(organization\.id, \(\) => rollUpQualityDay\(organization\.id, day\)\)\)/,
+      /isolated\(\(\) => withTenant\(organization\.id, \(\) => rollUpProcedureOutcomes\(organization\.id\)\)\)/,
+      /isolated\(\(\) => rollUpSharedPatterns\(\)\)/,
+    ],
+    "routes/operators.ts": [/const heartbeats = await isolated\(\(\) => listJobHeartbeats\(\)\)\.catch\(\(\) => \[\]\)/, /isolated\(\(\) => conversationViewers\(subjectId\)\)/],
+    "routes/hq.ts": [/isolated\(\(\) =>\s*withTenant\(business\.id, \(\) => listConnections\(business\.id, null\)\)/],
+    "routes/admin-bulk.ts": [/const usedToday = await isolated\(\(\) => dailyReachUsed\(number\.phoneNumberId\)\)\.catch\(\(\) => null\)/],
+  };
+  for (const [file, shapes] of Object.entries(expect)) {
+    const text = src(...file.split("/"));
+    for (const shape of shapes) assert.match(text, shape, `${file}: ${shape}`);
+  }
+  const connections = src("routes", "connections.ts");
+  assert.equal(
+    (connections.match(/isolated\(\(\) =>\s*withTenant\(owner\.organizationId, \(\) =>\s*recordSync\(owner\.organizationId, owner\.employeeId, "gmail", null\)/g) ?? []).length,
+    2,
+    "both Gmail success marks are contained"
+  );
+  const conversations = src("routes", "conversations.ts");
+  assert.equal((conversations.match(/isolated\(\(\) => getConversationRouting\(conversationId\)\)\.catch\(\(\) => null\)/g) ?? []).length, 2);
+  // Side by side on one connection a savepoint cannot contain a failed read:
+  // the timeline's reads, and the messages beside them, run one after another.
+  const timeline = conversations.slice(conversations.indexOf("async function buildTimeline"), conversations.indexOf("conversationsRoute.get(\"/:id/messages\""));
+  assert.doesNotMatch(timeline, /Promise\.all/);
+  for (const read of ["listConversationEvents", "listCustody", "listCallLogs", "resolveActorNames"]) {
+    assert.match(timeline, new RegExp(`isolated\\(\\(\\) => ${read}\\(`), read);
+  }
+  assert.match(conversations, /const messages = await getMessagesForConversation\(conversationId\);\s*const timeline = await buildTimeline\(conversationId\);/);
+  const hq = src("routes", "hq.ts");
+  assert.doesNotMatch(hq.slice(hq.indexOf("await Promise.all(["), hq.indexOf("]);", hq.indexOf("await Promise.all(["))), /listConnections/);
+  const handover = source("packages", "agents", "src", "handover.ts");
+  assert.match(handover, /isolated\(\(\) => listOpenTasksForConversation\(conversationId\)\)/);
+  assert.match(handover, /isolated\(\(\) => loadRecentHistory\(conversationId, 30\)\)/);
+  const organizations = source("packages", "db", "src", "organizations.ts");
+  assert.match(organizations, /isolated\(\(\) =>\s*getPool\(\)\.query<\{ id: string; whatsapp_display_number/);
+});
+
 test("one business's failed read leaves the others on the not-reported list", () => {
   const operators = source("apps", "api", "src", "services", "operators.ts");
   assert.match(operators, /isolated\(\(\) =>\s*withTenant\(organization\.id, \(\) => unansweredButNotReportedFor\(organization\.id\)\)/);

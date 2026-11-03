@@ -28,6 +28,7 @@ import {
   type TeamMessage,
   type TeamThread,
   type TeamViewer,
+  isolated,
 } from "@nexus/db";
 import { resolvePresence } from "@nexus/employees";
 import type { Employee } from "@nexus/shared";
@@ -275,7 +276,7 @@ teamChatRoute.post("/threads/:id/messages", async (c) => {
       return c.json({ error: "A customer chat can be handed over only in a direct chat." }, 400);
     }
     const conversation = /^[0-9a-f-]{36}$/i.test(shareId) ? await findConversationById(shareId) : null;
-    const routing = conversation ? await getConversationRouting(shareId).catch(() => null) : null;
+    const routing = conversation ? await isolated(() => getConversationRouting(shareId)).catch(() => null) : null;
     const serving = routing?.routedOrganizationId ?? conversation?.organizationId ?? null;
     const viewers = conversation ? await conversationViewers(shareId) : null;
     if (!conversation || serving !== thread.organizationId || !viewers || !conversationVisibleTo(viewers, who.viewer.employeeId)) {

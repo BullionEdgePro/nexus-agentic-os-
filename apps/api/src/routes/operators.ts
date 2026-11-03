@@ -14,6 +14,7 @@ import {
   dismissalHorizon,
   conversationViewers,
   conversationVisibleTo,
+  isolated,
 } from "@nexus/db";
 import { isJobStalled } from "@nexus/shared";
 import { OPERATORS, unansweredButNotReported } from "../services/operators.js";
@@ -75,14 +76,16 @@ operatorsRoute.get("/", async (c) => {
     }
   }
 
-  const [allFindings, businessCounts, lastSeen, heartbeats] = await Promise.all([
+  const [allFindings, businessCounts, lastSeen] = await Promise.all([
     listOpenFindings(organizationId),
     countOpenFindings(organizationId),
     lastSeenByOperator(organizationId),
-    // Migration 050. Not tenant-scoped and correctly so — the sweep runs across
-    // every business at once, so its liveness is one fact rather than five.
-    listJobHeartbeats().catch(() => []),
   ]);
+  // Migration 050. Not tenant-scoped and correctly so — the sweep runs across
+  // every business at once, so its liveness is one fact rather than five.
+  // After the Promise.all and isolated (3 Nov 2026): side by side on one
+  // connection a savepoint cannot contain it, and its failure refused the rest.
+  const heartbeats = await isolated(() => listJobHeartbeats()).catch(() => []);
 
   // WHEN THE SWEEP LAST RAN, because the page was asserting it.
   //
@@ -107,7 +110,8 @@ operatorsRoute.get("/", async (c) => {
     const kept: typeof allFindings = [];
     for (const finding of allFindings) {
       if (finding.subjectKind === "conversation" && finding.subjectId) {
-        const viewers = await conversationViewers(finding.subjectId).catch(() => null);
+        const subjectId = finding.subjectId;
+        const viewers = await isolated(() => conversationViewers(subjectId)).catch(() => null);
         if (viewers && conversationVisibleTo(viewers, scope.employeeId)) {
           // In the staff member's words: what to do, not where the platform
           // looked (24 Oct 2026 — "check the worker and the webhook" is the

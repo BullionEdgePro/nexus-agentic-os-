@@ -42,6 +42,7 @@ import {
   pauseBroadcastIfFailing,
   withAllTenants as withEveryTenant,
   withSavepoint,
+  isolated,
 } from "@nexus/db";
 import { looksLikeAnOptOut } from "@nexus/agents";
 import { bounceAddresses } from "../lib/campaign-email.js";
@@ -110,13 +111,10 @@ export async function gmailToken(
   // as the latter and replaces these sentences with "sign in again" (12 Oct 2026).
   try {
     const renewed = await refreshGoogleToken(stored.refreshToken);
-    await withTenant(owner.organizationId, () =>
-      refreshStoredAccessToken(
-        owner.organizationId,
-        owner.employeeId,
-        "gmail",
-        renewed.accessToken,
-        renewed.expiresAt
+    // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+    await isolated(() =>
+      withTenant(owner.organizationId, () =>
+        refreshStoredAccessToken(owner.organizationId, owner.employeeId, "gmail", renewed.accessToken, renewed.expiresAt)
       )
     );
     return { accessToken: renewed.accessToken, scopes: stored.scopes };

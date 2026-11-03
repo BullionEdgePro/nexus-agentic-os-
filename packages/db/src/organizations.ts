@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, isolated } from "./client.js";
 import type { Organization, SocialAccount } from "@nexus/shared";
 
 interface OrganizationRow {
@@ -134,8 +134,11 @@ export async function findNumberOwner(phoneNumberId: string): Promise<Organizati
  */
 export async function getDisplayNumbers(): Promise<Map<string, string>> {
   try {
-    const { rows } = await getPool().query<{ id: string; whatsapp_display_number: string | null }>(
-      `select id, whatsapp_display_number from organizations where is_active = true`
+    // Isolated (3 Nov 2026): GET /api/my/link reads more after this.
+    const { rows } = await isolated(() =>
+      getPool().query<{ id: string; whatsapp_display_number: string | null }>(
+        `select id, whatsapp_display_number from organizations where is_active = true`
+      )
     );
     return new Map(
       rows

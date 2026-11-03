@@ -22,6 +22,7 @@ import {
   disconnectCalendar,
   recordAssignmentEvent,
   withSavepoint,
+  isolated,
 } from "@nexus/db";
 import { randomInt } from "node:crypto";
 import { campaignReadiness } from "../services/campaign-readiness.js";
@@ -1282,7 +1283,8 @@ async function resolveServingOrganizationId(
   ownerOrganizationId: string
 ): Promise<string> {
   try {
-    const routing = await getConversationRouting(conversationId);
+    // Isolated (caught-error audit, 3 Nov 2026): failing here must not leave the request's transaction refusing everything after it.
+    const routing = await isolated(() => getConversationRouting(conversationId));
     return routing?.routedOrganizationId ?? ownerOrganizationId;
   } catch (err) {
     logger.error({ conversationId, err }, "Routing lookup failed — falling back to the owning business");
