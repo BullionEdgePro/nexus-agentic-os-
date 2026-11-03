@@ -179,11 +179,12 @@ test("a long lead source never widens its row", () => {
 // ---- Task 7: the page, the sidebar item and the Business HQ link -------------------------------
 
 test("the page loads the audit for its period and ignores answers that arrive late", () => {
-  const P = read("app/deck/workflow/page.tsx");
+  // The page and its panel (panel.tsx, shared with Business HQ since 3 Nov 2026).
+  const P = read("app/deck/workflow/page.tsx") + read("app/deck/workflow/panel.tsx");
   assert.match(P, /getWorkflowAudit\(/);
   assert.match(P, /const asked = \+\+requestId\.current;/);
   assert.match(P, /if \(asked !== requestId\.current\) return;/);
-  assert.match(P, /The audit could not be loaded\./);
+  assert.match(P, /The workflow could not be loaded\./);
   assert.match(P, /<NoWorkflow \/>/);
   assert.match(P, /Loading…/);
   assert.match(P, /const PERIODS: AuditDays\[\] = \[7, 30, 90\];/);
@@ -201,7 +202,8 @@ test("staff see the item only when their business has a workflow; admins reach i
   assert.match(read("app/console-shell.tsx"), /<RailLinks role=\{role\} mySlug=\{me\?\.organizationSlug \?\? null\} \/>/);
   // The search palette offers the same doors as the rail, so it hides the item the same way.
   assert.match(read("app/command-palette.tsx"), /needsWorkflow[\s\S]{0,120}workflowFor\(/);
-  assert.match(read("app/deck/hq/[slug]/tabs.tsx"), /workflowFor\([\s\S]{0,200}\/deck\/workflow\?business=/);
+  // Admins reach it as a Workflow tab of its own since 3 Nov 2026, where a link to the page was.
+  assert.match(read("app/deck/hq/[slug]/tabs.tsx"), /export function tabsFor[\s\S]{0,120}workflowFor\(slug\)/);
 });
 
 test("a business with no workflow says so, not an error", () => {
