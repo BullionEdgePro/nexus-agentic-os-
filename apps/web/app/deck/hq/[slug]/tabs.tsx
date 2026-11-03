@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   saveHqProfile,
   saveHqKeyword,
@@ -96,6 +96,26 @@ export function HqBusinessView({
   const tabs = tabsFor(slug);
   // A #workflow link to a business without a workflow opens on Overview.
   const active: HqTab = tabs.some((t) => t.id === tab) ? tab : "overview";
+  const tabsRef = useRef<HTMLElement>(null);
+
+  // On a narrow screen the bar scrolls sideways; keep the chosen tab in sight
+  // (3 Nov 2026: Workflow, last of seven, sat chosen but out of view on a phone).
+  useEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav) return;
+    const keepInSight = () => {
+      const on = nav.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!on) return;
+      const a = on.getBoundingClientRect();
+      const n = nav.getBoundingClientRect();
+      if (a.left < n.left || a.right > n.right) nav.scrollLeft += a.left - n.left - 16;
+    };
+    keepInSight();
+    // On first load the bar may still be settling (styles, fonts): check again as it does.
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(keepInSight);
+    watch?.observe(nav);
+    return () => watch?.disconnect();
+  }, [active]);
   const lastRun = Object.values(data.checks).map((c) => c?.ranAt).filter(Boolean).sort().pop() ?? null;
 
   async function checkNow() {
@@ -125,7 +145,7 @@ export function HqBusinessView({
         {checkMsg ? <p className="hq-vault-msg" role="status">{checkMsg}</p> : null}
       </header>
 
-      <nav className="hq-tabs" role="tablist" aria-label="Business HQ sections">
+      <nav ref={tabsRef} className="hq-tabs" role="tablist" aria-label="Business HQ sections">
         {tabs.map((t) => (
           <button key={t.id} type="button" role="tab" aria-selected={active === t.id} className={active === t.id ? "on" : undefined} onClick={() => onTab(t.id)}>
             {t.label}

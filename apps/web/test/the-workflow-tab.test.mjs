@@ -237,3 +237,16 @@ test("a #workflow link to a business without a workflow opens on Overview", () =
 test("the rail item is called Workflow, and keeps its rules", () => {
   assert.match(read("lib/nav.tsx"), /href: "\/deck\/workflow",\s*label: "Workflow",\s*staffOnly: true,\s*needsWorkflow: true,/);
 });
+
+test("on a narrow screen the chosen tab is scrolled into view", () => {
+  // Seen in the preview (3 Nov 2026): at phone width the tab bar scrolls
+  // sideways, and Workflow -- last of seven -- sat chosen but out of sight.
+  const T = read("app/deck/hq/[slug]/tabs.tsx");
+  assert.match(T, /<nav ref=\{tabsRef\} className="hq-tabs"/);
+  assert.match(T, /if \(a\.left < n\.left \|\| a\.right > n\.right\) nav\.scrollLeft \+= a\.left - n\.left - 16;/);
+  assert.match(T, /\}, \[active\]\);/);
+  // On first load the bar can still be settling (styles, fonts) when the
+  // effect runs -- the preview showed it -- so it checks again as it resizes.
+  assert.match(T, /new ResizeObserver\(keepInSight\)/);
+  assert.match(T, /return \(\) => watch\?\.disconnect\(\);/);
+});
