@@ -116,6 +116,47 @@
 .wf-consent .kit-rows { margin: 0; }
 @media (max-width: 900px) { .wf-compliance { grid-template-columns: minmax(0, 1fr); } }
 
+/* ---- the Pulse (3 Nov 2026, the SFS workflow tab) ------------------------------ */
+/* `wf-vitals`, not `wf-pulse`: that name is the dot travelling along the arrows. */
+
+.wf-vitals-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, .9fr); gap: 14px; }
+.wf-vitals-card { min-width: 0; padding: 14px 16px; border-radius: var(--r); background: var(--paper); box-shadow: var(--lift-sm); }
+.wf-h3 { margin: 0 0 10px; font-size: 13px; font-weight: 650; color: var(--slate); }
+
+.wf-progress + .wf-progress { margin-top: 12px; }
+.wf-progress-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.wf-progress-count { font-weight: 500; color: var(--slate); font-variant-numeric: tabular-nums; }
+.wf-progress-bar { display: flex; gap: 3px; margin-top: 6px; }
+.wf-seg { flex: 1 1 0; min-width: 0; height: 12px; border-radius: 4px; }
+.wf-key { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 3px; vertical-align: -2px; }
+.wf-seg-working { background: var(--st-forest); }
+.wf-seg-partly { background: var(--st-mustard); }
+.wf-seg-idle { box-shadow: inset 0 0 0 2px var(--st-forest); }
+.wf-seg-not_tracked {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--slate) 55%, transparent);
+  background: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--slate) 18%, transparent) 3px 5px);
+}
+.wf-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--slate); }
+
+.wf-stuck { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.wf-stuck li { display: grid; gap: 2px; padding-left: 12px; border-left: 3px solid var(--st-mustard); font-size: 13.5px; }
+.wf-stuck strong { font-weight: 650; color: var(--ink); }
+.wf-stuck a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.wf-stuck span { color: var(--slate); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.wf-stuck .wf-stuck-clear { border-left-color: var(--st-forest); }
+
+.wf-trend-total { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.wf-spark { display: block; width: 100%; height: 40px; margin: 6px 0; }
+.wf-spark polyline { fill: none; stroke: var(--st-forest); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.wf-spark circle { fill: var(--st-forest); }
+.wf-trend-note { margin: 0; font-size: 12.5px; color: var(--slate); }
+
+@media (max-width: 900px) {
+  .wf-vitals-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .wf-vitals-grid > :first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) { .wf-vitals-grid { grid-template-columns: minmax(0, 1fr); } }
+
 /* ---- a phone: each lane a list, branches indented in pairs -------------------- */
 
 @media (max-width: 760px) {

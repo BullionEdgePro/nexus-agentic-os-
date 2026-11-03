@@ -1,0 +1,143 @@
+/**
+ * The SFS workflow as a tab of its own (3 Nov 2026): the same live workflow in
+ * Business HQ and on /deck/workflow, reliable (loading, Try again, Updated and
+ * Refresh, a quiet period said in words) and with a Pulse on top -- progress per
+ * lane, where it is stuck, the lead trend -- built only from the audit's figures.
+ * Spec: docs/superpowers/specs/2026-11-03-sfs-workflow-tab-design.md
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import { REAL_ESTATE_WORKFLOW, stepStatus } from "@nexus/shared";
+import { laneProgress, whereStuck, leadTrend } from "@/lib/workflow/pulse";
+import { WorkflowPulse } from "@/app/deck/workflow/pulse";
+
+const AUDIT = {
+  business: { slug: "sfs-international", name: "SFS International", timezone: "Asia/Dubai" },
+  period: { days: 30, from: "2026-10-05", today: "2026-11-03", bucket: "day" },
+  evidence: {
+    contacts: { total: 154, added: 142, withSource: 97, optedOut: 3, notACustomer: 5, emailOptedOut: 1 },
+    outreach: { sent: 0, delivered: 0, failed: 0 },
+    calls: { answered: 0, noAnswer: 0, voicemail: 0, busy: 0, failed: 0 },
+    reengagement: { sent: 0, replied: 0, optedOut: 0, inCooldown: 0 },
+    leads: { total: 88, pitches: 11, byChannel: { whatsapp: 80, email: 8 }, bySource: [] },
+    qualifier: { scored: 59, hot: 12 },
+    replies: { medianMs: 120000, byAi: 40, byPerson: 21, unanswered: 7 },
+    viewings: { booked: 6, held: 4, noShow: 1, cancelled: 1 },
+    won: 2,
+    followUps: { created: 9, done: 5, openNow: 4, overdueNow: 2 },
+  },
+  series: {
+    leads: [
+      { bucket: "2026-11-01", count: 3 },
+      { bucket: "2026-11-02", count: 9 },
+      { bucket: "2026-11-03", count: 4 },
+    ],
+    replyMedian: [],
+    quality: [],
+    viewings: [],
+  },
+  funnel: { leads: 88, scored: 59, hot: 12, booked: 6, held: 4, won: 2 },
+};
+
+const zeroed = (value) =>
+  typeof value === "number" ? 0 : Array.isArray(value) ? [] : value && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, zeroed(v)]))
+    : value;
+const QUIET = { ...AUDIT, evidence: zeroed(AUDIT.evidence), funnel: zeroed(AUDIT.funnel), series: { ...AUDIT.series, leads: AUDIT.series.leads.map((b) => ({ ...b, count: 0 })) } };
+
+// ---------------------------------------------------------------------------
+// The Pulse
+// ---------------------------------------------------------------------------
+
+test("each lane's progress is its steps' own statuses, in order", () => {
+  const lanes = laneProgress(REAL_ESTATE_WORKFLOW, AUDIT.evidence);
+  assert.deepEqual(lanes.map((l) => l.lane), ["supply", "demand"]);
+  for (const lane of lanes) {
+    const steps = REAL_ESTATE_WORKFLOW.steps.filter((s) => s.lane === lane.lane);
+    assert.deepEqual(lane.steps.map((s) => s.id), steps.map((s) => s.id));
+    assert.deepEqual(lane.steps.map((s) => s.status), steps.map((s) => stepStatus(s, AUDIT.evidence)));
+    assert.equal(lane.total, steps.length);
+    assert.equal(lane.working, steps.filter((s) => stepStatus(s, AUDIT.evidence) === "working").length);
+  }
+});
+
+test("where it is stuck names the funnel's steepest drop, from its own figures", () => {
+  const drop = whereStuck(REAL_ESTATE_WORKFLOW, AUDIT).find((i) => i.kind === "drop");
+  // 88→59 loses a third, 59→12 four fifths, 12→6 half: the steepest is scored to hot.
+  assert.ok(drop, "no drop named");
+  assert.match(drop.title, /scored/i);
+  assert.match(drop.title, /hot/i);
+  assert.equal(drop.detail, "59 → 12");
+});
+
+test("a funnel stage of zero is never the start of a drop", () => {
+  const audit = { ...AUDIT, funnel: { leads: 0, scored: 0, hot: 0, booked: 0, held: 0, won: 0 } };
+  assert.equal(whereStuck(REAL_ESTATE_WORKFLOW, audit).find((i) => i.kind === "drop"), undefined);
+});
+
+test("built steps that sat idle are named", () => {
+  const idle = REAL_ESTATE_WORKFLOW.steps.filter((s) => stepStatus(s, AUDIT.evidence) === "idle").map((s) => s.name);
+  const item = whereStuck(REAL_ESTATE_WORKFLOW, AUDIT).find((i) => i.kind === "idle");
+  if (idle.length === 0) {
+    assert.equal(item, undefined);
+  } else {
+    assert.ok(item, "idle steps exist and are not named");
+    for (const name of idle) assert.ok(item.detail.includes(name), `${name} missing`);
+  }
+});
+
+test("waiting chats and past-due follow-ups appear only when there are some", () => {
+  const items = whereStuck(REAL_ESTATE_WORKFLOW, AUDIT);
+  assert.match(items.find((i) => i.kind === "unanswered")?.detail ?? "", /\b7\b/);
+  assert.equal(items.find((i) => i.kind === "unanswered")?.href, "/inbox");
+  assert.match(items.find((i) => i.kind === "overdue")?.detail ?? "", /\b2\b/);
+  assert.equal(items.find((i) => i.kind === "overdue")?.href, "/deck/tasks");
+  const calm = { ...AUDIT, evidence: { ...AUDIT.evidence, replies: { ...AUDIT.evidence.replies, unanswered: 0 }, followUps: { ...AUDIT.evidence.followUps, overdueNow: 0 } } };
+  const kinds = whereStuck(REAL_ESTATE_WORKFLOW, calm).map((i) => i.kind);
+  assert.ok(!kinds.includes("unanswered") && !kinds.includes("overdue"));
+});
+
+test("with nothing stuck it says so for the period", () => {
+  const busyEverywhere = (step) => ({ ...step, coverage: step.coverage === "built" ? "built" : step.coverage, activity: step.activity ? () => 1 : null });
+  const workflow = { ...REAL_ESTATE_WORKFLOW, steps: REAL_ESTATE_WORKFLOW.steps.map(busyEverywhere) };
+  const flat = { ...AUDIT, funnel: { leads: 5, scored: 5, hot: 5, booked: 5, held: 5, won: 5 }, evidence: { ...AUDIT.evidence, replies: { ...AUDIT.evidence.replies, unanswered: 0 }, followUps: { ...AUDIT.evidence.followUps, overdueNow: 0 } } };
+  assert.deepEqual(whereStuck(workflow, flat).map((i) => [i.kind, i.title]), [["clear", "Nothing is stuck in the last 30 days"]]);
+});
+
+test("the lead trend is the period's own total and busiest day", () => {
+  assert.deepEqual(leadTrend(AUDIT.series, AUDIT.period.bucket), {
+    total: 16,
+    peak: { bucket: "2026-11-02", count: 9 },
+    points: [3, 9, 4],
+    unit: "day",
+  });
+});
+
+test("a period with no leads has a flat trend and no busiest claim", () => {
+  const trend = leadTrend(QUIET.series, "week");
+  assert.equal(trend.total, 0);
+  assert.equal(trend.peak, null);
+  assert.equal(trend.unit, "week");
+  const html = renderToStaticMarkup(createElement(WorkflowPulse, { workflow: REAL_ESTATE_WORKFLOW, audit: QUIET }));
+  assert.doesNotMatch(html, /NaN|Infinity/);
+  assert.doesNotMatch(html, /Busiest/);
+});
+
+test("the pulse draws progress, the stuck list and the trend, with no number of its own", () => {
+  const html = renderToStaticMarkup(createElement(WorkflowPulse, { workflow: REAL_ESTATE_WORKFLOW, audit: AUDIT }));
+  for (const lane of laneProgress(REAL_ESTATE_WORKFLOW, AUDIT.evidence)) {
+    assert.ok(html.includes(`${lane.working} of ${lane.total} working`), `${lane.lane} progress missing`);
+    assert.equal((html.match(new RegExp(`data-lane="${lane.lane}"[^>]*>`, "g")) ?? []).length, 1);
+  }
+  assert.equal((html.match(/class="wf-seg /g) ?? []).length, REAL_ESTATE_WORKFLOW.steps.length);
+  assert.ok(html.includes("59 → 12"));
+  assert.ok(html.includes("Busiest day"));
+  assert.match(html, /<svg[^>]*class="wf-spark"/);
+  // Every number the stuck list and the trend print is one the audit holds,
+  // or the trend's own sum of the series.
+  const allowed = new Set(["16", "30", ...JSON.stringify(AUDIT).match(/\d+/g)]);
+  const printed = html.replace(/<[^>]+>/g, " ").match(/\d+/g) ?? [];
+  for (const n of printed) assert.ok(allowed.has(n) || laneProgress(REAL_ESTATE_WORKFLOW, AUDIT.evidence).some((l) => String(l.total) === n || String(l.working) === n), `${n} is not from the audit`);
+});
