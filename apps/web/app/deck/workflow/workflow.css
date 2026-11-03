@@ -264,8 +264,11 @@
 .wf-board-hot { flex: 1 1 260px; min-width: 0; }
 .wf-board-hot ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .wf-board-hot li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
-.wf-board-lane { grid-template-columns: repeat(var(--cols, 6), minmax(210px, 1fr)); overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 6px; }
+.wf-board-lane { grid-template-columns: repeat(var(--cols), minmax(210px, 1fr)); overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 6px; }
 .wf-board-card { display: flex; flex-direction: column; align-items: stretch; gap: 3px; text-align: left; }
+/* A card says the whole reference and the whole price: the kit cuts its lines to one (preview, 3 Nov 2026). */
+.wf-board-card .kit-card-title,
+.wf-board-card .kit-card-sub { white-space: normal; overflow-wrap: anywhere; }
 .wf-board-missing { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--slate); vertical-align: middle; }
 .wf-board-badge { align-self: flex-start; margin-top: 4px; padding: 2px 8px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; }
 .wf-board-expired { background: var(--warn); color: var(--paper); }
@@ -275,12 +278,15 @@
 .wf-board-move { display: flex; flex-direction: column; gap: 6px; }
 .wf-board-move-label { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--slate); }
 .wf-board-move-row { display: flex; flex-wrap: wrap; gap: 6px; }
+/* A step or closing the rules shut is shown, dimmed, with the reason on hover (preview, 3 Nov 2026). */
+.wf-board-move .kit-pill:disabled,
+.wf-board-detail .kit-pill:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 760px) {
   .wf-board-head { grid-template-columns: minmax(0, 1fr); }
   .wf-board-figs { grid-template-columns: repeat(2, auto); }
   .wf-board-figs dt:nth-of-type(n + 3) { grid-row: 3; }
   .wf-board-figs dd:nth-of-type(n + 3) { grid-row: 4; }
-  .wf-board-lane { grid-template-columns: repeat(var(--cols, 6), minmax(78vw, 1fr)); scroll-snap-type: x mandatory; }
+  .wf-board-lane { grid-template-columns: repeat(var(--cols), minmax(78vw, 1fr)); scroll-snap-type: x mandatory; }
   .wf-board-lane > .kit-col { scroll-snap-align: start; }
 }
 /* The card window and adding (workflow board, 3 Nov 2026). */

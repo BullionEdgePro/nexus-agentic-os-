@@ -58,9 +58,9 @@ export default function WorkflowPage() {
           <h1>Workflow{slug ? ` · ${nameOf(slug)}` : ""}</h1>
         </header>
         <p className="act-lede">
-          The workflow drawn for this business, step by step, against what Nexus actually recorded — then
-          the period&rsquo;s own figures. Nothing here is typed in: a step Nexus does not track yet says so,
-          with what tracking it would need.
+          The workflow drawn for this business, step by step, against what Nexus actually recorded —
+          conversations, scores, viewings, and the units and deals your team keeps on the Board — then the
+          period&rsquo;s own figures. A step Nexus does not track yet says so, with what tracking it would need.
         </p>
 
         {isOperator && BUSINESSES_WITH_WORKFLOW.length > 0 ? (

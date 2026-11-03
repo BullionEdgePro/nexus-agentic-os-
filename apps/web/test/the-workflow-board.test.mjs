@@ -283,3 +283,21 @@ test("money is typed the way people type it", () => {
   assert.ok(Number.isNaN(toAed("85k")));
   assert.ok(Number.isNaN(toAed("-5")));
 });
+
+// ---- Found in the preview (3 Nov 2026) ----------------------------------------------------------
+
+test("the page no longer says nothing is typed in: staff record units and deals on the board", () => {
+  const page = read("app/deck/workflow/page.tsx");
+  assert.doesNotMatch(page, /Nothing here is typed in/);
+  assert.match(page, /the units and deals your team keeps on the Board/);
+});
+
+test("a card's words wrap instead of being cut off", () => {
+  const css = read("app/deck/workflow/workflow.css");
+  assert.match(css, /\.wf-board-card \.kit-card-title,\s*\.wf-board-card \.kit-card-sub \{[^}]*white-space: normal/);
+});
+
+test("a shut move or closing looks shut, not only unclickable", () => {
+  const css = read("app/deck/workflow/workflow.css");
+  assert.match(css, /\.wf-board-move \.kit-pill:disabled,\s*\.wf-board-detail \.kit-pill:disabled \{[^}]*opacity: \.45;[^}]*cursor: not-allowed/);
+});
