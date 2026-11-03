@@ -10,6 +10,7 @@ import { isHiddenTemplate } from "@nexus/shared";
 import { listMetaTemplates, createMetaTemplate } from "../lib/whatsapp-client.js";
 import { missingCampaignTemplates } from "../lib/campaign-templates.js";
 import { logger } from "../lib/logger.js";
+import { releaseApprovedCampaigns } from "./campaign-control.js";
 
 export interface SyncResult {
   organizationSlug: string;
@@ -125,6 +126,14 @@ export async function syncAllTemplates(): Promise<SyncResult[]> {
   }
 
   results.push(...(await syncStaffNumberTemplates()));
+
+  // Approvals this sync found send the campaigns waiting for them (3 Nov 2026).
+  // One business failing must not stop the rest, as above.
+  for (const organization of organizations) {
+    await releaseApprovedCampaigns(organization.id).catch((err) =>
+      logger.error({ organization: organization.slug, err }, "Releasing campaigns waiting for approval failed")
+    );
+  }
   return results;
 }
 

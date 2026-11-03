@@ -73,6 +73,14 @@ export async function processBroadcastSendJob(job: Job<BroadcastSendJob>): Promi
       );
     }
 
+    // NOT YET (3 Nov 2026). A campaign waiting for WhatsApp to approve its
+    // message is `scheduled`; release moves it to `sending` in the same
+    // transaction that queues its jobs, so a job that runs first sees it still
+    // waiting. Thrown, the queue tries again once the release has committed.
+    if (current === "scheduled") {
+      throw new Error(`Campaign ${broadcastId} is still waiting for WhatsApp to approve its message; nothing was sent`);
+    }
+
     // NOBODY TO SEND TO (26 Oct 2026). An empty number used to go to Meta, which
     // answered "The parameter to is required" fourteen times on 22 Oct. The
     // audience already excludes these; this is the last line if it ever doesn't.

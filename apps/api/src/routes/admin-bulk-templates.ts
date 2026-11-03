@@ -1,8 +1,9 @@
 import { Hono } from "hono";
-import { connectionSecret, listBroadcastTemplates, upsertTemplateFromMeta, withTenant } from "@nexus/db";
+import { connectionSecret, isolated, listBroadcastTemplates, upsertTemplateFromMeta, withTenant } from "@nexus/db";
 import { bulkTemplateName, staffTemplateBody } from "@nexus/shared";
 import { createMetaTemplate, readTemplateReviews } from "../lib/whatsapp-client.js";
 import { syncStaffAccountTemplates, syncTemplatesForOrganization } from "../services/template-sync.js";
+import { releaseApprovedCampaigns } from "../services/campaign-control.js";
 import { pendingFrom } from "../lib/pending-templates.js";
 import { actorOf } from "../lib/actor.js";
 import { logger } from "../lib/logger.js";
@@ -136,6 +137,12 @@ adminBulkTemplatesRoute.post("/:slug/number/:phoneNumberId/templates/refresh", a
     } else {
       await syncTemplatesForOrganization({ id: organization.id, slug: organization.slug, whatsappBusinessAccountId: wabaId });
     }
+    // An approval this check found sends the campaigns waiting for it (3 Nov
+    // 2026). Isolated, and only logged on failure: it must not turn the check
+    // into "WhatsApp is unreachable".
+    await isolated(() => releaseApprovedCampaigns(organization.id)).catch((err) =>
+      logger.error({ organization: organization.slug, err }, "Releasing campaigns waiting for approval failed")
+    );
     const reviews = await readTemplateReviews(wabaId, token);
     const rows = await withTenant(organization.id, () => listBroadcastTemplates(organization.id, wabaId));
     return c.json({ pending: pendingFrom(rows, organization.slug, reviews), templates: await templatesFor(organization, wabaId) });

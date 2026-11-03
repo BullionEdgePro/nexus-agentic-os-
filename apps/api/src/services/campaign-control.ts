@@ -1,5 +1,6 @@
 import {
   campaignForControl,
+  campaignsWaitingForApproval,
   getBroadcastTemplate,
   pendingRecipients,
   setBroadcastStatusIf,
@@ -57,32 +58,84 @@ export async function resumeCampaign(broadcastId: string): Promise<ControlResult
       }))
     );
   } else {
-    const template = await withTenant(orgId, () => getBroadcastTemplate(campaign.templateId!));
-    if (!template) return { error: "The message this campaign used no longer exists.", status: 422 };
-    const queue = getBroadcastSendQueue();
-    for (const p of pending) {
-      if (!p.waId?.trim()) {
-        await withTenant(orgId, () => updateBroadcastRecipientStatus(p.id, "failed", null, NO_WHATSAPP_NUMBER));
-        continue;
-      }
-      const name = p.displayName?.trim() || "there";
-      await queue.add("send", {
-        broadcastId,
-        recipientId: p.id,
-        contactWaId: p.waId,
-        phoneNumberId: campaign.fromPhoneNumberId!,
-        templateName: template.metaTemplateName,
-        templateLanguage: template.language,
-        templateParams:
-          template.bodyParamCount > 0
-            ? Array.from({ length: template.bodyParamCount }, (_, i) => (i === 0 ? name : "-"))
-            : [],
-      });
-    }
+    const queued = await queueWhatsAppRecipients(orgId, broadcastId, campaign.templateId!, campaign.fromPhoneNumberId!, pending);
+    if (!queued) return { error: "The message this campaign used no longer exists.", status: 422 };
   }
 
   logger.info({ broadcastId, channel: campaign.channel, requeued: pending.length }, "Campaign resumed");
   return { ok: true, requeued: pending.length };
+}
+
+/**
+ * Queue a WhatsApp campaign's untried people, with the first name in the
+ * message's first blank. Resume and release share it. False when the message
+ * the campaign uses no longer exists.
+ */
+async function queueWhatsAppRecipients(
+  orgId: string,
+  broadcastId: string,
+  templateId: string,
+  fromPhoneNumberId: string,
+  pending: Awaited<ReturnType<typeof pendingRecipients>>
+): Promise<boolean> {
+  const template = await withTenant(orgId, () => getBroadcastTemplate(templateId));
+  if (!template) return false;
+  const queue = getBroadcastSendQueue();
+  for (const p of pending) {
+    if (!p.waId?.trim()) {
+      await withTenant(orgId, () => updateBroadcastRecipientStatus(p.id, "failed", null, NO_WHATSAPP_NUMBER));
+      continue;
+    }
+    const name = p.displayName?.trim().split(/\s+/)[0] || "there";
+    await queue.add("send", {
+      broadcastId,
+      recipientId: p.id,
+      contactWaId: p.waId,
+      phoneNumberId: fromPhoneNumberId,
+      templateName: template.metaTemplateName,
+      templateLanguage: template.language,
+      templateParams:
+        template.bodyParamCount > 0
+          ? Array.from({ length: template.bodyParamCount }, (_, i) => (i === 0 ? name : "-"))
+          : [],
+    });
+  }
+  return true;
+}
+
+/** WhatsApp's verdicts after which a message can never be sent as it is. */
+const NEVER_APPROVED = new Set(["REJECTED", "DISABLED", "PAUSED", "DELETED"]);
+
+/**
+ * SEND WHEN APPROVED (3 Nov 2026). An admin's own message for customers who
+ * have not written in 24 hours must be an approved template, and WhatsApp takes
+ * minutes to a day to approve one; the admin used to have to come back and send
+ * it. A campaign can now wait for its message as `scheduled`: this sends the
+ * waiting ones whose message is approved, and fails the ones WhatsApp turned
+ * down. Run after every template sync and on "Check again". Claiming the status
+ * first means two runs at once can never both send a campaign.
+ */
+export async function releaseApprovedCampaigns(organizationId: string): Promise<{ released: number; failed: number }> {
+  const waiting = await withTenant(organizationId, () => campaignsWaitingForApproval(organizationId));
+  let released = 0;
+  let failed = 0;
+  for (const campaign of waiting) {
+    if (campaign.templateApproved) {
+      if (!campaign.fromPhoneNumberId) continue;
+      const pending = await withTenant(organizationId, () => pendingRecipients(campaign.id));
+      // Claimed first: a cancel, or another release, that got there already wins.
+      if (!(await withTenant(organizationId, () => setBroadcastStatusIf(campaign.id, ["scheduled"], "sending")))) continue;
+      await queueWhatsAppRecipients(organizationId, campaign.id, campaign.templateId, campaign.fromPhoneNumberId, pending);
+      released += 1;
+      logger.info({ broadcastId: campaign.id, recipients: pending.length }, "Campaign released: WhatsApp approved its message");
+    } else if (NEVER_APPROVED.has(campaign.templateStatus ?? "")) {
+      if (await withTenant(organizationId, () => setBroadcastStatusIf(campaign.id, ["scheduled"], "failed"))) {
+        failed += 1;
+        logger.warn({ broadcastId: campaign.id, status: campaign.templateStatus }, "Campaign failed: WhatsApp did not approve its message");
+      }
+    }
+  }
+  return { released, failed };
 }
 
 /** Close a campaign for good. Its untried people stay pending and read as "not sent". */
