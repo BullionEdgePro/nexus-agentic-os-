@@ -163,11 +163,10 @@ export const NAV: NavItem[] = [
   {
     href: "/deck/connections",
     label: "Connections",
-    // A staff member's own channels in one place — the mailbox, the WhatsApp
-    // Business number, the Facebook Page and the Instagram account they answer
-    // from. Staff-only like the rest of the book: /api/connections is a person's
-    // own accounts, which an operator has none of.
-    staffOnly: true,
+    // A person's own channels in one place — the mailbox, the WhatsApp Business
+    // number, the Facebook Page and the Instagram account they answer from. For
+    // everyone since 3 Nov 2026: an admin connects like staff, through their
+    // seat in the business they pick on the page (migration 108).
     icon: (
       <svg viewBox="0 0 24 24" {...stroke}>
         <path d="M10 13a4 4 0 0 0 5.7.4l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.3 1.3" />
