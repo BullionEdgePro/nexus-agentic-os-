@@ -315,17 +315,37 @@ html[data-rail-from] .deck-root.shell .shell-rail:not([data-pill="ready"]) a.on:
 }
 
 /* ---------- the foot: who, light/dark, sound, sign out ---------- */
+/* Two rows (2 Nov 2026): who is signed in on top, the switches and the way
+   out beneath — on one line the name was squeezed to a sliver and the sky
+   switch drew over it. */
 .deck-root .rail-foot {
   margin-top: auto;
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 12px 4px 2px 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px 4px 2px 8px;
   border-top: 1px solid rgba(243, 239, 232, 0.12);
 }
-.deck-root .rail-foot-who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.deck-root .rail-foot-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.deck-root .rail-foot-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(243, 239, 232, 0.08);
+  box-shadow: inset 0 0 0 1.5px rgba(232, 194, 74, 0.55);
+  color: #E8C24A;
+}
+.deck-root .rail-foot-avatar svg { width: 18px; height: 18px; }
+.deck-root .rail-foot-text { display: flex; flex-direction: column; min-width: 0; }
 .deck-root .rail-foot-name { font-size: 13.5px; font-weight: 700; color: var(--dock-ink, var(--ink)); }
-.deck-root .rail-foot-role { font-size: 12px; color: inherit; }
+.deck-root .rail-foot-role { font-size: 12px; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deck-root .rail-foot-controls { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* The way out sits at the row's end, after the two switches. */
+.deck-root .rail-foot-controls > a { margin-left: auto; }
 .deck-root.shell .rail-foot a:not(.rail-brand) { padding: 8px; }
 .deck-root.shell .rail-foot .nx-theme { color: inherit; }
 .deck-root.shell .rail-foot .nx-theme:focus-visible { outline-color: #E8C24A; }
@@ -348,6 +368,8 @@ html[data-rail="icons"] .deck-root .rail-foot-who { display: none; }
 html[data-rail="icons"] .deck-root.shell .rail-search { justify-content: center; padding: 10px; }
 html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand) { justify-content: center; padding: 6px; }
 html[data-rail="icons"] .deck-root .rail-foot { flex-direction: column; padding: 10px 0 0; }
+html[data-rail="icons"] .deck-root .rail-foot-controls { flex-direction: column; }
+html[data-rail="icons"] .deck-root .rail-foot-controls > a { margin-left: 0; }
 html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand) .rail-label {
   position: absolute;
   left: calc(100% + 14px);
@@ -402,6 +424,8 @@ html[data-rail="icons"] .deck-root.shell .shell-rail a:not(.rail-brand):is(:hove
   .deck-root.shell .shell-rail a:not(.rail-brand) { flex: 0 0 auto; padding: 6px; }
   .deck-root .rail-foot,
   html[data-rail="icons"] .deck-root .rail-foot { flex-direction: row; margin: 0; padding: 0 0 0 6px; border-top: 0; border-left: 1px solid rgba(243, 239, 232, 0.12); }
+  .deck-root .rail-foot-controls,
+  html[data-rail="icons"] .deck-root .rail-foot-controls { flex-direction: row; }
   html[data-rail="icons"] .deck-root.shell .rail-search { padding: 11px; }
   /* The Ask button sits above the bar, never on it. */
   body .as-open { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px); }
