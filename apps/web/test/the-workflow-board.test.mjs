@@ -13,6 +13,8 @@ import { REAL_ESTATE_WORKFLOW } from "@nexus/shared";
 import { WorkflowBoardView, boardCanDrop } from "@/app/deck/workflow/board/board-view";
 import { MoveMenu } from "@/app/deck/workflow/board/move-menu";
 import { WorkflowPanel } from "@/app/deck/workflow/panel";
+import { CardDetail } from "@/app/deck/workflow/board/card-detail";
+import { AddCard, toAed } from "@/app/deck/workflow/board/add-card";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
@@ -193,4 +195,91 @@ test("the board's styles are its own, and its lanes scroll inside themselves", (
   for (const file of ["app/kit/kit.css", "app/deck/hq/hq.css", "app/deck/deck.css"]) {
     assert.doesNotMatch(read(file), /\.wf-board/, file);
   }
+});
+
+// ---- Task 7: the card window and adding ------------------------------------------------------
+
+const detail = (card, over = {}) =>
+  render(CardDetail, {
+    workflow: REAL_ESTATE_WORKFLOW,
+    card,
+    board: BOARD,
+    history: [],
+    now: NOW,
+    timezone: "Asia/Dubai",
+    origin: null,
+    message: "",
+    onSave: async () => {},
+    onMove() {},
+    onCloseCard() {},
+    onLink() {},
+    onUnlink() {},
+    onDismiss() {},
+    ...over,
+  });
+
+test("the card window: what the step needs, and its history in words", () => {
+  const history = [
+    { kind: "created", from: null, to: "D4", closedReason: null, by: "Aisha", at: ago(3) },
+    { kind: "moved", from: "D4", to: "D7", closedReason: null, by: "Aisha", at: ago(1) },
+    { kind: "moved", from: "D7", to: "D9", closedReason: null, by: null, at: ago(0) },
+  ];
+  const html = detail(deal({ id: "d7", step: "D7" }), { history });
+  assert.match(html, /What this step needs/);
+  assert.match(html, /class="wf-board-need wf-board-need-missing">Ejari number/);
+  assert.match(html, /Created on Unit matcher by Aisha/);
+  assert.match(html, /Moved to Rent deal by Aisha/);
+  assert.match(html, /Moved to CRM &amp; commission by someone no longer here/);
+  assert.match(html, /Move to…/);
+  assert.match(detail(deal({ id: "d8" }), { history: null }), /Loading the history…/);
+});
+
+test("closing says which ways are open for this card", () => {
+  const sale = detail(unit({ id: "u9", step: "S7", purpose: "sale" }));
+  assert.match(sale, /disabled="" title="Only a unit to let can close as Let\."[^>]*>Let</);
+  assert.doesNotMatch(sale, /disabled=""[^>]*>Sold</);
+  assert.doesNotMatch(sale, /disabled=""[^>]*>Withdrawn</);
+  const early = detail(deal({ step: "D5" }));
+  assert.match(early, /disabled="" title="A deal closes as Won from Rent deal, Sale deal or CRM &amp; commission\."[^>]*>Won</);
+  assert.doesNotMatch(early, /disabled=""[^>]*>Lost</);
+});
+
+test("an owner's name shows only to whoever may see that customer", () => {
+  assert.match(detail(unit({ owner: { contactId: "c3", name: null } })), /Owner: with Aisha Khan/);
+  assert.match(detail(unit({ owner: { contactId: "c3", name: "Owner B" } })), /Owner: Owner B/);
+  assert.match(detail(unit({ owner: null })), /Owner: not recorded/);
+});
+
+test("a deal lists the units offered to it, and a unit the deals it was offered to", () => {
+  const offered = detail(deal({ id: "d1", unitIds: ["u2"] }));
+  assert.match(offered, /Units offered/);
+  assert.match(offered, /JLT Cluster X · 805/);
+  assert.match(offered, />Remove</);
+  assert.match(offered, /<option value="u1">Marina Gate 2 · 1204<\/option>/);
+  assert.doesNotMatch(offered, /<option value="u2">/);
+  const board = { ...BOARD, deals: [deal({ id: "d1", contact: { id: "c1", name: "Lead one" } })] };
+  assert.match(detail(unit({ id: "u2", dealIds: ["d1"] }), { board }), /Offered to[\s\S]*Lead one/);
+});
+
+test("adding a lead needs rent or buy before it can be saved, and starts on Unit matcher", () => {
+  const html = render(AddCard, { kind: "deal", preset: null, contacts: [], message: "", onSearch() {}, onCreate: async () => {}, onDismiss() {} });
+  assert.match(html, /<button type="submit"[^>]*disabled=""[^>]*>Put on the board</);
+  assert.match(html, /<option value="D4" selected="">Unit matcher<\/option>/);
+  assert.match(html, /<option value="D3">Cold lead<\/option>/);
+  assert.match(html, /Renting/);
+  assert.match(html, /Buying/);
+  const preset = render(AddCard, { kind: "deal", preset: { contactId: "c9", name: "Hot lead" }, contacts: [], message: "", onSearch() {}, onCreate: async () => {}, onDismiss() {} });
+  assert.match(preset, /Hot lead/);
+  const unitForm = render(AddCard, { kind: "unit", preset: null, contacts: [], message: "", onSearch() {}, onCreate: async () => {}, onDismiss() {} });
+  assert.match(unitForm, /<button type="submit"[^>]*disabled=""[^>]*>Add unit</);
+});
+
+test("money is typed the way people type it", () => {
+  assert.equal(toAed("1,200,000"), 1200000);
+  assert.equal(toAed(" 85 000 "), 85000);
+  assert.equal(toAed("95000.50"), 95000.5);
+  assert.equal(toAed(""), null);
+  assert.equal(toAed("   "), null);
+  assert.ok(Number.isNaN(toAed("85k")));
+  assert.ok(Number.isNaN(toAed("-5")));
 });

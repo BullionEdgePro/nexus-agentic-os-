@@ -283,3 +283,29 @@
   .wf-board-lane { grid-template-columns: repeat(var(--cols, 6), minmax(78vw, 1fr)); scroll-snap-type: x mandatory; }
   .wf-board-lane > .kit-col { scroll-snap-align: start; }
 }
+/* The card window and adding (workflow board, 3 Nov 2026). */
+.wf-board-detail { display: flex; flex-direction: column; gap: 4px; }
+.wf-board-needs { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.wf-board-need { position: relative; padding-left: 20px; font-size: 14px; }
+.wf-board-need::before { content: ""; position: absolute; left: 2px; top: .35em; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--slate); }
+.wf-board-need-done::before { background: var(--st-forest); border-color: var(--st-forest); }
+.wf-board-need-state { color: var(--slate); }
+.wf-board-fields { display: flex; flex-direction: column; gap: 8px; }
+.wf-board-field { display: flex; flex-direction: column; gap: 3px; }
+.wf-board-field label { font-size: 13px; font-weight: 600; color: var(--slate); }
+.wf-board-field input, .wf-board-field select, .wf-board-fields textarea, .wf-board-add input, .wf-board-add select, .wf-board-detail > .wf-window-part > input {
+  font: inherit; padding: 8px 10px; border-radius: var(--r); border: 1px solid var(--hairline); background: var(--paper); color: var(--ink); min-width: 0;
+}
+.wf-board-flag { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.wf-board-links { margin: 6px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wf-board-links li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.wf-board-history { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.wf-board-add { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wf-board-add label { font-size: 13px; font-weight: 600; color: var(--slate); }
+.wf-board-add-note { margin: 0 0 4px; font-size: 14px; color: var(--slate); }
+.wf-board-add-purpose { display: flex; gap: 16px; margin: 6px 0; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--r); }
+.wf-board-add-purpose legend { padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--slate); }
+.wf-board-add-purpose label { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 14px; font-weight: 500; }
+.wf-board-add-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.wf-board-pick { display: flex; flex-direction: column; gap: 4px; }
+.wf-board-pick-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
