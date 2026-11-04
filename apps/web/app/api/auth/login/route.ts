@@ -7,6 +7,7 @@ import {
   SESSION_MAX_AGE,
   type SessionClaims,
 } from "@/lib/auth";
+import { clientAddressHeaders } from "@/lib/client-address";
 
 export const runtime = "nodejs";
 
@@ -58,7 +59,8 @@ export async function POST(req: Request) {
   }
 
   if (mode === "admin") {
-    const admin = await verifyAdmin(identifier, secret);
+    const admin = await verifyAdmin(req, identifier, secret);
+    if (admin === "locked") return lockedOut();
     if (admin) {
       return issue(admin.email, { role: "operator", adminId: admin.adminId });
     }
@@ -102,7 +104,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "That email and password don't match." }, { status: 401 });
   }
 
-  const employee = await verifyEmployee(identifier, secret);
+  const employee = await verifyEmployee(req, identifier, secret);
+  if (employee === "locked") return lockedOut();
   if (employee) {
     return issue(employee.signInAs, {
       role: "employee",
@@ -138,17 +141,33 @@ async function sharedPasswordRetired(): Promise<boolean> {
   }
 }
 
+/**
+ * Too many wrong attempts from this connection (audit, 4 Nov 2026). Said as
+ * such: this used to read "doesn't match", so a correct code typed during a
+ * lockout looked wrong and people kept trying.
+ */
+function lockedOut() {
+  return NextResponse.json(
+    { error: "Too many sign-in attempts from this connection. Wait 15 minutes, then try again." },
+    { status: 429 }
+  );
+}
+
 async function verifyAdmin(
+  req: Request,
   email: string,
   password: string
-): Promise<{ adminId: string; email: string } | null> {
+): Promise<{ adminId: string; email: string } | "locked" | null> {
   try {
     const response = await fetch(`${API_URL}/auth/admin`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // The browser's own address, signed, so the API's lockout is this person's
+      // and not the whole platform's (client-address.ts).
+      headers: { "Content-Type": "application/json", ...(await clientAddressHeaders(req)) },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
     });
+    if (response.status === 429) return "locked";
     if (!response.ok) return null;
     const data = (await response.json()) as { adminId?: string; email?: string };
     if (!data.adminId || !data.email) return null;
@@ -161,6 +180,7 @@ async function verifyAdmin(
 }
 
 async function verifyEmployee(
+  req: Request,
   identifier: string,
   accessCode: string
 ): Promise<{
@@ -168,14 +188,15 @@ async function verifyEmployee(
   employeeId: string;
   organizationId: string;
   organizationSlug: string;
-} | null> {
+} | "locked" | null> {
   try {
     const response = await fetch(`${API_URL}/auth/employee`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await clientAddressHeaders(req)) },
       body: JSON.stringify({ identifier, accessCode }),
       cache: "no-store",
     });
+    if (response.status === 429) return "locked";
     if (!response.ok) return null;
 
     const data = (await response.json()) as {

@@ -1,4 +1,6 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { getRedisConnection } from "../queue/queue.js";
+import { env } from "../config/env.js";
 import { logger } from "./logger.js";
 
 /**
@@ -76,9 +78,28 @@ const WINDOW_SECONDS = 15 * 60;
  * why `login-can-be-guessed-forever.test.mjs` asserts the directive is absent.
  */
 export function clientKey(headers: { get(name: string): string | null }): string {
+  // THE BROWSER, NOT THE WEB SERVER (audit, 4 Nov 2026). Sign-ins reach this
+  // API from the web container, back through Caddy, so X-Forwarded-For was the
+  // server's own address for every person: ten wrong codes from anyone locked
+  // out everyone, and any real sign-in reset an attacker's count. The web passes
+  // the browser's address signed with the session secret both sides hold;
+  // trusted only when the signature checks, so nobody outside can forge it.
+  const signed = signedClientAddress(headers);
+  if (signed) return signed;
   const forwarded = headers.get("x-forwarded-for");
   const first = forwarded?.split(",")[0]?.trim();
   return first && first.length > 0 ? first : "internal";
+}
+
+/** The address the web signed for this request, or null when absent or not genuine. */
+function signedClientAddress(headers: { get(name: string): string | null }): string | null {
+  const address = headers.get("x-nexus-client-address")?.trim();
+  const signature = headers.get("x-nexus-client-signature")?.trim();
+  if (!address || !signature || address.length > 64) return null;
+  const expected = createHmac("sha256", env.sessionSecret).update(`nexus-client-address:${address}`).digest("hex");
+  const given = Buffer.from(signature, "utf8");
+  const wanted = Buffer.from(expected, "utf8");
+  return given.length === wanted.length && timingSafeEqual(given, wanted) ? address : null;
 }
 
 /** True when this source has run out of attempts and should be refused. */
