@@ -250,3 +250,15 @@ test("on a business's number, STOP is honoured even while a person holds the cha
   assert.ok(optOut > 0 && stoodDown > 0, "both steps are there");
   assert.ok(optOut < stoodDown, "STOP is checked only after the agent stands down for a held chat");
 });
+
+test("a WhatsApp reply outside the 24-hour window is refused in words, not shown as sent", async () => {
+  // Meta accepts it with a wamid and refuses it later (131047), so the inbox
+  // showed a tick, paused the AI for 24 hours, and the customer got nothing.
+  const { readFileSync } = await import("node:fs");
+  const route = readFileSync(new URL("../src/routes/conversations.ts", import.meta.url), "utf8");
+  const reply = route.slice(route.indexOf('conversationsRoute.post("/:id/messages"'));
+  const check = reply.indexOf("openWindowConversations(");
+  assert.ok(check > 0 && check < reply.indexOf("sendReplyOnChannel("), "the window is checked before sending");
+  assert.match(reply.slice(0, reply.indexOf("sendReplyOnChannel(")), /return c\.json\(\{ error: OUTSIDE_THE_WINDOW \}, 409\)/);
+  assert.match(route, /within 24 hours of the customer's last message/);
+});

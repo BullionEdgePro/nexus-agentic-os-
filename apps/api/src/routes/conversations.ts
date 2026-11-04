@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  openWindowConversations,
   findConversationById,
   getMessagesForConversation,
   insertOutboundMessage,
@@ -47,6 +48,11 @@ import { logger } from "../lib/logger.js";
 import { actorOf } from "../lib/actor.js";
 
 export const conversationsRoute = new Hono();
+
+/** Why a WhatsApp reply was not sent (audit, 4 Nov 2026), in the words the person reads. */
+const OUTSIDE_THE_WINDOW =
+  "WhatsApp only delivers a reply within 24 hours of the customer's last message, so this would not arrive. " +
+  "Ask them to write again, or ask an admin to send them an approved message from Bulk messaging.";
 
 // ============================================================
 // The thread's timeline — what HAPPENED, beside what was SAID
@@ -367,6 +373,17 @@ conversationsRoute.post("/:id/messages", async (c) => {
 
   const conversation = await findConversationById(conversationId);
   if (!conversation) return c.json({ error: "Conversation not found" }, 404);
+
+  // WHATSAPP'S 24 HOURS (audit, 4 Nov 2026). Free text is only delivered within
+  // 24 hours of the customer's last message to this number. Outside it Meta
+  // still answers 200 with a wamid and refuses later by receipt (131047), so
+  // the inbox showed a tick, the AI was paused for a day, and the customer got
+  // nothing. Asked first now, and said in words. A chat with no number pinned
+  // (the shared-line days) has nothing to ask about and is left as it was.
+  if ((conversation.channel ?? "whatsapp") === "whatsapp" && conversation.phoneNumberId) {
+    const open = await openWindowConversations(conversation.organizationId, conversation.phoneNumberId, [conversation.contactId]);
+    if (open.length === 0) return c.json({ error: OUTSIDE_THE_WINDOW }, 409);
+  }
 
   // Sent on the channel the conversation is actually on — WhatsApp, Messenger or
   // Instagram — not always WhatsApp. The dispatcher returns the provider's id in

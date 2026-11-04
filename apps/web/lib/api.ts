@@ -107,6 +107,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * of one fact before: the nav rail and the API's operator-only list drifted
  * apart precisely because nothing connected them.
  */
+/**
+ * The `error` sentence of an API answer, with any reason Meta nested inside it
+ * ("Instagram send failed (400): {"error":{"message":…}}") brought out as words.
+ */
+function apiSentence(raw: string): string | null {
+  const start = raw.indexOf("{");
+  if (start < 0) return null;
+  let error: unknown;
+  try {
+    error = (JSON.parse(raw.slice(start)) as { error?: unknown }).error;
+  } catch {
+    return null;
+  }
+  if (typeof error !== "string" || !error.trim()) return null;
+  const nested = /^(.*?)\s*\(\d{3}\):\s*(\{[\s\S]*\})\s*$/.exec(error);
+  if (!nested) return error;
+  try {
+    const inner = JSON.parse(nested[2]) as { error?: { message?: unknown; error_user_msg?: unknown } };
+    const reason = inner.error?.error_user_msg ?? inner.error?.message;
+    if (typeof reason === "string" && reason.trim()) return `${nested[1]}: ${reason.trim()}`;
+  } catch {
+    // Not JSON after all: the sentence as written is still the best answer.
+  }
+  return error;
+}
+
 export function readableError(err: unknown, whenUnreachable?: string): string {
   const raw = err instanceof Error ? err.message : String(err);
 
@@ -123,6 +149,12 @@ export function readableError(err: unknown, whenUnreachable?: string): string {
 
   // The API's own sentence, when it wrote one. Several routes go to real
   // trouble over these and they are the best answer available.
+  //
+  // Read as JSON, not by pattern (audit, 4 Nov 2026): when the sentence carried
+  // Meta's reason nested inside it, the pattern stopped at the first escaped
+  // quote and the person read "the platform had a problem" instead of why.
+  const said = apiSentence(raw);
+  if (said) return said;
   const match = /\{"error":"([^"]+)"\}/.exec(raw);
   if (match) return match[1];
 
