@@ -125,10 +125,21 @@ export async function getContactsForAudience(
     // wa_id (email, Instagram, Messenger) — those were queued with a null
     // recipient and failed one by one. Both are now the audience's own rules,
     // the same base clause customer lists apply (segments.ts).
-    `select ct.id, ct.wa_id, ct.display_name from contacts ct
+    //
+    // ONE PERSON, ONE ROW (audit, 4 Nov 2026). The same number can be two rows
+    // this business serves — one made under the old shared line's owner, one
+    // when they wrote to an admin's number here — and both were listed, so a
+    // campaign reached them twice and a STOP on one row left the other. One row
+    // per number now, the business's own first; and a STOP on any row this
+    // business can see takes the number out.
+    `select distinct on (ct.wa_id) ct.id, ct.wa_id, ct.display_name from contacts ct
       where ${contactServedBy("$1")} and ct.attributes @> $2::jsonb
         and ct.reengagement_opted_out = false
-        and coalesce(ct.wa_id, '') <> ''`,
+        and coalesce(ct.wa_id, '') <> ''
+        and not exists (
+          select 1 from contacts twin where twin.wa_id = ct.wa_id and twin.reengagement_opted_out
+        )
+      order by ct.wa_id, (ct.organization_id = $1::uuid) desc, ct.created_at desc`,
     [organizationId, JSON.stringify(audienceFilter ?? {})]
   );
   return rows.map((row) => ({ id: row.id, waId: row.wa_id, displayName: row.display_name }));
@@ -336,10 +347,17 @@ export async function pauseBroadcastIfFailingByMessage(
  * are still to be tried, and whether they have since asked not to be messaged.
  * Locked until the job's transaction ends, so a second job for the same person
  * -- a release queued twice, a retry -- waits, then finds them already decided.
+ *
+ * Opted out if ANY row with this number is (audit, 4 Nov 2026): the send job
+ * reads across businesses, and a person's no applies whichever row the
+ * campaign happened to queue — as the test send already held (isWaIdOptedOut).
  */
 export async function recipientForSend(recipientId: string): Promise<{ status: string; optedOut: boolean } | null> {
   const { rows } = await getPool().query<{ status: string; opted_out: boolean }>(
-    `select r.status, ct.reengagement_opted_out as opted_out
+    `select r.status,
+            (ct.reengagement_opted_out
+             or exists (select 1 from contacts twin
+                         where twin.wa_id = ct.wa_id and coalesce(ct.wa_id, '') <> '' and twin.reengagement_opted_out)) as opted_out
        from broadcast_recipients r
        join contacts ct on ct.id = r.contact_id
       where r.id = $1
