@@ -437,7 +437,14 @@ export default function Landing({ contact }: { contact: SalesContact }) {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (!/.+@.+\..+/.test(email.trim())) {
+    // An email OR a staff code (audit, 4 Nov 2026): the API takes either, and
+    // staff with no email on file sign in with their code. Only something
+    // written as an email is checked as one.
+    if (!email.trim()) {
+      setError("Enter your email or staff code.");
+      return;
+    }
+    if (email.includes("@") && !/.+@.+\..+/.test(email.trim())) {
       setError("Enter a valid email to continue.");
       return;
     }
@@ -697,7 +704,7 @@ export default function Landing({ contact }: { contact: SalesContact }) {
           <p className="lp-auth-sub">nexusagenticos.com</p>
 
           <label className="lp-field" htmlFor="email">
-            <span>Email</span>
+            <span>Email or staff code</span>
             <span className="lp-inp">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -705,7 +712,10 @@ export default function Landing({ contact }: { contact: SalesContact }) {
               </svg>
               <input
                 id="email"
-                type="email"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your email or staff code"
