@@ -7,6 +7,7 @@ import {
   listEmployees,
   findEmployeeById,
   createEmployee,
+  freeEmployeeCode,
   deactivateEmployee,
   listRemovedEmployees,
   reactivateEmployee,
@@ -163,12 +164,22 @@ employeesRoute.post("/:slug/employees", async (c) => {
 
   // Derived from the name when not supplied, because an employee code is an
   // implementation detail to the person filling in this form.
-  const employeeCode =
-    typeof body.employeeCode === "string" && body.employeeCode.trim()
-      ? body.employeeCode.trim().toLowerCase()
-      : fullName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-  if (!employeeCode) return c.json({ error: "Could not derive an employee code from that name" }, 400);
+  //
+  // NEVER SOMEONE ELSE'S (audit, 4 Nov 2026). Adding upserts on (business,
+  // code), so a namesake's code merged the newcomer into them. A made-up code is
+  // always a free one now -- and an Arabic-only name, which has no Latin letters
+  // to make one from, gets one too -- while a typed code that is taken is refused.
+  const typed = typeof body.employeeCode === "string" && body.employeeCode.trim() ? body.employeeCode.trim().toLowerCase() : null;
+  let employeeCode: string;
+  if (typed) {
+    if ((await freeEmployeeCode(organization.id, typed)) !== typed) {
+      return c.json({ error: "That staff code is already in use in this business. Choose another." }, 409);
+    }
+    employeeCode = typed;
+  } else {
+    const fromName = fullName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    employeeCode = await freeEmployeeCode(organization.id, fromName || "staff");
+  }
 
   // Validated rather than stored as typed: an unusable number here produces a
   // dead click-to-chat link later, and the person who could fix it is the one

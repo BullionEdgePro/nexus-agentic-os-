@@ -383,6 +383,28 @@ export interface CreateEmployeeInput {
 }
 
 /**
+ * A staff code nobody in this business has used, starting from `base` (audit,
+ * 4 Nov 2026). Adding someone upserts on (business, code), so a code made from a
+ * namesake's name merged the newcomer into them: it overwrote their email and
+ * number, restored them if removed, and the next access code signed the
+ * newcomer into their customers. Removed people keep their codes, so a code is
+ * free only if no row at all has it: base, then base-2, base-3, ...
+ */
+export async function freeEmployeeCode(organizationId: string, base: string): Promise<string> {
+  const wanted = base.toLowerCase();
+  const { rows } = await getPool().query<{ code: string }>(
+    `select lower(employee_code) as code from employees
+      where organization_id = $1 and (lower(employee_code) = $2 or lower(employee_code) like $2 || '-%')`,
+    [organizationId, wanted]
+  );
+  const taken = new Set(rows.map((row) => row.code));
+  if (!taken.has(wanted)) return base;
+  for (let n = 2; ; n++) {
+    if (!taken.has(`${wanted}-${n}`)) return `${base}-${n}`;
+  }
+}
+
+/**
  * Add an employee to a business.
  *
  * Upserts on `(organization_id, employee_code)` — the natural key the schema
