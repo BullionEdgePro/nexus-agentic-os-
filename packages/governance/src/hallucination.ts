@@ -3,7 +3,9 @@ import type { HallucinationRisk } from "@nexus/shared";
 
 let client: Anthropic | undefined;
 function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // Bounded like the agent's (audit, 4 Nov 2026): it runs on the same reply,
+  // inside the same 90-second lock.
+  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30_000, maxRetries: 1 });
   return client;
 }
 

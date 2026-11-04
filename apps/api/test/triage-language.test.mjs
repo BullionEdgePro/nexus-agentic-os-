@@ -75,7 +75,8 @@ test("the caller actually passes the customer's message", () => {
   // Without this the feature is inert: the function would be capable of Arabic
   // and never receive anything to detect it from — working code, no effect,
   // and nothing anywhere would say so.
-  assert.match(PROCESSOR, /buildTriageMessage\(businesses, ctx\.text\)/);
+  // With the full list its numbers come from, since 4 Nov 2026.
+  assert.match(PROCESSOR, /buildTriageMessage\(businesses, ctx\.text, numberedFrom\)/);
   assert.match(PROCESSOR, /the menu answers in their script/);
   console.log("PASS: the triage menu answers in the script the customer wrote in");
 });

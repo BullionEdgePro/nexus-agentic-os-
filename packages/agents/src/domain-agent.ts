@@ -6,7 +6,10 @@ import { defaultToolRegistry } from "./tools/registry.js";
 
 let client: Anthropic | undefined;
 function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // Bounded (audit, 4 Nov 2026): the SDK's default is ten minutes and two
+  // retries, while the customer's lock lasts 90 seconds -- a hung call held a
+  // worker and a database connection, and the customer waited half an hour.
+  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30_000, maxRetries: 1 });
   return client;
 }
 
@@ -115,10 +118,12 @@ export class AnthropicDomainAgent implements DomainAgent {
       messages.push({ role: "user", content: toolResults });
     }
 
-    return {
-      text: "I'm having trouble completing that request right now — a human will follow up shortly.",
-      toolCalls,
-      usage,
-    };
+    // A failure, not a reply (audit, 4 Nov 2026). This used to send "a human
+    // will follow up shortly" as an ordinary answer: no handover, nobody told,
+    // and possibly just after a booking was made. Thrown, the reply path sends
+    // its fallback and hands over only when somebody can take it.
+    throw new Error(
+      `The agent used all ${MAX_TOOL_ITERATIONS} tool rounds without a reply (${toolCalls.map((call) => call.name).join(", ")})`
+    );
   }
 }

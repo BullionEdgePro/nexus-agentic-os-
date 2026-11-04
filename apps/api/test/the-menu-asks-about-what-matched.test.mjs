@@ -88,7 +88,8 @@ test("a decisive margin still routes without asking anybody", () => {
 
 test("the menu is built from the candidates when they narrow anything", () => {
   assert.ok(
-    PROCESSOR.includes("await askWhichBusiness(ctx, asked);"),
+    // With the full list for its numbers since 4 Nov 2026 (a-menu-number-means-what-it-showed).
+    PROCESSOR.includes("await askWhichBusiness(ctx, asked, businesses);"),
     "the menu is still built from the full roster"
   );
   assert.ok(

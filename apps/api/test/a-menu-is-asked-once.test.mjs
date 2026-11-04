@@ -16,7 +16,8 @@ const body = resolver.slice(0, resolver.indexOf("\n}\n"));
 test("a menu sent in the last five minutes is not sent again", () => {
   assert.match(PROC, /const TRIAGE_REPEAT_WINDOW_MS = 5 \* 60 \* 1000;/);
   const guard = body.indexOf("Date.now() - promptedAt < TRIAGE_REPEAT_WINDOW_MS");
-  const ask = body.lastIndexOf("await askWhichBusiness(ctx, asked);");
+  // Since 4 Nov 2026 the menu also carries the full list its numbers come from.
+  const ask = body.lastIndexOf("await askWhichBusiness(ctx, asked, businesses);");
   assert.ok(guard > -1 && ask > guard, "the repeat check must come before the menu is sent");
   // Holding back still says so, at a level the containers actually log.
   assert.match(body.slice(guard, ask), /logger\.info\(/);

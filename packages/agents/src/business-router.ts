@@ -203,10 +203,23 @@ function hintFor(business: RoutableBusiness, wantArabic: boolean): string {
   return ` — ${terms.join(wantArabic ? "\u060C " : ", ")}`;
 }
 
-export function buildTriageMessage(businesses: RoutableBusiness[], customerText = ""): string {
+/**
+ * `numberedFrom` (audit, 4 Nov 2026): the full list a reply will be read
+ * against. A narrowed menu used to number its own options 1, 2 -- and the reply
+ * "2" was then read against the FULL list and picked another business, which the
+ * routing kept. With it, each option carries its place in that list.
+ */
+export function buildTriageMessage(
+  businesses: RoutableBusiness[],
+  customerText = "",
+  numberedFrom: RoutableBusiness[] = businesses
+): string {
   const wantArabic = isArabic(customerText);
   const options = businesses
-    .map((b, i) => `${i + 1}. ${b.name}${hintFor(b, wantArabic)}`)
+    .map((b, i) => {
+      const place = numberedFrom.findIndex((candidate) => candidate.id === b.id);
+      return `${(place >= 0 ? place : i) + 1}. ${b.name}${hintFor(b, wantArabic)}`;
+    })
     .join("\n");
 
   // Answered in the script the customer wrote in.

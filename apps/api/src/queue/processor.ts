@@ -1300,7 +1300,10 @@ async function answerOneMessage(
         withRecall
       );
 
-      if (!result.text) return;
+      // A failure, not a silent return (audit, 4 Nov 2026): an empty reply
+      // (an empty end_turn after tools, a refusal) sent nothing and left no
+      // trace. Thrown, it takes the path that sends the fallback.
+      if (!result.text?.trim()) throw new Error("The model returned no reply text");
 
       // THE JUDGE WAS BEING ASKED TO AUDIT GROUNDED ANSWERS WITH THE GROUNDING
       // REMOVED.
@@ -1786,7 +1789,7 @@ async function resolveServingOrganization(ctx: {
     return { kind: "asked" };
   }
 
-  await askWhichBusiness(ctx, asked);
+  await askWhichBusiness(ctx, asked, businesses);
   return { kind: "asked" };
 }
 
@@ -1844,9 +1847,11 @@ async function askWhichBusiness(
     /** What the customer actually wrote, so the menu answers in their script. */
     text: string;
   },
-  businesses: SharedNumberBusiness[]
+  businesses: SharedNumberBusiness[],
+  /** Every business on the number, which a numbered reply is read against. */
+  numberedFrom: SharedNumberBusiness[] = businesses
 ): Promise<void> {
-  const body = buildTriageMessage(businesses, ctx.text);
+  const body = buildTriageMessage(businesses, ctx.text, numberedFrom);
 
   let waMessageId: string | null = null;
   try {
