@@ -249,9 +249,10 @@ test("the reply pipeline hands the agent a real customer to book against", () =>
   // human follow-up. Which is exactly the stub's behaviour, restored by
   // accident, and indistinguishable from it in the conversation.
   const PROCESSOR = read("apps", "api", "src", "queue", "processor.ts");
+  // The empty-reply line throws into the fallback since 4 Nov 2026.
   const call = PROCESSOR.slice(
     PROCESSOR.indexOf("const result = await agent.respond("),
-    PROCESSOR.indexOf("if (!result.text) return;")
+    PROCESSOR.indexOf("if (!result.text?.trim()) throw new Error(")
   );
   assert.ok(call.length > 200, "the agent.respond slice must not be empty");
   assert.match(call, /\bcontactId,/, "the agent must be told which customer this is");

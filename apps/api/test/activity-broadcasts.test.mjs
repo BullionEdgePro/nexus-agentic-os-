@@ -615,7 +615,9 @@ test("operator-only screens are hidden from employees, not just refused", () => 
   //
   // What must hold in both directions: whichever role is being rendered, the
   // list it is built from excludes the flag belonging to the other one.
-  const filtering = SHELL.slice(SHELL.indexOf("const visible"), SHELL.indexOf("return ("));
+  // The filtering lives in visibleNav since 4 Nov 2026, shared by the dock and
+  // the phone Menu so the two cannot disagree.
+  const filtering = SHELL.slice(SHELL.indexOf("export function visibleNav("), SHELL.indexOf("export function RailLinks("));
   assert.match(filtering, /operatorOnly/, "the rail no longer hides operator screens from staff");
   assert.match(
     filtering,

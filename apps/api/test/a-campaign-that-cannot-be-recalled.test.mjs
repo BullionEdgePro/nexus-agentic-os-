@@ -238,7 +238,9 @@ test("the daily count is cross-tenant, because the ceiling belongs to the number
   // as plenty of headroom.
   const BOOK = read("packages", "db", "src", "client-book.ts");
   const fn = BOOK.slice(BOOK.indexOf("export async function dailyReachUsed"));
-  assert.match(fn, /withAllTenants/);
+  // acrossEveryBusiness since 4 Nov 2026, so it counts every business even
+  // inside one business's request.
+  assert.match(fn, /withAllTenants|acrossEveryBusiness/);
   assert.match(fn, /count\(distinct r\.contact_id\)/);
 });
 

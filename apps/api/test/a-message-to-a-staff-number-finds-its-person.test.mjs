@@ -31,7 +31,9 @@ function body() {
 }
 
 test("finding whose number it is crosses businesses on purpose, and says why", () => {
-  assert.match(body(), /withAllTenants\("[^"]+", /);
+  // acrossEveryBusiness since 4 Nov 2026: it must see every business even when
+  // asked inside one business's request (Bulk, the connect flow).
+  assert.match(body(), /(withAllTenants|acrossEveryBusiness)\("[^"]+", /);
 });
 
 test("all three paths that ask it are covered by that one fix", () => {

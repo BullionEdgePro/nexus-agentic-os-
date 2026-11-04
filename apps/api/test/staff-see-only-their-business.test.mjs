@@ -275,7 +275,9 @@ test("the rail is filtered by role at render time", () => {
   // operator -- one correct change, two failing tests, neither describing a
   // fault. What has to be true is that the rail branches on the role and drops
   // the other role's entries.
-  const filtering = SHELL.slice(SHELL.indexOf("const visible"), SHELL.indexOf("return ("));
+  // The filtering lives in visibleNav since 4 Nov 2026, shared by the dock and
+  // the phone Menu so the two cannot disagree.
+  const filtering = SHELL.slice(SHELL.indexOf("export function visibleNav("), SHELL.indexOf("export function RailLinks("));
   assert.match(filtering, /role === "operator"/);
   assert.ok(/!item\.operatorOnly/.test(filtering), "employees are shown operator screens again");
   assert.ok(/!item\.staffOnly/.test(filtering), "the operator is shown a staff-only desk again");
