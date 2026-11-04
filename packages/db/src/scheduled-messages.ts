@@ -78,6 +78,22 @@ export async function listPendingScheduledMessages(conversationId: string): Prom
 }
 
 /**
+ * The sends on one conversation that failed in the last week, newest first
+ * (audit, 4 Nov 2026). A failed send was marked failed with its reason and then
+ * read by nothing: it dropped off the pending list exactly as if it had gone.
+ */
+export async function listRecentlyFailedScheduledMessages(conversationId: string): Promise<ScheduledMessage[]> {
+  const { rows } = await getPool().query<ScheduledMessageRow>(
+    `select ${COLS} from scheduled_messages
+      where conversation_id = $1 and status = 'failed' and send_at > now() - interval '7 days'
+      order by send_at desc
+      limit 5`,
+    [conversationId]
+  );
+  return rows.map(toModel);
+}
+
+/**
  * Cancel a pending send. Scoped to the conversation so a stray id from another
  * thread cannot cancel it, and guarded on 'pending' so a message already firing
  * or sent cannot be "cancelled" after the fact.

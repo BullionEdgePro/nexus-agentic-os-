@@ -917,7 +917,9 @@ export interface ScheduledMessage {
   sentAt: string | null;
 }
 
-export function getScheduledMessages(conversationId: string): Promise<{ scheduled: ScheduledMessage[] }> {
+export function getScheduledMessages(
+  conversationId: string
+): Promise<{ scheduled: ScheduledMessage[]; failed?: ScheduledMessage[]; timeZone?: string }> {
   return request(`/api/conversations/${conversationId}/scheduled`);
 }
 

@@ -8,6 +8,7 @@ import {
   readableError,
   type ScheduledMessage,
 } from "@/lib/api";
+import { describeInstant, wallClockToInstant } from "@/lib/zoned-time";
 
 /**
  * Scheduled sends on the open conversation — the queue, and the control to add
@@ -28,6 +29,10 @@ export function ScheduledMessages({
   onScheduled: () => void;
 }) {
   const [pending, setPending] = useState<ScheduledMessage[]>([]);
+  const [failed, setFailed] = useState<ScheduledMessage[]>([]);
+  // The business's clock (audit, 4 Nov 2026), not the device's: a manager abroad
+  // who picked 9:00 used to send at 9:00 their time, and the list agreed.
+  const [timeZone, setTimeZone] = useState("Asia/Dubai");
   const [open, setOpen] = useState(false);
   const [when, setWhen] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,12 +40,15 @@ export function ScheduledMessages({
 
   const load = useCallback(async () => {
     try {
-      const { scheduled } = await getScheduledMessages(conversationId);
+      const { scheduled, failed: notSent, timeZone: zone } = await getScheduledMessages(conversationId);
       setPending(scheduled ?? []);
+      setFailed(notSent ?? []);
+      if (zone) setTimeZone(zone);
     } catch {
       // A failed load of the schedule must not put a banner over a live
       // conversation; the compose box is what matters.
       setPending([]);
+      setFailed([]);
     }
   }, [conversationId]);
 
@@ -56,9 +64,16 @@ export function ScheduledMessages({
     setBusy(true);
     setError("");
     try {
-      // datetime-local is zone-less; toISOString reads it in the browser's zone,
-      // which is what the person meant by "9am".
-      await scheduleMessage(conversationId, draft.trim(), new Date(when).toISOString());
+      // datetime-local is zone-less, and "9am" means 9am where the business is
+      // (audit, 4 Nov 2026) — read in the device's zone it sent at 9am wherever
+      // the person happened to be.
+      const [date, time] = when.split("T");
+      const sendAt = wallClockToInstant(date, time, timeZone);
+      if (!sendAt) {
+        setError("Pick a date and time to send it.");
+        return;
+      }
+      await scheduleMessage(conversationId, draft.trim(), sendAt);
       setOpen(false);
       setWhen("");
       onScheduled();
@@ -86,17 +101,26 @@ export function ScheduledMessages({
           {pending.map((m) => (
             <li key={m.id} className="ibx-sched-item">
               <span className="ibx-sched-when">
-                {new Date(m.sendAt).toLocaleString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {describeInstant(m.sendAt, timeZone)}
               </span>
               <span className="ibx-sched-body">{m.body}</span>
               <button type="button" className="ibx-sched-cancel" onClick={() => cancel(m.id)}>
                 Cancel
               </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {/* Failed in the last week, with why (audit, 4 Nov 2026): they used to drop
+          off this list exactly as if they had been sent. */}
+      {failed.length ? (
+        <ul className="ibx-sched-list">
+          {failed.map((m) => (
+            <li key={m.id} className="ibx-sched-item ibx-sched-failed">
+              <span className="ibx-sched-when">Not sent · {describeInstant(m.sendAt, timeZone)}</span>
+              <span className="ibx-sched-body">{m.body}</span>
+              {m.error ? <em className="ibx-sched-why">{m.error}</em> : null}
             </li>
           ))}
         </ul>

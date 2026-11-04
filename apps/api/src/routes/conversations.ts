@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import {
   openWindowConversations,
   findConversationById,
+  findOrganizationById,
   getMessagesForConversation,
   insertOutboundMessage,
   pauseAiForContact,
@@ -15,6 +16,7 @@ import {
   getConversationRouting,
   createScheduledMessage,
   listPendingScheduledMessages,
+  listRecentlyFailedScheduledMessages,
   cancelScheduledMessage,
   listCustody,
   listCallLogs,
@@ -457,10 +459,20 @@ conversationsRoute.post("/:id/messages", async (c) => {
 // Scheduled messages
 // ============================================================
 
-/** The still-pending scheduled sends on this conversation. */
+/**
+ * The still-pending scheduled sends on this conversation — and since 4 Nov 2026
+ * the week's failed ones with their reason (they used to vanish as if sent), and
+ * the business's timezone, so the time typed and shown is the business's clock
+ * and not whatever zone the device is set to.
+ */
 conversationsRoute.get("/:id/scheduled", async (c) => {
-  const scheduled = await listPendingScheduledMessages(c.req.param("id"));
-  return c.json({ scheduled });
+  const conversationId = c.req.param("id");
+  // One after another: they share the request's connection.
+  const scheduled = await listPendingScheduledMessages(conversationId);
+  const failed = await listRecentlyFailedScheduledMessages(conversationId);
+  const conversation = await findConversationById(conversationId);
+  const business = conversation ? await findOrganizationById(conversation.organizationId) : null;
+  return c.json({ scheduled, failed, timeZone: business?.timezone ?? "Asia/Dubai" });
 });
 
 /**

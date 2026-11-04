@@ -952,6 +952,10 @@
 }
 .ibx-sched-when { font-family: var(--mono); font-size: 10.5px; color: var(--signal-text); white-space: nowrap; }
 .ibx-sched-body { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+/* A scheduled send that did not go (audit, 4 Nov 2026), with WhatsApp's or the mailbox's reason. */
+.ibx-sched-failed { flex-wrap: wrap; }
+.ibx-sched-failed .ibx-sched-when { color: var(--crit); }
+.ibx-sched-why { flex-basis: 100%; font-size: 12px; color: var(--slate); }
 .ibx-sched-cancel { border: 0; background: transparent; color: var(--slate); cursor: pointer; font-size: 12px; font-weight: 600; }
 .ibx-sched-cancel:hover { color: var(--crit); }
 .ibx-sched-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
