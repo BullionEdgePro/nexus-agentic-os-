@@ -4,7 +4,7 @@ import {
   createAdminBroadcast,
   createBroadcastRecipients,
   getBroadcastTemplate,
-  getContactsForAudience,
+  chosenAudience,
   isolated,
   pendingRecipients,
   setBroadcastStatusIf,
@@ -146,10 +146,8 @@ export async function createWaitingCampaign(input: {
   sentBy: string | null;
   contactIds: string[];
 }): Promise<{ broadcastId: string; recipients: number } | null> {
-  const chosen = new Set(input.contactIds);
-  const audience = (await withTenant(input.organizationId, () => getContactsForAudience(input.organizationId, {}))).filter(
-    (person) => chosen.has(person.id)
-  );
+  // One row per number, a ticked twin row included (chosenAudience, 4 Nov 2026).
+  const audience = await withTenant(input.organizationId, () => chosenAudience(input.organizationId, input.contactIds));
   if (audience.length === 0) return null;
   return withTenant(input.organizationId, async () => {
     const broadcast = await createAdminBroadcast({

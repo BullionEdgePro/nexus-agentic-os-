@@ -352,8 +352,12 @@ export async function openWindowConversations(
       `select distinct on (m.contact_id) m.contact_id, m.conversation_id, m.created_at as last_inbound_at
          from messages m
          join conversations c on c.id = m.conversation_id
+         join organizations o on o.id = c.organization_id
         where c.organization_id = $1
-          and c.phone_number_id = $2
+          -- A chat on the business's own number is recorded unpinned (review,
+          -- 4 Nov 2026); matched only when pinned, every reply on a business's
+          -- live number read as outside the window.
+          and coalesce(c.phone_number_id, o.whatsapp_phone_number_id) = $2
           and m.direction = 'inbound'
           and m.created_at > now() - interval '23 hours 50 minutes'
           and m.contact_id = any($3::uuid[])
@@ -384,8 +388,12 @@ export async function lastInboundByContact(
       `select m.contact_id, max(m.created_at) as last_inbound_at
          from messages m
          join conversations c on c.id = m.conversation_id
+         join organizations o on o.id = c.organization_id
         where c.organization_id = $1
-          and c.phone_number_id = $2
+          -- A chat on the business's own number is recorded unpinned (review,
+          -- 4 Nov 2026); matched only when pinned, every reply on a business's
+          -- live number read as outside the window.
+          and coalesce(c.phone_number_id, o.whatsapp_phone_number_id) = $2
           and m.direction = 'inbound'
           and m.contact_id = any($3::uuid[])
         group by m.contact_id`,

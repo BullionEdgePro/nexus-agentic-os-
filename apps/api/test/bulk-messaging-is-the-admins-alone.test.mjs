@@ -37,8 +37,12 @@ test("the refusal names its paths, so my-desk and my-day under /api/my keep work
 
 test("an admin send reaches only this business's customers, narrowed by the ticked ids", () => {
   const send = ADMIN.slice(ADMIN.indexOf('adminBulkRoute.post("/:slug/send"'), ADMIN.indexOf('adminBulkRoute.post("/:slug/quick"'));
-  assert.match(send, /getContactsForAudience\(organization\.id, \{\}\)/);
-  assert.match(send, /customers\.filter\(\(customer\) => chosen\.has\(customer\.id\)\)/);
+  // Since 4 Nov 2026 through chosenAudience: this business's audience (one row
+  // per number), narrowed by the ticked ids or the numbers those rows have.
+  assert.match(send, /chosenAudience\(organization\.id, \[\.\.\.chosen\]\)/);
+  const BROADCASTS = read("packages", "db", "src", "broadcasts.ts");
+  const chosenFn = BROADCASTS.slice(BROADCASTS.indexOf("export async function chosenAudience("));
+  assert.match(chosenFn.slice(0, 1200), /getContactsForAudience\(organizationId, \{\}\)/);
   // The number's checks live in sendingRefusal since 3 Nov 2026, shared with a
   // new message that sends itself once approved, and with its release.
   assert.match(send, /const refusal = await sendingRefusal\(number\.phoneNumberId\);\s*if \(refusal\) return c\.json\(\{ error: refusal \}, 409\);/);

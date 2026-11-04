@@ -118,3 +118,35 @@ test("the send job refuses a number anyone was told to leave alone, whichever ro
     await owner.query(`update contacts set reengagement_opted_out = false where id = $1`, [TWIN_OWN]);
   }
 });
+
+test("a chat on the business's own number is inside the 24-hour window when they wrote an hour ago", db, async () => {
+  // Business-number chats are recorded unpinned (phone_number_id null); the
+  // window check matched only pinned chats, so every reply on a business's own
+  // live number would have been refused as "outside 24 hours" (review, 4 Nov 2026).
+  const conversation = (
+    await owner.query(
+      `insert into conversations (organization_id, contact_id, channel) values ($1, $2, 'whatsapp') returning id`,
+      [BUSINESS, SOMEONE_ELSE]
+    )
+  ).rows[0].id;
+  await owner.query(
+    `insert into messages (organization_id, conversation_id, contact_id, direction, sender_type, body, status, created_at)
+     values ($1, $2, $3, 'inbound', 'contact', 'Hello', 'delivered', now() - interval '1 hour')`,
+    [BUSINESS, conversation, SOMEONE_ELSE]
+  );
+  try {
+    const open = await lib.withTenant(BUSINESS, () => lib.openWindowConversations(BUSINESS, "960301", [SOMEONE_ELSE]));
+    assert.equal(open[0]?.conversationId, conversation, "a fresh chat on the business's own number read as closed");
+  } finally {
+    await owner.query(`delete from messages where conversation_id = $1`, [conversation]);
+    await owner.query(`delete from conversations where id = $1`, [conversation]);
+  }
+});
+
+test("ticking a person's other row still chooses them, as the one row the list shows", db, async () => {
+  // Bulk's "+ Add numbers" answers with the row it made under the line's owner,
+  // and the page ticks that id; the list now shows the business's own row, so
+  // the tick matched nothing and the person was silently left out (review).
+  const chosen = await lib.withTenant(BUSINESS, () => lib.chosenAudience(BUSINESS, [TWIN_UNDER_OWNER]));
+  assert.deepEqual(chosen.map((person) => person.id), [TWIN_OWN]);
+});

@@ -145,6 +145,28 @@ export async function getContactsForAudience(
   return rows.map((row) => ({ id: row.id, waId: row.wa_id, displayName: row.display_name }));
 }
 
+/**
+ * The customers ticked on Bulk messaging, as the audience lists them: one row
+ * per number (review, 4 Nov 2026). A tick can name a person's OTHER row — "+ Add
+ * numbers" answers with the row made under the line's owner — and the list shows
+ * only one; matched by id alone, that person was silently left out. Matched by
+ * id or by the number the ticked row has.
+ */
+export async function chosenAudience(
+  organizationId: string,
+  contactIds: string[]
+): Promise<Array<{ id: string; waId: string; displayName: string | null }>> {
+  if (contactIds.length === 0) return [];
+  const audience = await getContactsForAudience(organizationId, {});
+  const { rows } = await getPool().query<{ wa_id: string }>(
+    `select distinct wa_id from contacts where id = any($1::uuid[]) and coalesce(wa_id, '') <> ''`,
+    [contactIds]
+  );
+  const ids = new Set(contactIds);
+  const numbers = new Set(rows.map((row) => row.wa_id));
+  return audience.filter((person) => ids.has(person.id) || numbers.has(person.waId));
+}
+
 export async function createBroadcastRecipients(
   broadcastId: string,
   contactIds: string[]

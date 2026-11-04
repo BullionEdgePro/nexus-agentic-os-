@@ -7,6 +7,7 @@ import {
   listBroadcastTemplates,
   getBroadcastTemplate,
   getContactsForAudience,
+  chosenAudience,
   lastInboundByContact,
   openWindowConversations,
   createAdminBroadcast,
@@ -259,8 +260,8 @@ adminBulkRoute.post("/:slug/send", async (c) => {
   const { organization, number, template, chosen } = prepared;
   if (!chosen || chosen.size === 0) return c.json({ error: "Choose at least one customer." }, 400);
 
-  const customers = await withTenant(organization.id, () => getContactsForAudience(organization.id, {}));
-  const audience = customers.filter((customer) => chosen.has(customer.id));
+  // One row per number, a ticked twin row included (chosenAudience, 4 Nov 2026).
+  const audience = await withTenant(organization.id, () => chosenAudience(organization.id, [...chosen]));
   if (audience.length === 0) return c.json({ error: "None of the chosen customers can be messaged." }, 422);
 
   const refusal = await sendingRefusal(number.phoneNumberId);
@@ -323,9 +324,7 @@ adminBulkRoute.post("/:slug/quick", async (c) => {
   const chosen = chosenIds(body.contactIds);
   if (!chosen || chosen.size === 0) return c.json({ error: "Choose at least one customer." }, 400);
 
-  const customers = (await withTenant(organization.id, () => getContactsForAudience(organization.id, {}))).filter((customer) =>
-    chosen.has(customer.id)
-  );
+  const customers = await withTenant(organization.id, () => chosenAudience(organization.id, [...chosen]));
   const open = await openWindowConversations(organization.id, number.phoneNumberId, customers.map((customer) => customer.id));
   const byId = new Map(customers.map((customer) => [customer.id, customer]));
   const people = open.flatMap((window) => {
