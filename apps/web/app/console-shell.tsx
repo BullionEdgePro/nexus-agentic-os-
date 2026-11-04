@@ -9,6 +9,7 @@ import { CommandPalette } from "./command-palette";
 import { AssignmentAlerts } from "./assignment-alerts";
 import { TeamChatAlerts, TeamChatBadge } from "./team-chat-alerts";
 import { MobileTabs } from "./mobile-tabs";
+import { PhoneMenu } from "./phone-menu";
 import { InstallBanner } from "./install-app";
 import { MotionBoot } from "./motion-boot";
 import { SoundToggle } from "./sound-toggle";
@@ -51,6 +52,22 @@ import "./motion.css";
  * of the rail and each positions it. That is the part that was drifting: the
  * items, not the geometry.
  */
+/**
+ * The doors this person may open, in rail order: the dock's list, and since
+ * 4 Nov 2026 also the phone's Menu (phone-menu.tsx), which a phone needs because
+ * it hides the dock. One list, so the two can never disagree.
+ */
+export function visibleNav(role: "operator" | "employee", mySlug: string | null) {
+  const items =
+    role === "operator"
+      ? NAV.filter((item) => !item.staffOnly)
+      : NAV.filter((item) => !item.operatorOnly).filter(
+          // The workflow audit only for staff whose business has a workflow drawn.
+          (item) => !item.needsWorkflow || (mySlug !== null && workflowFor(mySlug) !== null)
+        );
+  return items.map((item) => ({ ...item, label: (role === "employee" && item.staffLabel) || item.label }));
+}
+
 export function RailLinks({ role, mySlug = null }: { role: "operator" | "employee"; mySlug?: string | null }) {
   const pathname = usePathname();
   const current = activeHref(pathname);
@@ -67,13 +84,7 @@ export function RailLinks({ role, mySlug = null }: { role: "operator" | "employe
   // somebody else's.
   const labelFor = (item: (typeof NAV)[number]) => (role === "employee" && item.staffLabel) || item.label;
 
-  const visible =
-    role === "operator"
-      ? NAV.filter((item) => !item.staffOnly)
-      : NAV.filter((item) => !item.operatorOnly).filter(
-          // The workflow audit only for staff whose business has a workflow drawn.
-          (item) => !item.needsWorkflow || (mySlug !== null && workflowFor(mySlug) !== null)
-        );
+  const visible = visibleNav(role, mySlug);
 
   // The link itself, so the grouped run and the fallback render it identically.
   const link = (item: (typeof NAV)[number]) => (
@@ -378,6 +389,9 @@ export function ConsoleShell({
             the pings are for. Shown only at phone width. */}
         {role === "employee" ? (
           <div className="shell-phone-tools">
+            {/* Every page the hidden dock would offer, with Search and Sign out
+                (audit, 4 Nov 2026): a phone had no way to sign out at all. */}
+            <PhoneMenu items={visibleNav("employee", me?.organizationSlug ?? null)} />
             <ThemeToggle compact />
             <SoundToggle />
           </div>
