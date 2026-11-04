@@ -1,4 +1,4 @@
-import { getPool, withAllTenants, withTenant, withServingTenant } from "./client.js";
+import { getPool, withAllTenants, withTenant, withServingTenant, acrossEveryBusiness } from "./client.js";
 import type { Employee, PresenceSource, PresenceStatus, WeeklySchedule, SocialAccount } from "@nexus/shared";
 
 interface EmployeeRow {
@@ -205,7 +205,7 @@ export async function findEmployeeById(id: string): Promise<Employee | null> {
 export async function findEmployeeByPhoneNumberId(
   phoneNumberId: string
 ): Promise<Employee | null> {
-  return withAllTenants("whatsapp inbound: which staff member owns this number", async () => {
+  return acrossEveryBusiness("whatsapp inbound: which staff member owns this number", async () => {
     const { rows } = await getPool().query<EmployeeRow>(
       `select ${EMPLOYEE_COLUMNS} from employees
         where whatsapp_phone_number_id = $1 and is_active = true`,
@@ -224,7 +224,7 @@ export async function findEmployeeByPhoneNumberId(
  * claims the number; the newest removal wins if a number passed through several.
  */
 export async function findFormerEmployeeByPhoneNumberId(phoneNumberId: string): Promise<Employee | null> {
-  return withAllTenants("whatsapp inbound: whose number this was before they left", async () => {
+  return acrossEveryBusiness("whatsapp inbound: whose number this was before they left", async () => {
     const { rows } = await getPool().query<EmployeeRow>(
       `select ${EMPLOYEE_COLUMNS} from employees
         where whatsapp_phone_number_id = $1 and is_active = false

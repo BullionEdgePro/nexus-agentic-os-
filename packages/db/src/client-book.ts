@@ -40,7 +40,7 @@
 import { getPool, withContactOwner } from "./client.js";
 import { contactServedBy } from "./contacts.js";
 import { ensureContactForServingBusiness } from "./contact-identity.js";
-import { withTenant, withAllTenants } from "./client.js";
+import { withTenant, withAllTenants, acrossEveryBusiness } from "./client.js";
 
 /**
  * "May this person see this contact?"
@@ -659,7 +659,7 @@ export async function optOutOfReengagement(contactId: string): Promise<boolean> 
  * about being a floor beats a precise number that is wrong.
  */
 export async function dailyReachUsed(fromPhoneNumberId?: string | null): Promise<number> {
-  return withAllTenants("daily reach: a ceiling that belongs to the number, not a tenant", async () => {
+  return acrossEveryBusiness("daily reach: a ceiling that belongs to the number, not a tenant", async () => {
     // Per number when one is named (22 Oct 2026): a staff member's own number
     // has its own limit, and other numbers' campaigns do not use it up.
     //
@@ -760,7 +760,7 @@ export async function assignContactOwnerIfUnowned(
  * person has said no to any of us.
  */
 export async function isWaIdOptedOut(waId: string): Promise<boolean> {
-  return withAllTenants("opt-out check: a person's no applies whichever business asks", async () => {
+  return acrossEveryBusiness("opt-out check: a person's no applies whichever business asks", async () => {
     const { rows } = await getPool().query<{ one: number }>(
       `select 1 as one from contacts where wa_id = $1 and reengagement_opted_out limit 1`,
       [waId.replace(/\D/g, "")]

@@ -1,4 +1,4 @@
-import { getPool, isolated } from "./client.js";
+import { getPool, isolated, acrossEveryBusiness } from "./client.js";
 import type { Organization, SocialAccount } from "@nexus/shared";
 
 interface OrganizationRow {
@@ -135,9 +135,23 @@ export async function findNumberOwner(phoneNumberId: string): Promise<Organizati
 export async function getDisplayNumbers(): Promise<Map<string, string>> {
   try {
     // Isolated (3 Nov 2026): GET /api/my/link reads more after this.
+    //
+    // NEVER A DEAD NUMBER (audit, 4 Nov 2026). Every business still points at
+    // the shared line switched off on 6 Oct, so every published link dialled a
+    // number nothing answers. A switched-off number is left out, and so is a
+    // line a person holds: it is theirs, and every customer on it lands in their
+    // business whatever the link says. Across businesses, because the holder may
+    // be anyone's.
     const { rows } = await isolated(() =>
-      getPool().query<{ id: string; whatsapp_display_number: string | null }>(
-        `select id, whatsapp_display_number from organizations where is_active = true`
+      acrossEveryBusiness("customer links: which numbers are live and nobody's own", () =>
+        getPool().query<{ id: string; whatsapp_display_number: string | null }>(
+          `select o.id, o.whatsapp_display_number from organizations o
+            where o.is_active = true
+              and not exists (select 1 from retired_whatsapp_numbers r where r.phone_number_id = o.whatsapp_phone_number_id)
+              and not exists (
+                select 1 from employees e where e.whatsapp_phone_number_id = o.whatsapp_phone_number_id and e.is_active
+              )`
+        )
       )
     );
     return new Map(

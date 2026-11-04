@@ -381,6 +381,11 @@ export function withTenant<T>(organizationId: string, fn: () => Promise<T>, opti
  * the inbound worker, which cannot know the tenant until it has looked up which
  * phone number the message arrived on. Anything else calling this is worth a
  * second look, which is exactly why it has to name itself.
+ *
+ * Nested inside a transaction that is already open it runs `fn` in THAT
+ * transaction's view, deliberately: the `/api/*` request middleware nests here
+ * inside a business's request and must keep the business. A question that is
+ * about every business wherever it is asked uses acrossEveryBusiness below.
  */
 export function withAllTenants<T>(reason: string, fn: () => Promise<T>, options?: TransactionOptions): Promise<T> {
   if (!reason) throw new Error("withAllTenants requires a reason");
@@ -390,6 +395,33 @@ export function withAllTenants<T>(reason: string, fn: () => Promise<T>, options?
     fn,
     options
   );
+}
+
+/**
+ * A question about EVERY business, even when asked inside one business's
+ * request (audit, 4 Nov 2026).
+ *
+ * "Has this person said STOP to any of us?", "does anyone hold this number?",
+ * "how many has this number sent today?" Since 3 Nov every API request runs as
+ * its business, and these asked through withAllTenants, which inside a request
+ * keeps the request's one-business view — so each answered for one business
+ * while claiming everyone. Here the view is widened for `fn` alone, in its turn
+ * on the connection, and put back the moment it ends. Only for reads that decide
+ * something; nothing a request writes should go through it.
+ */
+export function acrossEveryBusiness<T>(reason: string, fn: () => Promise<T>): Promise<T> {
+  if (!reason) throw new Error("acrossEveryBusiness requires a reason");
+  const context = getTenantContext();
+  if (!context || context.scope === "all") return withAllTenants(reason, fn);
+  const client = context.client;
+  return inTurn(client, async () => {
+    await client.query("select set_config('app.tenant_scope', 'all', true)");
+    try {
+      return await runWithContext({ scope: "all", reason, client }, fn);
+    } finally {
+      await client.query("select set_config('app.tenant_scope', '', true)").catch(() => undefined);
+    }
+  });
 }
 
 /**
