@@ -262,3 +262,35 @@ test("a WhatsApp reply outside the 24-hour window is refused in words, not shown
   assert.match(reply.slice(0, reply.indexOf("sendReplyOnChannel(")), /return c\.json\(\{ error: OUTSIDE_THE_WINDOW \}, 409\)/);
   assert.match(route, /within 24 hours of the customer's last message/);
 });
+
+test("a chat that was the removed person's is handed to nobody, so an admin sees it", db, async () => {
+  // The customer's old chat was reused and stayed assigned to the person who
+  // left: no colleague saw it and no assignment alert fired (review, 4 Nov 2026).
+  const contact = (
+    await owner.query(
+      `insert into contacts (organization_id, wa_id, channel, display_name) values ($1, '971597000301', 'whatsapp', 'Their client') returning id`,
+      [ORG]
+    )
+  ).rows[0].id;
+  await owner.query(
+    `insert into conversations (organization_id, contact_id, channel, phone_number_id, employee_id) values ($1, $2, 'whatsapp', $3, $4)`,
+    [ORG, contact, REMOVED_NUMBER, REMOVED]
+  );
+  await processor.processInboundWebhookJob(
+    inbound(REMOVED_NUMBER, "971597000301", { id: "wamid.pn.in.5", type: "text", text: { body: "Still there?" } })
+  );
+  const row = (
+    await owner.query(
+      `select c.employee_id from messages m join conversations c on c.id = m.conversation_id where m.wa_message_id = 'wamid.pn.in.5'`
+    )
+  ).rows[0];
+  assert.ok(row, "the message was not recorded");
+  assert.equal(row.employee_id, null, "the chat stayed with the person who left");
+});
+
+test("on a business's number too, a STOP is confirmed in the language it was asked in", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../src/queue/processor.ts", import.meta.url), "utf8");
+  const answer = source.slice(source.indexOf("async function answerOneMessage("));
+  assert.match(answer, /optOutConfirmation\(organization\.name, optOutLanguage\(text\.body\)\)/);
+});

@@ -614,6 +614,9 @@ async function handleStaffNumberMessage(
   }
 
   await withTenant(employee.organizationId, async () => {
+    // Their old chat is reused, and stayed with the person who left: no
+    // colleague saw it (review, 4 Nov 2026). Handed to nobody, so an admin does.
+    if (removed) await assignConversationToEmployee(result.conversationId, null);
     if (!removed) {
       await assignConversationToEmployee(result.conversationId, employee.id);
       // A customer who writes to your own number is your client (22 Oct 2026):
@@ -917,7 +920,8 @@ async function answerOneMessage(
       return;
     }
 
-    await sendWhatsAppText(phoneNumberId, message.from, optOutConfirmation(organization.name))
+    // In the language they asked in (review, 4 Nov 2026).
+    await sendWhatsAppText(phoneNumberId, message.from, optOutConfirmation(organization.name, optOutLanguage(text.body)))
       .catch((err) =>
         // The flag is already set, which is the part that matters. A failed
         // confirmation leaves somebody unsure, not somebody still being
