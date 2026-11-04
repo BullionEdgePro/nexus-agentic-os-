@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { env } from "../config/env.js";
 import { verifySessionToken, readCookie, SESSION_COOKIE, type SessionScope } from "../lib/session.js";
-import { findOrganizationBySlug } from "@nexus/db";
+import { findOrganizationBySlug, sessionHolderIsActive } from "@nexus/db";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -105,6 +105,13 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
 
   const token = readCookie(c.req.header("cookie"), SESSION_COOKIE);
   const session = await verifySessionToken(token, env.sessionSecret);
+  // Removed means signed out NOW (audit, 4 Nov 2026), not when the 12-hour
+  // cookie runs out: a removed salesperson's open browser kept reading their
+  // customers and replying as the business.
+  if (session && !(await sessionHolderIsActive({ employeeId: session.employeeId, adminId: session.adminId }))) {
+    logger.warn({ sub: session.sub, path: c.req.path }, "Refused a session whose person was removed");
+    return c.json({ error: "Your access to Nexus has been removed. Ask your manager if this is a mistake." }, 401);
+  }
   if (session) {
     c.set("operator", session.sub);
 

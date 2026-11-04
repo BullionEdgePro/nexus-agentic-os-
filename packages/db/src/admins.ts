@@ -1,4 +1,4 @@
-import { getPool } from "./client.js";
+import { getPool, withAllTenants } from "./client.js";
 
 /**
  * Admin accounts — named people with full cross-tenant access.
@@ -191,6 +191,30 @@ export async function listAdmins(): Promise<Array<Omit<AdminAccount, "passwordHa
     const admin = toAdmin({ ...row, password_hash: "" });
     const { passwordHash: _drop, ...safe } = admin;
     return safe;
+  });
+}
+
+/**
+ * Whether the person a session names still works here (audit, 4 Nov 2026).
+ *
+ * A session is a signed cookie good for 12 hours; removing someone used to stop
+ * only their NEXT sign-in, so an open browser kept reading customers and
+ * replying as the business until the cookie ran out. Asked on every signed-in
+ * request: one lookup by primary key. Across businesses, because it runs before
+ * any request has a business.
+ */
+export async function sessionHolderIsActive(holder: { employeeId?: string; adminId?: string }): Promise<boolean> {
+  if (!holder.employeeId && !holder.adminId) return true;
+  return withAllTenants("session check: is the signed-in person still active", async () => {
+    if (holder.employeeId) {
+      const { rows } = await getPool().query(`select 1 from employees where id = $1 and is_active`, [holder.employeeId]);
+      if (rows.length === 0) return false;
+    }
+    if (holder.adminId) {
+      const { rows } = await getPool().query(`select 1 from admins where id = $1 and is_active`, [holder.adminId]);
+      if (rows.length === 0) return false;
+    }
+    return true;
   });
 }
 

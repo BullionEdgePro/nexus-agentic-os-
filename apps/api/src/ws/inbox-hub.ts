@@ -1,7 +1,7 @@
 import type { ServerType } from "@hono/node-server";
 import { WebSocketServer, WebSocket } from "ws";
 import type { InboxSocketEvent } from "@nexus/shared";
-import { conversationViewers, conversationVisibleTo } from "@nexus/db";
+import { conversationViewers, conversationVisibleTo, sessionHolderIsActive } from "@nexus/db";
 import { subscribeToInboxEvents } from "../lib/pubsub.js";
 import { subscribeToTeamEvents, type TeamEvent } from "../lib/team-events.js";
 import { verifySessionToken, readCookie, SESSION_COOKIE } from "../lib/session.js";
@@ -56,7 +56,14 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
     // credential the operator session already uses.
     void (async () => {
       const token = readCookie(request.headers.cookie, SESSION_COOKIE);
-      const session = await verifySessionToken(token, env.sessionSecret);
+      const verified = await verifySessionToken(token, env.sessionSecret);
+      // A removed person's cookie stops here too (audit, 4 Nov 2026), as on
+      // every REST request (require-auth.ts).
+      const session =
+        verified &&
+        (await sessionHolderIsActive({ employeeId: verified.employeeId, adminId: verified.adminId }).catch(() => false))
+          ? verified
+          : null;
       if (!session) {
         logger.warn("Rejected unauthenticated WebSocket upgrade on the inbox stream");
         socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
