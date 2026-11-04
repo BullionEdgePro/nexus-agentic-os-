@@ -60,6 +60,11 @@ const EXACT = new Set([
   // types. Kept to the two forms a person actually sends.
   "توقف",
   "إلغاء الاشتراك",
+  // The Stop button on an Arabic bulk message (audit, 4 Nov 2026): a tap sends
+  // its label, and this one was missing, so every Arabic Stop was ignored.
+  // With and without the hamza, as people also type it.
+  "إيقاف",
+  "ايقاف",
 ]);
 
 /**
@@ -91,9 +96,22 @@ export function looksLikeAnOptOut(text: string): boolean {
  * still get an answer. A confirmation that reads as "goodbye" makes people
  * think they have closed their account.
  */
-export function optOutConfirmation(businessName: string): string {
+export function optOutConfirmation(businessName: string, language: "en" | "ar" = "en"): string {
+  // In the language they asked in (audit, 4 Nov 2026): an Arabic Stop answered
+  // in English reads as if nobody understood it.
+  if (language === "ar") {
+    return (
+      `تم — لن تصلك بعد الآن رسائل ترويجية من ${businessName}. ` +
+      `يمكنك مراسلتنا هنا في أي وقت وسنرد عليك.`
+    );
+  }
   return (
     `Done — you will not receive any more promotional messages from ${businessName}. ` +
     `You can still message us here any time and we will reply.`
   );
+}
+
+/** The language an opt-out was written in: Arabic if it has Arabic letters. */
+export function optOutLanguage(text: string): "en" | "ar" {
+  return /[؀-ۿ]/.test(text ?? "") ? "ar" : "en";
 }

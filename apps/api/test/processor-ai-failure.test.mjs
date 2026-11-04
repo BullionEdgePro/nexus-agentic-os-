@@ -117,6 +117,8 @@ mock.module("@nexus/db", {
     // this branch never runs, but the processor imports these so the mock must
     // declare them.
     findEmployeeByPhoneNumberId: async () => null,
+    // A removed person's number (audit, 4 Nov 2026): none in these fixtures.
+    findFormerEmployeeByPhoneNumberId: async () => null,
     assignConversationToEmployee: async () => {},
     claimForAutoAssign: async () => true,
     setConversationPhoneNumber: async () => {},
@@ -171,6 +173,7 @@ mock.module("@nexus/agents", {
     // path they were written for.
     looksLikeAnOptOut: () => false,
     optOutConfirmation: () => "",
+    optOutLanguage: () => "en",
 
     // Referral handover. Enumerated like the rest: the processor imports these
     // three, so an omission is a module-load failure rather than a wrong

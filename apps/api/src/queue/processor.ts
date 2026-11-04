@@ -13,6 +13,7 @@ import {
   findOrganizationByPhoneNumberId,
   findOrganizationById,
   findEmployeeByPhoneNumberId,
+  findFormerEmployeeByPhoneNumberId,
   assignConversationToEmployee,
   findEmployeeForConversation,
   findSharedNumberBusinesses,
@@ -59,6 +60,7 @@ import {
   describeNobodyToEscalateTo,
   looksLikeAnOptOut,
   optOutConfirmation,
+  optOutLanguage,
   findStaffTag,
   personalHandoffLink,
   describeReferringColleague,
@@ -423,9 +425,12 @@ async function processDeliveryStatuses(
   // Person first, like inbound (3 Nov 2026): a business's old shared line that a
   // person now holds sends only as theirs, so its receipts belong to their
   // business — read business-first, they would match no row and be dropped.
+  // Last, a removed person's number (audit, 4 Nov 2026): what was sent from it
+  // still gets its receipts, filed in the business the message belongs to.
   const organizationId =
     (await findEmployeeByPhoneNumberId(phoneNumberId))?.organizationId ??
     (await findOrganizationByPhoneNumberId(phoneNumberId))?.id ??
+    (await findFormerEmployeeByPhoneNumberId(phoneNumberId))?.organizationId ??
     null;
   if (!organizationId) {
     logger.warn({ phoneNumberId }, "Delivery status for an unmapped phone_number_id");
@@ -572,7 +577,13 @@ async function handleStaffNumberMessage(
   employee: Employee,
   message: WhatsAppTextMessage,
   text: NonNullable<WhatsAppTextMessage["text"]>,
-  contactName: string | undefined
+  contactName: string | undefined,
+  /**
+   * The person was removed but their number is still connected (audit, 4 Nov
+   * 2026). The message is filed in their business UNASSIGNED, for an admin to
+   * see, instead of being dropped — and never handed back to the person who left.
+   */
+  removed = false
 ): Promise<void> {
   const result = await recordInboundMessage({
     organizationId: employee.organizationId,
@@ -593,20 +604,33 @@ async function handleStaffNumberMessage(
   if (!result.messageId) return;
   const messageId = result.messageId;
 
+  // STOP ON A PERSON'S NUMBER (audit, 4 Nov 2026). Every bulk offer now goes
+  // out from an admin's number with a Stop button, and the tap comes back HERE —
+  // where nothing recorded it, so the next campaign reached them again. Honoured
+  // like on a business's number; the message still reaches the person's inbox
+  // below, so they see the customer asked.
+  if (looksLikeAnOptOut(text.body)) {
+    await honourOptOutOnPersonalLine(employee, result.contactId, result.conversationId, message.from, text.body);
+  }
+
   await withTenant(employee.organizationId, async () => {
-    await assignConversationToEmployee(result.conversationId, employee.id);
-    // A customer who writes to your own number is your client (22 Oct 2026):
-    // without this the book stayed empty and a campaign could never reach the
-    // people this person actually talks to. Only when nobody owns them yet.
-    await assignContactOwnerIfUnowned(result.contactId, employee.id);
+    if (!removed) {
+      await assignConversationToEmployee(result.conversationId, employee.id);
+      // A customer who writes to your own number is your client (22 Oct 2026):
+      // without this the book stayed empty and a campaign could never reach the
+      // people this person actually talks to. Only when nobody owns them yet.
+      await assignContactOwnerIfUnowned(result.contactId, employee.id);
+    }
     // Pin the conversation to this number so the reply leaves from it, not the
     // shared line — the whole point of a person having their own.
     if (employee.whatsappPhoneNumberId) {
       await setConversationPhoneNumber(result.conversationId, employee.whatsappPhoneNumberId);
     }
     // Human custody: the twin must never answer on a person's own number. The
-    // conversation is theirs to work, the way a handed-over one is.
-    await setConversationHandoff(result.conversationId, true, "taken_by_employee", employee.id);
+    // conversation is theirs to work, the way a handed-over one is. Not for a
+    // removed person's line: custody in the name of someone who left would
+    // mislead, and the twin never runs on this path anyway.
+    if (!removed) await setConversationHandoff(result.conversationId, true, "taken_by_employee", employee.id);
     // Why it matters (24 Oct 2026): scored like a message on the shared line,
     // so My queue's reason tag is there for a person's own clients too.
     await scoreLeadBestEffort({
@@ -639,10 +663,49 @@ async function handleStaffNumberMessage(
     });
   }
 
+  if (removed) {
+    logger.warn(
+      { employeeId: employee.id, conversationId: result.conversationId },
+      "Inbound on a removed staff member's number — filed in their business, unassigned"
+    );
+    return;
+  }
   logger.info(
     { employeeId: employee.id, conversationId: result.conversationId },
     "Inbound on a staff member's own number — routed to them, twin held out"
   );
+}
+
+/**
+ * Record a STOP that arrived on a person's own number, and say so from that
+ * number, in the language it was asked in. As on a business's number, a
+ * confirmation is only sent once the flag is saved: confirming an opt-out that
+ * did not save would be a lie.
+ */
+async function honourOptOutOnPersonalLine(
+  employee: Employee,
+  contactId: string,
+  conversationId: string,
+  customerWaId: string,
+  said: string
+): Promise<void> {
+  try {
+    const changed = await withTenant(employee.organizationId, () => isolated(() => optOutOfReengagement(contactId)));
+    logger.info(
+      { conversationId, contactId, alreadyOptedOut: !changed, onNumberOf: employee.id },
+      "Customer opted out of promotional messages on a person's number"
+    );
+  } catch (err) {
+    logger.error({ conversationId, contactId, err }, "Could not record an opt-out on a person's number — NOT confirmed");
+    return;
+  }
+  if (!employee.whatsappPhoneNumberId) return;
+  const business = await findOrganizationById(employee.organizationId);
+  await sendWhatsAppText(
+    employee.whatsappPhoneNumberId,
+    customerWaId,
+    optOutConfirmation(business?.name ?? "us", optOutLanguage(said))
+  ).catch((err) => logger.error({ conversationId, err }, "Opt-out recorded but the confirmation did not send"));
 }
 
 async function answerOneMessage(
@@ -675,6 +738,14 @@ async function answerOneMessage(
   // — it is the query that decides which tenant we are.
   const organization = await findOrganizationByPhoneNumberId(phoneNumberId);
   if (!organization) {
+    // A REMOVED PERSON'S NUMBER (audit, 4 Nov 2026). Removing someone leaves
+    // their number connected at Meta, and customers keep writing to it; these
+    // were dropped here, 22 in one day. Filed in that person's business instead.
+    const formerHolder = await findFormerEmployeeByPhoneNumberId(phoneNumberId);
+    if (formerHolder) {
+      await handleStaffNumberMessage(formerHolder, message, text, contactName, true);
+      return;
+    }
     logger.warn({ phoneNumberId }, "No organization mapped to inbound phone_number_id");
     return;
   }
@@ -806,6 +877,56 @@ async function answerOneMessage(
     text: text.body,
   });
 
+  // Moved here (audit, 4 Nov 2026): it used to sit after the "stood down"
+  // return below, so a STOP sent while a person held the chat — and any staff
+  // reply holds it for 24 hours — was never recorded.
+  // SOMEBODY ASKING TO BE LEFT ALONE, HONOURED BEFORE ANYTHING ELSE.
+  //
+  // Placed here — after the message is recorded, before routing, retrieval,
+  // the model and governance — because an opt-out has to work on the day all
+  // of those are broken. That is precisely the day a frustrated customer sends
+  // one. Every step below this line can fail without the request being lost.
+  //
+  // It also returns immediately rather than opting out AND answering. Somebody
+  // who has just asked to stop hearing from us does not want a follow-up
+  // question, and an agent reply would be one.
+  if (looksLikeAnOptOut(text.body)) {
+    try {
+      const changed = await isolated(() => optOutOfReengagement(contactId));
+      logger.info(
+        { conversationId, contactId, alreadyOptedOut: !changed },
+        "Customer opted out of promotional messages"
+      );
+    } catch (err) {
+      // Confirming an opt-out that did not save would be a lie, and a
+      // particularly bad one. Say nothing, record it loudly, and let the
+      // customer's next attempt try again.
+      logger.error({ conversationId, contactId, err }, "Could not record an opt-out — NOT confirmed");
+      // Counted, because this is a customer message that got no answer. Without
+      // a row it is a person who asked to be left alone, was not, and left no
+      // trace of having asked — which is the exact shape of the defect the
+      // silent-return gate exists to catch, and the gate caught this one.
+      await recordMetricBestEffort({
+        organizationId: organization.id,
+        conversationId,
+        resolvedBy: "human_agent" as const,
+        inputTokens: 0,
+        outputTokens: 0,
+        replyOutcome: "none" as const,
+      });
+      return;
+    }
+
+    await sendWhatsAppText(phoneNumberId, message.from, optOutConfirmation(organization.name))
+      .catch((err) =>
+        // The flag is already set, which is the part that matters. A failed
+        // confirmation leaves somebody unsure, not somebody still being
+        // messaged.
+        logger.error({ conversationId, err }, "Opt-out recorded but the confirmation did not send")
+      );
+    return;
+  }
+
   const aiPaused = Boolean(aiPausedUntil && new Date(aiPausedUntil).getTime() > Date.now());
 
   // A HANDOFF FLAG IS A PERMANENT MUTE, AND NOTHING EVER CLEARS IT.
@@ -908,53 +1029,6 @@ async function answerOneMessage(
   // immediately and costs one indexed query; on a shared number it decides
   // which business the enquiry is for, or asks.
   //
-  // SOMEBODY ASKING TO BE LEFT ALONE, HONOURED BEFORE ANYTHING ELSE.
-  //
-  // Placed here — after the message is recorded, before routing, retrieval,
-  // the model and governance — because an opt-out has to work on the day all
-  // of those are broken. That is precisely the day a frustrated customer sends
-  // one. Every step below this line can fail without the request being lost.
-  //
-  // It also returns immediately rather than opting out AND answering. Somebody
-  // who has just asked to stop hearing from us does not want a follow-up
-  // question, and an agent reply would be one.
-  if (looksLikeAnOptOut(text.body)) {
-    try {
-      const changed = await isolated(() => optOutOfReengagement(contactId));
-      logger.info(
-        { conversationId, contactId, alreadyOptedOut: !changed },
-        "Customer opted out of promotional messages"
-      );
-    } catch (err) {
-      // Confirming an opt-out that did not save would be a lie, and a
-      // particularly bad one. Say nothing, record it loudly, and let the
-      // customer's next attempt try again.
-      logger.error({ conversationId, contactId, err }, "Could not record an opt-out — NOT confirmed");
-      // Counted, because this is a customer message that got no answer. Without
-      // a row it is a person who asked to be left alone, was not, and left no
-      // trace of having asked — which is the exact shape of the defect the
-      // silent-return gate exists to catch, and the gate caught this one.
-      await recordMetricBestEffort({
-        organizationId: organization.id,
-        conversationId,
-        resolvedBy: "human_agent" as const,
-        inputTokens: 0,
-        outputTokens: 0,
-        replyOutcome: "none" as const,
-      });
-      return;
-    }
-
-    await sendWhatsAppText(phoneNumberId, message.from, optOutConfirmation(organization.name))
-      .catch((err) =>
-        // The flag is already set, which is the part that matters. A failed
-        // confirmation leaves somebody unsure, not somebody still being
-        // messaged.
-        logger.error({ conversationId, err }, "Opt-out recorded but the confirmation did not send")
-      );
-    return;
-  }
-
   // Deliberately placed before the agent is loaded and before governance is
   // evaluated, because the routed tenant selects BOTH — answering first and
   // attributing afterwards would mean the number owner's policy had already

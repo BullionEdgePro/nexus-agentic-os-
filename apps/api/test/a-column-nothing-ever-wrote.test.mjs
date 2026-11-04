@@ -106,19 +106,27 @@ test("the opt-out is handled before routing, retrieval and the model", () => {
   assert.ok(optOut !== -1 && routing !== -1 && optOut < routing);
 });
 
+// The business-number block, inside answerOneMessage. Since 4 Nov 2026 a STOP on
+// a person's own number is honoured too (honourOptOutOnPersonalLine), so the
+// first mention in the file is no longer this one.
+const BUSINESS_OPT_OUT = (() => {
+  const answer = PROCESSOR.slice(PROCESSOR.indexOf("async function answerOneMessage("));
+  return answer.slice(answer.indexOf("looksLikeAnOptOut(text.body)"));
+})();
+
 test("a failed write is not confirmed to the customer", () => {
   // Confirming an opt-out that did not save is a particularly bad lie: the
   // person stops objecting and the messages keep coming.
-  const block = PROCESSOR.slice(PROCESSOR.indexOf("looksLikeAnOptOut(text.body)"));
-  assert.match(block.slice(0, 2000), /NOT confirmed/);
+  assert.match(BUSINESS_OPT_OUT.slice(0, 2000), /NOT confirmed/);
+  const personal = PROCESSOR.slice(PROCESSOR.indexOf("async function honourOptOutOnPersonalLine("));
+  assert.match(personal.slice(0, 1500), /NOT confirmed/);
 });
 
 test("a failed opt-out still leaves a trace", () => {
   // Found by the silent-return gate, which is the whole reason that gate
   // exists: a customer who asked to be left alone, was not, and left no record
   // of having asked.
-  const block = PROCESSOR.slice(PROCESSOR.indexOf("looksLikeAnOptOut(text.body)"));
-  assert.match(block.slice(0, 2000), /recordMetricBestEffort/);
+  assert.match(BUSINESS_OPT_OUT.slice(0, 2000), /recordMetricBestEffort/);
 });
 
 // ============================================================

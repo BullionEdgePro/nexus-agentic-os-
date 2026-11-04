@@ -216,6 +216,27 @@ export async function findEmployeeByPhoneNumberId(
 }
 
 /**
+ * The person a number belonged to before they were removed (audit, 4 Nov 2026).
+ *
+ * Removing someone leaves their number connected at Meta, so customers go on
+ * writing to it, and the active-only lookup above dropped every such message —
+ * 22 in one day on 3-4 Nov. Asked only after no active person and no business
+ * claims the number; the newest removal wins if a number passed through several.
+ */
+export async function findFormerEmployeeByPhoneNumberId(phoneNumberId: string): Promise<Employee | null> {
+  return withAllTenants("whatsapp inbound: whose number this was before they left", async () => {
+    const { rows } = await getPool().query<EmployeeRow>(
+      `select ${EMPLOYEE_COLUMNS} from employees
+        where whatsapp_phone_number_id = $1 and is_active = false
+        order by updated_at desc nulls last
+        limit 1`,
+      [phoneNumberId]
+    );
+    return rows[0] ? toEmployee(rows[0]) : null;
+  });
+}
+
+/**
  * Every distinct WhatsApp account a staff member's own number sits on, with one
  * staff member whose stored sign-in can read it. Cross-tenant on purpose: the
  * template sync runs from the worker for every business at once.
