@@ -7,8 +7,11 @@
  *
  * - A customer's message in a chat assigned to an active person: that person,
  *   on shift or not. It is their chat; mode "mine" (and "all") hears it.
- * - A customer's message with nobody (active) on it: the business's active
- *   staff who are on shift, on devices set to "all". Nobody on shift: the owner.
+ * - A customer's message with nobody (active) on it: the owners (admins), on
+ *   devices set to "all". Not the staff on shift (4 Nov 2026): under the
+ *   own-book rule an unassigned chat is the admins', a staff member who tapped
+ *   the alert could not open it, and the alert carried the customer's name and,
+ *   with previews on, their words.
  * - A chat handed to someone: the new assignee only.
  * - Anything the team did itself (a reply, a note, a status change): nobody.
  */
@@ -54,7 +57,5 @@ export function decideRecipients(ctx: PushContext): PushRecipients[] {
     return [{ subjects: holder(ctx.assigneeEmployeeId!), requiresMode: "mine" }];
   }
 
-  const onShift = ctx.staff.filter((s) => s.active && s.onShift).map((s) => employee(s.employeeId));
-  if (onShift.length > 0) return [{ subjects: onShift, requiresMode: "all" }];
   return ctx.ownerSubjects.length > 0 ? [{ subjects: ctx.ownerSubjects, requiresMode: "all" }] : [];
 }

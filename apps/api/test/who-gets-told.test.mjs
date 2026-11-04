@@ -1,9 +1,9 @@
 // Who gets told (spec 2026-10-09-nexus-mobile-app-design.md, "Push
 // notifications", dispatcher). One pure function decides; these run it for real.
 // The rules: a customer writing into an assigned chat tells the person it is
-// assigned to; an unassigned one tells whoever of that business is on shift and
-// asked to hear about everything, and the owner when nobody is; a chat handed to
-// someone tells them. Nothing the team itself did — a reply, a note, a status
+// assigned to; an unassigned one tells the owners (admins) who asked to hear
+// every new chat -- never the staff on shift, who under the own-book rule cannot
+// open it (phone push, 4 Nov 2026); a chat handed to someone tells them. Nothing the team itself did — a reply, a note, a status
 // change — ever buzzes a phone.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -29,10 +29,10 @@ test("a message in an assigned chat tells the person it is assigned to", () => {
   );
 });
 
-test("a chat assigned to someone who has left goes to whoever is on, then the owner", () => {
+test("a chat assigned to someone who has left goes to the owners, not to the staff on shift", () => {
   assert.deepEqual(
     decideRecipients(ctx({ assigneeEmployeeId: "e1", staff: staff(["e1", false, false], ["e2", true, true]) })),
-    [{ subjects: ["e:e2"], requiresMode: "all" }]
+    [{ subjects: OWNERS, requiresMode: "all" }]
   );
   assert.deepEqual(
     decideRecipients(ctx({ assigneeEmployeeId: "e1", staff: staff(["e1", false, false]) })),
@@ -40,10 +40,13 @@ test("a chat assigned to someone who has left goes to whoever is on, then the ow
   );
 });
 
-test("an unassigned message tells the staff on shift who asked to hear everything", () => {
+test("an unassigned message tells the owners who asked to hear every new chat, never the staff on shift", () => {
+  // The staff member could not open it (own book: an unassigned chat is the
+  // admins'), and the alert carried the customer's name and, with previews on,
+  // their words (audit, 4 Nov 2026).
   assert.deepEqual(
     decideRecipients(ctx({ staff: staff(["e2", true, true], ["e3", true, false], ["e5", false, true]) })),
-    [{ subjects: ["e:e2"], requiresMode: "all" }]
+    [{ subjects: OWNERS, requiresMode: "all" }]
   );
 });
 
@@ -75,6 +78,7 @@ test("what the team did itself never buzzes a phone", () => {
   assert.deepEqual(decideRecipients(ctx({ direction: null, kind: "other", staff: staff(["e1", true, true]) })), []);
 });
 
-test("no owner on record and nobody on shift means nobody, not an empty send", () => {
+test("no owner on record means nobody, not an empty send -- and still not the staff", () => {
   assert.deepEqual(decideRecipients(ctx({ ownerSubjects: [] })), []);
+  assert.deepEqual(decideRecipients(ctx({ ownerSubjects: [], staff: staff(["e2", true, true]) })), []);
 });
