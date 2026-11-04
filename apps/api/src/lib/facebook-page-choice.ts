@@ -7,9 +7,12 @@ import type { ConnectablePage } from "./facebook-onboarding.js";
  * The connect used to save whichever Page Meta listed first: an admin whose
  * account manages several businesses' Pages could connect one business's Page as
  * another's channel, and its Messenger customers landed in the wrong inbox to be
- * answered by the wrong agent. Now: the only Page that fits (for Instagram, the
- * only one with an Instagram account), else the one Page named for the business,
- * else nothing — the caller refuses and lists the Pages rather than guess.
+ * answered by the wrong agent. Now, among the Pages that fit (for Instagram, the
+ * ones with an Instagram account): a Page named exactly for the business, else
+ * the one Page carrying every word of its name, else -- only when the account
+ * manages a single Page at all -- that Page. Anything else is null, and the
+ * caller refuses and lists the Pages rather than guess. Words are whole words,
+ * so "ABR" never matches "Fabric".
  */
 export function chooseFacebookPage(
   pages: ConnectablePage[],
@@ -17,16 +20,23 @@ export function chooseFacebookPage(
   target: "facebook" | "instagram"
 ): ConnectablePage | null {
   const fits = target === "instagram" ? pages.filter((page) => page.instagram) : pages;
-  if (fits.length === 1) return fits[0];
-  const wanted = plain(businessName);
-  if (!wanted) return null;
-  const named = fits.filter((page) => {
-    const name = plain(page.name);
-    return name.length > 0 && (name.includes(wanted) || wanted.includes(name));
-  });
-  return named.length === 1 ? named[0] : null;
+  const wanted = words(businessName);
+  if (wanted.length > 0) {
+    const exact = fits.filter((page) => words(page.name).join(" ") === wanted.join(" "));
+    if (exact.length === 1) return exact[0];
+    const named = fits.filter((page) => {
+      const has = new Set(words(page.name));
+      return wanted.every((word) => has.has(word));
+    });
+    if (named.length === 1) return named[0];
+  }
+  // An account with one Page has nothing to confuse it with.
+  return pages.length === 1 && fits.length === 1 ? fits[0] : null;
 }
 
-function plain(text: string): string {
-  return (text ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+function words(text: string): string[] {
+  return (text ?? "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 0);
 }

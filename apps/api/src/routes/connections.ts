@@ -4,6 +4,7 @@ import { appBaseUrl } from "../lib/public-urls.js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   findOrganizationById,
+  organizationForConnectedPage,
   listConnections,
   saveConnection,
   removeConnection,
@@ -628,6 +629,15 @@ connectionsRoute.get("/facebook/callback", async (c) => {
         `That Facebook account manages ${pages.length} Pages (${pages.map((p) => p.name).join(", ")}), and Nexus cannot tell which is ` +
           `${business?.name ?? "this business"}'s. Connect from an account that manages only that Page, or rename the Page to include the business's name.`
       );
+    }
+    // Never a Page or Instagram account another business already has (review,
+    // 4 Nov 2026): inbound is routed by that id, so the two would share one
+    // inbox and one agent would answer the other's customers.
+    const connectedTo = await organizationForConnectedPage(
+      target === "instagram" && page.instagram ? page.instagram.id : page.pageId
+    );
+    if (connectedTo && connectedTo !== state.organizationId) {
+      return back(`${page.name} is already connected to another business in Nexus. Disconnect it there first.`);
     }
 
     // Instagram is connected THROUGH the Page it is linked to. No linked IG means
