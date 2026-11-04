@@ -416,11 +416,18 @@ export function acrossEveryBusiness<T>(reason: string, fn: () => Promise<T>): Pr
   const client = context.client;
   return inTurn(client, async () => {
     await client.query("select set_config('app.tenant_scope', 'all', true)");
+    let result: T;
     try {
-      return await runWithContext({ scope: "all", reason, client }, fn);
-    } finally {
+      result = await runWithContext({ scope: "all", reason, client }, fn);
+    } catch (err) {
       await client.query("select set_config('app.tenant_scope', '', true)").catch(() => undefined);
+      throw err;
     }
+    // Put back, and NOT quietly (review, 4 Nov 2026): a request left widened
+    // would read every business for the rest of its life. If this fails the
+    // request fails, which is the safe direction.
+    await client.query("select set_config('app.tenant_scope', '', true)");
+    return result;
   });
 }
 

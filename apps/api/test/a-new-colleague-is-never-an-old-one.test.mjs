@@ -65,6 +65,8 @@ test("the Team route never merges a new person into an existing one", () => {
   const route = readFileSync(new URL("../src/routes/employees.ts", import.meta.url), "utf8");
   const add = route.slice(route.indexOf("const fullName = typeof body.fullName"), route.indexOf("const rawWhatsApp"));
   assert.match(add, /freeEmployeeCode\(organization\.id, /);
-  assert.match(add, /\|\| "staff"/, "an Arabic-only name still gets a code");
+  // Named for the business (review, 4 Nov 2026): a bare "staff" in every
+  // business made code sign-in refuse it as matching more than one person.
+  assert.match(add, /\|\| `\$\{organization\.slug\}-staff`/, "an Arabic-only name still gets a code, unique to the business");
   assert.match(add, /That staff code is already in use/);
 });

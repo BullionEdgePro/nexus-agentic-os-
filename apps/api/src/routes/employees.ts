@@ -178,7 +178,9 @@ employeesRoute.post("/:slug/employees", async (c) => {
     employeeCode = typed;
   } else {
     const fromName = fullName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    employeeCode = await freeEmployeeCode(organization.id, fromName || "staff");
+    // Named for the business when the name gives nothing (review, 4 Nov 2026):
+    // a bare "staff" in every business made code sign-in refuse it as ambiguous.
+    employeeCode = await freeEmployeeCode(organization.id, fromName || `${organization.slug}-staff`);
   }
 
   // Validated rather than stored as typed: an unusable number here produces a
