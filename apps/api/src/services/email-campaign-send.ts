@@ -9,6 +9,7 @@ import { splitByDailyCap } from "../lib/campaign-email.js";
 import { getEmailBroadcastQueue } from "../queue/email-broadcast-queue.js";
 import type { CampaignMailbox } from "./campaign-mailbox.js";
 import { logger } from "../lib/logger.js";
+import { AFTER_THE_REQUEST_MS } from "./campaign-control.js";
 
 const DAY_MS = 86_400_000;
 
@@ -83,7 +84,9 @@ export async function queueEmailCampaign(input: {
     recipients.map((recipient) => ({
       name: "send",
       data: { broadcastId: broadcast.id, recipientId: recipient.id },
-      opts: { delay: (dayOf.get(recipient.contactId) ?? 0) * DAY_MS, jobId: `email-${recipient.id}` },
+      // Never before this request has saved the campaign (audit, 4 Nov 2026): a
+      // first email that ran sooner found no recipient row and was never sent.
+      opts: { delay: AFTER_THE_REQUEST_MS + (dayOf.get(recipient.contactId) ?? 0) * DAY_MS, jobId: `email-${recipient.id}` },
     }))
   );
 

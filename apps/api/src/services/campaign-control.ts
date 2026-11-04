@@ -45,6 +45,12 @@ export async function resumeCampaign(broadcastId: string): Promise<ControlResult
     }
   } else if (!campaign.templateId || !campaign.fromPhoneNumberId) {
     return { error: "This campaign has no message or number on record to resume with.", status: 422 };
+  } else {
+    // The number is asked again, as Send and the release ask (audit, 4 Nov
+    // 2026): resuming onto a number WhatsApp is blocking, or rates red, only
+    // spends the rest of the campaign on refusals.
+    const refusal = await sendingRefusal(campaign.fromPhoneNumberId);
+    if (refusal) return { error: refusal, status: 409 };
   }
 
   const pending = await withTenant(orgId, () => pendingRecipients(broadcastId));
@@ -59,17 +65,34 @@ export async function resumeCampaign(broadcastId: string): Promise<ControlResult
         data: { broadcastId, recipientId: p.id },
         // A new job id: the original job for this person has already run (and
         // returned on the pause), so reusing its id would be ignored as a duplicate.
-        opts: { jobId: `email-${p.id}-resume-${Date.now()}` },
+        //
+        // And on the day it was planned for (audit, 4 Nov 2026): Resume used to
+        // send every remaining day's emails at once, past the mailbox's daily cap.
+        opts: {
+          jobId: `email-${p.id}-resume-${Date.now()}`,
+          delay: Math.max(AFTER_THE_REQUEST_MS, p.sendAfter ? new Date(p.sendAfter).getTime() - Date.now() : 0),
+        },
       }))
     );
   } else {
-    const queued = await queueWhatsAppRecipients(orgId, broadcastId, campaign.templateId!, campaign.fromPhoneNumberId!, pending);
+    const queued = await queueWhatsAppRecipients(orgId, broadcastId, campaign.templateId!, campaign.fromPhoneNumberId!, pending, {
+      delay: AFTER_THE_REQUEST_MS,
+    });
     if (!queued) return { error: "The message this campaign used no longer exists.", status: 422 };
   }
 
   logger.info({ broadcastId, channel: campaign.channel, requeued: pending.length }, "Campaign resumed");
   return { ok: true, requeued: pending.length };
 }
+
+/**
+ * How long a job queued inside a request waits before it may start (audit,
+ * 4 Nov 2026). Every API request is one transaction that commits when the
+ * request ends; a Resume's first jobs used to start before that, still read the
+ * campaign as 'paused', and return for good — those people were never messaged
+ * and the campaign never finished. Ten seconds is far longer than any request.
+ */
+export const AFTER_THE_REQUEST_MS = 10_000;
 
 /**
  * Queue a WhatsApp campaign's untried people, with the first name in the
@@ -81,7 +104,8 @@ async function queueWhatsAppRecipients(
   broadcastId: string,
   templateId: string,
   fromPhoneNumberId: string,
-  pending: Awaited<ReturnType<typeof pendingRecipients>>
+  pending: Awaited<ReturnType<typeof pendingRecipients>>,
+  opts: { delay?: number } = {}
 ): Promise<boolean> {
   const template = await withTenant(orgId, () => getBroadcastTemplate(templateId));
   if (!template) return false;
@@ -103,7 +127,7 @@ async function queueWhatsAppRecipients(
         template.bodyParamCount > 0
           ? Array.from({ length: template.bodyParamCount }, (_, i) => (i === 0 ? name : "-"))
           : [],
-    });
+    }, opts.delay ? { delay: opts.delay } : undefined);
   }
   return true;
 }

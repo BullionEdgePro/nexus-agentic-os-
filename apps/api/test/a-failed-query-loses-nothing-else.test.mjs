@@ -174,7 +174,12 @@ test("every caught database call on a request path is contained", () => {
   assert.match(handover, /isolated\(\(\) => listOpenTasksForConversation\(conversationId\)\)/);
   assert.match(handover, /isolated\(\(\) => loadRecentHistory\(conversationId, 30\)\)/);
   const organizations = source("packages", "db", "src", "organizations.ts");
-  assert.match(organizations, /isolated\(\(\) =>\s*getPool\(\)\.query<\{ id: string; whatsapp_display_number/);
+  // Since 4 Nov 2026 the read is across every business (a person's line is
+  // left out wherever they work); still inside its own savepoint.
+  assert.match(
+    organizations,
+    /isolated\(\(\) =>\s*acrossEveryBusiness\("[^"]+", \(\) =>\s*getPool\(\)\.query<\{ id: string; whatsapp_display_number/
+  );
 });
 
 test("one business's failed read leaves the others on the not-reported list", () => {

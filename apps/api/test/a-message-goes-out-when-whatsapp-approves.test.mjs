@@ -27,6 +27,8 @@ let owner;
 let dbTurn;
 let control;
 const queued = [];
+/** The options each job was queued with, by job: how long it waits to start. */
+const queuedOpts = new Map();
 /** Set to make the queue refuse some jobs, as Redis going away half-way would. */
 let failAdd = null;
 /** What the number's readiness check answers; null is "ready to send". */
@@ -37,9 +39,10 @@ mock.module(new URL("../src/queue/broadcast-queue.ts", import.meta.url).href, {
   namedExports: {
     BROADCAST_SEND_QUEUE: "whatsapp-broadcast-send",
     getBroadcastSendQueue: () => ({
-      add: async (_name, data) => {
+      add: async (_name, data, opts) => {
         if (failAdd?.(data)) throw new Error("Redis is not answering");
         queued.push(data);
+        queuedOpts.set(data, opts ?? {});
       },
     }),
   },
@@ -355,4 +358,37 @@ test("the new-message route checks the number first, then makes the ticked custo
   assert.ok(create.indexOf("sendingRefusal(") > -1 && create.indexOf("sendingRefusal(") < create.indexOf("createMetaTemplate("), "the number is not checked before anything is created");
   assert.match(create, /createWaitingCampaign\(/);
   assert.match(create, /return c\.json\(\{ name, status: created\.status \?\? "PENDING", waiting \}\)/);
+});
+
+test("a resumed campaign's jobs wait for the Resume to be saved, so nobody is skipped", db, async () => {
+  // Every API request is one transaction, and Resume queued its jobs before
+  // that committed: the first ones ran, still read 'paused', and returned —
+  // those people stayed pending and the campaign never finished.
+  const campaign = await approvedCampaign("bulk_zp_probe_resume");
+  await owner.query(`update broadcasts set status = 'paused' where id = $1`, [campaign]);
+  queued.length = 0;
+  const { withAllTenants } = await import("@nexus/db");
+  const result = await withAllTenants("test: as the admin route runs it", () => control.resumeCampaign(campaign));
+  assert.deepEqual(result, { ok: true, requeued: 2 });
+  const jobs = jobsFor(campaign);
+  assert.equal(jobs.length, 2);
+  for (const job of jobs) assert.ok((queuedOpts.get(job)?.delay ?? 0) >= 5000, "a resumed job can run before the Resume is saved");
+});
+
+test("Resume checks the number first, as Send and the release do", db, async () => {
+  const campaign = await approvedCampaign("bulk_zp_probe_resume_held");
+  await owner.query(`update broadcasts set status = 'paused' where id = $1`, [campaign]);
+  queued.length = 0;
+  refusal = "WhatsApp rates this number's quality as low (red). Nothing was sent.";
+  let result;
+  try {
+    const { withAllTenants } = await import("@nexus/db");
+    result = await withAllTenants("test: as the admin route runs it", () => control.resumeCampaign(campaign));
+  } finally {
+    refusal = null;
+  }
+  assert.equal(result.status, 409);
+  assert.equal(result.error, "WhatsApp rates this number's quality as low (red). Nothing was sent.");
+  assert.equal(await statusOf(campaign), "paused");
+  assert.equal(jobsFor(campaign).length, 0);
 });

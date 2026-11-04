@@ -319,7 +319,15 @@ export async function recordEmailBounce(
 
 /** Who a paused campaign never reached — what Resume queues again. */
 export async function pendingRecipients(broadcastId: string): Promise<
-  Array<{ id: string; contactId: string; waId: string | null; displayName: string | null; toAddress: string | null }>
+  Array<{
+    id: string;
+    contactId: string;
+    waId: string | null;
+    displayName: string | null;
+    toAddress: string | null;
+    /** The day an email was planned for (Resume keeps it, audit 4 Nov 2026). */
+    sendAfter: string | null;
+  }>
 > {
   const { rows } = await getPool().query<{
     id: string;
@@ -327,8 +335,9 @@ export async function pendingRecipients(broadcastId: string): Promise<
     wa_id: string | null;
     display_name: string | null;
     to_address: string | null;
+    send_after: string | null;
   }>(
-    `select r.id, r.contact_id, ct.wa_id, ct.display_name, r.to_address
+    `select r.id, r.contact_id, ct.wa_id, ct.display_name, r.to_address, r.send_after::text
        from broadcast_recipients r
        join contacts ct on ct.id = r.contact_id
       where r.broadcast_id = $1 and r.status = 'pending'`,
@@ -340,6 +349,7 @@ export async function pendingRecipients(broadcastId: string): Promise<
     waId: row.wa_id,
     displayName: row.display_name,
     toAddress: row.to_address,
+    sendAfter: row.send_after,
   }));
 }
 
