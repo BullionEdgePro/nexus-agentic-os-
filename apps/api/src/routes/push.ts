@@ -49,11 +49,29 @@ function labelFrom(userAgent: string): string {
   return "This computer";
 }
 
+/**
+ * Being a device's person is the first half. For staff the device must also be
+ * in the business they are signed in to -- defence in depth, the bookings and
+ * tasks pattern -- so a phone filed under another business is not theirs from
+ * this one. An admin's devices belong to no one business.
+ */
+function inReach(scope: SessionScope, device: PushSubscriptionRow): boolean {
+  return scope.role !== "employee" || device.organizationId === scope.organizationId;
+}
+
+/** One of the person's own devices, or null: the same for "no such phone" and "not yours". */
+async function ownDevice(scope: SessionScope, subject: string, id: string): Promise<PushSubscriptionRow | null> {
+  const device = (await listPushSubscriptionsForSubject(subject)).find((d) => d.id === id);
+  if (!device) return null;
+  return scope.role !== "employee" || device.organizationId === scope.organizationId ? device : null;
+}
+
 pushRoute.get("/", async (c) => {
-  const subject = readerOf(c.get("scope") as SessionScope | undefined);
-  if (!subject) return c.json({ error: "Unauthorized" }, 401);
+  const scope = c.get("scope") as SessionScope | undefined;
+  const subject = readerOf(scope);
+  if (!scope || !subject) return c.json({ error: "Unauthorized" }, 401);
   const configured = pushConfigured();
-  const devices = await listPushSubscriptionsForSubject(subject);
+  const devices = (await listPushSubscriptionsForSubject(subject)).filter((d) => inReach(scope, d));
   return c.json({ configured, publicKey: configured ? env.vapidPublicKey : null, devices: devices.map(view) });
 });
 
@@ -91,7 +109,7 @@ pushRoute.post("/", async (c) => {
 pushRoute.patch("/:id", async (c) => {
   const scope = c.get("scope") as SessionScope | undefined;
   const subject = readerOf(scope);
-  if (!subject) return c.json({ error: "Unauthorized" }, 401);
+  if (!scope || !subject) return c.json({ error: "Unauthorized" }, 401);
   const body = (await c.req.json().catch(() => null)) as { previews?: unknown; mode?: unknown } | null;
   if (body?.previews !== undefined && typeof body.previews !== "boolean") return c.json({ error: "previews must be true or false" }, 400);
   if (body?.mode !== undefined && !MODES.includes(body.mode as PushMode)) return c.json({ error: "That is not one of the choices." }, 400);
@@ -100,6 +118,7 @@ pushRoute.patch("/:id", async (c) => {
   if (body?.mode === "all" && scope?.role === "employee") {
     return c.json({ error: "That choice is for admins. Staff are told about their own chats." }, 400);
   }
+  if (!(await ownDevice(scope, subject, c.req.param("id")))) return c.json({ error: "That phone is not one of yours." }, 404);
   const device = await updatePushPreferences(c.req.param("id"), subject, {
     previews: body?.previews as boolean | undefined,
     mode: body?.mode as PushMode | undefined,
@@ -109,8 +128,10 @@ pushRoute.patch("/:id", async (c) => {
 });
 
 pushRoute.delete("/:id", async (c) => {
-  const subject = readerOf(c.get("scope") as SessionScope | undefined);
-  if (!subject) return c.json({ error: "Unauthorized" }, 401);
+  const scope = c.get("scope") as SessionScope | undefined;
+  const subject = readerOf(scope);
+  if (!scope || !subject) return c.json({ error: "Unauthorized" }, 401);
+  if (!(await ownDevice(scope, subject, c.req.param("id")))) return c.json({ error: "That phone is not one of yours." }, 404);
   const removed = await deletePushSubscription(c.req.param("id"), subject);
   if (!removed) return c.json({ error: "That phone is not one of yours." }, 404);
   return c.json({ ok: true });
@@ -118,16 +139,18 @@ pushRoute.delete("/:id", async (c) => {
 
 /** One alert to one of the person's own devices, so they can see it arrive. */
 pushRoute.post("/:id/test", async (c) => {
-  const subject = readerOf(c.get("scope") as SessionScope | undefined);
-  if (!subject) return c.json({ error: "Unauthorized" }, 401);
-  const device = (await listPushSubscriptionsForSubject(subject)).find((d) => d.id === c.req.param("id"));
+  const scope = c.get("scope") as SessionScope | undefined;
+  const subject = readerOf(scope);
+  if (!scope || !subject) return c.json({ error: "Unauthorized" }, 401);
+  const device = await ownDevice(scope, subject, c.req.param("id"));
   if (!device) return c.json({ error: "That phone is not one of yours." }, 404);
   if (!pushConfigured()) return c.json({ error: NOT_ENABLED }, 503);
   const outcome = await sendPush(device, {
     title: "Nexus",
     body: "Alerts are working on this phone.",
     tag: "nexus-test",
-    url: "/deck/my-settings",
+    // A page every role has: an admin has no My settings.
+    url: "/deck/notifications",
   });
   await recordPushOutcome(device.id, outcome).catch((err) =>
     logger.warn({ err, deviceId: device.id }, "Could not record a test alert's outcome")

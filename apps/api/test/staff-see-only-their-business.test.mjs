@@ -121,6 +121,9 @@ const TAB_API = {
   // so `operatorOnly` guards the whole prefix — which is a setup decision for
   // the whole platform, like the marketplace above it, not a staff concern.
   "/deck/channels": "/api/channels",
+  // Phone notifications (4 Nov 2026): a person's own phones, addressed by the
+  // session rather than a business, so open to staff and admins alike.
+  "/deck/notifications": "/api/me/push",
   "/deck/links": "/api/links",
   "/deck/broadcasts": "/api/broadcasts",
   "/deck/activity": "/api/activity",

@@ -83,13 +83,15 @@ test("each phone can be tested and removed", () => {
   assert.match(html, /Android/);
 });
 
-test("staff find it in My settings, admins on Notifications in the Admin menu", () => {
+test("one Notifications page for everyone, with the choices that fit who is signed in; staff also in My settings", () => {
   assert.match(read("app/deck/my-settings/page.tsx"), /<PhoneAlerts role="employee" \/>/);
-  assert.match(read("app/deck/notifications/page.tsx"), /<PhoneAlerts role="operator" \/>/);
+  const page = read("app/deck/notifications/page.tsx");
+  assert.match(page, /<PhoneAlerts role=\{me\.role === "employee" \? "employee" : "operator"\} \/>/);
   const nav = read("lib/nav.tsx");
-  const entry = nav.slice(nav.indexOf('href: "/deck/notifications"'), nav.indexOf('href: "/deck/notifications"') + 400);
-  assert.match(entry, /operatorOnly: true/);
-  assert.match(nav, /\{ title: "Admin", hrefs: \[[^\]]*"\/deck\/notifications"/);
+  const at = nav.indexOf('href: "/deck/notifications"');
+  const entry = nav.slice(at, nav.indexOf("href:", at + 10));
+  assert.doesNotMatch(entry, /operatorOnly|staffOnly/, "both roles turn their own alerts on");
+  assert.match(nav, /\{ title: "You", hrefs: \[[^\]]*"\/deck\/notifications"/);
 });
 
 test("the page talks to /api/me/push only", () => {

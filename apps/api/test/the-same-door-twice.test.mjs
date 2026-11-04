@@ -110,6 +110,9 @@ const TAB_API = {
   "/deck/workflow": "/api/organizations",
   "/deck/catalogue": "/api/catalog",
   "/deck/channels": "/api/channels",
+  // Phone notifications: each person's own phones, for staff and admins alike,
+  // so neither flag. Staff also have the same panel in My settings.
+  "/deck/notifications": "/api/me/push",
   "/deck/links": "/api/links",
   "/deck/broadcasts": "/api/broadcasts",
   "/deck/activity": "/api/activity",

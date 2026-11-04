@@ -17,6 +17,7 @@ const APP_URL = process.env.AUDIT_TEST_APP_URL;
 const db = { skip: !(OWNER_URL && APP_URL) && "set AUDIT_TEST_OWNER_URL and AUDIT_TEST_APP_URL" };
 
 const ORG = "9c9c9c9c-0000-4000-8000-000000000001";
+const OTHER_ORG = "9c9c9c9c-0000-4000-8000-000000000002";
 const STAFF = "9c9c9c9c-0000-4000-8000-0000000000e1";
 const COLLEAGUE = "9c9c9c9c-0000-4000-8000-0000000000e2";
 const ADMIN = "9c9c9c9c-0000-4000-8000-0000000000a1";
@@ -53,8 +54,9 @@ before(async () => {
   await dbTurn.query("select pg_advisory_lock(20261102)");
   await owner.query(
     `insert into organizations (id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone)
-     values ($1, 'push-org', 'Push Org', '9c0901', '8c0901', 'Asia/Dubai')`,
-    [ORG]
+     values ($1, 'push-org', 'Push Org', '9c0901', '8c0901', 'Asia/Dubai'),
+            ($2, 'push-org-2', 'Push Org Two', '9c0902', '8c0902', 'Asia/Dubai')`,
+    [ORG, OTHER_ORG]
   );
   await owner.query(
     `insert into employees (id, organization_id, employee_code, full_name, is_active)
@@ -90,7 +92,7 @@ after(async () => {
     await owner.query(`delete from push_subscriptions where subject in ($1, $2, $3)`, [`e:${STAFF}`, `e:${COLLEAGUE}`, `o:${ADMIN}`]);
     await owner.query(`delete from admins where id = $1`, [ADMIN]);
     await owner.query(`delete from employees where organization_id = $1`, [ORG]);
-    await owner.query(`delete from organizations where id = $1`, [ORG]);
+    await owner.query(`delete from organizations where id in ($1, $2)`, [ORG, OTHER_ORG]);
   } finally {
     if (dbTurn) {
       await dbTurn.query("select pg_advisory_unlock(20261102)");
@@ -168,6 +170,7 @@ test("a test alert goes to that phone only, and says so when the server has no k
   assert.equal(ok.status, 200);
   assert.equal(ok.body.outcome, "ok");
   assert.deepEqual(sent.map((s) => s.endpoint), ["https://push.example.test/1"]);
+  assert.equal(sent[0].payload.url, "/deck/notifications", "a page every role has; an admin has no My settings");
   configured = false;
   try {
     const off = await call("staff", "POST", `/${id}/test`);
@@ -175,6 +178,27 @@ test("a test alert goes to that phone only, and says so when the server has no k
     assert.equal(off.body.error, "Notifications aren't enabled on this server yet.");
   } finally {
     configured = true;
+  }
+});
+
+test("a staff member's phone filed under another business is not reachable from this one", db, async () => {
+  // Defence in depth, the bookings and tasks pattern: being the right person is
+  // not enough for staff; the device must also be in the business they are
+  // signed in to.
+  const { rows } = await owner.query(
+    `insert into push_subscriptions (subject_kind, subject_id, organization_id, endpoint, p256dh, auth, label)
+     values ('employee', $1, $2, 'https://push.example.test/elsewhere', 'p', 'a', 'Old phone') returning id`,
+    [STAFF, OTHER_ORG]
+  );
+  const elsewhere = rows[0].id;
+  try {
+    const listed = (await call("staff", "GET", "")).body.devices.map((d) => d.id);
+    assert.ok(!listed.includes(elsewhere), "not listed");
+    assert.equal((await call("staff", "PATCH", `/${elsewhere}`, { previews: true })).status, 404);
+    assert.equal((await call("staff", "POST", `/${elsewhere}/test`)).status, 404);
+    assert.equal((await call("staff", "DELETE", `/${elsewhere}`)).status, 404);
+  } finally {
+    await owner.query(`delete from push_subscriptions where id = $1`, [elsewhere]);
   }
 });
 
