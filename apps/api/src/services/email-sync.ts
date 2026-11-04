@@ -222,7 +222,9 @@ async function storeInboxMail(
       if (inserted) newMessages += 1;
       // "Unsubscribe" or "stop" in reply to a campaign email: no more campaign
       // emails. The mail itself is kept like any other — a person wrote it.
-      if (inserted && looksLikeAnOptOut(freshPartOfEmail(m.body || m.snippet || ""))) {
+      // Or the subject (audit, 4 Nov 2026): the List-Unsubscribe mailto every
+      // campaign email offers sends "unsubscribe" as the subject, not the body.
+      if (inserted && (looksLikeAnOptOut(freshPartOfEmail(m.body || m.snippet || "")) || asksToUnsubscribe(m.subject))) {
         await withSavepoint(() => optOutOfEmailCampaigns(contactId)).catch((err) =>
           logger.warn({ err, contactId }, "Email opt-out could not be recorded (non-fatal)")
         );
@@ -409,6 +411,15 @@ export async function syncAllMailboxes(): Promise<EmailSyncResult> {
 
   logger.info(result, "Mailboxes synced");
   return result;
+}
+
+/**
+ * A subject that is the unsubscribe request itself: what the List-Unsubscribe
+ * mailto sends. Only that word, so a real email that merely mentions it is not
+ * read as one.
+ */
+function asksToUnsubscribe(subject: string | null | undefined): boolean {
+  return /^\s*(re:\s*)?unsubscribe\s*$/i.test(subject ?? "");
 }
 
 /** Add "Re: " unless the subject already carries one (any case, once). */
