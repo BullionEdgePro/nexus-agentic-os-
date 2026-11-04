@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { appBaseUrl } from "../lib/public-urls.js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
+  findOrganizationById,
   listConnections,
   saveConnection,
   removeConnection,
@@ -67,6 +68,7 @@ import type { SessionScope } from "../lib/session.js";
 import { env } from "../config/env.js";
 import { clientKey, loginBlocked, recordLoginFailure, clearLoginFailures } from "../lib/login-throttle.js";
 import { logger } from "../lib/logger.js";
+import { chooseFacebookPage } from "../lib/facebook-page-choice.js";
 
 /**
  * Connecting a social account.
@@ -609,11 +611,24 @@ connectionsRoute.get("/facebook/callback", async (c) => {
 
     // ONE PAGE PER BUSINESS. saveConnection is keyed on (org, employee, provider),
     // so a business has one Facebook connection and one Instagram connection —
-    // storing several Pages would collapse to the last one written. The first
-    // Page is connected; connecting a specific one of several is a later refinement.
-    const page = pages[0];
+    // storing several Pages would collapse to the last one written. One Page is
+    // connected; choosing one of several on screen is a later refinement.
+    //
+    // NOT WHICHEVER META LISTED FIRST (audit, 4 Nov 2026): an account managing
+    // several businesses' Pages could connect one business's Page as another's
+    // channel. The only Page that fits, or the one named for the business, or a
+    // refusal that names them.
+    //
     // Absent target means an older flow — treat it as the Facebook connect.
     const target = state.target ?? "facebook";
+    const business = await findOrganizationById(state.organizationId);
+    const page = chooseFacebookPage(pages, business?.name ?? "", target);
+    if (!page) {
+      return back(
+        `That Facebook account manages ${pages.length} Pages (${pages.map((p) => p.name).join(", ")}), and Nexus cannot tell which is ` +
+          `${business?.name ?? "this business"}'s. Connect from an account that manages only that Page, or rename the Page to include the business's name.`
+      );
+    }
 
     // Instagram is connected THROUGH the Page it is linked to. No linked IG means
     // there is nothing to connect — say so plainly rather than storing a Page row
