@@ -52,9 +52,17 @@ test("devices are tenant data behind row-level security", () => {
 test("re-subscribing refreshes the keys and keeps the person's choices", () => {
   const body = fn("upsertPushSubscription");
   assert.match(body, /on conflict \(endpoint\) do update/);
+  // Refined 4 Nov 2026 (phone push review): the SAME person's choices survive a
+  // re-subscribe; a phone that changes hands starts from the new person's
+  // defaults. a-phone-belongs-to-its-person.test.mjs proves both on a database.
   const update = body.slice(body.indexOf("do update"));
-  assert.ok(!/previews\s*=/.test(update), "previews survives a re-subscribe");
-  assert.ok(!/mode\s*=/.test(update), "mode survives a re-subscribe");
+  const same =
+    /when push_subscriptions\.subject_kind = excluded\.subject_kind\s+and push_subscriptions\.subject_id = excluded\.subject_id\s+then push_subscriptions\.(\w+)/g;
+  assert.deepEqual(
+    [...update.matchAll(same)].map((m) => m[1]),
+    ["mode", "previews"],
+    "mode and message text are kept when the person is the same"
+  );
 });
 
 test("only the person who owns a device can change or remove it", () => {
