@@ -208,6 +208,39 @@ test("removing a phone stops it", db, async () => {
   assert.equal((await call("staff", "GET", "")).body.devices.length, 0);
 });
 
+test("an admin's new phone hears chats nobody has taken; a staff member's hears their own; message text stays off", db, async () => {
+  // Review fix: under the own-book rule a new lead is a chat nobody has taken,
+  // and those now go only to admin phones set to hear them -- so an admin's
+  // phone defaulting to "My chats" heard nothing about new customers.
+  const admin = await call("admin", "POST", "", device(10));
+  const staff = await call("staff", "POST", "", device(11));
+  try {
+    assert.equal(admin.body.device.mode, "all");
+    assert.equal(admin.body.device.previews, false);
+    assert.equal(staff.body.device.mode, "mine");
+    assert.equal(staff.body.device.previews, false);
+  } finally {
+    await call("admin", "DELETE", `/${admin.body.device.id}`);
+    await call("staff", "DELETE", `/${staff.body.device.id}`);
+  }
+});
+
+test("turning alerts on again keeps a person's own choices; a phone that changes hands starts from the new person's", db, async () => {
+  const first = await call("admin", "POST", "", device(12));
+  await call("admin", "PATCH", `/${first.body.device.id}`, { mode: "paused", previews: true });
+  const again = await call("admin", "POST", "", device(12));
+  assert.equal(again.body.device.mode, "paused");
+  assert.equal(again.body.device.previews, true);
+  const handed = await call("staff", "POST", "", device(12));
+  try {
+    assert.equal(handed.body.device.subject, `e:${STAFF}`);
+    assert.equal(handed.body.device.mode, "mine");
+    assert.equal(handed.body.device.previews, false, "the admin's message-text choice does not follow the phone");
+  } finally {
+    await call("staff", "DELETE", `/${handed.body.device.id}`);
+  }
+});
+
 test("the route sits before /api/me, so /api/me does not swallow it", () => {
   const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
   const push = index.indexOf('app.route("/api/me/push", pushRoute);');

@@ -101,6 +101,10 @@ pushRoute.post("/", async (c) => {
     auth,
     userAgent: userAgent || null,
     label: named || labelFrom(userAgent),
+    // Under the own-book rule a new customer is a chat nobody has taken, and
+    // only admin phones set to hear those are told -- so an admin's phone
+    // starts there, with message text still off. Staff hear their own chats.
+    mode: scope?.role === "operator" ? "all" : "mine",
   });
   logger.info({ subject, deviceId: device.id, label: device.label }, "A phone was registered for alerts");
   return c.json({ device: view(device) });

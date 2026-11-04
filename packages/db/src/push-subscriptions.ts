@@ -76,8 +76,11 @@ function splitSubject(subject: string): { kind: "employee" | "operator"; id: str
 /**
  * Register a device, or refresh it when it subscribes again.
  *
- * Keyed by endpoint. A re-subscribe updates the keys and who it belongs to, and
- * leaves the person's own choices (previews, mode) exactly as they set them.
+ * Keyed by endpoint. A re-subscribe by the same person updates the keys and
+ * leaves their own choices (previews, mode) exactly as they set them. A phone
+ * that changes hands -- someone else signs in on it and turns alerts on --
+ * starts from the new person's defaults instead: message text off and their
+ * role's mode, never the last person's choices (review fix, 4 Nov 2026).
  */
 export async function upsertPushSubscription(input: {
   subject: string;
@@ -87,13 +90,21 @@ export async function upsertPushSubscription(input: {
   auth: string;
   userAgent: string | null;
   label: string | null;
+  /** What a phone new to this person hears: "all" for an admin, "mine" for staff. */
+  mode: PushMode;
 }): Promise<PushSubscriptionRow> {
   const { kind, id } = splitSubject(input.subject);
   const { rows } = await getPool().query<Row>(
-    `insert into push_subscriptions (subject_kind, subject_id, organization_id, endpoint, p256dh, auth, user_agent, label)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+    `insert into push_subscriptions (subject_kind, subject_id, organization_id, endpoint, p256dh, auth, user_agent, label, mode)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      on conflict (endpoint) do update
-        set subject_kind = excluded.subject_kind,
+        set mode = case when push_subscriptions.subject_kind = excluded.subject_kind
+                         and push_subscriptions.subject_id = excluded.subject_id
+                        then push_subscriptions.mode else excluded.mode end,
+            previews = case when push_subscriptions.subject_kind = excluded.subject_kind
+                             and push_subscriptions.subject_id = excluded.subject_id
+                            then push_subscriptions.previews else false end,
+            subject_kind = excluded.subject_kind,
             subject_id = excluded.subject_id,
             organization_id = excluded.organization_id,
             p256dh = excluded.p256dh,
@@ -102,7 +113,7 @@ export async function upsertPushSubscription(input: {
             label = coalesce(excluded.label, push_subscriptions.label),
             failure_count = 0
      returning ${COLUMNS}`,
-    [kind, id, input.organizationId, input.endpoint, input.p256dh, input.auth, input.userAgent, input.label]
+    [kind, id, input.organizationId, input.endpoint, input.p256dh, input.auth, input.userAgent, input.label, input.mode]
   );
   return toRow(rows[0]);
 }
