@@ -22,6 +22,8 @@ interface Client {
   organizationSlug: string | null;
   /** Set for a staff member: they receive events for their own conversations only. */
   employeeId: string | null;
+  /** The named admin behind an operator session, so their socket can be closed if they are removed. */
+  adminId: string | null;
   /**
    * Which stream this socket asked for (24 Oct 2026): the inbox at /ws, team
    * chat at /ws/team. Kept apart so a team message never rides the inbox
@@ -75,8 +77,14 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
         const stream = url.pathname === TEAM_PATH ? "team" : "inbox";
         const client: Client =
           session.role === "operator"
-            ? { socket: ws, organizationSlug: url.searchParams.get("org"), employeeId: null, stream }
-            : { socket: ws, organizationSlug: session.organizationSlug ?? "", employeeId: session.employeeId ?? "", stream };
+            ? { socket: ws, organizationSlug: url.searchParams.get("org"), employeeId: null, adminId: session.adminId ?? null, stream }
+            : {
+                socket: ws,
+                organizationSlug: session.organizationSlug ?? "",
+                employeeId: session.employeeId ?? "",
+                adminId: null,
+                stream,
+              };
         clients.add(client);
         ws.on("close", () => clients.delete(client));
         ws.on("error", () => clients.delete(client));
@@ -115,9 +123,29 @@ export function attachInboxWebSocketServer(httpServer: ServerType): () => void {
     }
   });
 
+  // A removed person's open stream is closed within a minute (review, 4 Nov
+  // 2026). The check at upgrade alone left an open tab receiving customer
+  // messages after its person was removed. A failed check leaves the socket be.
+  const recheck = setInterval(() => {
+    void (async () => {
+      for (const client of [...clients]) {
+        if (!client.employeeId && !client.adminId) continue;
+        const active = await sessionHolderIsActive({ employeeId: client.employeeId ?? undefined, adminId: client.adminId ?? undefined }).catch(
+          () => true
+        );
+        if (!active) {
+          clients.delete(client);
+          client.socket.close(4401, "Your access to Nexus has been removed.");
+        }
+      }
+    })();
+  }, 60_000);
+  recheck.unref();
+
   logger.info(`Unified Inbox WebSocket endpoint attached at ${WS_PATH} (team chat at ${TEAM_PATH})`);
 
   return () => {
+    clearInterval(recheck);
     unsubscribe();
     unsubscribeTeam();
     wss.close();

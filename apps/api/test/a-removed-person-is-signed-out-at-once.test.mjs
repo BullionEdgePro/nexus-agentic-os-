@@ -89,3 +89,15 @@ test("so is an admin whose account was switched off", db, async () => {
   await owner.query(`update admins set is_active = false where id = $1`, [ADMIN]);
   assert.equal(await asked(token), 401, "a switched-off admin's open session still worked");
 });
+
+test("a removed person's open live inbox is closed within a minute", async () => {
+  // Checked only when the stream opened, an open tab kept receiving customer
+  // messages after its person was removed (review, 4 Nov 2026).
+  const { readFileSync } = await import("node:fs");
+  const hub = readFileSync(new URL("../src/ws/inbox-hub.ts", import.meta.url), "utf8");
+  const sweep = hub.slice(hub.indexOf("const recheck = setInterval("));
+  assert.ok(sweep.length > 0, "there is a periodic re-check");
+  assert.match(sweep.slice(0, 1200), /sessionHolderIsActive\(\{ employeeId: client\.employeeId \?\? undefined, adminId: client\.adminId \?\? undefined \}\)/);
+  assert.match(sweep.slice(0, 1200), /client\.socket\.close\(4401/);
+  assert.match(hub, /clearInterval\(recheck\)/);
+});
