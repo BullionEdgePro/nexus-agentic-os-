@@ -13,6 +13,7 @@ const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
 const LOGOUT = read("apps", "web", "app", "api", "auth", "logout", "route.ts");
 const SHELL = read("apps", "web", "app", "console-shell.tsx");
 const MENUS = read("apps", "web", "app", "header-menus.tsx");
+const SIGN_OUT = read("apps", "web", "lib", "sign-out.ts");
 const ME = read("apps", "api", "src", "routes", "me.ts");
 
 // ============================================================
@@ -62,11 +63,18 @@ test("both verbs clear the cookie the same way", () => {
 test("there is exactly one way to sign out, and it needs no JavaScript", () => {
   // It used to branch: an <a> with no href on the front page — clickable with
   // a mouse, invisible to a keyboard — and a GET link everywhere else.
-  assert.match(SHELL, /<a href="\/api\/auth\/logout" title="Sign out">/);
-  assert.ok(!/onSignOut=\{/.test(SHELL), "the rail must not take a click handler");
+  //
+  // 4 Nov 2026 (phone push review): a link may now first make this phone forget
+  // the person's alerts (onClick={signOutHere}), but it keeps its plain href --
+  // so it still works with no JavaScript -- and the handler always ends on this
+  // same route, whatever the server says.
+  assert.match(SHELL, /<a href="\/api\/auth\/logout" title="Sign out"( onClick=\{signOutHere\})?>/);
+  assert.ok(!/onSignOut=\{/.test(SHELL), "the rail must not take a sign-out prop that replaces the link");
   assert.ok(!/href=\{onSignOut/.test(SHELL), "no conditional href");
   // The account panel uses the same route rather than its own fetch.
-  assert.match(MENUS, /<a className="acct-out" href="\/api\/auth\/logout">/);
+  assert.match(MENUS, /<a className="acct-out" href="\/api\/auth\/logout"( onClick=\{signOutHere\})?>/);
+  assert.match(SIGN_OUT, /const SIGN_OUT = "\/api\/auth\/logout";/);
+  assert.match(SIGN_OUT, /\} finally \{\s*deps\.navigate\(SIGN_OUT\);/, "always ends on the one route");
 });
 
 // ============================================================
