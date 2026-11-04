@@ -40,6 +40,7 @@ import { workflowAuditRoute } from "./routes/workflow-audit.js";
 import { workflowBoardRoute } from "./routes/workflow-board.js";
 import { searchRoute } from "./routes/search.js";
 import { meRoute } from "./routes/me.js";
+import { pushRoute } from "./routes/push.js";
 import { hqRoute } from "./routes/hq.js";
 import { attachInboxWebSocketServer } from "./ws/inbox-hub.js";
 import { teamChatRoute } from "./routes/team-chat.js";
@@ -401,6 +402,8 @@ app.route("/api/operators", operatorsRoute);
 // Header search and the signed-in account. Both narrowed by role inside their
 // handlers, because neither path carries a :slug for requireTenantScope.
 app.route("/api/search", searchRoute);
+// Before /api/me, which would otherwise answer for it: a person's phones, for alerts (4 Nov 2026).
+app.route("/api/me/push", pushRoute);
 app.route("/api/me", meRoute);
 // Team chat: staff of one business talking to each other. Scoped inside the
 // handlers like /api/tasks — the path carries no :slug (24 Oct 2026).
