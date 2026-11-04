@@ -310,6 +310,23 @@ export async function removeCatalogInstall(
     [installId, organizationId]
   );
   if (!rows[0]) return null;
+
+  // AND OUT OF THE AGENT (audit, 4 Nov 2026). The stamp alone left the pack's
+  // knowledge indexed, so the agent kept quoting it, and a procedure or wording
+  // that was switched on kept steering replies. A reinstall re-adds the
+  // knowledge under the same `catalog:<slug>` address.
+  await getPool().query(`update procedures set is_active = false
+      where catalog_install_id = $1`, [installId]);
+  await getPool().query(`update agent_phrases set is_active = false
+      where catalog_install_id = $1`, [installId]);
+  const { rows: item } = await getPool().query<{ slug: string }>(
+    `select ci.slug from catalog_installs i join catalog_items ci on ci.id = i.catalog_item_id where i.id = $1`,
+    [installId]
+  );
+  if (item[0]) {
+    await getPool().query(`delete from knowledge_sources
+        where organization_id = $1 and uri = 'catalog:' || $2`, [organizationId, item[0].slug]);
+  }
   return getInstall(rows[0].id);
 }
 
