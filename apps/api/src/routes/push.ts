@@ -42,6 +42,37 @@ function view(device: PushSubscriptionRow) {
   };
 }
 
+/**
+ * The push services browsers actually subscribe with: Chrome, Samsung and Opera
+ * (Google), Safari (Apple), Firefox (Mozilla), Edge on Windows (Microsoft). A
+ * test alert is a POST from this server to the stored address and its outcome is
+ * shown back, so any https address would let a signed-in person point the server
+ * at a host of their choosing, internal ones included (review fix, 4 Nov 2026).
+ */
+const PUSH_HOSTS = [
+  /^fcm\.googleapis\.com$/,
+  /^android\.googleapis\.com$/,
+  /(^|\.)push\.apple\.com$/,
+  /(^|\.)push\.services\.mozilla\.com$/,
+  /(^|\.)notify\.windows\.com$/,
+];
+
+export function isPushServiceAddress(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === "https:" &&
+    url.port === "" &&
+    !url.username &&
+    !url.password &&
+    PUSH_HOSTS.some((host) => host.test(url.hostname))
+  );
+}
+
 /** "iPhone", "Android" or "This computer", when the page names nothing. */
 function labelFrom(userAgent: string): string {
   if (/iPhone|iPad|iPod/.test(userAgent)) return "iPhone";
@@ -87,7 +118,7 @@ pushRoute.post("/", async (c) => {
   const endpoint = typeof body?.endpoint === "string" ? body.endpoint.trim() : "";
   const p256dh = typeof body?.keys?.p256dh === "string" ? body.keys.p256dh.trim() : "";
   const auth = typeof body?.keys?.auth === "string" ? body.keys.auth.trim() : "";
-  if (!/^https:\/\/\S+$/.test(endpoint) || endpoint.length > 1000 || !p256dh || !auth || p256dh.length > 200 || auth.length > 200) {
+  if (!/^https:\/\/\S+$/.test(endpoint) || !isPushServiceAddress(endpoint) || endpoint.length > 1000 || !p256dh || !auth || p256dh.length > 200 || auth.length > 200) {
     return c.json({ error: "This phone's notification details were incomplete. Try turning alerts on again." }, 400);
   }
   const userAgent = (c.req.header("user-agent") ?? "").slice(0, 300);

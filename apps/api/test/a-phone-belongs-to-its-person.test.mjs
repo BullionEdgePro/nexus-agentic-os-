@@ -111,7 +111,7 @@ const call = async (who, method, path, body) => {
   });
   return { status: response.status, body: await response.json() };
 };
-const device = (n) => ({ endpoint: `https://push.example.test/${n}`, keys: { p256dh: `p256-${n}`, auth: `auth-${n}` } });
+const device = (n) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/probe-${n}`, keys: { p256dh: `p256-${n}`, auth: `auth-${n}` } });
 
 test("the page learns whether alerts are on and the key a phone subscribes with", db, async () => {
   const { status, body } = await call("staff", "GET", "");
@@ -169,7 +169,7 @@ test("a test alert goes to that phone only, and says so when the server has no k
   const ok = await call("staff", "POST", `/${id}/test`);
   assert.equal(ok.status, 200);
   assert.equal(ok.body.outcome, "ok");
-  assert.deepEqual(sent.map((s) => s.endpoint), ["https://push.example.test/1"]);
+  assert.deepEqual(sent.map((s) => s.endpoint), [device(1).endpoint]);
   assert.equal(sent[0].payload.url, "/deck/notifications", "a page every role has; an admin has no My settings");
   configured = false;
   try {
@@ -238,6 +238,33 @@ test("turning alerts on again keeps a person's own choices; a phone that changes
     assert.equal(handed.body.device.previews, false, "the admin's message-text choice does not follow the phone");
   } finally {
     await call("staff", "DELETE", `/${handed.body.device.id}`);
+  }
+});
+
+test("only a real push service's address is taken, so the server never posts to a host a person picks", db, async () => {
+  // Review fix: a test alert is a POST from the server to the stored address,
+  // and its answer comes back -- any https address made it a probe of hosts,
+  // internal ones included.
+  const keys = { p256dh: "p256-x", auth: "auth-x" };
+  for (const endpoint of [
+    "https://push.example.test/x",
+    "https://127.0.0.1/x",
+    "https://fcm.googleapis.com.example.test/x",
+    "https://fcm.googleapis.com:8443/x",
+    "https://user@fcm.googleapis.com/x",
+    "http://fcm.googleapis.com/x",
+  ]) {
+    assert.equal((await call("staff", "POST", "", { endpoint, keys })).status, 400, endpoint);
+  }
+  for (const endpoint of [
+    "https://fcm.googleapis.com/fcm/send/abc",
+    "https://web.push.apple.com/QAbc",
+    "https://updates.push.services.mozilla.com/wpush/v2/abc",
+    "https://wns2-par02p.notify.windows.com/w/?token=abc",
+  ]) {
+    const taken = await call("staff", "POST", "", { endpoint, keys });
+    assert.equal(taken.status, 200, endpoint);
+    await call("staff", "DELETE", `/${taken.body.device.id}`);
   }
 });
 
