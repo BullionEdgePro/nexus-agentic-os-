@@ -23,7 +23,9 @@ const quick = ROUTE.slice(ROUTE.indexOf('myCampaignsRoute.post("/quick-message"'
 
 test("the window is the customer's last message to THIS number, inside 24 hours", () => {
   const fn = DB.slice(DB.indexOf("export async function openWindowConversations"), DB.indexOf("export async function nameContactIfUnnamed"));
-  assert.match(fn, /c\.phone_number_id = \$2/);
+  // This number: the chat's pinned one, or for an unpinned chat the business's
+  // own (review, 4 Nov 2026: business-number chats are recorded unpinned).
+  assert.match(fn, /coalesce\(c\.phone_number_id, o\.whatsapp_phone_number_id\) = \$2/);
   assert.match(fn, /m\.direction = 'inbound'/);
   assert.match(fn, /interval '23 hours 50 minutes'/);
 });
