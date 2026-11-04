@@ -14,6 +14,8 @@ import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
 import "./my-settings.css";
+import "../phone-alerts.css";
+import { PhoneAlerts } from "../phone-alerts";
 
 /**
  * Your settings — the one place a staff member changes their own details.
@@ -79,6 +81,8 @@ export default function MySettingsPage() {
               <ProfileCard me={me} onSaved={load} />
               <SocialCard />
               <ConnectionsCard />
+              {/* Alerts on this phone (phone push, 4 Nov 2026). */}
+              <PhoneAlerts role="employee" />
             </div>
           ) : (
             <div className="act-empty">

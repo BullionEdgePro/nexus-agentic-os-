@@ -53,6 +53,9 @@ export function InstallBanner() {
   // offer the browser then removes is a flash.
   const [choice, setChoice] = useState<InstallChoice | null>(null);
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  // The iPhone steps, shown here (4 Nov 2026): the link went to /app, a page
+  // that was never built.
+  const [showSteps, setShowSteps] = useState(false);
 
   useEffect(() => {
     const decide = (promptAvailable: boolean) =>
@@ -91,7 +94,9 @@ export function InstallBanner() {
       <p>
         {choice === "prompt"
           ? "Install Nexus for instant alerts on your own chats."
-          : "Get Nexus on your iPhone for instant alerts on your own chats."}
+          : showSteps
+            ? "In Safari, tap Share, then Add to Home Screen. Open Nexus from its new icon and turn alerts on in your settings."
+            : "Get Nexus on your iPhone for instant alerts on your own chats."}
       </p>
       {choice === "prompt" ? (
         <button
@@ -107,10 +112,10 @@ export function InstallBanner() {
         >
           Install app
         </button>
-      ) : (
-        <a className="install-go" href="/app#iphone">
+      ) : showSteps ? null : (
+        <button type="button" className="install-go" onClick={() => setShowSteps(true)}>
           Install on iPhone
-        </a>
+        </button>
       )}
       <button type="button" className="install-x" onClick={dismiss} aria-label="Not now">
         ×

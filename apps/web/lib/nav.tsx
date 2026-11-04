@@ -303,6 +303,19 @@ export const NAV: NavItem[] = [
     ),
   },
   {
+    href: "/deck/notifications",
+    label: "Notifications",
+    // An admin's phone alerts (phone push, 4 Nov 2026). Staff turn theirs on in
+    // My settings, which an admin does not have.
+    operatorOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z" />
+        <path d="M10 20a2 2 0 0 0 4 0" />
+      </svg>
+    ),
+  },
+  {
     href: "/deck/links",
     label: "Customer links",
     icon: (
@@ -425,7 +438,7 @@ export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
   { title: "AI agent", hrefs: ["/deck/agent", "/deck/knowledge", "/deck/procedures", "/deck/catalogue"] },
   { title: "Insights", hrefs: ["/deck/forecast", "/deck/workflow", "/deck/quality"] },
   // Two runs that never meet: an admin sees Admin, a staff member sees You.
-  { title: "Admin", hrefs: ["/deck/hq", "/deck/channels"] },
+  { title: "Admin", hrefs: ["/deck/hq", "/deck/channels", "/deck/notifications"] },
   { title: "You", hrefs: ["/deck/connections", "/deck/my-settings"] },
 ];
 

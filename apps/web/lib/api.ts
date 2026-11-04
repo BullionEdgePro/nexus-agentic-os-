@@ -2706,6 +2706,47 @@ export function getMe(): Promise<Me> {
   return request("/api/me");
 }
 
+// ============================================================
+// Phone alerts (phone push, 4 Nov 2026) — the signed-in person's own devices.
+// ============================================================
+
+export type PushMode = "mine" | "all" | "paused";
+
+export interface PushDevice {
+  id: string;
+  label: string | null;
+  previews: boolean;
+  mode: PushMode;
+  lastSuccessAt: string | null;
+  failureCount: number;
+}
+
+export function getPushDevices(): Promise<{ configured: boolean; publicKey: string | null; devices: PushDevice[] }> {
+  return request("/api/me/push");
+}
+
+export function registerPushDevice(subscription: PushSubscriptionJSON, label?: string): Promise<{ device: PushDevice }> {
+  return request("/api/me/push", {
+    method: "POST",
+    body: JSON.stringify({ endpoint: subscription.endpoint, keys: subscription.keys, label }),
+  });
+}
+
+export function updatePushDevice(id: string, patch: { previews?: boolean; mode?: PushMode }): Promise<{ device: PushDevice }> {
+  return request(`/api/me/push/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function removePushDevice(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/push/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function testPushDevice(id: string): Promise<{ outcome: "ok" | "gone" | "failed" }> {
+  return request(`/api/me/push/${encodeURIComponent(id)}/test`, { method: "POST" });
+}
+
 export function updateMe(input: {
   fullName?: string;
   whatsappNumber?: string | null;
