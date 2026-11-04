@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { signOutHere } from "@/lib/sign-out";
 import {
   searchAll,
   getMe,
@@ -906,8 +907,9 @@ export function AccountMenu({ signedInAs }: { signedInAs: string }) {
             )}
             {saved ? <span className="acct-saved">Saved</span> : null}
             {/* A link, like the rail. One route, one behaviour, and it works
-                if the click handler never runs. */}
-            <a className="acct-out" href="/api/auth/logout">
+                if the click handler never runs; the handler first makes this
+                phone forget the person's alerts (lib/sign-out.ts). */}
+            <a className="acct-out" href="/api/auth/logout" onClick={signOutHere}>
               Sign out
             </a>
           </div>

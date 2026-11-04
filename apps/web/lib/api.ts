@@ -2747,6 +2747,11 @@ export function testPushDevice(id: string): Promise<{ outcome: "ok" | "gone" | "
   return request(`/api/me/push/${encodeURIComponent(id)}/test`, { method: "POST" });
 }
 
+/** Signing out: the server forgets the phone at this push address (lib/sign-out.ts). */
+export function forgetPushDevice(endpoint: string): Promise<{ ok: true }> {
+  return request(`/api/me/push/forget`, { method: "POST", body: JSON.stringify({ endpoint }) });
+}
+
 export function updateMe(input: {
   fullName?: string;
   whatsappNumber?: string | null;

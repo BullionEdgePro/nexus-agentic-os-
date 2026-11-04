@@ -172,6 +172,26 @@ pushRoute.delete("/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Signing out on this phone: it stops hearing this person's alerts (review fix,
+ * 4 Nov 2026). Sign-out only cleared the cookie, so on a shared phone the last
+ * person's alerts kept arriving for whoever signed in next. The browser knows
+ * its own push address, not the device id, so the phone is found by address --
+ * among this person's own phones only, which is all a stolen address could reach.
+ */
+pushRoute.post("/forget", async (c) => {
+  const scope = c.get("scope") as SessionScope | undefined;
+  const subject = readerOf(scope);
+  if (!scope || !subject) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as { endpoint?: unknown } | null;
+  const endpoint = typeof body?.endpoint === "string" ? body.endpoint.trim() : "";
+  if (!endpoint) return c.json({ error: "Which phone? Its address was missing." }, 400);
+  const device = (await listPushSubscriptionsForSubject(subject)).find((d) => d.endpoint === endpoint && inReach(scope, d));
+  if (!device) return c.json({ error: "That phone is not one of yours." }, 404);
+  await deletePushSubscription(device.id, subject);
+  return c.json({ ok: true });
+});
+
 /** One alert to one of the person's own devices, so they can see it arrive. */
 pushRoute.post("/:id/test", async (c) => {
   const scope = c.get("scope") as SessionScope | undefined;

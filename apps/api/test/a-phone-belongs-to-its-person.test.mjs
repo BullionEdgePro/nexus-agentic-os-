@@ -208,6 +208,19 @@ test("removing a phone stops it", db, async () => {
   assert.equal((await call("staff", "GET", "")).body.devices.length, 0);
 });
 
+test("signing out forgets this phone: found by its address, among its own person's phones only", db, async () => {
+  // Review fix: sign-out only cleared the cookie, so on a shared phone the last
+  // person's alerts -- an admin's chats nobody has taken, message text and all --
+  // kept arriving for whoever signed in next.
+  const mine = await call("staff", "POST", "", device(20));
+  assert.equal((await call("colleague", "POST", "/forget", { endpoint: device(20).endpoint })).status, 404);
+  assert.equal((await call("staff", "POST", "/forget", {})).status, 400);
+  const forgot = await call("staff", "POST", "/forget", { endpoint: device(20).endpoint });
+  assert.equal(forgot.status, 200);
+  const left = (await call("staff", "GET", "")).body.devices.map((d) => d.id);
+  assert.ok(!left.includes(mine.body.device.id), "the phone is gone");
+});
+
 test("an admin's new phone hears chats nobody has taken; a staff member's hears their own; message text stays off", db, async () => {
   // Review fix: under the own-book rule a new lead is a chat nobody has taken,
   // and those now go only to admin phones set to hear them -- so an admin's

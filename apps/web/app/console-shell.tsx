@@ -10,6 +10,7 @@ import { AssignmentAlerts } from "./assignment-alerts";
 import { TeamChatAlerts, TeamChatBadge } from "./team-chat-alerts";
 import { MobileTabs } from "./mobile-tabs";
 import { PhoneMenu } from "./phone-menu";
+import { signOutHere } from "@/lib/sign-out";
 import { InstallBanner } from "./install-app";
 import { MotionBoot } from "./motion-boot";
 import { SoundToggle } from "./sound-toggle";
@@ -162,7 +163,7 @@ export function RailLinks({ role, mySlug = null }: { role: "operator" | "employe
         <div className="rail-foot-controls">
           <ThemeToggle compact />
           <SoundToggle />
-          <a href="/api/auth/logout" title="Sign out">
+          <a href="/api/auth/logout" title="Sign out" onClick={signOutHere}>
             <span className="rail-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />

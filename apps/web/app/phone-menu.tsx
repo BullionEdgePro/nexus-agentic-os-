@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signOutHere } from "@/lib/sign-out";
 import "./phone-menu.css";
 
 /**
@@ -59,7 +60,7 @@ export function PhoneMenu({ items }: { items: Array<{ href: string; label: strin
                 </a>
               ))}
             </nav>
-            <a className="pmenu-signout" href="/api/auth/logout">
+            <a className="pmenu-signout" href="/api/auth/logout" onClick={signOutHere}>
               Sign out
             </a>
           </div>
