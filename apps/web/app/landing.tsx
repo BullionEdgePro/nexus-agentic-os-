@@ -7,6 +7,7 @@ import { TENANTS } from "@/lib/tenants";
 import type { SalesContact } from "@/lib/sales-contact";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
 import { placeNode } from "@/lib/plate";
+import { returnPath, signedOutReason, type SignedOutReason } from "@/lib/return-path";
 import { ThemeToggle } from "./theme-toggle";
 import { ContactButton, ClosingBand, NavMenu, FloatingContact } from "./landing-contact";
 import "./deck/deck.css";
@@ -418,6 +419,9 @@ export default function Landing({ contact }: { contact: SalesContact }) {
   const [password, setPassword] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [remember, setRemember] = useState(true);
+  // Read after the first render: the server cannot see the address's query.
+  const [signedOut, setSignedOut] = useState<SignedOutReason | null>(null);
+  useEffect(() => setSignedOut(signedOutReason(window.location.search)), []);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -460,7 +464,9 @@ export default function Landing({ contact }: { contact: SalesContact }) {
         // Staff mode: this form only ever accepts an employee access code.
         // Admins have their own entrance at /admin, and this path never calls
         // the admin verifier — so a bug here cannot mint an admin session.
-        body: JSON.stringify({ email: email.trim(), password: password.trim(), mode: "staff" }),
+        // "Keep me signed in" was on this form for weeks and never sent (5 Nov
+        // 2026): every sign-in ended after 12 hours whatever it said.
+        body: JSON.stringify({ email: email.trim(), password: password.trim(), mode: "staff", remember }),
       });
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string };
@@ -469,6 +475,12 @@ export default function Landing({ contact }: { contact: SalesContact }) {
         return;
       }
       forgetSystemTheme();
+      // Straight back to the screen whose sign-in had ended, when there was one.
+      const next = returnPath(window.location.search);
+      if (next) {
+        window.location.assign(next);
+        return;
+      }
       router.refresh();
       router.refresh();
     } catch {
@@ -702,6 +714,13 @@ export default function Landing({ contact }: { contact: SalesContact }) {
         <form className="lp-auth" onSubmit={onSubmit} autoComplete="off">
           <h3>Staff sign-in</h3>
           <p className="lp-auth-sub">nexusagenticos.com</p>
+          {signedOut && (
+            <p className="lp-signed-out" role="status">
+              {signedOut === "removed"
+                ? "Your access to Nexus has been removed. Ask your manager if this is a mistake."
+                : "Your sign-in ended. Sign in again and you go straight back to where you were."}
+            </p>
+          )}
 
           <label className="lp-field" htmlFor="email">
             <span>Email or staff code</span>
@@ -748,7 +767,9 @@ export default function Landing({ contact }: { contact: SalesContact }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="XXXXX-XXXXX"
-                autoComplete="one-time-code"
+                // The code is theirs for good, not a one-time code: naming it a
+                // password lets the browser save it, so a new device fills it in.
+                autoComplete="current-password"
                 autoCapitalize="characters"
                 spellCheck={false}
               />

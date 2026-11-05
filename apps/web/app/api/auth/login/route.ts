@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import {
   signSession,
   operatorPassword,
-  sessionCookieDomain,
+  sessionCookieOptions,
   SESSION_COOKIE,
-  SESSION_MAX_AGE,
   type SessionClaims,
 } from "@/lib/auth";
 import { clientAddressHeaders } from "@/lib/client-address";
@@ -34,13 +33,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
  * signed here so there is one signing implementation and one session format.
  */
 export async function POST(req: Request) {
-  let body: { email?: string; password?: string; mode?: string };
+  let body: { email?: string; password?: string; mode?: string; remember?: boolean };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
+  // "Keep me signed in" (5 Nov 2026). Only an explicit yes keeps a sign-in: a
+  // form that does not say leaves it ending after 12 hours, as before.
+  const remember = body.remember === true;
   const identifier = (body.email ?? "").trim();
   const secret = (body.password ?? "").trim();
   const mode = body.mode === "admin" ? "admin" : "staff";
@@ -62,7 +64,7 @@ export async function POST(req: Request) {
     const admin = await verifyAdmin(req, identifier, secret);
     if (admin === "locked") return lockedOut();
     if (admin) {
-      return issue(admin.email, { role: "operator", adminId: admin.adminId });
+      return issue(admin.email, { role: "operator", adminId: admin.adminId }, remember);
     }
 
     // The shared password is a BOOTSTRAP credential and now behaves like one.
@@ -98,7 +100,7 @@ export async function POST(req: Request) {
         `[auth] SHARED OPERATOR PASSWORD USED by "${identifier}". This grants access to every business. ` +
           "Create an admin account and sign in with it — that retires this password automatically."
       );
-      return issue(identifier, { role: "operator" });
+      return issue(identifier, { role: "operator" }, remember);
     }
 
     return NextResponse.json({ error: "That email and password don't match." }, { status: 401 });
@@ -107,12 +109,16 @@ export async function POST(req: Request) {
   const employee = await verifyEmployee(req, identifier, secret);
   if (employee === "locked") return lockedOut();
   if (employee) {
-    return issue(employee.signInAs, {
-      role: "employee",
-      employeeId: employee.employeeId,
-      organizationId: employee.organizationId,
-      organizationSlug: employee.organizationSlug,
-    });
+    return issue(
+      employee.signInAs,
+      {
+        role: "employee",
+        employeeId: employee.employeeId,
+        organizationId: employee.organizationId,
+        organizationSlug: employee.organizationSlug,
+      },
+      remember
+    );
   }
 
   // One message for every staff failure. Telling someone their email was
@@ -217,16 +223,9 @@ async function verifyEmployee(
   }
 }
 
-async function issue(subject: string, claims: SessionClaims) {
-  const token = await signSession(subject, claims);
+async function issue(subject: string, claims: SessionClaims, remember: boolean) {
+  const token = await signSession(subject, claims, { remember });
   const res = NextResponse.json({ ok: true, role: claims.role });
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    domain: sessionCookieDomain(),
-    maxAge: SESSION_MAX_AGE,
-  });
+  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(remember));
   return res;
 }
