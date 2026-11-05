@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type { InboxSocketEvent } from "@nexus/shared";
 import { useInboxStore } from "./store";
+import { confirmStillSignedIn } from "./api";
 
 /**
  * Connects to the API's live WhatsApp feed, scoped to whichever business is
@@ -62,6 +63,10 @@ export function useInboxSocket(): void {
         // Down and retrying — say so, so a person on the inbox knows a new
         // message may lag rather than trusting a feed that has stopped.
         setSocketStatus("closed");
+        // Unless the sign-in ended: then every retry is refused, and agents
+        // read the banner as WhatsApp disconnecting for hours (5 Nov 2026).
+        // This sends the tab to sign in and back instead.
+        void confirmStillSignedIn();
         retryTimer = setTimeout(connect, retryDelayMs);
         retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
       };

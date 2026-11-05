@@ -20,6 +20,7 @@ import type {
 } from "@nexus/shared";
 
 export type { ConversationNote, InboxSettings, TimelineItem } from "@nexus/shared";
+import type { SignedOutReason } from "./return-path";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -88,9 +89,60 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+    const ended = sessionEnded(response.status, body);
+    if (ended) leaveForSignIn(ended);
     throw new Error(`API ${response.status} on ${path}: ${body}`);
   }
   return response.json() as Promise<T>;
+}
+
+/**
+ * Whether a refusal means this tab's sign-in has ended (5 Nov 2026): only the
+ * API guard's own 401, which says so in `signedOut`. Other routes answer 401
+ * for other reasons, and those must not send anybody anywhere.
+ */
+export function sessionEnded(status: number, body: string): SignedOutReason | null {
+  if (status !== 401) return null;
+  try {
+    const said = (JSON.parse(body) as { signedOut?: unknown }).signedOut;
+    return said === "ended" || said === "removed" ? said : null;
+  } catch {
+    return null;
+  }
+}
+
+let leaving = false;
+
+/**
+ * Take this tab to sign in, and back to this screen afterwards (5 Nov 2026).
+ *
+ * Agents' tabs sat for hours on "Live updates paused — reconnecting" once their
+ * sign-in ran out, polling and being refused, and they read it as WhatsApp
+ * disconnecting. By way of sign-out, which clears the cookie: a removed
+ * person's is still validly signed, and the front page would render the
+ * console from it again. Once per tab, and never from the sign-in itself.
+ */
+function leaveForSignIn(why: SignedOutReason): void {
+  if (leaving || typeof window === "undefined") return;
+  const { pathname, search } = window.location;
+  if (new URLSearchParams(search).has("signed-out")) return;
+  leaving = true;
+  const params = new URLSearchParams({ next: pathname + search, "signed-out": why });
+  window.location.assign(`/api/auth/logout?${params.toString()}`);
+}
+
+let lastAsked = 0;
+
+/**
+ * A live feed dropped: does this tab's sign-in still hold? A browser hides why
+ * a WebSocket was refused, so the feed asks over HTTP instead — at most every 30
+ * seconds — and a refusal there sends the tab to sign in (request, above).
+ */
+export async function confirmStillSignedIn(): Promise<void> {
+  const now = Date.now();
+  if (now - lastAsked < 30_000) return;
+  lastAsked = now;
+  await request("/api/me").catch(() => undefined);
 }
 
 /**

@@ -110,7 +110,10 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   // customers and replying as the business.
   if (session && !(await sessionHolderIsActive({ employeeId: session.employeeId, adminId: session.adminId }))) {
     logger.warn({ sub: session.sub, path: c.req.path }, "Refused a session whose person was removed");
-    return c.json({ error: "Your access to Nexus has been removed. Ask your manager if this is a mistake." }, 401);
+    return c.json(
+      { error: "Your access to Nexus has been removed. Ask your manager if this is a mistake.", signedOut: "removed" },
+      401
+    );
   }
   if (session) {
     c.set("operator", session.sub);
@@ -126,5 +129,8 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
     { path: c.req.path, method: c.req.method },
     "Rejected unauthenticated request to a tenant-data endpoint"
   );
-  return c.json({ error: "Unauthorized" }, 401);
+  // `signedOut` (5 Nov 2026): the screen's cue to send its person to sign in
+  // and back, rather than sit on a dead "reconnecting". Other routes answer 401
+  // for other reasons; only this guard's refusal carries it.
+  return c.json({ error: "Unauthorized", signedOut: "ended" }, 401);
 };

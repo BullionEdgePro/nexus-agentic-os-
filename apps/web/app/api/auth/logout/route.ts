@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, sessionCookieDomain } from "@/lib/auth";
+import { returnPath, signedOutReason, signInAgainUrl } from "@/lib/return-path";
 
 export const runtime = "nodejs";
 
@@ -109,11 +110,15 @@ function clear(res: NextResponse): NextResponse {
  * sends anybody who reaches a gated screen without a session, so both ways of
  * ending up signed out arrive in the same place.
  */
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  // A screen whose sign-in ended comes through here (5 Nov 2026) with where it
+  // was and why, so the sign-in can say so and take its person straight back.
+  // Only the console's own screens are passed on (lib/return-path.ts).
+  const why = signedOutReason(req.nextUrl.search);
   const res = new NextResponse(null, {
     status: 303,
     headers: {
-      Location: "/#signin",
+      Location: why ? signInAgainUrl(returnPath(req.nextUrl.search) ?? "/", why) : "/#signin",
       // No-store, or a cached redirect could send somebody to a page the
       // server renders from a session this response just destroyed.
       "Cache-Control": "no-store",
