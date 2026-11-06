@@ -43,7 +43,9 @@ test("the reply path takes the lock before it does anything", () => {
     PROCESSOR.indexOf("async function processSingleTextMessage"),
     PROCESSOR.indexOf("async function answerOneMessage")
   );
-  assert.match(fn, /return withConversationLock\(phoneNumberId, message\.from, \(\) =>/);
+  // Keyed on the customer's username id when Meta sends one (6 Nov 2026): their
+  // `from` can be the number for one message and the id for the next.
+  assert.match(fn, /return withConversationLock\(phoneNumberId, given\(message\.from_user_id\) \?\? message\.from, \(\) =>/);
   assert.match(fn, /answerOneMessage\(phoneNumberId, message, change, text\)/);
 });
 
