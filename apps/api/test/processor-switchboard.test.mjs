@@ -170,6 +170,10 @@ mock.module("@nexus/db", {
     findEmployeeByPhoneNumberId: async () => null,
     // A removed person's number (audit, 4 Nov 2026): none in these fixtures.
     findFormerEmployeeByPhoneNumberId: async () => null,
+    // Added with migration 109: the number behind a WhatsApp username id. No
+    // fixture here has one, so nothing is known and nothing is kept.
+    phoneForWhatsAppUser: async () => null,
+    rememberWhatsAppUser: async () => undefined,
     assignConversationToEmployee: async () => {},
     claimForAutoAssign: async () => true,
     setConversationPhoneNumber: async () => {},
