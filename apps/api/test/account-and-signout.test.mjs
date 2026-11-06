@@ -11,6 +11,7 @@ const read = (...p) => readFileSync(join(here, "..", "..", "..", ...p), "utf8");
 
 const LOGOUT = read("apps", "web", "app", "api", "auth", "logout", "route.ts");
 const LOGIN = read("apps", "web", "app", "api", "auth", "login", "route.ts");
+const AUTH = read("apps", "web", "lib", "auth.ts");
 const ME = read("apps", "api", "src", "routes", "me.ts");
 const SESSION = read("apps", "api", "src", "lib", "session.ts");
 const MENUS = read("apps", "web", "app", "header-menus.tsx");
@@ -26,7 +27,12 @@ test("logout clears the cookie on the same domain it was set on", () => {
   // would never reach the second. Logout cleared it WITHOUT one — which sets a
   // different, host-only cookie and expires that. The real session survived,
   // the refresh rendered the console again, and Sign out looked inert.
-  assert.match(LOGIN, /domain: sessionCookieDomain\(\)/);
+  // Written in ONE place since 5 Nov 2026 (sessionCookieOptions), shared by
+  // sign-in and the middleware's renewal of a kept sign-in.
+  assert.match(LOGIN, /res\.cookies\.set\(SESSION_COOKIE, token, sessionCookieOptions\(remember\)\)/);
+  const options = AUTH.slice(AUTH.indexOf("export function sessionCookieOptions"));
+  assert.match(options.slice(0, 600), /domain: sessionCookieDomain\(\)/);
+  assert.match(options.slice(0, 600), /path: "\/"/);
   assert.match(LOGOUT, /const domain = sessionCookieDomain\(\)/);
   assert.match(LOGOUT, /Domain=\$\{domain\}/);
   // Every other attribute mirrors the write too.

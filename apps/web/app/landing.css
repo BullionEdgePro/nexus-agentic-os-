@@ -811,6 +811,7 @@ html[data-theme="dark"] .lp-sky::after { opacity: .7; animation: lp-twinkle 7s e
 .lp-remember.on .lp-chk { background: var(--lp-accent); border-color: transparent; color: var(--lp-on-accent); }
 .lp-submit { justify-content: center; padding: 14px 20px; font-size: 15px; }
 .lp-err { min-height: 18px; margin: -4px 0 0; font-size: 12.5px; color: var(--crit); }
+.lp-signed-out { margin: 0; padding: 9px 12px; border: 1px solid var(--hairline-strong); border-radius: 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink); background: var(--paper); }
 .lp-auth-hint { padding-top: 12px; border-top: 1px solid var(--hairline); font-size: 12.5px; line-height: 1.55; color: var(--slate); }
 .lp-auth-hint a { color: var(--signal-text); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--hairline-strong); }
 

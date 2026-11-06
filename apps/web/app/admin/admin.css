@@ -148,6 +148,9 @@
   transition: border-color .16s, box-shadow .16s, background .16s;
 }
 .admin-card input:focus { background: var(--paper); }
+/* Keep me signed in: a plain checkbox beside its words, not a full-width field. */
+.admin-card .admin-remember { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--ink); cursor: pointer; }
+.admin-card .admin-remember input { width: 16px; height: 16px; margin: 0; padding: 0; accent-color: var(--ink); }
 .admin-card input:focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 1px;

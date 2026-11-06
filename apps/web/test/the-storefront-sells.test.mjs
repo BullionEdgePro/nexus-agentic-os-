@@ -105,7 +105,17 @@ test("signing in hands the console its own default, not the system's", () => {
   assert.deepEqual(run("dark"), []);
   assert.deepEqual(run("light"), []);
   for (const f of ["app/landing.tsx", "app/admin/page.tsx"]) {
-    assert.match(read(f), /forgetSystemTheme\(\);\s*router\./, f);
+    // Before ANY way onward (5 Nov 2026): both sign-ins may now go straight
+    // back to the screen whose sign-in had ended, by a full navigation.
+    const source = read(f);
+    const forget = source.indexOf("forgetSystemTheme();");
+    const onward = source.slice(forget).search(/router\.|window\.location\.(assign|replace)\(/);
+    assert.ok(forget > 0 && onward > 0 && onward < 600, f);
+    assert.doesNotMatch(
+      source.slice(source.indexOf("async function onSubmit"), forget),
+      /router\.(push|refresh|replace)|window\.location\.(assign|replace)\(/,
+      f
+    );
   }
 });
 
@@ -150,7 +160,8 @@ test("the storefront's top bar, headline and sign-in are the sales page's", () =
   assert.match(L, /mode: "staff"/);
   assert.match(L, /id="email"/);
   assert.match(L, /id="pass"/);
-  assert.match(L, /<a href="\/admin">Administrator sign-in<\/a> is separate\./);
+  // Carries where an admin's ended sign-in was, when it was one (5 Nov 2026).
+  assert.match(L, /<a href=\{`\/admin\$\{adminQuery\}`\}>Administrator sign-in<\/a> is separate\./);
 });
 
 // Phones: the links fold into a menu, and a WhatsApp pill follows the reader (spec §3).

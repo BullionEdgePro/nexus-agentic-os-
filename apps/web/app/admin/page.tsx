@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fontVariables } from "@/lib/fonts";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
+import { returnPath } from "@/lib/return-path";
 import { ThemeToggle } from "../theme-toggle";
 import "../deck/deck.css";
 import "./admin.css";
@@ -27,6 +28,9 @@ export default function AdminSignIn() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Kept for 30 days on this device and renewed while used (5 Nov 2026), as on
+  // the staff sign-in. Off for a shared computer.
+  const [remember, setRemember] = useState(true);
 
   useEffect(() => {
     document.title = "Admin sign-in · Nexus Agentic OS";
@@ -40,7 +44,7 @@ export default function AdminSignIn() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, mode: "admin" }),
+        body: JSON.stringify({ email: email.trim(), password, mode: "admin", remember }),
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -48,6 +52,12 @@ export default function AdminSignIn() {
         return;
       }
       forgetSystemTheme();
+      // Back to the screen whose sign-in had ended, when there was one (5 Nov 2026).
+      const next = returnPath(window.location.search);
+      if (next) {
+        window.location.replace(next);
+        return;
+      }
       router.push("/");
       router.refresh();
     } catch {
@@ -126,7 +136,12 @@ export default function AdminSignIn() {
               autoComplete="current-password"
               required
             />
-  
+
+            <label className="admin-remember">
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              Keep me signed in
+            </label>
+
             <button type="submit" className="btn" disabled={busy || !email.trim() || !password}>
               {busy ? "Signing in…" : "Sign in"}
             </button>

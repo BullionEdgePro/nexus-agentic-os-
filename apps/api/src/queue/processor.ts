@@ -72,6 +72,7 @@ import { sendWhatsAppText } from "../lib/whatsapp-client.js";
 import { publishInboxEvent } from "../lib/pubsub.js";
 import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
+import { noteUnheldNumber } from "../lib/unheld-numbers.js";
 import { explainSendError, isPaymentRefusal } from "../lib/send-errors.js";
 import { clearPaymentRefusal, notePaymentRefusal } from "../lib/payment-refusal.js";
 import { recordTestSendReceipt } from "../lib/campaign-test-status.js";
@@ -433,6 +434,9 @@ async function processDeliveryStatuses(
     (await findFormerEmployeeByPhoneNumberId(phoneNumberId))?.organizationId ??
     null;
   if (!organizationId) {
+    // Counted for admins (5 Nov 2026): a number connected at Meta that nobody
+    // here holds. Not awaited — a count must never hold up the webhook.
+    void noteUnheldNumber(phoneNumberId, "receipt");
     logger.warn({ phoneNumberId }, "Delivery status for an unmapped phone_number_id");
     return;
   }
@@ -749,6 +753,9 @@ async function answerOneMessage(
       await handleStaffNumberMessage(formerHolder, message, text, contactName, true);
       return;
     }
+    // A customer's message to a number nobody here holds, dropped — counted so
+    // admins see it on Connections (5 Nov 2026: +971 58 848 3731, 34 in a day).
+    void noteUnheldNumber(phoneNumberId, "message");
     logger.warn({ phoneNumberId }, "No organization mapped to inbound phone_number_id");
     return;
   }

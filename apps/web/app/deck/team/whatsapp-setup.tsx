@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { connectStaffWhatsApp, getWhatsAppSetup, readableError, setMainBusiness, type WhatsAppSetup } from "@/lib/api";
-import { launchWhatsAppSignup } from "@/lib/whatsapp-signup";
+import { launchWhatsAppSignup, SignupStopped } from "@/lib/whatsapp-signup";
 
 /**
  * Every staff member's WhatsApp, and whose card pays for it (30 Oct 2026).
@@ -44,7 +44,12 @@ export function WhatsAppSetupPanel({ business }: { business: BusinessSlug }) {
       });
       await load();
     } catch (err) {
-      setConnectNote({ employeeId: person.employeeId, ok: false, text: readableError(err, "The WhatsApp connection did not finish.") });
+      setConnectNote({
+        employeeId: person.employeeId,
+        ok: false,
+        // Meta's window says what happened in its own words (5 Nov 2026).
+        text: err instanceof SignupStopped ? err.message : readableError(err, "The WhatsApp connection did not finish."),
+      });
     } finally {
       setConnecting(null);
     }

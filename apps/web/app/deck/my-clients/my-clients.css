@@ -285,6 +285,9 @@
   margin-bottom: 8px;
 }
 .deck-root .cnx-head strong { font-size: 14px; color: var(--ink); }
+/* Numbers nobody holds (5 Nov 2026): a warning, so it reads apart from the cards. */
+.deck-root .cnx-unheld { border-color: color-mix(in srgb, var(--crit) 45%, transparent); background: var(--crit-soft); margin-bottom: 14px; }
+.deck-root .cnx-unheld-line { margin: 4px 0 0; font-size: 13px; color: var(--ink); }
 .deck-root .cnx-on {
   margin-left: 9px;
   font-size: 12px;

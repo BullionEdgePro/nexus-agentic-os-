@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { InboxSocketEvent } from "@nexus/shared";
 import { play } from "@/lib/sound";
+import { confirmStillSignedIn } from "@/lib/api";
 import "./assignment-alerts.css";
 
 interface Alert {
@@ -75,6 +76,8 @@ export function AssignmentAlerts({ employeeId, organizationSlug }: { employeeId:
       };
       socket.onclose = () => {
         if (cancelled) return;
+        // An ended sign-in is refused on every retry (5 Nov 2026).
+        void confirmStillSignedIn();
         retryTimer = setTimeout(connect, retryDelayMs);
         retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
       };

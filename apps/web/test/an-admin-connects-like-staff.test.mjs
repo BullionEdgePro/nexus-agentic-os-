@@ -31,7 +31,8 @@ test("an admin's calls name the business; staff's never do", () => {
   setConnectionsBusiness(null);
   const api = read("lib/api.ts");
   assert.equal((api.match(/request\("\/api\/connections/g) ?? []).length, 0, "a connections call bypasses connectionsPath");
-  assert.equal((api.match(/request\(connectionsPath\("\/api\/connections/g) ?? []).length, 18);
+  // 19 since 5 Nov 2026: the admins' list of numbers nobody holds.
+  assert.equal((api.match(/request\(connectionsPath\("\/api\/connections/g) ?? []).length, 19);
 });
 
 test("the picker is a labelled choice of every business", () => {

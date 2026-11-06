@@ -81,6 +81,9 @@ test("a staff member removed mid-session is refused on their next request", db, 
   assert.equal(await asked(token), 200);
   await owner.query(`update employees set is_active = false where id = $1`, [STAFF]);
   assert.equal(await asked(token), 401, "a removed staff member's open session still worked");
+  // Said so (5 Nov 2026): the screen sends them to sign in with this reason.
+  const refusal = await app.request("/api/probe", { headers: { cookie: `nexus_session=${token}` } });
+  assert.equal((await refusal.json()).signedOut, "removed");
 });
 
 test("so is an admin whose account was switched off", db, async () => {

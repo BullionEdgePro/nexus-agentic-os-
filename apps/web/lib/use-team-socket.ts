@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { TeamChatMessage, TeamReaction } from "./api";
+import { confirmStillSignedIn, type TeamChatMessage, type TeamReaction } from "./api";
 
 /** What the API publishes on /ws/team (apps/api/src/lib/team-events.ts). */
 export interface TeamSocketEvent {
@@ -79,6 +79,9 @@ export function useTeamSocket(
         if (cancelled) return;
         droppedOnce = true;
         setStatus("closed");
+        // A sign-in that ended would be refused here forever; this sends the
+        // tab to sign in instead (5 Nov 2026).
+        void confirmStillSignedIn();
         retryTimer = setTimeout(connect, retryDelayMs);
         retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
       };

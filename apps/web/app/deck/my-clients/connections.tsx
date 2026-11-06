@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { launchWhatsAppSignup } from "@/lib/whatsapp-signup";
+import { launchWhatsAppSignup, SignupStopped } from "@/lib/whatsapp-signup";
+import { UnheldNumbers } from "./unheld-numbers";
 import {
   getConnections,
   getWhatsAppHistory,
@@ -180,6 +181,8 @@ export function ConnectionsPanel() {
   const picker = businesses ? (
     <BusinessPicker businesses={businesses} value={business} onChange={choose} />
   ) : null;
+  // Admins only (5 Nov 2026): numbers connected at Meta that nobody here holds.
+  const unheld = <>{businesses ? <UnheldNumbers /> : null}</>;
 
   // An admin who has not chosen a business sees the choice, not the cards: a
   // card would connect an account to nobody.
@@ -187,6 +190,7 @@ export function ConnectionsPanel() {
     return (
       <section className="cnx">
         <h2>Your accounts</h2>
+        {unheld}
         {picker}
         {notice ? <p className="cnx-note">{notice}</p> : null}
         {error ? <p className="mc-error">{error}</p> : null}
@@ -198,6 +202,7 @@ export function ConnectionsPanel() {
   return (
     <section className="cnx">
       <h2>Your accounts</h2>
+      {unheld}
       {picker}
 
       {notice ? <p className="cnx-note">{notice}</p> : null}
@@ -504,7 +509,8 @@ function WhatsAppCard({
                 setBusinessWarning(connected.businessWarning ?? null);
                 await onChange();
               } catch (err) {
-                onError(readableError(err, "WhatsApp could not be connected."));
+                // Meta's window says what happened in its own words (5 Nov 2026).
+                onError(err instanceof SignupStopped ? err.message : readableError(err, "WhatsApp could not be connected."));
               } finally {
                 setBusy(false);
               }
