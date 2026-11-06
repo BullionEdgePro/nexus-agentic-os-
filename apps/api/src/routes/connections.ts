@@ -22,11 +22,16 @@ import {
   withTenant,
   isolated,
   withRecovery,
+  findEmployeeByPhoneNumberId,
+  findFormerEmployeeByPhoneNumberId,
+  findOrganizationByPhoneNumberId,
 } from "@nexus/db";
 import { readHistoryStatus, requestChatHistory } from "../lib/whatsapp-history.js";
+import { unheldNumbersNow } from "../lib/unheld-numbers.js";
 import { connectWhatsAppNumber } from "../services/whatsapp-connect.js";
 import { getMainBusiness } from "../lib/main-business.js";
 import {
+  fetchCoexistenceNumber,
   whatsappCoexistenceConfigured,
   whatsappEmbeddedConfig,
 } from "../lib/whatsapp-onboarding.js";
@@ -1134,6 +1139,28 @@ async function ownWhatsAppNumber(c: Context) {
 connectionsRoute.get("/whatsapp/main-business", async (c) => {
   const main = await getMainBusiness();
   return c.json({ main: main ? { id: main.id, name: main.name } : null });
+});
+
+/**
+ * WhatsApp numbers that reach Nexus while nobody holds them (5 Nov 2026), for
+ * admins on Connections: a connect that finished at Meta without Nexus hearing
+ * leaves its customers' messages going to nobody (lib/unheld-numbers.ts).
+ * Admins only — the list spans every business.
+ */
+connectionsRoute.get("/whatsapp/unheld", async (c) => {
+  if (scopeOf(c).role !== "operator") return c.json({ error: "Only an admin can see this." }, 403);
+  const numbers = await unheldNumbersNow({
+    // Whoever the processor would file it under now: a person, a business, or
+    // someone who left (their customers' messages are filed for them too).
+    isHeld: async (id) =>
+      Boolean(
+        (await findEmployeeByPhoneNumberId(id)) ??
+          (await findOrganizationByPhoneNumberId(id)) ??
+          (await findFormerEmployeeByPhoneNumberId(id))
+      ),
+    describe: async (id) => fetchCoexistenceNumber(id, env.metaAccessToken),
+  });
+  return c.json({ numbers });
 });
 
 /** How the import of this person's past WhatsApp chats is going. */

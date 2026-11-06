@@ -3548,6 +3548,21 @@ export function getConnections(): Promise<{
   return request(connectionsPath("/api/connections"));
 }
 
+/** A WhatsApp number reaching Nexus that nobody holds (admins only; 5 Nov 2026). */
+export interface UnheldWhatsAppNumber {
+  phoneNumberId: string;
+  displayNumber: string | null;
+  verifiedName: string | null;
+  firstSeen: string;
+  lastSeen: string;
+  messages: number;
+  receipts: number;
+}
+
+export function getUnheldWhatsAppNumbers(): Promise<{ numbers: UnheldWhatsAppNumber[] }> {
+  return request("/api/connections/whatsapp/unheld");
+}
+
 export function startTikTokConnect(): Promise<{ url: string }> {
   return request(connectionsPath("/api/connections/tiktok/start"));
 }
