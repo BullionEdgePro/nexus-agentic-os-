@@ -14,3 +14,4 @@ export * from "./card-number.js";
 export * from "./hq.js";
 export * from "./org-chart.js";
 export * from "./workflows/index.js";
+export * from "./whatsapp-identity.js";

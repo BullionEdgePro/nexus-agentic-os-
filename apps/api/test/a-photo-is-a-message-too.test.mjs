@@ -79,7 +79,9 @@ test("the pipeline no longer drops non-text messages", () => {
   assert.ok(!/if \(message\.type !== "text" \|\| !message\.text\) continue;/.test(PROC), "the old text-only filter is gone");
   const loop = PROC.slice(PROC.indexOf("export async function processInboundWebhookJob"));
   assert.match(loop, /const described = describeInboundMessage\(message\);\s+if \(!described\) continue;/);
-  assert.match(loop, /processSingleTextMessage\(phoneNumberId, \{ \.\.\.message, text: \{ body: described\.body \} \}, change\)/);
+  // With the sender set once there since 6 Nov 2026 (a customer with a
+  // WhatsApp username has no `from`; a-customer-with-a-username-is-not-lost).
+  assert.match(loop, /processSingleTextMessage\(phoneNumberId, \{ \.\.\.message, from: sender, text: \{ body: described\.body \} \}, change\)/);
   // The real type is stored, so the inbox can offer the file.
   assert.equal((PROC.match(/messageType: message\.type,/g) ?? []).length, 2);
   // The AI hears the attachment note; the stored body stays the label alone.
@@ -97,8 +99,11 @@ test("staff can open the file, only through the chat it belongs to", () => {
 test("a message with no sender profile is still processed, not crashed on", () => {
   // Meta's "unsupported" messages (error 131051) arrive with a contact that has
   // no profile; reading profile.name without the ? failed the job 5 times.
-  assert.match(PROC, /\?\.profile\?\.name;/);
+  // Since 6 Nov 2026 the contact is found first (by number or username id),
+  // and a missing name falls back to the username — still guarded throughout.
+  assert.match(PROC, /contact\?\.profile\?\.name \?\? contact\?\.profile\?\.username;/);
   assert.ok(!/\)\?\.profile\.name;/.test(PROC), "no code line reads profile.name unguarded");
+  assert.ok(!/contact\?\.profile\.name/.test(PROC), "no code line reads profile.name unguarded");
   const u = describeInboundMessage({ from: "971500000000", id: "w", timestamp: "1", type: "unsupported", errors: [{ code: 131051 }] });
   assert.ok(u && u.body.startsWith("["), "an unsupported message is still recorded");
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { whatsAppAddressLabel } from "@nexus/shared";
 import {
   getConversationDetails,
   updateConversationDetails,
@@ -31,7 +32,7 @@ function contactLine(d: ConversationDetails): { label: string; value: string } {
     case "email":
       return { label: "Email", value: "Email thread" };
     default:
-      return { label: "WhatsApp", value: d.contactWaId ? `+${d.contactWaId}` : "—" };
+      return { label: "WhatsApp", value: d.contactWaId ? whatsAppAddressLabel(d.contactWaId) : "—" };
   }
 }
 
@@ -214,7 +215,7 @@ export function DetailsPanel({
               <span className="dp-avatar" aria-hidden="true">
                 {(details.contactName ?? "#").trim().charAt(0).toUpperCase() || "#"}
               </span>
-              <h3 className="dp-name">{details.contactName ?? (details.contactWaId ? `+${details.contactWaId}` : "Customer")}</h3>
+              <h3 className="dp-name">{details.contactName ?? (details.contactWaId ? whatsAppAddressLabel(details.contactWaId) : "Customer")}</h3>
             </div>
             <dl className="dp-facts">
               <div>

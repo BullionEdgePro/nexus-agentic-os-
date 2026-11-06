@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { ConversationSummary, ConversationChannel, MessageDto, TimelineItem } from "@nexus/shared";
+import { isBusinessScopedUserId, whatsAppAddressLabel } from "@nexus/shared";
 import { suggestReply, polishText, syncGmailInbox, readableError, attachmentUrl } from "@/lib/api";
 import { useInboxStore } from "@/lib/store";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
@@ -748,7 +749,7 @@ export default function InboxPage() {
   useEffect(() => () => clearCommandActions(), []);
 
   const contactLabel = (c: ConversationSummary): string =>
-    c.contactName ?? (c.contactWaId ? `+${c.contactWaId}` : `${channelLabel(c.channel)} customer`);
+    c.contactName ?? (c.contactWaId ? whatsAppAddressLabel(c.contactWaId) : `${channelLabel(c.channel)} customer`);
 
   const waitingMs =
     // Not for a sender marked not a customer: nobody is waiting on a platform
@@ -1258,7 +1259,7 @@ export default function InboxPage() {
                 <h1 className="ibx-who">{contactLabel(activeConversation)}</h1>
                 <p className="ibx-wa">
                   {channelLabel(activeConversation.channel)}
-                  {activeConversation.contactWaId ? ` · +${activeConversation.contactWaId}` : ""}
+                  {activeConversation.contactWaId ? ` · ${whatsAppAddressLabel(activeConversation.contactWaId)}` : ""}
                 </p>
               </div>
               <div className="ibx-head-actions">
@@ -1275,7 +1276,7 @@ export default function InboxPage() {
                 {/* WhatsApp chats have a number to dial: the header dials it (the
                     phone's dialer, or Phone Link on a computer) and opens the
                     Calls tab already timing the call. Other channels log only. */}
-                {activeConversation.channel === "whatsapp" && activeConversation.contactWaId ? (
+                {activeConversation.channel === "whatsapp" && activeConversation.contactWaId && !isBusinessScopedUserId(activeConversation.contactWaId) ? (
                   <a
                     className="ibx-callbtn"
                     href={`tel:+${activeConversation.contactWaId}`}
@@ -1362,7 +1363,7 @@ export default function InboxPage() {
                     conversationId={activeConversation.id}
                     customerName={
                       activeConversation.contactName ??
-                      (activeConversation.contactWaId ? `+${activeConversation.contactWaId}` : "this customer")
+                      (activeConversation.contactWaId ? whatsAppAddressLabel(activeConversation.contactWaId) : "this customer")
                     }
                   />
                 ) : null}
