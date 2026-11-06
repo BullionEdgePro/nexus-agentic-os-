@@ -8,7 +8,7 @@ import type {
   WhatsAppWebhookEntry,
 } from "@nexus/shared";
 import type { Employee } from "@nexus/shared";
-import { worstRetrievalOutcome, whatsAppEchoRecipient, whatsAppSender } from "@nexus/shared";
+import { worstRetrievalOutcome } from "@nexus/shared";
 import {
   findOrganizationByPhoneNumberId,
   findOrganizationById,
@@ -73,6 +73,7 @@ import { publishInboxEvent } from "../lib/pubsub.js";
 import { autoAssignIfEnabled, hasStaffOnShift } from "../services/availability.js";
 import { logger } from "../lib/logger.js";
 import { noteUnheldNumber } from "../lib/unheld-numbers.js";
+import { customerFiledAs, given } from "../lib/whatsapp-customer.js";
 import { explainSendError, isPaymentRefusal } from "../lib/send-errors.js";
 import { clearPaymentRefusal, notePaymentRefusal } from "../lib/payment-refusal.js";
 import { recordTestSendReceipt } from "../lib/campaign-test-status.js";
@@ -295,7 +296,14 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
         // number, their message failed five times on the contacts identity
         // check and was lost. Everything below reads `from`, so it is set here
         // once. A message naming nobody at all is set aside, never retried.
-        const sender = whatsAppSender(message);
+        //
+        // And as ONE customer (migration 109): the number behind a username id
+        // is kept whenever Meta sends the two together, so a username-only
+        // message lands on the contact the number made (lib/whatsapp-customer.ts).
+        const userId =
+          given(message.from_user_id) ??
+          given(change.value.contacts?.find((c) => given(c.wa_id) && c.wa_id === message.from)?.user_id);
+        const sender = await customerFiledAs(given(message.from), userId);
         if (!sender) {
           logger.warn({ phoneNumberId, messageId: message.id }, "A WhatsApp message names no sender — set aside");
           continue;
@@ -347,8 +355,9 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
  * webhook and have Meta redeliver the customer messages beside it.
  */
 async function processMessageEcho(phoneNumberId: string, echo: WhatsAppTextMessage): Promise<void> {
-  // To a customer with a username, Meta gives `to_user_id` and no `to` (6 Nov 2026).
-  const to = whatsAppEchoRecipient(echo);
+  // To a customer with a username, Meta gives `to_user_id` and no `to` (6 Nov
+  // 2026) — filed as one customer, like an inbound message (migration 109).
+  const to = await customerFiledAs(given(echo.to), given(echo.to_user_id));
   const body = echo.text?.body;
   if (!to || !body) return;
 
@@ -738,7 +747,11 @@ async function answerOneMessage(
   //
   // A customer with a username (6 Nov 2026) is matched by `user_id`, and when
   // they gave no profile name their username names them.
-  const contact = change.value.contacts?.find((c) => c.wa_id === message.from || c.user_id === message.from);
+  // `from` may be the number kept for their username id (migration 109) while
+  // Meta's contact block names only the id, so the id is matched too.
+  const contact = change.value.contacts?.find(
+    (c) => c.wa_id === message.from || c.user_id === message.from || (given(c.user_id) && c.user_id === message.from_user_id)
+  );
   const contactName = contact?.profile?.name ?? contact?.profile?.username;
 
   // A LINE HELD BY A PERSON WINS (3 Nov 2026). Asked first: is this a number

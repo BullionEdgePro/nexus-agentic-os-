@@ -32,7 +32,7 @@ export interface WhatsAppTextMessage {
   /**
    * The customer's number. ABSENT as Meta sends it for a customer with a
    * username (6 Nov 2026), who comes as `from_user_id`; the processor sets it
-   * from whatsAppSender, so everything past the entry point may rely on it.
+   * (customerFiledAs), so everything past the entry point may rely on it.
    */
   from: string;
   id: string;
@@ -76,7 +76,8 @@ export interface WhatsAppWebhookEntry {
       state_sync?: Array<{
         type?: string;
         action?: string;
-        contact?: { full_name?: string; first_name?: string; phone_number?: string };
+        /** `user_id` and `username` since usernames (6 Nov 2026); `phone_number` may then be absent. */
+        contact?: { full_name?: string; first_name?: string; phone_number?: string; user_id?: string; username?: string };
         metadata?: { timestamp?: string };
       }>;
       statuses?: Array<{
@@ -107,8 +108,10 @@ export interface WhatsAppWebhookEntry {
 export interface WhatsAppHistoryChunk {
   metadata?: { phase?: number; chunk_order?: number; progress?: number };
   threads?: Array<{
-    /** The customer's WhatsApp number. */
-    id: string;
+    /** The customer's WhatsApp number — absent for a customer with a username Meta may not share. */
+    id?: string;
+    /** Who the thread is with (6 Nov 2026): their number when Meta may share it, and their business-scoped id. */
+    context?: { wa_id?: string; user_id?: string; username?: string };
     messages?: Array<WhatsAppTextMessage & { history_context?: { status?: string } }>;
   }>;
   errors?: Array<{ code?: number; title?: string; message?: string }>;

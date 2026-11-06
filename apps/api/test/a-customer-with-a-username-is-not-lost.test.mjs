@@ -72,12 +72,9 @@ globalThis.fetch = async (url, init) => {
 
 const shared = await import("@nexus/shared");
 
-test("the sender is the number when there is one, the username id when there is not", () => {
-  assert.equal(shared.whatsAppSender({ from: "971501234567", from_user_id: BSUID }), "971501234567");
-  assert.equal(shared.whatsAppSender({ from_user_id: BSUID }), BSUID);
-  assert.equal(shared.whatsAppSender({}), null);
-  assert.equal(shared.whatsAppEchoRecipient({ to_user_id: BSUID }), BSUID);
-  assert.equal(shared.whatsAppEchoRecipient({ to: "971501234567", to_user_id: BSUID }), "971501234567");
+test("a username id is told from a number", () => {
+  // Which customer a message is filed as is customerFiledAs's, with the number
+  // behind a username id kept (one-customer-one-contact.test.mjs).
   assert.equal(shared.isBusinessScopedUserId(BSUID), true);
   assert.equal(shared.isBusinessScopedUserId("US.ENT.11815799212886844830"), true, "a parent id too");
   assert.equal(shared.isBusinessScopedUserId("971501234567"), false);

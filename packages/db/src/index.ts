@@ -56,3 +56,4 @@ export * from "./hq.js";
 export * from "./vault-crypto.js";
 export * from "./team-chat.js";
 export * from "./team-chat-media.js";
+export * from "./whatsapp-users.js";

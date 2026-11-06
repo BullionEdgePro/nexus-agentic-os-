@@ -11,6 +11,7 @@ import { getRedisConnection } from "../queue/queue.js";
 import { requestSmbAppData } from "./whatsapp-client.js";
 import { describeInboundMessage } from "./inbound-media.js";
 import { logger } from "./logger.js";
+import { customerFiledAs, given } from "./whatsapp-customer.js";
 
 /**
  * A staff member's past chats, brought in from their WhatsApp Business app.
@@ -156,16 +157,24 @@ async function importChunk(
   let imported = 0;
   let chats = 0;
   for (const thread of chunk.threads ?? []) {
-    const customer = digits(thread.id);
+    // A thread with a customer who uses a WhatsApp username may have no number
+    // at all (6 Nov 2026): Meta then names them in `context` by their
+    // business-scoped id. Filed as one customer, like a live message.
+    const phone = digits(thread.id) || digits(thread.context?.wa_id) || null;
+    const userId = given(thread.context?.user_id);
+    const customer = await customerFiledAs(phone, userId);
     if (!customer) continue;
     try {
       const messages = (thread.messages ?? [])
         .filter((message) => message?.id && message.timestamp)
         .map((message) => ({
           waMessageId: String(message.id),
-          // A message is the customer's when it came FROM the thread's number;
-          // everything else in the thread was sent by the business.
-          direction: digits(message.from) === customer ? ("inbound" as const) : ("outbound" as const),
+          // A message is the customer's when it came FROM them — their number,
+          // or their username id; everything else was sent by the business.
+          direction:
+            (phone && digits(message.from) === phone) || (userId && message.from_user_id === userId)
+              ? ("inbound" as const)
+              : ("outbound" as const),
           messageType: String(message.type || "text"),
           body: historyMessageBody(message),
           at: new Date(Number(message.timestamp) * 1000).toISOString(),
@@ -173,7 +182,8 @@ async function importChunk(
           rawPayload: message,
         }));
       if (messages.length === 0) continue;
-      const name = await getRedisConnection().hget(NAMES(phoneNumberId), customer).catch(() => null);
+      const name =
+        (await getRedisConnection().hget(NAMES(phoneNumberId), customer).catch(() => null)) ?? given(thread.context?.username);
       const result = await importHistoryThread({
         organizationId: employee.organizationId,
         contactWaId: customer,
@@ -226,9 +236,12 @@ export async function processAppSync(phoneNumberId: string, change: WhatsAppWebh
 
   // Names first: a chunk in the same delivery can then use them.
   for (const entry of contacts) {
-    const waId = digits(entry.contact?.phone_number);
-    const name = entry.contact?.full_name?.trim() || entry.contact?.first_name?.trim();
-    if (!waId || entry.action === "remove" || !name) continue;
+    if (entry.action === "remove") continue;
+    // A contact with a username may come with no number, only their
+    // business-scoped id (6 Nov 2026); filed as one customer, and the pair kept.
+    const waId = await customerFiledAs(digits(entry.contact?.phone_number) || null, given(entry.contact?.user_id));
+    const name = entry.contact?.full_name?.trim() || entry.contact?.first_name?.trim() || given(entry.contact?.username);
+    if (!waId || !name) continue;
     try {
       await getRedisConnection().hset(NAMES(phoneNumberId), waId, name);
       await getRedisConnection().expire(NAMES(phoneNumberId), TTL_SECONDS);
