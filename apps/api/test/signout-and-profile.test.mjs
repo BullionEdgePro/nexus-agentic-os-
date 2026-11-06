@@ -42,7 +42,12 @@ test("the redirect goes somewhere the browser can reach", () => {
   // A relative Location is resolved by the browser against the address it
   // actually requested, so it cannot be wrong regardless of what the proxy
   // forwards.
-  assert.match(LOGOUT, /Location: "\/#signin"/);
+  //
+  // Two relative forms since 5 Nov 2026: the plain sign-out, and the one a
+  // screen whose sign-in ended takes, built by signInAgainUrl as "/?…#signin".
+  assert.match(LOGOUT, /Location: why \? signInAgainUrl\([^\n]*\) : "\/#signin"/);
+  const RETURN = read("apps", "web", "lib", "return-path.ts");
+  assert.match(RETURN, /return `\/\?\$\{params\.toString\(\)\}#signin`;/);
   const code = LOGOUT.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   assert.ok(
     !/NextResponse\.redirect/.test(code),
