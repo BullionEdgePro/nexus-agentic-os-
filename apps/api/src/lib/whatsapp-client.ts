@@ -1,6 +1,16 @@
 import { env } from "../config/env.js";
 import { isolated, whatsappSendTokenForNumber } from "@nexus/db";
+import { isBusinessScopedUserId } from "@nexus/shared";
 import { logger } from "./logger.js";
+
+/**
+ * Whom a send is addressed to (6 Nov 2026). A customer with a WhatsApp
+ * username may be known only by their business-scoped user id, and Meta takes
+ * that in `recipient`, never in `to` (its "Business-scoped user IDs" page).
+ */
+function addressee(waId: string): { to: string } | { recipient: string } {
+  return isBusinessScopedUserId(waId) ? { recipient: waId } : { to: waId };
+}
 
 /**
  * The bearer token a send from THIS number must use.
@@ -66,7 +76,7 @@ export async function sendWhatsAppText(
     },
     body: JSON.stringify({
       messaging_product: "whatsapp",
-      to: toWaId,
+      ...addressee(toWaId),
       type: "text",
       text: { body },
     }),
@@ -100,7 +110,7 @@ export async function sendWhatsAppTemplate(
     },
     body: JSON.stringify({
       messaging_product: "whatsapp",
-      to: toWaId,
+      ...addressee(toWaId),
       type: "template",
       template: {
         name: templateName,

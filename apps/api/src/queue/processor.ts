@@ -8,7 +8,7 @@ import type {
   WhatsAppWebhookEntry,
 } from "@nexus/shared";
 import type { Employee } from "@nexus/shared";
-import { worstRetrievalOutcome } from "@nexus/shared";
+import { worstRetrievalOutcome, whatsAppEchoRecipient, whatsAppSender } from "@nexus/shared";
 import {
   findOrganizationByPhoneNumberId,
   findOrganizationById,
@@ -289,10 +289,20 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
         // Only a reaction to an earlier message comes back null.
         const described = describeInboundMessage(message);
         if (!described) continue;
+        // WHO IT IS FROM (6 Nov 2026). A customer with a WhatsApp username has
+        // no `from`, only `from_user_id` (their business-scoped id); read as a
+        // number, their message failed five times on the contacts identity
+        // check and was lost. Everything below reads `from`, so it is set here
+        // once. A message naming nobody at all is set aside, never retried.
+        const sender = whatsAppSender(message);
+        if (!sender) {
+          logger.warn({ phoneNumberId, messageId: message.id }, "A WhatsApp message names no sender — set aside");
+          continue;
+        }
         // Isolated per message: one bad message in a multi-message webhook
         // payload must not force BullMQ to retry the whole batch, re-doing
         // work for siblings that already succeeded.
-        await processSingleTextMessage(phoneNumberId, { ...message, text: { body: described.body } }, change);
+        await processSingleTextMessage(phoneNumberId, { ...message, from: sender, text: { body: described.body } }, change);
       }
 
       // The half of this webhook nobody read until 2026-08-17.
@@ -336,7 +346,8 @@ export async function processInboundWebhookJob(job: Job<InboundWebhookJob>): Pro
  * webhook and have Meta redeliver the customer messages beside it.
  */
 async function processMessageEcho(phoneNumberId: string, echo: WhatsAppTextMessage): Promise<void> {
-  const to = typeof echo.to === "string" ? echo.to : null;
+  // To a customer with a username, Meta gives `to_user_id` and no `to` (6 Nov 2026).
+  const to = whatsAppEchoRecipient(echo);
   const body = echo.text?.body;
   if (!to || !body) return;
 
@@ -720,7 +731,11 @@ async function answerOneMessage(
   // `?.profile?.name`, not `?.profile.name`: Meta sends a contact with NO
   // profile for some messages (an "unsupported" one, error 131051, arrived like
   // that on 2026-09-30), and the missing `?` crashed the job five times over.
-  const contactName = change.value.contacts?.find((c) => c.wa_id === message.from)?.profile?.name;
+  //
+  // A customer with a username (6 Nov 2026) is matched by `user_id`, and when
+  // they gave no profile name their username names them.
+  const contact = change.value.contacts?.find((c) => c.wa_id === message.from || c.user_id === message.from);
+  const contactName = contact?.profile?.name ?? contact?.profile?.username;
 
   // A LINE HELD BY A PERSON WINS (3 Nov 2026). Asked first: is this a number
   // somebody was given — a staff member's own, or an admin's (their seat,

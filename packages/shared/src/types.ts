@@ -29,6 +29,11 @@ export type SenderType = "contact" | "ai_agent" | "human_agent" | "system";
 export type ScheduledMessageStatus = "pending" | "sending" | "sent" | "failed" | "cancelled";
 
 export interface WhatsAppTextMessage {
+  /**
+   * The customer's number. ABSENT as Meta sends it for a customer with a
+   * username (6 Nov 2026), who comes as `from_user_id`; the processor sets it
+   * from whatsAppSender, so everything past the entry point may rely on it.
+   */
   from: string;
   id: string;
   timestamp: string;
@@ -44,8 +49,12 @@ export interface WhatsAppWebhookEntry {
     value: {
       messaging_product: "whatsapp";
       metadata: { display_phone_number: string; phone_number_id: string };
-      /** `profile` is missing on some messages (an "unsupported" one, for example). */
-      contacts?: Array<{ profile?: { name?: string }; wa_id: string }>;
+      /**
+       * `profile` is missing on some messages (an "unsupported" one, for
+       * example). A customer with a username has `user_id` and
+       * `profile.username`, and no `wa_id` unless Meta can share their number.
+       */
+      contacts?: Array<{ profile?: { name?: string; username?: string }; wa_id?: string; user_id?: string }>;
       messages?: WhatsAppTextMessage[];
       /**
        * Coexistence only (field `smb_message_echoes`): messages the staff member
