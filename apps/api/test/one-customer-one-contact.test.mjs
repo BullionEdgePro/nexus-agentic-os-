@@ -16,6 +16,7 @@
 // stood in.
 import { test, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 const OWNER_URL = process.env.AUDIT_TEST_OWNER_URL;
 const APP_URL = process.env.AUDIT_TEST_APP_URL;
@@ -215,4 +216,89 @@ test("a connected phone's past chat with a username customer is imported, the ri
 test("a number Meta's way never fails the message: a malformed pair is skipped", db, async () => {
   await assert.doesNotReject(processor.processInboundWebhookJob(message("wamid.oc.5", { from: "971500970005", userId: "not-a-bsuid" })));
   assert.ok((await contactsOf()).includes("971500970005"));
+  const kept = await owner.query(`select count(*)::int as n from whatsapp_user_ids where user_id = 'not-a-bsuid'`);
+  assert.equal(kept.rows[0].n, 0);
+});
+
+// ---- Review, 6 Nov 2026 ----
+
+test("a username contact made after the pair was kept is still moved (two jobs at once)", db, async () => {
+  // Worker concurrency: a username-only job that missed the pair can make a
+  // contact under the id just after another job kept the pair. The next
+  // message with both must still move it.
+  const BSUID = "AE.9704";
+  await owner.query(`insert into whatsapp_user_ids (user_id, wa_id) values ($1, '971500970004')`, [BSUID]);
+  await owner.query(`insert into contacts (organization_id, wa_id) values ($1, $2)`, [ORG, BSUID]);
+  await processor.processInboundWebhookJob(message("wamid.oc.6", { from: "971500970004", userId: BSUID, name: "Late" }));
+  const contacts = await contactsOf();
+  assert.ok(!contacts.includes(BSUID), "the late username contact stayed");
+  assert.ok(contacts.includes("971500970004"));
+});
+
+test("an opt-out on a username contact that cannot be merged follows the person", db, async () => {
+  const BSUID = "AE.9705";
+  await owner.query(
+    `insert into contacts (organization_id, wa_id, reengagement_opted_out) values ($1, $2, true), ($1, '971500970006', false)`,
+    [ORG, BSUID]
+  );
+  await processor.processInboundWebhookJob(message("wamid.oc.7", { from: "971500970006", userId: BSUID, name: "Both" }));
+  const phone = await owner.query(`select reengagement_opted_out from contacts where organization_id = $1 and wa_id = '971500970006'`, [ORG]);
+  assert.equal(phone.rows[0].reengagement_opted_out, true, "they asked not to be messaged, under their username");
+});
+
+test("a username id where Meta puts a number is never read as one", db, async () => {
+  // Stripped to digits, "AE.9706…" passes for a 20-digit number; kept as a
+  // pair it would re-file the customer under a number that does not exist.
+  const BSUID = "AE.97060000000000000006";
+  await processor.processInboundWebhookJob(
+    delivery(
+      {
+        history: [
+          {
+            metadata: { phase: 0, chunk_order: 1, progress: 100 },
+            threads: [{ id: BSUID, context: { user_id: BSUID }, messages: [{ from_user_id: BSUID, id: "wamid.oc.h3", timestamp: now(), type: "text", text: { body: "Hello" } }] }],
+          },
+        ],
+      },
+      "history"
+    )
+  );
+  const kept = await owner.query(`select count(*)::int as n from whatsapp_user_ids where user_id = $1`, [BSUID]);
+  assert.equal(kept.rows[0].n, 0);
+  assert.ok((await contactsOf()).includes(BSUID));
+  assert.ok(!(await contactsOf()).includes("9706" + "0".repeat(15) + "6"));
+});
+
+test("an old chat filed by a kept number knows the customer's own messages", db, async () => {
+  // The thread names only the id; the number comes from the pair kept for it.
+  await processor.processInboundWebhookJob(
+    delivery(
+      {
+        history: [
+          {
+            metadata: { phase: 0, chunk_order: 1, progress: 100 },
+            threads: [
+              {
+                context: { user_id: "AE.9701" },
+                messages: [{ from: "971500970001", id: "wamid.oc.h4", timestamp: now(), type: "text", text: { body: "Before" } }],
+              },
+            ],
+          },
+        ],
+      },
+      "history"
+    )
+  );
+  const row = await owner.query(`select direction from messages where organization_id = $1 and wa_message_id = 'wamid.oc.h4'`, [ORG]);
+  assert.equal(row.rows[0]?.direction, "inbound");
+});
+
+test("the cross-business write refuses to run inside one business's transaction", db, async () => {
+  const lib = await import("@nexus/db");
+  await assert.rejects(lib.withTenant(ORG, () => lib.rememberWhatsAppUser("AE.9707", "971500970007")), /outside/);
+});
+
+test("one customer's messages wait for each other whichever way Meta names them", () => {
+  const source = readFileSync(new URL("../src/queue/processor.ts", import.meta.url), "utf8");
+  assert.match(source, /withConversationLock\(phoneNumberId, given\(message\.from_user_id\) \?\? message\.from,/);
 });

@@ -37,6 +37,10 @@ create policy whatsapp_user_ids_readable on whatsapp_user_ids
 grant select, insert, update on whatsapp_user_ids to nexus_app;
 revoke delete on whatsapp_user_ids from nexus_app;
 
+-- Each pair Meta sends looks for contacts still filed under the BSUID, in every
+-- business; (organization_id, wa_id) cannot serve a lookup by wa_id alone.
+create index if not exists contacts_by_wa_id on contacts (wa_id) where wa_id is not null;
+
 do $$
 begin
   if not exists (select 1 from information_schema.tables where table_name = 'whatsapp_user_ids') then

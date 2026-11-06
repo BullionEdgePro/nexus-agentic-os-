@@ -11,7 +11,7 @@ import { getRedisConnection } from "../queue/queue.js";
 import { requestSmbAppData } from "./whatsapp-client.js";
 import { describeInboundMessage } from "./inbound-media.js";
 import { logger } from "./logger.js";
-import { customerFiledAs, given } from "./whatsapp-customer.js";
+import { customerFiledAs, given, phoneIn, userIdIn } from "./whatsapp-customer.js";
 
 /**
  * A staff member's past chats, brought in from their WhatsApp Business app.
@@ -130,8 +130,6 @@ export function historyMessageBody(message: { type: string; [key: string]: unkno
   return described?.body ?? `[${message.type || "message"}]`;
 }
 
-const digits = (value: string | undefined | null) => (value ?? "").replace(/\D/g, "");
-
 /**
  * One history chunk, written. Threads are imported one at a time so a bad one
  * costs that thread, never the chunk — Meta does not resend a chunk the
@@ -160,8 +158,9 @@ async function importChunk(
     // A thread with a customer who uses a WhatsApp username may have no number
     // at all (6 Nov 2026): Meta then names them in `context` by their
     // business-scoped id. Filed as one customer, like a live message.
-    const phone = digits(thread.id) || digits(thread.context?.wa_id) || null;
-    const userId = given(thread.context?.user_id);
+    // Each read for what it is (review): a BSUID where a number goes is the id.
+    const phone = phoneIn(thread.id) ?? phoneIn(thread.context?.wa_id);
+    const userId = userIdIn(thread.context?.user_id) ?? userIdIn(thread.id);
     const customer = await customerFiledAs(phone, userId);
     if (!customer) continue;
     try {
@@ -169,10 +168,13 @@ async function importChunk(
         .filter((message) => message?.id && message.timestamp)
         .map((message) => ({
           waMessageId: String(message.id),
-          // A message is the customer's when it came FROM them — their number,
-          // or their username id; everything else was sent by the business.
+          // A message is the customer's when it came FROM them — their number
+          // (the thread's, or the one kept for their username id), or their
+          // username id; everything else was sent by the business.
           direction:
-            (phone && digits(message.from) === phone) || (userId && message.from_user_id === userId)
+            (phone && phoneIn(message.from) === phone) ||
+            phoneIn(message.from) === customer ||
+            (userId && message.from_user_id === userId)
               ? ("inbound" as const)
               : ("outbound" as const),
           messageType: String(message.type || "text"),
@@ -239,7 +241,7 @@ export async function processAppSync(phoneNumberId: string, change: WhatsAppWebh
     if (entry.action === "remove") continue;
     // A contact with a username may come with no number, only their
     // business-scoped id (6 Nov 2026); filed as one customer, and the pair kept.
-    const waId = await customerFiledAs(digits(entry.contact?.phone_number) || null, given(entry.contact?.user_id));
+    const waId = await customerFiledAs(entry.contact?.phone_number, entry.contact?.user_id);
     const name = entry.contact?.full_name?.trim() || entry.contact?.first_name?.trim() || given(entry.contact?.username);
     if (!waId || !name) continue;
     try {

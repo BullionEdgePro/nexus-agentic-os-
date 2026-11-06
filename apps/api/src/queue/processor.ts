@@ -581,8 +581,10 @@ async function processSingleTextMessage(
   // answering two halves of the same message. See conversation-lock.ts.
   //
   // Keyed on the number and sender rather than the conversation, because the
-  // conversation does not exist yet for the first message of one.
-  return withConversationLock(phoneNumberId, message.from, () =>
+  // conversation does not exist yet for the first message of one. The sender
+  // is their username id when Meta sends one (review, 6 Nov 2026): `from` can
+  // be their number for one message and the id for the next.
+  return withConversationLock(phoneNumberId, given(message.from_user_id) ?? message.from, () =>
     answerOneMessage(phoneNumberId, message, change, text)
   );
 }
