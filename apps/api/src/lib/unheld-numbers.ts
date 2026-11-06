@@ -21,6 +21,31 @@ const NUMBERS = "wa-unheld";
 const KEY = (phoneNumberId: string) => `wa-unheld:${phoneNumberId}`;
 const KEEP_SECONDS = 14 * 24 * 60 * 60;
 
+/**
+ * The shared connection, only when it is connected (review, 5 Nov 2026). It
+ * retries a command forever while Redis is away (queue.ts), so asking it then
+ * would hang an admin's request — and queue counts nobody needs.
+ */
+async function connectedRedis() {
+  const redis = getRedisConnection();
+  if (redis.status !== "ready") {
+    // Still connecting just after a start: a moment's grace, never more.
+    await new Promise<void>((resolve) => {
+      const onReady = () => {
+        clearTimeout(giveUp);
+        resolve();
+      };
+      // The listener goes with the wait, or an outage would pile them up.
+      const giveUp = setTimeout(() => {
+        redis.off("ready", onReady);
+        resolve();
+      }, 1000);
+      redis.once("ready", onReady);
+    });
+  }
+  return redis.status === "ready" ? redis : null;
+}
+
 export interface UnheldNumber {
   phoneNumberId: string;
   firstSeen: string;
@@ -42,7 +67,8 @@ export async function noteUnheldNumber(
   at: Date = new Date()
 ): Promise<void> {
   try {
-    const redis = getRedisConnection();
+    const redis = await connectedRedis();
+    if (!redis) return;
     const key = KEY(phoneNumberId);
     await redis.sadd(NUMBERS, phoneNumberId);
     await redis.hsetnx(key, "firstSeen", at.toISOString());
@@ -57,7 +83,8 @@ export async function noteUnheldNumber(
 /** Every number counted in the last 14 days, most recent first. */
 export async function listUnheldNumbers(): Promise<UnheldNumber[]> {
   try {
-    const redis = getRedisConnection();
+    const redis = await connectedRedis();
+    if (!redis) return [];
     const out: UnheldNumber[] = [];
     for (const phoneNumberId of await redis.smembers(NUMBERS)) {
       const fields = await redis.hgetall(KEY(phoneNumberId));
@@ -81,7 +108,8 @@ export async function listUnheldNumbers(): Promise<UnheldNumber[]> {
 }
 
 async function forgetUnheldNumber(phoneNumberId: string): Promise<void> {
-  const redis = getRedisConnection();
+  const redis = await connectedRedis();
+  if (!redis) return;
   await redis.srem(NUMBERS, phoneNumberId);
   await redis.del(KEY(phoneNumberId));
 }

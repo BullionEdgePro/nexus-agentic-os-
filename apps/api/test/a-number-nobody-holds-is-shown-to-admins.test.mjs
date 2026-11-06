@@ -15,7 +15,11 @@ import { readFileSync } from "node:fs";
 const sets = new Map();
 const hashes = new Map();
 let redisDown = false;
+const readyListeners = new Set();
 const fake = {
+  status: "ready",
+  once(event, fn) { if (event === "ready") readyListeners.add(fn); },
+  off(event, fn) { if (event === "ready") readyListeners.delete(fn); },
   async sadd(key, member) { if (redisDown) throw new Error("redis down"); (sets.get(key) ?? sets.set(key, new Set()).get(key)).add(member); },
   async smembers(key) { if (redisDown) throw new Error("redis down"); return [...(sets.get(key) ?? [])]; },
   async srem(key, member) { sets.get(key)?.delete(member); },
@@ -81,12 +85,30 @@ test("Redis being down never costs the delivery beside it", async () => {
   redisDown = false;
 });
 
+test("Redis not connected: the list answers empty at once rather than waiting (review, 5 Nov 2026)", async () => {
+  // The shared connection retries a command forever while Redis is away, so
+  // asking it then would hang the admin's Connections request.
+  fake.status = "reconnecting";
+  fake.smembers = () => new Promise(() => {});
+  const answered = await Promise.race([listUnheldNumbers(), new Promise((r) => setTimeout(() => r("hung"), 2500))]);
+  assert.deepEqual(answered, []);
+  await noteUnheldNumber("557", "message");
+  assert.equal(hashes.has("wa-unheld:557"), false, "nothing is queued for a Redis that is away");
+  assert.equal(readyListeners.size, 0, "a wait that gave up leaves no listener behind");
+});
+
 test("both places that drop a delivery for an unknown number count it", () => {
   const processor = readFileSync(new URL("../src/queue/processor.ts", import.meta.url), "utf8");
   const receipt = processor.slice(processor.indexOf('"Delivery status for an unmapped phone_number_id"') - 300);
   assert.match(receipt.slice(0, 500), /noteUnheldNumber\(phoneNumberId, "receipt"\)/);
   const inbound = processor.slice(processor.indexOf('"No organization mapped to inbound phone_number_id"') - 300);
   assert.match(inbound.slice(0, 500), /noteUnheldNumber\(phoneNumberId, "message"\)/);
+});
+
+test("asking Meta a number's name gives up after a few seconds (review, 5 Nov 2026)", () => {
+  const onboarding = readFileSync(new URL("../src/lib/whatsapp-onboarding.ts", import.meta.url), "utf8");
+  const lookup = onboarding.slice(onboarding.indexOf("export async function fetchCoexistenceNumber"));
+  assert.match(lookup.slice(0, 700), /signal: AbortSignal\.timeout\(8000\)/);
 });
 
 test("only an admin may list them", () => {

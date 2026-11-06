@@ -227,7 +227,9 @@ export async function fetchCoexistenceNumber(
   try {
     const response = await fetch(
       `${graph()}/${phoneNumberId}?fields=display_phone_number,verified_name`,
-      { headers: { Authorization: `Bearer ${businessToken}` } }
+      // A label is never worth a hung request (review, 5 Nov 2026): the admins'
+      // list of numbers nobody holds asks this once per number.
+      { headers: { Authorization: `Bearer ${businessToken}` }, signal: AbortSignal.timeout(8000) }
     );
     if (!response.ok) return { displayNumber: null, verifiedName: null };
     const data = (await response.json()) as {
