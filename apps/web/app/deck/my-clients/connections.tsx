@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { launchWhatsAppSignup } from "@/lib/whatsapp-signup";
+import { launchWhatsAppSignup, SignupStopped } from "@/lib/whatsapp-signup";
 import {
   getConnections,
   getWhatsAppHistory,
@@ -504,7 +504,8 @@ function WhatsAppCard({
                 setBusinessWarning(connected.businessWarning ?? null);
                 await onChange();
               } catch (err) {
-                onError(readableError(err, "WhatsApp could not be connected."));
+                // Meta's window says what happened in its own words (5 Nov 2026).
+                onError(err instanceof SignupStopped ? err.message : readableError(err, "WhatsApp could not be connected."));
               } finally {
                 setBusy(false);
               }
