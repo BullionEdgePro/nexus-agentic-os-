@@ -72,6 +72,34 @@ async function oldStyleToken(payload) {
   return `${body}.${b64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))))}`;
 }
 
+test("renewal stops 90 days after the person last typed their code (review, 5 Nov 2026)", async () => {
+  // Renewed forever while used, a stolen cookie -- an admin's sees every
+  // business -- would never run out. Carried through renewals, the original
+  // sign-in time caps it: at most 90 days, then sign in again.
+  const now = Date.now();
+  const at60 = await verifySession(await signSession("a@b.co", STAFF, { remember: true, now: now - 2 * DAY, since: now - 60 * DAY }));
+  assert.equal(needsRenewal(at60, now), true);
+  assert.equal(at60.signedInAt, now - 60 * DAY, "the first sign-in time rides along");
+  const capped = await verifySession(await signSession("a@b.co", STAFF, { remember: true, since: now - 89 * DAY }));
+  assert.ok(capped.expiresAt <= now - 89 * DAY + 90 * DAY + 1000, "a renewal never reaches past 90 days");
+  const atItsEnd = await verifySession(
+    await signSession("a@b.co", STAFF, { remember: true, now: now - 2 * DAY, since: now - 89 * DAY })
+  );
+  assert.equal(needsRenewal(atItsEnd, now), false, "nothing left to extend, so no renewal");
+  const past90 = await verifySession(
+    await signSession("a@b.co", STAFF, { remember: true, now: now - 2 * DAY, since: now - 91 * DAY })
+  );
+  assert.equal(past90, null, "past 90 days the sign-in has ended");
+});
+
+test("the middleware's renewal keeps the first sign-in time", async () => {
+  const since = Date.now() - 40 * DAY;
+  const token = await signSession("a@b.co", STAFF, { remember: true, now: Date.now() - 3 * DAY, since });
+  const response = await middleware(requestFor("/inbox", token));
+  const session = await verifySession(response.cookies.get(SESSION_COOKIE).value);
+  assert.equal(session.signedInAt, since);
+});
+
 test("a sign-in made before this change still works and is simply not renewed", async () => {
   const legacy = await verifySession(await oldStyleToken({ sub: "a@b.co", exp: Date.now() + 60 * 60 * 1000, ...STAFF }));
   assert.ok(legacy, "an unexpired old-style session must still verify");

@@ -16,6 +16,12 @@ const TTL_MS = 1000 * 60 * 60 * 12; // 12h
 const KEPT_MS = 1000 * 60 * 60 * 24 * 30;
 /** How old a kept sign-in may get before a visit renews it. */
 const RENEW_AFTER_MS = 1000 * 60 * 60 * 24;
+/**
+ * Renewed at most this long after the person last typed their code (review,
+ * 5 Nov 2026): renewed forever, a stolen cookie — an admin's sees every
+ * business — would never run out.
+ */
+const KEPT_AT_MOST_MS = 1000 * 60 * 60 * 24 * 90;
 
 // Always allocate over a concrete ArrayBuffer so the result types as
 // Uint8Array<ArrayBuffer> — Web Crypto's BufferSource params reject the
@@ -79,21 +85,23 @@ export type Session = { sub: string } & SessionClaims & {
   kept: boolean;
   /** When it was signed; absent on sessions made before 5 Nov 2026. */
   issuedAt?: number;
+  /** When the person last typed their code; renewals carry it unchanged. */
+  signedInAt?: number;
   expiresAt: number;
 };
 
 export async function signSession(
   email: string,
   claims: SessionClaims = { role: "operator" },
-  options: { remember?: boolean; now?: number } = {}
+  options: { remember?: boolean; now?: number; since?: number } = {}
 ): Promise<string> {
   const now = options.now ?? Date.now();
   const kept = options.remember === true;
+  const since = options.since ?? now;
+  const exp = kept ? Math.min(now + KEPT_MS, since + KEPT_AT_MOST_MS) : now + TTL_MS;
   // The claims first, so nothing in them can stand in for the times.
   const body = b64url(
-    textBytes(
-      JSON.stringify({ sub: email, ...claims, iat: now, exp: now + (kept ? KEPT_MS : TTL_MS), ...(kept ? { kept: true } : {}) })
-    )
+    textBytes(JSON.stringify({ sub: email, ...claims, iat: now, exp, ...(kept ? { kept: true, since } : {}) }))
   );
   const key = await hmacKey(sessionSecret());
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, textBytes(body)));
@@ -114,11 +122,14 @@ export async function verifySession(token: string | undefined): Promise<Session 
       exp: number;
       iat?: number;
       kept?: boolean;
+      since?: number;
     } & Partial<SessionClaims>;
     if (!payload.exp || Date.now() > payload.exp) return null;
+    const issuedAt = typeof payload.iat === "number" ? payload.iat : undefined;
     const life = {
       kept: payload.kept === true,
-      issuedAt: typeof payload.iat === "number" ? payload.iat : undefined,
+      issuedAt,
+      signedInAt: typeof payload.since === "number" ? payload.since : issuedAt,
       expiresAt: payload.exp,
     };
 
@@ -150,7 +161,9 @@ export async function verifySession(token: string | undefined): Promise<Session 
  * A session made before 5 Nov 2026 carries no "kept" and simply runs out.
  */
 export function needsRenewal(session: Session, now: number = Date.now()): boolean {
-  return session.kept && session.issuedAt !== undefined && now - session.issuedAt > RENEW_AFTER_MS;
+  if (!session.kept || session.issuedAt === undefined || session.signedInAt === undefined) return false;
+  // Not once it already runs to its 90-day end: renewing would extend nothing.
+  return now - session.issuedAt > RENEW_AFTER_MS && session.expiresAt < session.signedInAt + KEPT_AT_MOST_MS;
 }
 
 /** The scope a session was signed with, to sign it again unchanged. */

@@ -421,7 +421,14 @@ export default function Landing({ contact }: { contact: SalesContact }) {
   const [remember, setRemember] = useState(true);
   // Read after the first render: the server cannot see the address's query.
   const [signedOut, setSignedOut] = useState<SignedOutReason | null>(null);
-  useEffect(() => setSignedOut(signedOutReason(window.location.search)), []);
+  // An admin's ended sign-in lands here too, and this form refuses admins: the
+  // link to theirs carries where they were (review, 5 Nov 2026).
+  const [adminQuery, setAdminQuery] = useState("");
+  useEffect(() => {
+    const why = signedOutReason(window.location.search);
+    setSignedOut(why);
+    if (why) setAdminQuery(window.location.search);
+  }, []);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -475,10 +482,13 @@ export default function Landing({ contact }: { contact: SalesContact }) {
         return;
       }
       forgetSystemTheme();
-      // Straight back to the screen whose sign-in had ended, when there was one.
-      const next = returnPath(window.location.search);
-      if (next) {
-        window.location.assign(next);
+      // Straight back to the screen whose sign-in had ended, when there was one
+      // — by a full load either way, so the note leaves the address (review,
+      // 5 Nov 2026): left there, it stopped this tab being sent to sign in the
+      // next time its sign-in ended.
+      const search = window.location.search;
+      if (signedOutReason(search) || returnPath(search)) {
+        window.location.replace(returnPath(search) ?? "/");
         return;
       }
       router.refresh();
@@ -831,7 +841,7 @@ export default function Landing({ contact }: { contact: SalesContact }) {
 
           <p className="lp-auth-hint">
             Sign in with the access code your manager issued you.{" "}
-            <a href="/admin">Administrator sign-in</a> is separate.
+            <a href={`/admin${adminQuery}`}>Administrator sign-in</a> is separate.
           </p>
         </form>
       </section>

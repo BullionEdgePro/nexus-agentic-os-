@@ -127,6 +127,11 @@ function leaveForSignIn(why: SignedOutReason): void {
   const { pathname, search } = window.location;
   if (new URLSearchParams(search).has("signed-out")) return;
   leaving = true;
+  // Still here after 10 seconds — a "Leave site?" prompt was cancelled — and
+  // the next refusal may try again (review, 5 Nov 2026).
+  setTimeout(() => {
+    leaving = false;
+  }, 10_000);
   const params = new URLSearchParams({ next: pathname + search, "signed-out": why });
   window.location.assign(`/api/auth/logout?${params.toString()}`);
 }

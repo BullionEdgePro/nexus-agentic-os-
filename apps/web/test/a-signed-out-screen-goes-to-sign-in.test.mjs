@@ -93,5 +93,34 @@ test("sign-out passes the screen and the reason on to the sign-in -- only the co
 test("the sign-in page says why, and returns to the screen", () => {
   const landing = read("../app/landing.tsx");
   assert.match(landing, /signedOutReason\(window\.location\.search\)/);
-  assert.match(landing, /returnPath\(window\.location\.search\)/);
+  const submit = landing.slice(landing.indexOf("async function onSubmit"), landing.indexOf("async function onSubmit") + 2600);
+  assert.match(submit, /returnPath\(search\)/);
+});
+
+test("signing in leaves no signed-out note in the address (review, 5 Nov 2026)", () => {
+  // Left there, a staff member signing in on `/` kept "?signed-out=ended" in
+  // their address, and the next time that tab's sign-in ended, the guard
+  // against sending a tab twice read it and sent them nowhere.
+  const landing = read("../app/landing.tsx");
+  const submit = landing.slice(landing.indexOf("async function onSubmit"), landing.indexOf("async function onSubmit") + 2600);
+  assert.match(submit, /if \(signedOutReason\(search\) \|\| returnPath\(search\)\) \{\s*window\.location\.replace\(returnPath\(search\) \?\? "\/"\);/);
+});
+
+test("an admin whose sign-in ended goes back too, by the admin sign-in", () => {
+  // The staff form refuses admin credentials, so its link to the admin sign-in
+  // carries where they were, and the admin sign-in honours it.
+  const landing = read("../app/landing.tsx");
+  assert.match(landing, /<a href=\{`\/admin\$\{adminQuery\}`\}>Administrator sign-in<\/a>/);
+  const admin = read("../app/admin/page.tsx");
+  assert.match(admin, /const next = returnPath\(window\.location\.search\);/);
+  assert.match(admin, /window\.location\.replace\(next\)/);
+});
+
+test("a tab that stayed (a Leave-site prompt cancelled) may be sent again later", async () => {
+  sent.length = 0;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const { readFileSync: r } = await import("node:fs");
+  const api = r(new URL("../lib/api.ts", import.meta.url), "utf8");
+  const leave = api.slice(api.indexOf("function leaveForSignIn"), api.indexOf("function leaveForSignIn") + 900);
+  assert.match(leave, /setTimeout\(\(\) => \{\s*leaving = false;\s*\}, 10_000\)/);
 });

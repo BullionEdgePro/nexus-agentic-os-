@@ -51,7 +51,9 @@ async function renewed(
   session: Awaited<ReturnType<typeof verifySession>>
 ): Promise<NextResponse> {
   if (!session || !needsRenewal(session)) return response;
-  const token = await signSession(session.sub, claimsOf(session), { remember: true });
+  // `since` carried unchanged: renewal stops 90 days after the person last
+  // typed their code (lib/auth.ts).
+  const token = await signSession(session.sub, claimsOf(session), { remember: true, since: session.signedInAt });
   response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(true));
   return response;
 }

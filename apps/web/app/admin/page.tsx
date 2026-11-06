@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fontVariables } from "@/lib/fonts";
 import { PUBLIC_THEME_BOOT, forgetSystemTheme } from "@/lib/theme";
+import { returnPath } from "@/lib/return-path";
 import { ThemeToggle } from "../theme-toggle";
 import "../deck/deck.css";
 import "./admin.css";
@@ -51,6 +52,12 @@ export default function AdminSignIn() {
         return;
       }
       forgetSystemTheme();
+      // Back to the screen whose sign-in had ended, when there was one (5 Nov 2026).
+      const next = returnPath(window.location.search);
+      if (next) {
+        window.location.replace(next);
+        return;
+      }
       router.push("/");
       router.refresh();
     } catch {
