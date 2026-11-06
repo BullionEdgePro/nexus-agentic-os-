@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BusinessTabs, useVisibleBusinesses } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
+import { whatsAppAddressLabel } from "@nexus/shared";
 import {
   getTasks,
   createTask,
@@ -318,7 +319,7 @@ export default function TasksPage() {
                   <p className="tk-meta">
                     <span className="tk-biz">{task.businessName}</span>
                     {task.contactName || task.contactWaId ? (
-                      <span>for {task.contactName ?? `+${task.contactWaId}`}</span>
+                      <span>for {task.contactName ?? whatsAppAddressLabel(task.contactWaId ?? "")}</span>
                     ) : null}
                     {task.employeeName ? (
                       <span>{task.employeeName}</span>

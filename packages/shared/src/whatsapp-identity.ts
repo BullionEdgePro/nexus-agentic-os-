@@ -33,3 +33,12 @@ export function whatsAppSender(message: { from?: unknown; from_user_id?: unknown
 export function whatsAppEchoRecipient(echo: { to?: unknown; to_user_id?: unknown; [key: string]: unknown }): string | null {
   return present(echo.to) ?? present(echo.to_user_id);
 }
+
+/**
+ * How a customer's WhatsApp address reads on screen: "+971…" for a number, and
+ * "WhatsApp username" for a business-scoped id — printed as a number it read
+ * "+AE.1349…", which is no number anybody can dial.
+ */
+export function whatsAppAddressLabel(waId: string): string {
+  return isBusinessScopedUserId(waId) ? "WhatsApp username" : `+${waId}`;
+}

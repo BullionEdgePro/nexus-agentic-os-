@@ -3,6 +3,7 @@
 import { InboxRules } from "./inbox-rules";
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
+import { whatsAppAddressLabel } from "@nexus/shared";
 import { BusinessSocialsPanel } from "./business-socials";
 import { WhatsAppNumberPicker } from "./whatsapp-number";
 import { WhatsAppReadiness } from "./whatsapp-readiness";
@@ -731,7 +732,7 @@ export default function TeamWorkspace({ lockedTo }: { lockedTo?: LockedTo }) {
                   <div className="cust-head">
                     <span className="nm">
                       {conversation.contactName ??
-                        (conversation.contactWaId ? `+${conversation.contactWaId}` : "Customer")}
+                        (conversation.contactWaId ? whatsAppAddressLabel(conversation.contactWaId) : "Customer")}
                     </span>
                     <span className="biz">
                       {conversation.channel === "whatsapp"
