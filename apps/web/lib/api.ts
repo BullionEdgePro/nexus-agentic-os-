@@ -3560,7 +3560,7 @@ export interface UnheldWhatsAppNumber {
 }
 
 export function getUnheldWhatsAppNumbers(): Promise<{ numbers: UnheldWhatsAppNumber[] }> {
-  return request("/api/connections/whatsapp/unheld");
+  return request(connectionsPath("/api/connections/whatsapp/unheld"));
 }
 
 export function startTikTokConnect(): Promise<{ url: string }> {

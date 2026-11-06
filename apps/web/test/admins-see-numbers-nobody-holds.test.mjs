@@ -50,5 +50,5 @@ test("only an admin's Connections asks, and from the admin-only address", () => 
   const panel = read("../app/deck/my-clients/connections.tsx");
   assert.match(panel, /\{businesses \? <UnheldNumbers \/> : null\}/);
   const api = read("../lib/api.ts");
-  assert.match(api, /request\("\/api\/connections\/whatsapp\/unheld"\)/);
+  assert.match(api, /request\(connectionsPath\("\/api\/connections\/whatsapp\/unheld"\)\)/);
 });

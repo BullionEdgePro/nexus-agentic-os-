@@ -105,7 +105,13 @@ test("signing in hands the console its own default, not the system's", () => {
   assert.deepEqual(run("dark"), []);
   assert.deepEqual(run("light"), []);
   for (const f of ["app/landing.tsx", "app/admin/page.tsx"]) {
-    assert.match(read(f), /forgetSystemTheme\(\);\s*router\./, f);
+    // Before ANY way onward (5 Nov 2026): the staff sign-in may now go straight
+    // back to the screen whose sign-in had ended, by a full navigation.
+    const source = read(f);
+    const forget = source.indexOf("forgetSystemTheme();");
+    const onward = source.slice(forget).search(/router\.|window\.location\.assign\(/);
+    assert.ok(forget > 0 && onward > 0 && onward < 400, f);
+    assert.doesNotMatch(source.slice(source.indexOf("async function onSubmit"), forget), /router\.(push|refresh|replace)|window\.location\.assign\(/, f);
   }
 });
 
