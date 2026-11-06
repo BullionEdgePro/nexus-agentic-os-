@@ -52,6 +52,15 @@ test("Meta finished but handed back no code: said plainly, with the way out", as
   });
 });
 
+test("Meta's finish arriving just after its callback is still heard (review, 5 Nov 2026)", async () => {
+  script = (callback) => {
+    callback({ authResponse: null });
+    setTimeout(() => fromMeta(finished), 200);
+  };
+  await assert.rejects(launchWhatsAppSignup(provider), (err) => err instanceof SignupStopped && /Meta finished connecting/.test(err.message));
+  assert.equal(listeners.size, 0, "the window message listener goes once it has decided");
+});
+
 test("closed before finishing: still cancelled", async () => {
   script = (callback) => {
     fromMeta({ type: "WA_EMBEDDED_SIGNUP", event: "CANCEL", data: { current_step: "PHONE_NUMBER_SETUP" } });

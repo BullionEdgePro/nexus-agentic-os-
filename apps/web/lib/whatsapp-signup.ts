@@ -88,6 +88,8 @@ export async function launchWhatsAppSignup(provider: {
   return new Promise((resolve, reject) => {
     let captured: { wabaId?: string; phoneNumberId?: string } = {};
     let finished = false;
+    // Set while a run with no code waits to hear whether Meta finished.
+    let decideWithoutCode: (() => void) | null = null;
     const onMessage = (event: MessageEvent) => {
       if (!/(^|\.)facebook\.com$/.test(new URL(event.origin).hostname)) return;
       try {
@@ -95,7 +97,10 @@ export async function launchWhatsAppSignup(provider: {
         if (data?.type === "WA_EMBEDDED_SIGNUP" && data?.data) {
           // FINISH, FINISH_ONLY_WABA, FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING:
           // the number is connected at Meta. CANCEL and ERROR carry no ids.
-          if (typeof data.event === "string" && data.event.startsWith("FINISH")) finished = true;
+          if (typeof data.event === "string" && data.event.startsWith("FINISH")) {
+            finished = true;
+            decideWithoutCode?.();
+          }
           if (data.data.phone_number_id) {
             captured = { wabaId: data.data.waba_id, phoneNumberId: data.data.phone_number_id };
           }
@@ -108,12 +113,23 @@ export async function launchWhatsAppSignup(provider: {
 
     FB.login(
       (response) => {
-        window.removeEventListener("message", onMessage);
         const code = response?.authResponse?.code;
         if (!code) {
-          reject(new SignupStopped(finished ? FINISHED_WITHOUT_CODE : "WhatsApp sign-in was cancelled."));
+          // Meta's FINISH can arrive a moment after this callback (review, 5 Nov
+          // 2026), so a run with no code waits briefly to hear it before saying
+          // "cancelled" about a number that is in fact connected.
+          let wait: ReturnType<typeof setTimeout> | undefined;
+          decideWithoutCode = () => {
+            decideWithoutCode = null;
+            if (wait) clearTimeout(wait);
+            window.removeEventListener("message", onMessage);
+            reject(new SignupStopped(finished ? FINISHED_WITHOUT_CODE : "WhatsApp sign-in was cancelled."));
+          };
+          if (finished) decideWithoutCode();
+          else wait = setTimeout(() => decideWithoutCode?.(), 1500);
           return;
         }
+        window.removeEventListener("message", onMessage);
         // The waba/phone ids are a fast path, not a requirement. Meta only sends
         // them (as the window message above) on the full flow; the "Continue with
         // previous settings" path returns just the code. Either way the server
