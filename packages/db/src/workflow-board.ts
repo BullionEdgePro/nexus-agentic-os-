@@ -279,6 +279,22 @@ async function readUnit(organizationId: string, viewer: Viewer, id: string, lock
   return rows[0] ? { ...toUnit(rows[0]), closed: rows[0].closed_at !== null } : null;
 }
 
+/**
+ * Units of this business as this viewer sees them, narrowed by `where` (its
+ * parameters start at $4). For the portal listings module; the caller runs it
+ * inside withTenant.
+ */
+export async function unitsWhere(
+  organizationId: string,
+  viewer: Viewer,
+  where: string,
+  args: unknown[],
+  orderBy = "u.in_step_since"
+): Promise<(BoardUnit & { closed: boolean })[]> {
+  const { rows } = await getPool().query(`${UNIT_SELECT} and ${where} order by ${orderBy}`, [...viewArgs(organizationId, viewer), ...args]);
+  return rows.map((row) => ({ ...toUnit(row), closed: row.closed_at !== null }));
+}
+
 /** One deal, only if this viewer may see it. */
 async function readDeal(organizationId: string, viewer: Viewer, id: string, lock = false): Promise<(BoardDeal & { closed: boolean }) | null> {
   const { rows } = await getPool().query(`${DEAL_SELECT} and d.id = $4${lock ? " for update of d" : ""}`, [...viewArgs(organizationId, viewer), id]);

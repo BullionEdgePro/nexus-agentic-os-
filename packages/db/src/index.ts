@@ -42,6 +42,7 @@ export * from "./client-book.js";
 export * from "./staff-work.js";
 export * from "./workflow-audit.js";
 export * from "./workflow-board.js";
+export * from "./portal-listings.js";
 export * from "./referrals.js";
 export * from "./token-crypto.js";
 export * from "./social-connections.js";
