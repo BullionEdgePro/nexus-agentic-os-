@@ -16,3 +16,4 @@ export * from "./org-chart.js";
 export * from "./workflows/index.js";
 export * from "./whatsapp-identity.js";
 export * from "./portals/listing.js";
+export * from "./portals/bayut-feed.js";
