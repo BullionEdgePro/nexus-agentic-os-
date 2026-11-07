@@ -26,6 +26,7 @@ import { activityRoute } from "./routes/activity.js";
 import { qualityRoute } from "./routes/quality.js";
 import { linksRoute, publicLinksRoute } from "./routes/links.js";
 import { unsubscribeRoute } from "./routes/unsubscribe.js";
+import { portalPublicRoute } from "./routes/portal-public.js";
 import { automationsRoute } from "./routes/automations.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { quickRepliesRoute } from "./routes/quick-replies.js";
@@ -313,6 +314,9 @@ app.route("/links", publicLinksRoute);
 // The unsubscribe link in every campaign email (26 Oct 2026): public, outside
 // /api, for a customer who is signed in to nothing.
 app.route("/unsubscribe", unsubscribeRoute);
+// The portals' own addresses (7 Nov 2026): the Bayut/dubizzle feed and its
+// photos, read by the portals with no session -- so outside /api, like /links.
+app.route("/", portalPublicRoute);
 app.route("/api/organizations", organizationsRoute);
 // Same mount point: knowledge is addressed per organization
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.
