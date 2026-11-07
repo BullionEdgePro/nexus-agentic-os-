@@ -82,7 +82,7 @@ test("a new unit has Dubai, no photos, every switch off; the business has no fee
   assert.equal(unit.city, "Dubai");
   assert.deepEqual(unit.photos, []);
   assert.deepEqual(unit.amenities, []);
-  assert.deepEqual(unit.portals, { bayut: { wanted: false }, dubizzle: { wanted: false }, property_finder: { wanted: false } });
+  assert.deepEqual(unit.portals, { bayut: { wanted: false, state: null, message: null, syncedAt: null }, dubizzle: { wanted: false, state: null, message: null, syncedAt: null }, property_finder: { wanted: false, state: null, message: null, syncedAt: null } });
   assert.match(unit.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
   const b = await board();
   assert.equal(b.portalFeed, null);
@@ -139,7 +139,7 @@ test("photos come in order without bytes; switches and the feed show through", d
     { id: p(3), width: 1200, height: 900 },
     { id: p(1), width: 1600, height: 1200 },
   ]);
-  assert.deepEqual(card.portals, { bayut: { wanted: false }, dubizzle: { wanted: true }, property_finder: { wanted: false } });
+  assert.deepEqual(card.portals, { bayut: { wanted: false, state: null, message: null, syncedAt: null }, dubizzle: { wanted: true, state: null, message: null, syncedAt: null }, property_finder: { wanted: false, state: null, message: null, syncedAt: null } });
   assert.deepEqual(b.portalFeed, { lastReadAt: "2026-11-07T06:42:00.000Z" });
   assert.equal(b.ornSet, true);
 });

@@ -1,12 +1,14 @@
 import {
   closeProblem,
   moveProblem,
+  PF_LISTING_CALLS_READY,
   purposeAfterMove,
   type Board,
   type BoardDeal,
   type BoardUnit,
   type CardMove,
   type DealStep,
+  type PfState,
   type Portal,
   type PropertyType,
   type Purpose,
@@ -150,7 +152,9 @@ const UNIT_SELECT = `
              from unit_photos p
             where p.unit_id = u.id
          ), '[]'::json) as photos,
-         coalesce((select json_object_agg(up.portal, up.wanted) from unit_portals up where up.unit_id = u.id), '{}'::json) as portals,
+         coalesce((select json_object_agg(up.portal, json_build_object(
+                     'wanted', up.wanted, 'state', up.remote_state, 'message', up.remote_message, 'syncedAt', up.synced_at))
+                     from unit_portals up where up.unit_id = u.id), '{}'::json) as portals,
          case when $2::boolean or oc.owner_employee_id = $3::uuid
               then coalesce(oc.display_name, oc.external_id, oc.wa_id) end as owner_name,
          ag.id as agent_id, ag.full_name as agent_name,
@@ -233,17 +237,21 @@ function toUnit(row: Row): BoardUnit {
       width: Number(p.width),
       height: Number(p.height),
     })),
-    portals: wantedPortals(row.portals as Record<string, boolean> | null),
+    portals: portalRows(row.portals as Record<string, PortalRow> | null),
   };
 }
 
-/** All three switches, off unless a row says otherwise. */
-function wantedPortals(rows: Record<string, boolean> | null): BoardUnit["portals"] {
-  return {
-    bayut: { wanted: rows?.bayut === true },
-    dubizzle: { wanted: rows?.dubizzle === true },
-    property_finder: { wanted: rows?.property_finder === true },
-  };
+type PortalRow = { wanted: boolean; state: PfState | null; message: string | null; syncedAt: string | null };
+
+/** All three switches, off unless a row says otherwise, with the portal's last answer (Property Finder only, so far). */
+function portalRows(rows: Record<string, PortalRow> | null): BoardUnit["portals"] {
+  const one = (r: PortalRow | undefined): BoardUnit["portals"]["bayut"] => ({
+    wanted: r?.wanted === true,
+    state: r?.state ?? null,
+    message: r?.message ?? null,
+    syncedAt: r?.syncedAt ? new Date(r.syncedAt).toISOString() : null,
+  });
+  return { bayut: one(rows?.bayut), dubizzle: one(rows?.dubizzle), property_finder: one(rows?.property_finder) };
 }
 
 function toDeal(row: Row): BoardDeal {
@@ -409,8 +417,15 @@ export async function getBoard(input: { organizationId: string; timezone: string
     );
     const c = closed.rows[0];
     // What the Portals section needs to say what is missing (portal listings, 7 Nov 2026).
-    const settings = await db.query<{ orn: string | null; feed_token: string | null; feed_last_read_at: Date | null }>(
-      `select orn, feed_token, feed_last_read_at from portal_settings where organization_id = $1`,
+    const settings = await db.query<{
+      orn: string | null;
+      feed_token: string | null;
+      feed_last_read_at: Date | null;
+      pf_saved: boolean;
+      pf_check_error: string | null;
+    }>(
+      `select orn, feed_token, feed_last_read_at, pf_key_sealed is not null as pf_saved, pf_check_error
+         from portal_settings where organization_id = $1`,
       [organizationId]
     );
     const s = settings.rows[0];
@@ -438,6 +453,7 @@ export async function getBoard(input: { organizationId: string; timezone: string
       ornSet: !!s?.orn,
       agentBrns: Object.fromEntries(brns.rows.map((r) => [String(r.id), r.has])),
       agentsGone: brns.rows.filter((r) => !r.is_active).map((r) => String(r.id)),
+      pfConnection: !s?.pf_saved ? "none" : s.pf_check_error ? "key-refused" : PF_LISTING_CALLS_READY ? "connected" : "waiting-format",
     };
   });
 }

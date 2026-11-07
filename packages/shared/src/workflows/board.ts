@@ -1,4 +1,5 @@
 import type { Lane, Workflow, WorkflowStep } from "./types.js";
+import type { PfConnection, PfState } from "../portals/pf-sync.js";
 
 /**
  * The workflow board's rules (3 Nov 2026): SFS staff move units through the
@@ -66,8 +67,15 @@ export type BoardUnit = {
   availableFrom: string | null;
   /** In order; the first is the cover. No bytes on the board. */
   photos: { id: string; width: number; height: number }[];
-  /** The publish switches; what is actually published is wanted AND ready. */
-  portals: Record<"bayut" | "dubizzle" | "property_finder", { wanted: boolean }>;
+  /**
+   * The publish switches; what is actually published is wanted AND ready. With
+   * each, the portal's last answer — only Property Finder answers so far (its
+   * sync, 7 Nov 2026); for the others they stay null.
+   */
+  portals: Record<
+    "bayut" | "dubizzle" | "property_finder",
+    { wanted: boolean; state: PfState | null; message: string | null; syncedAt: string | null }
+  >;
 };
 
 export type BoardDeal = {
@@ -110,6 +118,8 @@ export type Board = {
   agentBrns: Record<string, boolean>;
   /** Agents on open units who have left the staff: their units stay off the portals. */
   agentsGone: string[];
+  /** Where the business stands with Property Finder (its sync, 7 Nov 2026). */
+  pfConnection: PfConnection;
 };
 
 export type CardMove = {

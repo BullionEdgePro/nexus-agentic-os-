@@ -118,7 +118,7 @@ test("1. switching on a unit that is not ready is refused with the sentence; off
   const refused = await lib.setUnitPortal(SFS, unit, "bayut", true, aisha, asAisha, TODAY);
   assert.deepEqual(refused, { refused: "Before it can go on the portals: 3 photos." });
   const off = await lib.setUnitPortal(SFS, unit, "bayut", false, aisha, asAisha, TODAY);
-  assert.deepEqual(off.portals.bayut, { wanted: false });
+  assert.deepEqual(off.portals.bayut, { wanted: false, state: null, message: null, syncedAt: null });
   assert.equal(await lib.setUnitPortal(SFS, id(999), "bayut", false, aisha, asAisha, TODAY), null);
 });
 
@@ -155,7 +155,7 @@ test("4. an order that does not name every photo is refused whole", db, async ()
 
 test("5. a ready unit switches on, and the feed publishes it without anything private", db, async () => {
   const on = await lib.setUnitPortal(SFS, unit, "bayut", true, aisha, asAisha, TODAY);
-  assert.deepEqual(on.portals.bayut, { wanted: true });
+  assert.deepEqual(on.portals.bayut, { wanted: true, state: null, message: null, syncedAt: null });
   await lib.setUnitPortal(SFS, unit, "property_finder", true, aisha, asAisha, TODAY);
   const listings = await lib.publishedListings(SFS, ["bayut", "dubizzle"], TODAY, url);
   assert.equal(listings.length, 1);
