@@ -27,6 +27,7 @@ import { qualityRoute } from "./routes/quality.js";
 import { linksRoute, publicLinksRoute } from "./routes/links.js";
 import { unsubscribeRoute } from "./routes/unsubscribe.js";
 import { portalFeedRoute, portalPhotoRoute } from "./routes/portal-public.js";
+import { pocketPublicRoute } from "./routes/pocket-public.js";
 import { automationsRoute } from "./routes/automations.js";
 import { tasksRoute, conversationTasksRoute } from "./routes/tasks.js";
 import { quickRepliesRoute } from "./routes/quick-replies.js";
@@ -75,6 +76,9 @@ app.use("/auth/*", cors({ origin: env.webOrigins, credentials: true }));
 // any origin: a business's own website may well want to read it directly rather
 // than have someone paste a link by hand.
 app.use("/links/*", cors({ origin: "*" }));
+// A pocket listing's private page (7 Nov 2026) presses "I'm interested" from the
+// web's own origin; no cookie goes with it -- the link's token is the key.
+app.use("/pocket-shares/*", cors({ origin: env.webOrigins }));
 
 // Every /api/* route serves tenant data — conversations, contacts, metrics —
 // so authentication is applied at the router, not per-route. A new endpoint is
@@ -318,6 +322,8 @@ app.route("/unsubscribe", unsubscribeRoute);
 // photos, read by the portals with no session -- so outside /api, like /links.
 app.route("/portal-feeds", portalFeedRoute);
 app.route("/portal-photos", portalPhotoRoute);
+// A pocket listing's private page (7 Nov 2026): reached with a link's token, no session.
+app.route("/pocket-shares", pocketPublicRoute);
 app.route("/api/organizations", organizationsRoute);
 // Same mount point: knowledge is addressed per organization
 // (/api/organizations/:slug/knowledge), and Hono composes the two routers.

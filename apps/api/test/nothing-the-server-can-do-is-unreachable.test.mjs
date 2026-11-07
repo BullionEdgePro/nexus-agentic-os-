@@ -70,6 +70,9 @@ const REACHED_ELSEWHERE = {
   "GET /portal-feeds/:token/:file":
     "read by Bayut's feed reader at the address an admin copies from Portal settings and sends Bayut — the portal fetches it, not our client",
   "GET /portal-photos/:file": "fetched by the portals from the image addresses inside that feed",
+  "GET /pocket-shares/:token": "read by the private listing page (app/pocket/[token]) on the server, for a buyer with no session",
+  "GET /pocket-shares/:token/photos/:file": "the private listing page's <img> addresses",
+  "POST /pocket-shares/:token/interest": "the private listing page's \"I'm interested\" button",
 };
 
 function handlers() {

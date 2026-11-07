@@ -149,6 +149,19 @@ export async function notifyOwnersOfHqCritical(org: { id: string; name: string }
   }
 }
 
+/**
+ * Pocket listings (7 Nov 2026): a buyer pressed "I'm interested" on a private
+ * link — the agent's phones hear it once (the caller only calls for the first
+ * press). A no-op without VAPID keys.
+ */
+export async function notifyPocketInterest(employeeId: string, text: string): Promise<void> {
+  if (!pushConfigured()) return;
+  const subjects = [`e:${employeeId}`];
+  const subs = devicesFor(await listPushSubscriptionsForSubjects(subjects), [{ subjects, requiresMode: "mine" }]);
+  const payload = { ...buildPlatformPayload(text), url: "/deck/workflow#board" };
+  await deliver(subs, () => payload);
+}
+
 /** Start listening. Returns a stop function; without VAPID keys it does nothing and says so once. */
 export function startPushDispatcher(): () => void {
   if (!pushConfigured()) {

@@ -53,6 +53,9 @@ mock.module("@nexus/db", {
     recordPfCheck: stub("recordPfCheck"),
     clearPfConnection: stub("clearPfConnection"),
     pfCredentials: stub("pfCredentials"),
+    setUnitPocket: stub("setUnitPocket"),
+    createPocketShare: stub("createPocketShare"),
+    revokePocketShare: stub("revokePocketShare"),
   },
 });
 

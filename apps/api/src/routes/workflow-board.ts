@@ -4,6 +4,7 @@ import {
   cardHistory,
   clearPfConnection,
   closeDeal,
+  createPocketShare,
   closeUnit,
   createDeal,
   createUnit,
@@ -20,8 +21,10 @@ import {
   portalSettings,
   recordPfCheck,
   removeUnitPhoto,
+  revokePocketShare,
   savePfConnection,
   setEmployeeBrn,
+  setUnitPocket,
   setPortalOrn,
   setUnitPortal,
   unitPhotoBytes,
@@ -37,10 +40,12 @@ import {
   AMENITIES,
   FURNISHING,
   PF_LISTING_CALLS_READY,
+  pocketMessage,
   PORTAL_TARGETS,
   PORTALS,
   PROPERTY_TYPES,
   REAL_ESTATE_WORKFLOW,
+  whatsappLink,
   workflowFor,
   xmlSafe,
   type PortalTarget,
@@ -48,7 +53,7 @@ import {
 import { PHOTO_MAX_BYTES, PHOTO_TOO_LARGE, readBoardPhoto } from "../lib/board-photo-upload.js";
 import { jpegSize } from "../lib/jpeg-size.js";
 import { pfClient, type PfAnswer } from "../lib/property-finder.js";
-import { apiBaseUrl } from "../lib/public-urls.js";
+import { apiBaseUrl, appBaseUrl } from "../lib/public-urls.js";
 import { queuePfCycle, queuePfUnit } from "../queue/pf-sync-queue.js";
 import type { SessionScope } from "../lib/session.js";
 
@@ -468,6 +473,48 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/portals/:portal", async
     todayIn(w.organization.timezone)
   );
   return followOnPropertyFinder(answerCard(c, result), w.organization.id, c.req.param("id"));
+});
+
+// Pocket listings (7 Nov 2026): a unit kept off-market, shared one buyer at a time.
+// Spec: docs/superpowers/specs/2026-11-07-pocket-listings-design.md §2, §4, §9
+
+workflowBoardRoute.post("/:slug/workflow-board/units/:id/pocket", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const pocket = (await body(c)).pocket;
+  if (typeof pocket !== "boolean") return c.json({ error: "pocket must be true or false." }, 400);
+  const unitId = c.req.param("id");
+  // Pocket on turns the portal switches off, so Property Finder follows.
+  return followOnPropertyFinder(answerCard(c, await setUnitPocket(w.organization.id, unitId, pocket, w.actor, w.viewer)), w.organization.id, unitId);
+});
+
+workflowBoardRoute.post("/:slug/workflow-board/units/:id/pocket/shares", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const dealId = (await body(c)).dealId;
+  if (typeof dealId !== "string" || dealId.length === 0 || dealId.length > 64) return c.json({ error: "dealId is required." }, 400);
+  const result = await createPocketShare(w.organization.id, c.req.param("id"), dealId, w.actor, w.viewer, todayIn(w.organization.timezone));
+  if (result === null) return c.json({ error: "Card not found" }, 404);
+  if (result === "closed") return c.json({ error: CLOSED }, 409);
+  if ("refused" in result) return c.json({ error: result.refused }, 422);
+  const url = `${appBaseUrl()}/pocket/${result.token}`;
+  const message = pocketMessage({
+    firstName: result.recipient.firstName,
+    title: result.unit.title,
+    community: result.unit.community,
+    priceAed: result.unit.priceAed,
+    url,
+    agentFirstName: result.agentFirstName,
+    businessName: w.organization.name,
+  });
+  return c.json({ share: result.share, url, message, whatsappUrl: whatsappLink(result.recipient.number, message) }, result.created ? 201 : 200);
+});
+
+workflowBoardRoute.delete("/:slug/workflow-board/units/:id/pocket/shares/:shareId", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const revoked = await revokePocketShare(w.organization.id, c.req.param("id"), c.req.param("shareId"));
+  return revoked ? c.json({ ok: true }) : c.json({ error: "Link not found" }, 404);
 });
 
 /** Settings and licences are an admin's: the business, or the answer to send. */
