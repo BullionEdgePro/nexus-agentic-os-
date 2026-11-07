@@ -336,3 +336,11 @@
 .wf-board-portal-needs { margin: 4px 0 0; font-size: 13px; color: var(--warn); }
 .wf-board-feed { margin: 4px 0; font-size: 13px; overflow-wrap: anywhere; }
 .wf-board-feed code { padding: 4px 6px; border-radius: var(--r); background: var(--pebble); color: var(--ink); }
+
+/* Pocket listings (7 Nov 2026): the off-market badge, a buyer's interest, the share rows. */
+.wf-board-pocket { background: var(--ink); color: var(--paper); }
+.wf-board-interested { background: var(--pebble); color: var(--ink); }
+.wf-board-pocket-heading { margin: 8px 0 2px; font-size: 13px; font-weight: 700; }
+.wf-board-pocket-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wf-board-pocket-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.wf-board-pocket-message { margin: 8px 0; padding: 10px 12px; border-radius: var(--r); background: var(--pebble); font-size: 14px; overflow-wrap: anywhere; }

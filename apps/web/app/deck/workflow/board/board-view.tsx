@@ -177,6 +177,10 @@ export function WorkflowBoardView({
                         handlers={drag.cardHandlers(card.id, card.step)}
                         dragging={drag.dragging === card.id}
                         published={card.kind === "unit" && isPublished(card, board)}
+                        pocketInterest={
+                          card.kind === "deal" &&
+                          board.units.some((u) => u.pocket?.shares.some((s) => s.dealId === card.id && s.interestedAt !== null))
+                        }
                       />
                     ))}
                     {hidden > 0 ? <p className="wf-board-hidden">+{hidden} with colleagues</p> : null}

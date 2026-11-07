@@ -5,6 +5,7 @@ import type {
   BoardUnit,
   BusinessSlug,
   CardMove,
+  PocketShare,
   Portal,
   PropertyType,
   Purpose,
@@ -2791,6 +2792,29 @@ export function checkPfKey(slug: BusinessSlug): Promise<PortalSettingsData> {
 
 export function disconnectPf(slug: BusinessSlug): Promise<PortalSettingsData> {
   return request(`/api/organizations/${slug}/workflow-board/portal-settings/property-finder`, { method: "DELETE" });
+}
+
+/** Pocket listings (7 Nov 2026): keep a unit off-market, or bring it back. */
+export function setUnitPocket(slug: BusinessSlug, unitId: string, pocket: boolean): Promise<BoardUnit> {
+  return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/pocket`, { method: "POST", body: JSON.stringify({ pocket }) });
+}
+
+/** A private link for one buyer on the board, with the message to send. */
+export function sharePocket(
+  slug: BusinessSlug,
+  unitId: string,
+  dealId: string
+): Promise<{ share: PocketShare; url: string; message: string; whatsappUrl: string | null }> {
+  return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/pocket/shares`, {
+    method: "POST",
+    body: JSON.stringify({ dealId }),
+  });
+}
+
+export function revokePocketShare(slug: BusinessSlug, unitId: string, shareId: string): Promise<{ ok: true }> {
+  return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/pocket/shares/${encodeURIComponent(shareId)}`, {
+    method: "DELETE",
+  });
 }
 
 export function saveAgentBrn(slug: BusinessSlug, employeeId: string, brn: string | null): Promise<{ ok: true }> {

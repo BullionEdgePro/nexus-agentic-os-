@@ -34,10 +34,17 @@ export function readiness(unit: BoardUnit, board: Board): string[] {
   });
 }
 
-/** Wanted on a portal AND ready: what Portals + social counts as live (spec §5). */
+/**
+ * Wanted on a portal AND ready: what Portals + social counts as live (spec §5).
+ * A pocket unit is never on a portal: it counts once ready and shared privately
+ * by a link that still works (pocket listings, 7 Nov 2026).
+ */
 export function isPublished(unit: BoardUnit, board: Board): boolean {
+  if (unit.pocket?.on) return readiness(unit, board).length === 0 && unit.pocket.shares.some((s) => s.active);
   return Object.values(unit.portals).some((p) => p.wanted) && readiness(unit, board).length === 0;
 }
+
+export const POCKET_STAYS_OFF = "A pocket listing stays off the portals — turn Pocket off to publish it.";
 
 /** "10:42, 7 Nov" in the business's own zone. */
 function readAt(iso: string, timezone: string): string {
@@ -89,7 +96,9 @@ export function PortalsSection({
   onSwitch: (portal: PortalTarget, wanted: boolean) => void;
 }) {
   const problems = readiness(unit, board);
-  const sentence = portalProblemSentence(problems);
+  const pocket = unit.pocket?.on === true;
+  // A pocket unit's switches are locked off; the Pocket section says what it needs.
+  const sentence = pocket ? POCKET_STAYS_OFF : portalProblemSentence(problems);
   return (
     <section className="wf-window-part">
       <h3>Portals</h3>
@@ -104,7 +113,7 @@ export function PortalsSection({
                   type="checkbox"
                   role="switch"
                   checked={wanted}
-                  disabled={!canEdit || (!wanted && problems.length > 0)}
+                  disabled={!canEdit || (!wanted && (pocket || problems.length > 0))}
                   onChange={(e) => onSwitch(portal, e.target.checked)}
                 />{" "}
                 {PORTAL_LABEL[portal]}

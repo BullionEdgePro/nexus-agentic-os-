@@ -68,6 +68,7 @@ export function WorkflowCard({
   handlers,
   dragging = false,
   published = false,
+  pocketInterest = false,
 }: {
   card: BoardCard;
   today: string;
@@ -78,15 +79,21 @@ export function WorkflowCard({
   dragging?: boolean;
   /** A unit wanted on a portal and ready: Portals + social is then done. */
   published?: boolean;
+  /** A deal whose buyer pressed "I'm interested" on a pocket listing's private link. */
+  pocketInterest?: boolean;
 }) {
   const title = cardTitle(card);
   const lines = cardLines(card, now, timezone);
   const badge = card.kind === "unit" ? permitBadge(card, today) : null;
+  const pocket = card.kind === "unit" && card.pocket?.on === true;
+  const interested = card.kind === "deal" && pocketInterest;
   const missing = isMissing(card, published);
   const label = [
     `${title}.`,
     `${lines.join(", ")}.`,
     badge ? `${badge.text}.` : "",
+    pocket ? "Pocket listing." : "",
+    interested ? "Interested in a pocket listing." : "",
     missing ? "Something this step needs is missing." : "",
     "Open the card.",
   ]
@@ -115,6 +122,8 @@ export function WorkflowCard({
           {badge.text}
         </span>
       ) : null}
+      {pocket ? <span className="wf-board-badge wf-board-pocket">Pocket</span> : null}
+      {interested ? <span className="wf-board-badge wf-board-interested">Interested in a pocket listing</span> : null}
     </button>
   );
 }

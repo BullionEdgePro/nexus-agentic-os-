@@ -23,6 +23,7 @@ import { aed, cardTitle } from "./board-card";
 import { MONEY_HELP, toAed } from "./add-card";
 import { PhotosSection } from "./photos-section";
 import { isPublished, PortalsSection } from "./portals-section";
+import { PocketSection } from "./pocket-section";
 
 /**
  * A card's window on the workflow board (3 Nov 2026): what its step needs, its
@@ -195,6 +196,9 @@ export function CardDetail({
   onMovePhoto = () => {},
   onRemovePhoto = () => {},
   onSwitchPortal = () => {},
+  onSwitchPocket = () => {},
+  onSharePocket = () => {},
+  onRevokePocketShare = () => {},
 }: {
   workflow: Workflow;
   card: BoardCard;
@@ -219,6 +223,10 @@ export function CardDetail({
   onMovePhoto?: (photoId: string, by: -1 | 1) => void;
   onRemovePhoto?: (photoId: string) => void;
   onSwitchPortal?: (portal: PortalTarget, wanted: boolean) => void;
+  /** Pocket listings (7 Nov 2026). */
+  onSwitchPocket?: (on: boolean) => void;
+  onSharePocket?: (dealId: string) => void;
+  onRevokePocketShare?: (shareId: string) => void;
 }) {
   const fields = fieldsFor(card);
   const [draft, setDraft] = useState<Draft>(() => draftOf(card));
@@ -442,6 +450,16 @@ export function CardDetail({
               onRemove={onRemovePhoto}
             />
             <PortalsSection unit={card} board={board} canEdit={canEdit} timezone={timezone} onSwitch={onSwitchPortal} />
+            <PocketSection
+              unit={card}
+              board={board}
+              canEdit={canEdit}
+              timezone={timezone}
+              now={now}
+              onSwitch={onSwitchPocket}
+              onShare={onSharePocket}
+              onRevoke={onRevokePocketShare}
+            />
           </>
         ) : null}
         {card.kind === "unit" ? (

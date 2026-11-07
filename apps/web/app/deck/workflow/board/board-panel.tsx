@@ -15,7 +15,10 @@ import {
   orderUnitPhotos,
   readableError,
   removeUnitPhoto,
+  revokePocketShare,
+  setUnitPocket,
   setUnitPortalWanted,
+  sharePocket,
   unitPhotoUrl,
   unlinkBoardUnit,
   updateBoardDeal,
@@ -30,6 +33,7 @@ import { PORTAL_PHOTO, shrinkTo } from "@/lib/team-chat/shrink-image";
 import { updatedLabel } from "@/lib/workflow/pulse";
 import { PORTAL_LABEL } from "./portals-section";
 import { PortalSettings, PortalSettingsButton } from "./portal-settings";
+import { ShareWindow, type SharedLink } from "./pocket-section";
 import { CardWindow } from "../../../kit/card-window";
 import { WorkflowBoardView, type AddRequest } from "./board-view";
 import { CardDetail } from "./card-detail";
@@ -73,6 +77,8 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
   // Portal settings are an admin's; "View as staff" sees what staff see.
   const [isAdmin, setIsAdmin] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** The private link just made, shown in its own window (pocket listings). */
+  const [sharedLink, setSharedLink] = useState<SharedLink | null>(null);
   useEffect(() => {
     let cancelled = false;
     getMe()
@@ -356,7 +362,43 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
               wanted ? `On for ${PORTAL_LABEL[portal]}.` : `Off ${PORTAL_LABEL[portal]}.`
             )
           }
+          onSwitchPocket={(on) =>
+            void fromWindow(
+              current,
+              () => setUnitPocket(slug, current.id, on),
+              on ? "Pocket on — kept off the portals." : "Pocket off — every private link revoked."
+            )
+          }
+          onSharePocket={(dealId) => {
+            setDetailMessage("");
+            void sharePocket(slug, current.id, dealId)
+              .then((link) => {
+                setSharedLink({ url: link.url, message: link.message, whatsappUrl: link.whatsappUrl });
+                void load();
+              })
+              .catch((err) => {
+                setDetailMessage(readableError(err));
+                if (raced(err)) void load();
+              });
+          }}
+          onRevokePocketShare={(shareId) =>
+            void fromWindow(current, () => revokePocketShare(slug, current.id, shareId), "Link revoked.")
+          }
         />
+      ) : null}
+
+      {sharedLink ? (
+        <CardWindow open title="Private link" onClose={() => setSharedLink(null)} origin={null}>
+          <ShareWindow
+            link={sharedLink}
+            onCopy={(text, what) =>
+              void navigator.clipboard
+                .writeText(text)
+                .then(() => setStatus(`${what} copied.`))
+                .catch(() => setStatus("Copy it by hand from the window."))
+            }
+          />
+        </CardWindow>
       ) : null}
 
       {settingsOpen ? (
