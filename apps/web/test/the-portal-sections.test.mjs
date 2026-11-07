@@ -129,3 +129,28 @@ test("Portals + social is done only when a portal is wanted AND the unit is read
   const expired = detail({ ...s10, permitExpiresOn: "2026-11-06" });
   assert.match(expired, /Live on at least one portal<span class="wf-board-need-state"> — missing/);
 });
+
+// Property Finder's line (7 Nov 2026): the first row that applies wins.
+// Spec: docs/superpowers/specs/2026-11-07-property-finder-connection-design.md §6
+test("Property Finder's line says exactly where the unit stands", () => {
+  const NONE = { state: null, message: null, syncedAt: null };
+  const pf = (row, board = {}, unit = {}) =>
+    portalState(
+      { ...READY, ...unit, portals: { ...OFF, property_finder: { wanted: true, ...NONE, ...row } } },
+      "property_finder",
+      { ...BOARD, pfConnection: "connected", ...board },
+      TZ
+    );
+  const AT = "2026-11-07T06:42:00.000Z";
+  assert.equal(pf({ wanted: false, state: "live", syncedAt: AT }), "Coming off Property Finder");
+  assert.equal(pf({ wanted: false }), "Off");
+  assert.equal(pf({}, {}, { permitExpiresOn: "2026-11-01" }), "Off the portals: a permit that has not expired");
+  assert.equal(pf({}, { pfConnection: "none" }), "Waiting for the Property Finder connection");
+  assert.equal(pf({}, { pfConnection: "key-refused" }), "Property Finder refused the key — an admin can check it in Portal settings");
+  assert.equal(pf({}, { pfConnection: "waiting-format" }), "Key saved — waiting for Property Finder's listing format");
+  assert.equal(pf({ state: "live", syncedAt: AT }), "Live on Property Finder — updated 10:42, 7 Nov");
+  assert.equal(pf({ state: "refused", message: "Price is too low", syncedAt: AT }), "Property Finder refused it: Price is too low");
+  assert.equal(pf({ state: "failed", message: "HTTP 503", syncedAt: AT }), "Could not reach Property Finder — trying again");
+  assert.equal(pf({}), "Sending to Property Finder…");
+  assert.equal(pf({ state: "unpublished", syncedAt: AT }), "Sending to Property Finder…");
+});

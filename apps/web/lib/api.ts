@@ -2730,7 +2730,17 @@ export type PortalSettingsData = {
   lastReadBy: string | null;
   /** The business's active staff and their broker licences. */
   agents: { id: string; name: string; brn: string | null }[];
+  /** Property Finder's key (7 Nov 2026): whether one is saved, its last four characters, the last check — never the key. */
+  propertyFinder: {
+    saved: boolean;
+    environment: PfEnvironment | null;
+    keyEnding: string | null;
+    checkedAt: string | null;
+    checkError: string | null;
+    listingCallsReady: boolean;
+  };
 };
+export type PfEnvironment = "sandbox" | "live";
 
 /** Where an <img> loads a unit's photo; it carries the session cookie itself. */
 export function unitPhotoUrl(slug: BusinessSlug, unitId: string, photoId: string): string {
@@ -2765,6 +2775,22 @@ export function savePortalOrn(slug: BusinessSlug, orn: string | null): Promise<P
 
 export function makeNewPortalFeed(slug: BusinessSlug): Promise<PortalSettingsData> {
   return request(`/api/organizations/${slug}/workflow-board/portal-settings/feed`, { method: "POST" });
+}
+
+/** Saves Property Finder's key and secret and checks them; the answer never carries them back. */
+export function savePfKey(
+  slug: BusinessSlug,
+  input: { apiKey: string; apiSecret: string; environment: PfEnvironment }
+): Promise<PortalSettingsData> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/property-finder`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function checkPfKey(slug: BusinessSlug): Promise<PortalSettingsData> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/property-finder/check`, { method: "POST" });
+}
+
+export function disconnectPf(slug: BusinessSlug): Promise<PortalSettingsData> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/property-finder`, { method: "DELETE" });
 }
 
 export function saveAgentBrn(slug: BusinessSlug, employeeId: string, brn: string | null): Promise<{ ok: true }> {

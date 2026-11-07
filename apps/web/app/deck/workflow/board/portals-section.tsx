@@ -49,12 +49,29 @@ function readAt(iso: string, timezone: string): string {
 
 /** What one portal is doing with this unit, in staff's words. */
 export function portalState(unit: BoardUnit, portal: PortalTarget, board: Board, timezone: string): string {
-  if (!unit.portals[portal].wanted) return "Off";
+  const row = unit.portals[portal];
+  if (!row.wanted) return portal === "property_finder" && row.state === "live" ? "Coming off Property Finder" : "Off";
   const problems = readiness(unit, board);
   if (problems.length > 0) return `Off the portals: ${problems[0]}`;
-  if (portal === "property_finder") return "Waiting for the Property Finder connection";
+  if (portal === "property_finder") return propertyFinderState(row, board, timezone);
   const at = board.portalFeed?.lastReadAt;
   return at ? `In the feed — Bayut last read it ${readAt(at, timezone)}` : "In the feed — Bayut has not read it yet";
+}
+
+/**
+ * Property Finder, for a unit wanted there and ready (7 Nov 2026): first where
+ * the business stands with Property Finder, then Property Finder's own answer.
+ * Spec: docs/superpowers/specs/2026-11-07-property-finder-connection-design.md §6
+ */
+function propertyFinderState(row: BoardUnit["portals"]["property_finder"], board: Board, timezone: string): string {
+  const connection = board.pfConnection ?? "none";
+  if (connection === "none") return "Waiting for the Property Finder connection";
+  if (connection === "key-refused") return "Property Finder refused the key — an admin can check it in Portal settings";
+  if (connection === "waiting-format") return "Key saved — waiting for Property Finder's listing format";
+  if (row.state === "live") return row.syncedAt ? `Live on Property Finder — updated ${readAt(row.syncedAt, timezone)}` : "Live on Property Finder";
+  if (row.state === "refused") return `Property Finder refused it: ${row.message ?? "no reason given"}`;
+  if (row.state === "failed") return "Could not reach Property Finder — trying again";
+  return "Sending to Property Finder…";
 }
 
 export function PortalsSection({
@@ -91,7 +108,9 @@ export function PortalsSection({
                 />{" "}
                 {PORTAL_LABEL[portal]}
               </label>
-              <span className={`wf-board-portal-state${state.startsWith("Off the portals") ? " wf-board-portal-warn" : ""}`}>{state}</span>
+              <span className={`wf-board-portal-state${/^(Off the portals|Property Finder refused)/.test(state) ? " wf-board-portal-warn" : ""}`}>
+                {state}
+              </span>
             </li>
           );
         })}

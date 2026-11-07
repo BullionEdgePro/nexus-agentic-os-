@@ -3,19 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
+  checkPfKey,
+  disconnectPf,
   getPortalSettings,
   makeNewPortalFeed,
   readableError,
   saveAgentBrn,
+  savePfKey,
   savePortalOrn,
+  type PfEnvironment,
   type PortalSettingsData,
 } from "@/lib/api";
 
 /**
  * Portal settings (7 Nov 2026): an admin's window from the board. The agency's
  * ORN and each agent's BRN go on every listing; the Bayut/dubizzle feed address
- * is what the agency sends Bayut to switch the feed on; Property Finder waits
- * for the agency's Enterprise API key (phase 2). Staff never see the button.
+ * is what the agency sends Bayut to switch the feed on; Property Finder takes
+ * the agency's API key and secret, checked and kept sealed (its connection,
+ * 7 Nov 2026). Staff never see the button.
  * Spec: docs/superpowers/specs/2026-11-07-portal-listings-design.md §3, §6, §7, §8
  */
 
@@ -60,6 +65,117 @@ export function pendingSaves(drafts: SettingsDrafts, settings: PortalSettingsDat
   return saves;
 }
 
+export const PF_DISCONNECT_WARNING = "Nexus stops updating Property Finder. Listings already there stay until removed in PF Expert.";
+const PF_STEPS = "A Decision Maker opens PF Expert → Developer Resources → API Credentials → New API Key. Start with a Sandbox.";
+export type PfKeyInput = { apiKey: string; apiSecret: string; environment: PfEnvironment };
+
+/**
+ * Property Finder's key (7 Nov 2026). The admin pastes the key and secret the
+ * Decision Maker made; Nexus checks them and keeps them sealed — this section
+ * only ever shows the key's last four characters and what the check said. The
+ * fields are emptied as soon as they are sent.
+ * Spec: docs/superpowers/specs/2026-11-07-property-finder-connection-design.md §6
+ */
+export function PfSection({
+  pf,
+  timezone,
+  onSaveKey,
+  onCheck,
+  onDisconnect,
+}: {
+  pf: PortalSettingsData["propertyFinder"];
+  timezone: string;
+  onSaveKey: (input: PfKeyInput) => void;
+  onCheck: () => void;
+  onDisconnect: () => void;
+}) {
+  const [replacing, setReplacing] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
+  const [environment, setEnvironment] = useState<PfEnvironment>(pf.environment ?? "sandbox");
+  const status = pf.checkError
+    ? pf.checkError
+    : `Connected (${pf.environment === "live" ? "Live" : "Sandbox"}) — key ending ${pf.keyEnding ?? "····"}${
+        pf.checkedAt ? `, checked ${when(pf.checkedAt, timezone)}` : ""
+      }`;
+  return (
+    <section className="wf-window-part">
+      <h3>Property Finder</h3>
+      {pf.saved ? (
+        <p className={pf.checkError ? "wf-board-portal-warn" : "wf-board-status"}>{status}</p>
+      ) : (
+        <p className="wf-board-empty">{PF_STEPS}</p>
+      )}
+      {pf.saved && !pf.listingCallsReady ? (
+        <p className="wf-board-empty">Listings start going to Property Finder once its listing format is added to Nexus.</p>
+      ) : null}
+      {!pf.saved || replacing ? (
+        <form
+          className="wf-board-fields"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSaveKey({ apiKey, apiSecret, environment });
+            setApiKey("");
+            setApiSecret("");
+            setReplacing(false);
+          }}
+        >
+          <div className="wf-board-field">
+            <label htmlFor="pf-key">API key</label>
+            <input id="pf-key" aria-label="API key" autoComplete="off" spellCheck={false} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+          </div>
+          <div className="wf-board-field">
+            <label htmlFor="pf-secret">API secret</label>
+            <input
+              id="pf-secret"
+              type="password"
+              aria-label="API secret"
+              autoComplete="off"
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+            />
+          </div>
+          <div className="wf-board-field">
+            <label htmlFor="pf-environment">Account</label>
+            <select id="pf-environment" value={environment} onChange={(e) => setEnvironment(e.target.value as PfEnvironment)}>
+              <option value="sandbox">Sandbox</option>
+              <option value="live">Live</option>
+            </select>
+          </div>
+          <div className="wf-board-move-row">
+            <button type="submit" className="kit-pill">
+              Save and check
+            </button>
+            {replacing ? (
+              <button type="button" className="kit-pill quiet" onClick={() => setReplacing(false)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </form>
+      ) : (
+        <div className="wf-board-move-row">
+          <button type="button" className="kit-pill" onClick={onCheck}>
+            Check again
+          </button>
+          <button type="button" className="kit-pill quiet" onClick={() => setReplacing(true)}>
+            Replace key
+          </button>
+          <button
+            type="button"
+            className="kit-pill quiet"
+            onClick={() => {
+              if (window.confirm(PF_DISCONNECT_WARNING)) onDisconnect();
+            }}
+          >
+            Disconnect
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function PortalSettingsView({
   settings,
   timezone,
@@ -68,6 +184,9 @@ export function PortalSettingsView({
   onNewAddress,
   onCopy,
   onSaveBrn,
+  onSavePfKey,
+  onCheckPf,
+  onDisconnectPf,
 }: {
   settings: PortalSettingsData;
   timezone: string;
@@ -76,6 +195,9 @@ export function PortalSettingsView({
   onNewAddress: () => void;
   onCopy: (url: string) => void;
   onSaveBrn: (employeeId: string, brn: string | null) => void;
+  onSavePfKey: (input: PfKeyInput) => void;
+  onCheckPf: () => void;
+  onDisconnectPf: () => void;
 }) {
   const [orn, setOrn] = useState(settings.orn ?? "");
   const [brns, setBrns] = useState<Record<string, string>>(() => Object.fromEntries(settings.agents.map((a) => [a.id, a.brn ?? ""])));
@@ -179,10 +301,7 @@ export function PortalSettingsView({
         ))}
       </section>
 
-      <section className="wf-window-part">
-        <h3>Property Finder</h3>
-        <p className="wf-board-empty">Not connected yet. It needs SFS&apos;s Enterprise API key (PF Expert → Developer Resources).</p>
-      </section>
+      <PfSection pf={settings.propertyFinder} timezone={timezone} onSaveKey={onSavePfKey} onCheck={onCheckPf} onDisconnect={onDisconnectPf} />
     </div>
   );
 }
@@ -238,6 +357,22 @@ export function PortalSettings({ slug, timezone }: { slug: BusinessSlug; timezon
         void saveAgentBrn(slug, employeeId, brn)
           .then(() => getPortalSettings(slug))
           .then((s) => show(s, brn ? "BRN saved." : "BRN cleared."))
+          .catch((err) => setMessage(readableError(err)))
+      }
+      onSavePfKey={(input) => {
+        setMessage("Checking the key with Property Finder…");
+        void savePfKey(slug, input)
+          .then((s) => show(s, s.propertyFinder.checkError ? "Key saved, but Property Finder did not accept it." : "Key saved — Property Finder accepted it."))
+          .catch((err) => setMessage(readableError(err)));
+      }}
+      onCheckPf={() =>
+        void checkPfKey(slug)
+          .then((s) => show(s, s.propertyFinder.checkError ? "Property Finder still does not accept the key." : "Property Finder accepts the key."))
+          .catch((err) => setMessage(readableError(err)))
+      }
+      onDisconnectPf={() =>
+        void disconnectPf(slug)
+          .then((s) => show(s, "Property Finder disconnected."))
           .catch((err) => setMessage(readableError(err)))
       }
     />
