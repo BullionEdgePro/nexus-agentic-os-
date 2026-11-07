@@ -315,3 +315,22 @@
 .wf-board-add-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .wf-board-pick { display: flex; flex-direction: column; gap: 4px; }
 .wf-board-pick-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Portal listings (7 Nov 2026): the unit card's Listing, Photos and Portals. */
+.wf-board-field-wide textarea { resize: vertical; min-height: 96px; }
+.wf-board-amenities { margin: 4px 0 0; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--r); display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 12px; }
+.wf-board-amenities legend { padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--slate); }
+.wf-board-photos { margin: 8px 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.wf-board-photo { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.wf-board-photo img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--r); background: var(--pebble); }
+.wf-board-cover { position: absolute; top: 6px; left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--ink); color: var(--paper); }
+.wf-board-photo-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.wf-board-photo-actions .kit-pill { font-size: 12px; padding: 3px 8px; }
+.wf-board-add-photos { position: relative; align-self: flex-start; cursor: pointer; }
+.wf-board-file { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.wf-board-add-photos:focus-within { outline: 2px solid var(--st-forest); outline-offset: 2px; }
+.wf-board-portals { margin: 6px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.wf-board-portal { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.wf-board-portal-state { font-size: 13px; color: var(--slate); }
+.wf-board-portal-warn { color: var(--warn); font-weight: 600; }
+.wf-board-portal-needs { margin: 4px 0 0; font-size: 13px; color: var(--warn); }

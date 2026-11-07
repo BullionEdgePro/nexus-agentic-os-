@@ -11,15 +11,23 @@ import {
   getWorkflowBoard,
   linkBoardUnit,
   moveBoardCard,
+  orderUnitPhotos,
   readableError,
+  removeUnitPhoto,
+  setUnitPortalWanted,
+  unitPhotoUrl,
   unlinkBoardUnit,
   updateBoardDeal,
   updateBoardUnit,
+  uploadUnitPhoto,
+  viewingAs,
   type ContactSummary,
   type DealInput,
   type UnitInput,
 } from "@/lib/api";
+import { PORTAL_PHOTO, shrinkTo } from "@/lib/team-chat/shrink-image";
 import { updatedLabel } from "@/lib/workflow/pulse";
+import { PORTAL_LABEL } from "./portals-section";
 import { CardWindow } from "../../../kit/card-window";
 import { WorkflowBoardView, type AddRequest } from "./board-view";
 import { CardDetail } from "./card-detail";
@@ -56,6 +64,10 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
   const requestId = useRef(0);
   const historyFor = useRef<string | null>(null);
   const searchId = useRef(0);
+  // "View as staff" is look-only (the server refuses its writes); read after
+  // mount, since the preview lives in this tab's sessionStorage.
+  const [canEdit, setCanEdit] = useState(true);
+  useEffect(() => setCanEdit(!viewingAs()), []);
 
   const load = useCallback(async () => {
     const asked = ++requestId.current;
@@ -157,6 +169,45 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
     } catch (err) {
       setAddMessage(readableError(err));
     }
+  }
+
+  /**
+   * Photos for the portals: each shrunk here to 2048 px at JPEG 0.85, refused
+   * here if smaller than 800 × 600 (the server checks again), sent one at a time.
+   */
+  async function addPhotos(card: BoardCard, files: File[]) {
+    setDetailMessage(`Adding ${files.length === 1 ? "the photo" : `${files.length} photos`}…`);
+    let added = 0;
+    for (const file of files) {
+      const shrunk = await shrinkTo(file, PORTAL_PHOTO.longest, PORTAL_PHOTO.quality);
+      if (!shrunk) {
+        setDetailMessage(`This browser cannot read ${file.name}. Save it as a JPEG and try again.`);
+        break;
+      }
+      if (shrunk.width < PORTAL_PHOTO.minWidth || shrunk.height < PORTAL_PHOTO.minHeight) {
+        setDetailMessage(`${file.name}: Too small for the portals: at least 800 × 600 pixels.`);
+        break;
+      }
+      try {
+        await uploadUnitPhoto(slug, card.id, shrunk.blob);
+        added += 1;
+      } catch (err) {
+        setDetailMessage(readableError(err));
+        break;
+      }
+    }
+    if (added === files.length) setDetailMessage(added === 1 ? "Photo added." : `${added} photos added.`);
+    if (added > 0) await load();
+  }
+
+  function movePhoto(card: BoardCard, photoId: string, by: -1 | 1) {
+    if (card.kind !== "unit") return;
+    const ids = card.photos.map((p) => p.id);
+    const at = ids.indexOf(photoId);
+    const to = at + by;
+    if (at < 0 || to < 0 || to >= ids.length) return;
+    [ids[at], ids[to]] = [ids[to]!, ids[at]!];
+    void fromWindow(card, () => orderUnitPhotos(slug, card.id, ids), to === 0 ? "That photo is the cover now." : "Photos reordered.");
   }
 
   function search(query: string) {
@@ -276,6 +327,18 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
           }}
           onLink={(unitId) => void fromWindow(current, () => linkBoardUnit(slug, current.id, unitId), "Unit offered.")}
           onUnlink={(unitId) => void fromWindow(current, () => unlinkBoardUnit(slug, current.id, unitId), "Unit removed.")}
+          canEdit={canEdit}
+          photoSrc={(photoId) => unitPhotoUrl(slug, current.id, photoId)}
+          onAddPhotos={(files) => void addPhotos(current, files)}
+          onMovePhoto={(photoId, by) => movePhoto(current, photoId, by)}
+          onRemovePhoto={(photoId) => void fromWindow(current, () => removeUnitPhoto(slug, current.id, photoId), "Photo removed.")}
+          onSwitchPortal={(portal, wanted) =>
+            void fromWindow(
+              current,
+              () => setUnitPortalWanted(slug, current.id, portal, wanted),
+              wanted ? `On for ${PORTAL_LABEL[portal]}.` : `Off ${PORTAL_LABEL[portal]}.`
+            )
+          }
         />
       ) : null}
 

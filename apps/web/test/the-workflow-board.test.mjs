@@ -28,7 +28,12 @@ const unit = (over) => ({
   kind: "unit", id: "u0", step: "S5", inStepSince: ago(0), reference: "Unit", community: null, propertyType: null,
   bedrooms: null, purpose: null, priceAed: null, cheques: null, ejariReady: false, titleDeed: false, ownerDocs: false,
   formASignedOn: null, permitNumber: null, permitExpiresOn: null, liveOn: [], owner: null, agent: AISHA, notes: null,
-  dealIds: [], ...over,
+  dealIds: [],
+  // Portal listings (7 Nov 2026).
+  updatedAt: ago(0), title: null, description: null, sizeSqft: null, bathrooms: null, furnishing: null, city: "Dubai",
+  subCommunity: null, building: null, parking: null, amenities: [], availableFrom: null, photos: [],
+  portals: { bayut: { wanted: false }, dubizzle: { wanted: false }, property_finder: { wanted: false } },
+  ...over,
 });
 const deal = (over) => ({
   kind: "deal", id: "d0", step: "D4", inStepSince: ago(0), contact: { id: "c1", name: "Lead one" }, purpose: "rent",
@@ -48,6 +53,9 @@ const BOARD = {
   hotWaiting: [{ contactId: "c9", name: "Hot lead", priority: "urgent", scoredAt: ago(0) }],
   closed30: { let: 1, sold: 2, won: 3, commissionAed: 84000 },
   today: "2026-11-03",
+  portalFeed: null,
+  ornSet: false,
+  agentBrns: {},
 };
 
 const AUDIT = {

@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 import {
+  AMENITIES,
+  AMENITY_WORDS,
   closeProblem,
   daysInStepLabel,
   PORTALS,
@@ -11,6 +13,7 @@ import {
   type BoardCard,
   type CardMove,
   type Portal,
+  type PortalTarget,
   type Workflow,
 } from "@nexus/shared";
 import type { DealInput, UnitInput } from "@/lib/api";
@@ -18,6 +21,8 @@ import { CardWindow } from "../../../kit/card-window";
 import { MoveMenu } from "./move-menu";
 import { aed, cardTitle } from "./board-card";
 import { MONEY_HELP, toAed } from "./add-card";
+import { PhotosSection } from "./photos-section";
+import { PortalsSection } from "./portals-section";
 
 /**
  * A card's window on the workflow board (3 Nov 2026): what its step needs, its
@@ -49,7 +54,14 @@ const CLOSES: Record<BoardCard["kind"], [string, string][]> = {
   ],
 };
 
-type FieldType = "text" | "money" | "count" | "date" | "flag" | "type";
+type FieldType = "text" | "money" | "count" | "date" | "flag" | "type" | "area" | "longtext" | "furnishing";
+
+const FURNISHING_WORDS: [string, string][] = [
+  ["furnished", "Furnished"],
+  ["semi_furnished", "Semi-furnished"],
+  ["unfurnished", "Unfurnished"],
+];
+const AREA_HELP = "a number of square feet, like 812 or 812.5.";
 type Field = { key: string; label: string; type: FieldType; group: string };
 
 const UNIT_FIELDS: Field[] = [
@@ -65,6 +77,17 @@ const UNIT_FIELDS: Field[] = [
   { key: "formASignedOn", label: "Form A signed on", type: "date", group: "Papers" },
   { key: "permitNumber", label: "Trakheesi permit number", type: "text", group: "Papers" },
   { key: "permitExpiresOn", label: "Permit expires on", type: "date", group: "Papers" },
+  // The listing the portals publish (portal listings, 7 Nov 2026).
+  { key: "title", label: "Title", type: "text", group: "Listing" },
+  { key: "description", label: "Description", type: "longtext", group: "Listing" },
+  { key: "sizeSqft", label: "Size, sq ft", type: "area", group: "Listing" },
+  { key: "bathrooms", label: "Bathrooms", type: "count", group: "Listing" },
+  { key: "furnishing", label: "Furnishing", type: "furnishing", group: "Listing" },
+  { key: "city", label: "City", type: "text", group: "Listing" },
+  { key: "subCommunity", label: "Sub-community", type: "text", group: "Listing" },
+  { key: "building", label: "Building", type: "text", group: "Listing" },
+  { key: "parking", label: "Parking spaces", type: "count", group: "Listing" },
+  { key: "availableFrom", label: "Available from", type: "date", group: "Listing" },
 ];
 
 const DEAL_FIELDS: Field[] = [
@@ -103,7 +126,8 @@ export function unsavedChanges(
   card: BoardCard,
   draft: Draft,
   liveOn: Portal[],
-  touched: Set<string>
+  touched: Set<string>,
+  amenities?: string[]
 ): { changes: Record<string, unknown> } | { problem: string } {
   const values = card as unknown as Record<string, unknown>;
   const changes: Record<string, unknown> = {};
@@ -119,6 +143,10 @@ export function unsavedChanges(
       const text = String(raw).trim();
       next = text === "" ? null : Number(text);
       if (next !== null && !Number.isInteger(next)) return { problem: `${f.label}: a whole number, please.` };
+    } else if (f.type === "area") {
+      const text = String(raw).trim();
+      if (text !== "" && !/^\d+(\.\d{1,2})?$/.test(text)) return { problem: `${f.label}: ${AREA_HELP}` };
+      next = text === "" ? null : Number(text);
     } else if (f.key === "reference") next = String(raw).trim();
     else next = String(raw).trim() === "" ? null : String(raw).trim();
     if (next !== values[f.key]) changes[f.key] = next;
@@ -127,6 +155,9 @@ export function unsavedChanges(
   if (touched.has("notes") && notes !== card.notes) changes.notes = notes;
   if (card.kind === "unit" && touched.has("liveOn") && JSON.stringify([...liveOn].sort()) !== JSON.stringify([...card.liveOn].sort())) {
     changes.liveOn = liveOn;
+  }
+  if (card.kind === "unit" && amenities && touched.has("amenities") && JSON.stringify([...amenities].sort()) !== JSON.stringify([...card.amenities].sort())) {
+    changes.amenities = amenities;
   }
   return { changes };
 }
@@ -158,6 +189,12 @@ export function CardDetail({
   onLink,
   onUnlink,
   onDismiss,
+  canEdit = true,
+  photoSrc = () => "",
+  onAddPhotos = () => {},
+  onMovePhoto = () => {},
+  onRemovePhoto = () => {},
+  onSwitchPortal = () => {},
 }: {
   workflow: Workflow;
   card: BoardCard;
@@ -174,10 +211,19 @@ export function CardDetail({
   onLink: (unitId: string) => void;
   onUnlink: (unitId: string) => void;
   onDismiss: () => void;
+  /** False for "View as staff": photos and switches are shown, not changeable. */
+  canEdit?: boolean;
+  /** Where an <img> loads one of the unit's photos. */
+  photoSrc?: (photoId: string) => string;
+  onAddPhotos?: (files: File[]) => void;
+  onMovePhoto?: (photoId: string, by: -1 | 1) => void;
+  onRemovePhoto?: (photoId: string) => void;
+  onSwitchPortal?: (portal: PortalTarget, wanted: boolean) => void;
 }) {
   const fields = fieldsFor(card);
   const [draft, setDraft] = useState<Draft>(() => draftOf(card));
   const [liveOn, setLiveOn] = useState<Portal[]>(card.kind === "unit" ? card.liveOn : []);
+  const [amenities, setAmenities] = useState<string[]>(card.kind === "unit" ? card.amenities : []);
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
   const touch = (key: string) => setTouched((t) => (t.has(key) ? t : new Set(t).add(key)));
   const [note, setNote] = useState("");
@@ -190,7 +236,7 @@ export function CardDetail({
   const groups = [...new Set(fields.map((f) => f.group))];
 
   async function save() {
-    const result = unsavedChanges(card, draft, liveOn, touched);
+    const result = unsavedChanges(card, draft, liveOn, touched, amenities);
     if ("problem" in result) {
       setProblem(result.problem);
       return;
@@ -222,6 +268,29 @@ export function CardDetail({
         </label>
       );
     }
+    if (f.type === "longtext") {
+      return (
+        <div key={f.key} className="wf-board-field wf-board-field-wide">
+          <label htmlFor={id}>{f.label}</label>
+          <textarea id={id} aria-label={f.label} rows={5} dir="auto" value={String(value)} onChange={(e) => set(e.target.value)} />
+        </div>
+      );
+    }
+    if (f.type === "furnishing") {
+      return (
+        <div key={f.key} className="wf-board-field">
+          <label htmlFor={id}>{f.label}</label>
+          <select id={id} value={String(value)} onChange={(e) => set(e.target.value)}>
+            <option value="">Not set</option>
+            {FURNISHING_WORDS.map(([v, words]) => (
+              <option key={v} value={v}>
+                {words}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
     return (
       <div key={f.key} className="wf-board-field">
         <label htmlFor={id}>{f.label}</label>
@@ -238,7 +307,7 @@ export function CardDetail({
           <input
             id={id}
             type={f.type === "date" ? "date" : "text"}
-            inputMode={f.type === "money" ? "decimal" : f.type === "count" ? "numeric" : undefined}
+            inputMode={f.type === "money" || f.type === "area" ? "decimal" : f.type === "count" ? "numeric" : undefined}
             value={String(value)}
             onChange={(e) => set(e.target.value)}
           />
@@ -342,8 +411,39 @@ export function CardDetail({
           <section key={group} className="wf-window-part wf-board-fields">
             <h3>{group}</h3>
             {fields.filter((f) => f.group === group).map(input)}
+            {group === "Listing" ? (
+              <fieldset className="wf-board-amenities">
+                <legend>Amenities</legend>
+                {AMENITIES.map((a) => (
+                  <label key={a} className="wf-board-flag">
+                    <input
+                      type="checkbox"
+                      checked={amenities.includes(a)}
+                      onChange={(e) => {
+                        touch("amenities");
+                        setAmenities((now) => (e.target.checked ? [...now, a] : now.filter((x) => x !== a)));
+                      }}
+                    />{" "}
+                    {AMENITY_WORDS[a]}
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
           </section>
         ))}
+        {card.kind === "unit" ? (
+          <>
+            <PhotosSection
+              unit={card}
+              canEdit={canEdit}
+              photoSrc={photoSrc}
+              onAdd={onAddPhotos}
+              onMove={onMovePhoto}
+              onRemove={onRemovePhoto}
+            />
+            <PortalsSection unit={card} board={board} canEdit={canEdit} timezone={timezone} onSwitch={onSwitchPortal} />
+          </>
+        ) : null}
         {card.kind === "unit" ? (
           <section className="wf-window-part wf-board-fields">
             <h3>Live on</h3>

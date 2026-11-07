@@ -38,6 +38,20 @@ function drawJpeg(image: ImageBitmap, longest: number, quality: number): Promise
   );
 }
 
+/** A unit's photo for the portals (portal listings, 7 Nov 2026): longest side 2048 px, JPEG quality 0.85. */
+export const PORTAL_PHOTO = { longest: 2048, quality: 0.85, minWidth: 800, minHeight: 600 } as const;
+
+/** The photo as one JPEG fitting within `longest`, or null when this browser cannot read it. */
+export async function shrinkTo(file: Blob, longest: number, quality: number): Promise<{ blob: Blob; width: number; height: number } | null> {
+  const image = await decode(file);
+  if (!image) return null;
+  try {
+    return await drawJpeg(image, longest, quality);
+  } finally {
+    image.close();
+  }
+}
+
 /**
  * The photo to send and its preview, or null when this browser cannot read the
  * picture (an old HEIC on a desktop, say) — the caller then offers it as a

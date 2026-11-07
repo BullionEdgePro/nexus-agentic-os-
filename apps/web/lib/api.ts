@@ -2639,6 +2639,18 @@ export type UnitInput = Partial<{
   ownerContactId: string | null;
   agentEmployeeId: string | null;
   notes: string | null;
+  // The listing (portal listings, 7 Nov 2026).
+  title: string | null;
+  description: string | null;
+  sizeSqft: number | null;
+  bathrooms: number | null;
+  furnishing: "furnished" | "semi_furnished" | "unfurnished" | null;
+  city: string | null;
+  subCommunity: string | null;
+  building: string | null;
+  parking: number | null;
+  amenities: string[];
+  availableFrom: string | null;
 }>;
 export type DealInput = Partial<{
   budgetAed: number | null;
@@ -2703,6 +2715,53 @@ export function unlinkBoardUnit(slug: BusinessSlug, dealId: string, unitId: stri
 
 export function getCardHistory(slug: BusinessSlug, kind: CardKind, id: string): Promise<{ moves: CardMove[] }> {
   return request(`/api/organizations/${slug}/workflow-board/${kind}/${id}/history`);
+}
+
+/**
+ * Portal listings (7 Nov 2026): a unit's photos, its publish switches, the
+ * business's portal settings and each agent's BRN. A 422 carries the rule's
+ * own words ("Before it can go on the portals: …").
+ */
+export type PortalTargetName = "bayut" | "dubizzle" | "property_finder";
+export type PortalSettingsView = { orn: string | null; feedUrl: string | null; lastReadAt: string | null; lastReadBy: string | null };
+
+/** Where an <img> loads a unit's photo; it carries the session cookie itself. */
+export function unitPhotoUrl(slug: BusinessSlug, unitId: string, photoId: string): string {
+  return `${API_URL}/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/photos/${encodeURIComponent(photoId)}`;
+}
+
+export function uploadUnitPhoto(slug: BusinessSlug, unitId: string, photo: Blob): Promise<{ id: string; width: number; height: number }> {
+  const form = new FormData();
+  form.set("photo", photo, "photo.jpg");
+  return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/photos`, { method: "POST", body: form });
+}
+
+export function orderUnitPhotos(slug: BusinessSlug, unitId: string, ids: string[]): Promise<{ ok: true }> {
+  return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/photos/order`, { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+export function removeUnitPhoto(slug: BusinessSlug, unitId: string, photoId: string): Promise<{ ok: true }> {
+  return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/photos/${encodeURIComponent(photoId)}`, { method: "DELETE" });
+}
+
+export function setUnitPortalWanted(slug: BusinessSlug, unitId: string, portal: PortalTargetName, wanted: boolean): Promise<BoardUnit> {
+  return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/portals/${portal}`, { method: "POST", body: JSON.stringify({ wanted }) });
+}
+
+export function getPortalSettings(slug: BusinessSlug): Promise<PortalSettingsView> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings`);
+}
+
+export function savePortalOrn(slug: BusinessSlug, orn: string | null): Promise<PortalSettingsView> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings`, { method: "PATCH", body: JSON.stringify({ orn }) });
+}
+
+export function makeNewPortalFeed(slug: BusinessSlug): Promise<PortalSettingsView> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/feed`, { method: "POST" });
+}
+
+export function saveAgentBrn(slug: BusinessSlug, employeeId: string, brn: string | null): Promise<{ ok: true }> {
+  return request(`/api/organizations/${slug}/workflow-board/agents/${encodeURIComponent(employeeId)}/brn`, { method: "PATCH", body: JSON.stringify({ brn }) });
 }
 
 export function refreshForecast(orgSlug: BusinessSlug): Promise<{
