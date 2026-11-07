@@ -25,6 +25,7 @@ export const SCHEDULED_JOBS = [
   "email-sync",
   "scheduled-messages",
   "hq-checks",
+  "pf-sync",
 ] as const;
 
 export type ScheduledJob = (typeof SCHEDULED_JOBS)[number];
@@ -68,6 +69,11 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
   // Business HQ's daily 06:00 website checks. Daily, so the same margin as the
   // other daily jobs: a deploy can land the first run up to a day late.
   "hq-checks": 30 * HOUR,
+  // The Property Finder sync, every ten minutes (7 Nov 2026). Three intervals
+  // plus room for a deploy, and above the operators sweep. A dead sync does not
+  // look like an outage either: listings simply stop following the board, and a
+  // unit that should have come off Property Finder stays advertised.
+  "pf-sync": 45 * MINUTE,
 };
 
 /**

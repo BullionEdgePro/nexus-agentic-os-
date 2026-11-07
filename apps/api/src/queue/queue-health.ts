@@ -13,6 +13,7 @@ import { EMAIL_SYNC_QUEUE } from "./email-sync-queue.js";
 import { SCHEDULED_MESSAGES_QUEUE } from "./scheduled-messages-queue.js";
 import { SOCIAL_INBOUND_QUEUE } from "./social-inbound-queue.js";
 import { HQ_CHECKS_QUEUE } from "./hq-checks-queue.js";
+import { PF_SYNC_QUEUE } from "./pf-sync-queue.js";
 
 /**
  * What is stuck or lost in the queues — the half of the background system that
@@ -66,6 +67,7 @@ const QUEUES = [
   EMAIL_SYNC_QUEUE,
   SCHEDULED_MESSAGES_QUEUE,
   HQ_CHECKS_QUEUE,
+  PF_SYNC_QUEUE,
 ] as const;
 
 /**

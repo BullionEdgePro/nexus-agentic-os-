@@ -33,6 +33,8 @@ import { processScheduledMessageSweep } from "./queue/scheduled-messages-process
 import { startPushDispatcher } from "./services/push-dispatcher.js";
 import { HQ_CHECKS_QUEUE, scheduleHqChecks } from "./queue/hq-checks-queue.js";
 import { processHqChecksJob } from "./queue/hq-checks-processor.js";
+import { PF_SYNC_QUEUE, schedulePfSync } from "./queue/pf-sync-queue.js";
+import { processPfSyncJob } from "./queue/pf-sync-processor.js";
 import { SOCIAL_INBOUND_QUEUE, getSocialInboundQueue } from "./queue/social-inbound-queue.js";
 import { processSocialInboundJob } from "./queue/social-processor.js";
 import type { SocialInboundJob } from "@nexus/shared";
@@ -190,6 +192,18 @@ const hqChecksWorker = new Worker(HQ_CHECKS_QUEUE, processHqChecksJob, {
   concurrency: 1,
 });
 hqChecksWorker.on("failed", (job, err) => logger.error({ jobId: job?.id, err }, "Business HQ checks job failed"));
+
+// Property Finder (7 Nov 2026): the ten-minute cycle and each unit's own run.
+// One at a time, so the cycle and a unit's job never work on the same unit at
+// once (two creates would make two listings on Property Finder).
+const pfSyncWorker = new Worker(PF_SYNC_QUEUE, processPfSyncJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+pfSyncWorker.on("failed", (job, err) => logger.error({ jobId: job?.id, err }, "Property Finder sync job failed"));
+schedulePfSync()
+  .then(() => logger.info("Property Finder sync scheduled (every 10m)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule the Property Finder sync"));
 scheduleHqChecks()
   .then(() => logger.info("Business HQ checks scheduled (daily 06:00 Asia/Dubai)"))
   .catch((err) => logger.warn({ err }, "Could not schedule Business HQ checks"));
@@ -290,6 +304,7 @@ async function shutdown() {
     proceduresWorker.close(),
     forecastWorker.close(),
     scheduledMessagesWorker.close(),
+    pfSyncWorker.close(),
   ]);
   process.exit(0);
 }
