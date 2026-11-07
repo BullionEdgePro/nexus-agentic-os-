@@ -227,12 +227,22 @@ export type PocketView = {
   amenities: string[];
   availableFrom: string | null;
   photoIds: string[];
+  /** The listing agent: the advert names them and their BRN. */
   agent: { name: string; firstName: string; brn: string; whatsapp: string | null };
+  /** The buyer's own agent (final review): who they talk to, and who hears of their interest. */
+  contact: { name: string; firstName: string; whatsapp: string | null };
   orn: string;
   permitNumber: string;
   expiresAt: string;
 };
-type Found = { organizationId: string; shareId: string; unitId: string; createdBy: string | null; view: PocketView };
+type Found = { organizationId: string; shareId: string; unitId: string; contactId: string | null; view: PocketView };
+
+/** A WhatsApp number's digits — Meta stores "+971 58 848 3731" (final review); null for anything else. */
+function waDigits(number: string | null | undefined): string | null {
+  if (!number || /[a-z]/i.test(number)) return null;
+  const digits = number.replace(/\D/g, "");
+  return digits.length >= 6 && digits.length <= 20 ? digits : null;
+}
 
 const todayIn = (timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
 
@@ -267,17 +277,32 @@ async function findShare(token: string): Promise<Found | null> {
       `select full_name, brn, whatsapp_number from employees where organization_id = $1 and id = $2`,
       [organizationId, unit.agent!.id]
     );
-    const { rows: deals } = await getPool().query<{ display_name: string | null }>(
-      `select ct.display_name from property_deals d left join contacts ct on ct.id = d.contact_id where d.organization_id = $1 and d.id = $2`,
-      [organizationId, String(share.deal_id)]
+    // The buyer's own agent: whoever works the deal, else whoever holds the client
+    // in their book, else whoever shared it, else the listing agent (final review).
+    const { rows: deals } = await getPool().query<{
+      display_name: string | null;
+      contact_id: string | null;
+      contact_name: string | null;
+      contact_whatsapp: string | null;
+    }>(
+      `select ct.display_name, e.id as contact_id, e.full_name as contact_name, e.whatsapp_number as contact_whatsapp
+         from property_deals d
+         left join contacts ct on ct.id = d.contact_id
+         left join employees e on e.organization_id = $1 and e.is_active
+                              and e.id = coalesce(d.agent_employee_id, ct.owner_employee_id, $3::uuid, $4::uuid)
+        where d.organization_id = $1 and d.id = $2`,
+      [organizationId, String(share.deal_id), share.created_by_employee_id ?? null, unit.agent!.id]
     );
     const agent = agents[0];
     if (!agent?.brn || !ctx.orn) return null;
+    const buyersAgent = deals[0]?.contact_id
+      ? { id: String(deals[0].contact_id), name: deals[0].contact_name!, whatsapp: deals[0].contact_whatsapp }
+      : { id: unit.agent!.id, name: agent.full_name, whatsapp: agent.whatsapp_number };
     return {
       organizationId,
       shareId: String(share.id),
       unitId: unit.id,
-      createdBy: share.created_by_employee_id ? String(share.created_by_employee_id) : null,
+      contactId: buyersAgent.id,
       view: {
         businessName: share.name,
         recipientFirstName: firstWord(deals[0]?.display_name),
@@ -299,7 +324,12 @@ async function findShare(token: string): Promise<Found | null> {
           name: agent.full_name,
           firstName: firstWord(agent.full_name) ?? agent.full_name,
           brn: agent.brn,
-          whatsapp: agent.whatsapp_number && /^\d{6,20}$/.test(agent.whatsapp_number) ? agent.whatsapp_number : null,
+          whatsapp: waDigits(agent.whatsapp_number),
+        },
+        contact: {
+          name: buyersAgent.name,
+          firstName: firstWord(buyersAgent.name) ?? buyersAgent.name,
+          whatsapp: waDigits(buyersAgent.whatsapp),
         },
         orn: ctx.orn,
         permitNumber: unit.permitNumber!,
@@ -359,17 +389,13 @@ export async function recordPocketInterest(token: string): Promise<{
       `update unit_pocket_shares set interested_at = now() where organization_id = $1 and id = $2 and interested_at is null`,
       [found.organizationId, found.shareId]
     );
-    const { rows } = await getPool().query<{ agent_employee_id: string | null }>(
-      `select agent_employee_id from property_units where organization_id = $1 and id = $2`,
-      [found.organizationId, found.unitId]
-    );
-    const agentId = rows[0]?.agent_employee_id ? String(rows[0].agent_employee_id) : null;
+    // The buyer's own agent hears it (final review): they hold the client and can act on it.
     return {
       first: (rowCount ?? 0) > 0,
-      notify: agentId ?? found.createdBy,
+      notify: found.contactId,
       title: found.view.title,
       recipientFirstName: found.view.recipientFirstName,
-      agentFirstName: found.view.agent.firstName,
+      agentFirstName: found.view.contact.firstName,
     };
   });
 }

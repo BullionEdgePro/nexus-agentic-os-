@@ -109,6 +109,12 @@ test("the share window: the message, Send on WhatsApp when there is a number, th
   assert.doesNotMatch(render(ShareWindow, { link: { ...link, whatsappUrl: null }, onCopy: noop }), /Send on WhatsApp/);
 });
 
+test("the share window says the truth about the link: anyone who has it can open it (final review)", () => {
+  const html = render(ShareWindow, { link: { url: "u", message: "m", whatsappUrl: null }, onCopy: noop });
+  assert.match(html, /The link works for 14 days\. Anyone who has it can open it — send it to this buyer only\. Revoke it from the card at any time\./);
+  assert.doesNotMatch(html, /for this buyer only\./);
+});
+
 test("a pocket unit's portal switches are locked, with the reason", () => {
   const html = render(PortalsSection, { unit: READY, board: BOARD, canEdit: true, timezone: TZ, onSwitch: noop });
   assert.match(html, /A pocket listing stays off the portals — turn Pocket off to publish it\./);

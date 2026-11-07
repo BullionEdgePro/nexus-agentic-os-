@@ -180,3 +180,34 @@ test("6. every rule is checked on every view", db, async () => {
   assert.equal(await lib.pocketShareView("not-a-token"), null);
   assert.equal(await lib.pocketShareView("A".repeat(43)), null, "a well-formed token nobody holds");
 });
+
+test("7. an agent's number as Meta writes it still gives a WhatsApp button (final review)", db, async () => {
+  await owner.query(`update employees set whatsapp_number = '+971 50 000 0001' where id = $1`, [AISHA]);
+  try {
+    const { view } = await lib.pocketShareView(token);
+    assert.equal(view.agent.whatsapp, "971500000001");
+    assert.equal(view.contact.whatsapp, "971500000001");
+  } finally {
+    await owner.query(`update employees set whatsapp_number = '971500000001' where id = $1`, [AISHA]);
+  }
+});
+
+test("8. the buyer's own agent is their contact and hears of their interest (final review)", db, async () => {
+  const BILAL = id(12);
+  const OMAR = id(32);
+  const D_OMAR = id(42);
+  await owner.query(
+    `insert into employees (id, organization_id, employee_code, full_name, whatsapp_number, brn) values ($1, $2, 'PKV2', 'Bilal Ahmed', '+971 50 000 0002', null)`,
+    [BILAL, SFS]
+  );
+  await owner.query(`insert into contacts (id, organization_id, wa_id, display_name, owner_employee_id) values ($1, $2, '971502223344', 'Omar Haddad', $3)`, [OMAR, SFS, BILAL]);
+  await owner.query(`insert into property_deals (id, organization_id, contact_id, step, purpose, budget_aed) values ($1, $2, $3, 'D4', 'sale', 1200000)`, [D_OMAR, SFS, OMAR]);
+  // Bilal shares Aisha's listing with his own client.
+  const bilalsToken = (await lib.createPocketShare(SFS, R, D_OMAR, { employeeId: BILAL }, { employeeId: BILAL, seesAll: false }, TODAY)).token;
+  const { view } = await lib.pocketShareView(bilalsToken);
+  assert.deepEqual(view.agent, { name: "Aisha Khan", firstName: "Aisha", brn: "45678", whatsapp: "971500000001" }, "the listing agent and licence stay");
+  assert.deepEqual(view.contact, { name: "Bilal Ahmed", firstName: "Bilal", whatsapp: "971500000002" });
+  const interest = await lib.recordPocketInterest(bilalsToken);
+  assert.equal(interest.notify, BILAL, "the buyer's agent is told, not the listing agent");
+  assert.equal(interest.agentFirstName, "Bilal");
+});

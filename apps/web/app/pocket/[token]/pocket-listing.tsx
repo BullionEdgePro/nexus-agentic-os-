@@ -26,7 +26,10 @@ export type PocketView = {
   amenities: string[];
   availableFrom: string | null;
   photoIds: string[];
+  /** The listing agent: the advert names them and their BRN. */
   agent: { name: string; firstName: string; brn: string; whatsapp: string | null };
+  /** The buyer's own agent: who they talk to (final review). */
+  contact: { name: string; firstName: string; whatsapp: string | null };
   orn: string;
   permitNumber: string;
   expiresAt: string;
@@ -48,7 +51,9 @@ export function PocketListing({ view, token, apiUrl }: { view: PocketView; token
     `${view.sizeSqft.toLocaleString("en-US")} sq ft`,
     view.furnishing ? FURNISHING[view.furnishing] ?? word(view.furnishing) : null,
   ].filter((f): f is string => !!f);
-  const whatsapp = whatsappLink(view.agent.whatsapp, `Hi, about the private listing "${view.title}"`);
+  // The buyer talks to their own agent; the advert still names the listing agent and BRN.
+  const contact = view.contact ?? { name: view.agent.name, firstName: view.agent.firstName, whatsapp: view.agent.whatsapp };
+  const whatsapp = whatsappLink(contact.whatsapp, `Hi, about the private listing "${view.title}"`);
   return (
     <article className="pocket-card">
       <ViewBeacon token={token} apiUrl={apiUrl} />
@@ -94,8 +99,11 @@ export function PocketListing({ view, token, apiUrl }: { view: PocketView; token
       {view.availableFrom ? <p className="pocket-note">Available from {date(view.availableFrom)}</p> : null}
 
       <section className="pocket-agent">
-        <p className="pocket-agent-name">{view.agent.name}</p>
-        <p className="pocket-licence">BRN {view.agent.brn}</p>
+        {contact.name !== view.agent.name ? <p className="pocket-agent-name">Your agent: {contact.name}</p> : null}
+        <p className={contact.name !== view.agent.name ? "pocket-licence" : "pocket-agent-name"}>
+          {contact.name !== view.agent.name ? `Listed by ${view.agent.name} · BRN ${view.agent.brn}` : view.agent.name}
+        </p>
+        {contact.name === view.agent.name ? <p className="pocket-licence">BRN {view.agent.brn}</p> : null}
         <p className="pocket-licence">
           {view.businessName} · ORN {view.orn}
         </p>
@@ -103,10 +111,10 @@ export function PocketListing({ view, token, apiUrl }: { view: PocketView; token
       </section>
 
       <div className="pocket-actions">
-        <InterestButton token={token} apiUrl={apiUrl} agentFirstName={view.agent.firstName} />
+        <InterestButton token={token} apiUrl={apiUrl} agentFirstName={contact.firstName} />
         {whatsapp ? (
           <a className="pocket-button quiet" href={whatsapp} target="_blank" rel="noopener noreferrer">
-            WhatsApp {view.agent.firstName}
+            WhatsApp {contact.firstName}
           </a>
         ) : null}
       </div>

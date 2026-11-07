@@ -14,8 +14,13 @@ import "../pocket.css";
  */
 
 export const dynamic = "force-dynamic";
+// Nothing but "Private listing" (final review): `absolute` skips the layout's
+// title template, and an own Open Graph block replaces the layout's — Nexus's
+// marketing would otherwise be the preview under every link an agent sends.
 export const metadata: Metadata = {
-  title: "Private listing",
+  title: { absolute: "Private listing" },
+  description: "A private property listing.",
+  openGraph: { title: "Private listing", description: "A private property listing.", siteName: undefined, url: undefined },
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",
 };

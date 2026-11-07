@@ -31,6 +31,7 @@ const VIEW = {
   availableFrom: null,
   photoIds: ["p1", "p2", "p3"],
   agent: { name: "Aisha Khan", firstName: "Aisha", brn: "45678", whatsapp: "971500000001" },
+  contact: { name: "Aisha Khan", firstName: "Aisha", whatsapp: "971500000001" },
   orn: "12345",
   permitNumber: "71450",
   expiresAt: "2026-11-21T06:00:00.000Z",
@@ -80,7 +81,28 @@ test("I'm interested, and WhatsApp the agent when they have a number", () => {
   const text = encodeURIComponent('Hi, about the private listing "Palm villa with beach access"');
   assert.ok(html.includes(`href="https://wa.me/971500000001?text=${text}"`), "the WhatsApp link");
   assert.match(html, />WhatsApp Aisha</);
-  assert.doesNotMatch(page({ ...VIEW, agent: { ...VIEW.agent, whatsapp: null } }), /WhatsApp Aisha/);
+  assert.doesNotMatch(page({ ...VIEW, contact: { ...VIEW.contact, whatsapp: null } }), /WhatsApp Aisha/);
+});
+
+test("the buyer's own agent is the one to talk to; the listing agent's licence stays (final review)", () => {
+  // Staff share a colleague's listing with their own client: the buyer talks to
+  // their own agent, while the advert still names the listing agent and BRN.
+  const html = page({ ...VIEW, contact: { name: "Bilal Ahmed", firstName: "Bilal", whatsapp: "971500000002" } });
+  assert.match(html, /Listed by Aisha Khan · BRN 45678/);
+  assert.match(html, /Your agent: Bilal Ahmed/);
+  assert.match(html, />WhatsApp Bilal</);
+  assert.ok(html.includes("https://wa.me/971500000002?text="), "WhatsApp goes to the buyer's agent");
+  assert.doesNotMatch(html, /WhatsApp Aisha/);
+  assert.doesNotMatch(page(), /Your agent:/, "one name when the listing agent is the buyer's agent");
+});
+
+test("a link preview names nothing but a private listing (final review)", () => {
+  // The layout's title template and Open Graph tags (Nexus's own marketing)
+  // would otherwise be what WhatsApp shows under every link an agent sends.
+  const pageSrc = src("../app/pocket/[token]/page.tsx");
+  assert.match(pageSrc, /title: \{ absolute: "Private listing" \}/);
+  assert.match(pageSrc, /description: "A private property listing\."/);
+  assert.match(pageSrc, /openGraph: \{ title: "Private listing", description: "A private property listing\.", siteName: undefined, url: undefined \}/);
 });
 
 test("never the building or the unit's reference", () => {

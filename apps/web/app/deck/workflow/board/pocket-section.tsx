@@ -130,7 +130,9 @@ export function ShareWindow({ link, onCopy }: { link: SharedLink; onCopy: (text:
           Copy link
         </button>
       </div>
-      <p className="wf-board-empty">The link works for 14 days, for this buyer only. Revoke it from the card at any time.</p>
+      <p className="wf-board-empty">
+        The link works for 14 days. Anyone who has it can open it — send it to this buyer only. Revoke it from the card at any time.
+      </p>
     </div>
   );
 }
