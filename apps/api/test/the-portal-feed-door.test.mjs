@@ -34,10 +34,11 @@ mock.module("@nexus/db", {
   },
 });
 
-const { portalPublicRoute } = await import("../src/routes/portal-public.ts");
+const { portalFeedRoute, portalPhotoRoute } = await import("../src/routes/portal-public.ts");
 const { Hono } = await import("hono");
 const app = new Hono();
-app.route("/", portalPublicRoute);
+app.route("/portal-feeds", portalFeedRoute);
+app.route("/portal-photos", portalPhotoRoute);
 
 const TOKEN = "A".repeat(43);
 const UUID = "1b4e28ba-2fa1-11d2-883f-0016d3cca427";
@@ -77,7 +78,8 @@ const LISTING = {
 
 test("the addresses are mounted outside /api, where no session is asked for", () => {
   const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
-  assert.match(index, /app\.route\("\/", portalPublicRoute\);/);
+  assert.match(index, /app\.route\("\/portal-feeds", portalFeedRoute\);/);
+  assert.match(index, /app\.route\("\/portal-photos", portalPhotoRoute\);/);
   assert.doesNotMatch(index, /app\.use\("\/portal-(feeds|photos)/);
 });
 

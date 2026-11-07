@@ -178,9 +178,26 @@ function declaredRoutes() {
   return routes;
 }
 
+/**
+ * Public by design: no session at all, so there is no caller's business to
+ * check. Each is keyed by an unguessable value that names its own business
+ * (a 43-character feed token, a photo's uuid) and hands out only what the
+ * portals publish anyway (portal listings, 7 Nov 2026). Every entry must still
+ * be a real route, or it goes.
+ */
+const PUBLIC_BY_DESIGN = {
+  "GET /portal-feeds/:token/:file": "the Bayut/dubizzle feed, read by Bayut with no session; the token names its business",
+  "GET /portal-photos/:file": "the feed's photos, fetched by the portals; served only while the unit is published",
+};
+
+test("every public-by-design route is still a real route", () => {
+  const real = new Set(declaredRoutes().map((r) => `${r.method.toUpperCase()} ${r.full}`));
+  for (const key of Object.keys(PUBLIC_BY_DESIGN)) assert.ok(real.has(key), `${key} is not a route any more`);
+});
+
 test("every route that takes a bare id restricts by the caller's business", () => {
   const guards = guardedPrefixes();
-  const routes = declaredRoutes();
+  const routes = declaredRoutes().filter((r) => !(`${r.method.toUpperCase()} ${r.full}` in PUBLIC_BY_DESIGN));
 
   // The whole test lives in the loop below, so a parse failure would leave it
   // green having examined nothing. This suite has already shipped one of those.

@@ -14,14 +14,17 @@ import { apiBaseUrl } from "../lib/public-urls.js";
  *
  * Spec: docs/superpowers/specs/2026-11-07-portal-listings-design.md §2.2, §6, §9
  */
-export const portalPublicRoute = new Hono();
+/** Mounted at /portal-feeds. */
+export const portalFeedRoute = new Hono();
+/** Mounted at /portal-photos. */
+export const portalPhotoRoute = new Hono();
 
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const PHOTO_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jpg$/i;
 
 const todayIn = (timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
 
-portalPublicRoute.get("/portal-feeds/:token/:file", async (c) => {
+portalFeedRoute.get("/:token/:file", async (c) => {
   const token = c.req.param("token");
   if (c.req.param("file") !== "bayut.xml" || !TOKEN.test(token)) return c.text("Not found", 404);
   const business = await feedByToken(token);
@@ -42,7 +45,7 @@ portalPublicRoute.get("/portal-feeds/:token/:file", async (c) => {
   });
 });
 
-portalPublicRoute.get("/portal-photos/:file", async (c) => {
+portalPhotoRoute.get("/:file", async (c) => {
   const match = PHOTO_FILE.exec(c.req.param("file"));
   if (!match) return c.text("Not found", 404);
   const bytes = await publicPhoto(match[1].toLowerCase());

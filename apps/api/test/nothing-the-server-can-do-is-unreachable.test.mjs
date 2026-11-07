@@ -67,6 +67,9 @@ const REACHED_ELSEWHERE = {
   "GET /api/organizations/:slug/export/customers.csv": "download helper on the customers page",
   "GET /api/organizations/:slug/export/messages.csv": "download helper on the customers page",
   "GET /api/organizations/:slug/contacts/:contactId/export.json": "download helper on the customers page",
+  "GET /portal-feeds/:token/:file":
+    "read by Bayut's feed reader at the address an admin copies from Portal settings and sends Bayut — the portal fetches it, not our client",
+  "GET /portal-photos/:file": "fetched by the portals from the image addresses inside that feed",
 };
 
 function handlers() {
