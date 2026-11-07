@@ -414,8 +414,8 @@ export async function getBoard(input: { organizationId: string; timezone: string
       [organizationId]
     );
     const s = settings.rows[0];
-    const brns = await db.query<{ id: string; has: boolean }>(
-      `select e.id, e.brn is not null as has
+    const brns = await db.query<{ id: string; has: boolean; is_active: boolean }>(
+      `select e.id, e.brn is not null as has, e.is_active
          from employees e
         where e.organization_id = $1
           and e.id in (select u.agent_employee_id from property_units u
@@ -437,6 +437,7 @@ export async function getBoard(input: { organizationId: string; timezone: string
       portalFeed: s?.feed_token ? { lastReadAt: s.feed_last_read_at ? iso(s.feed_last_read_at) : null } : null,
       ornSet: !!s?.orn,
       agentBrns: Object.fromEntries(brns.rows.map((r) => [String(r.id), r.has])),
+      agentsGone: brns.rows.filter((r) => !r.is_active).map((r) => String(r.id)),
     };
   });
 }

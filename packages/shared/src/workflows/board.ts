@@ -108,6 +108,8 @@ export type Board = {
   ornSet: boolean;
   /** Employee id → whether that agent has a BRN on file. */
   agentBrns: Record<string, boolean>;
+  /** Agents on open units who have left the staff: their units stay off the portals. */
+  agentsGone: string[];
 };
 
 export type CardMove = {
@@ -194,8 +196,12 @@ export function closeProblem(card: BoardCard, reason: string): string | null {
 const need = (label: string, done: boolean) => ({ label, done });
 const has = (v: number | null) => v !== null;
 
-/** The checklist for the card's current step (spec §6). */
-export function stepNeeds(card: BoardCard): { label: string; done: boolean }[] {
+/**
+ * The checklist for the card's current step (spec §6). `published` is whether a
+ * unit is wanted on a portal AND ready (portal listings spec §5) — the caller
+ * knows the business's ORN and BRNs, this rule does not.
+ */
+export function stepNeeds(card: BoardCard, published = false): { label: string; done: boolean }[] {
   if (card.kind === "unit") {
     const permit = [
       need("Form A signed", !!card.formASignedOn),
@@ -217,10 +223,8 @@ export function stepNeeds(card: BoardCard): { label: string; done: boolean }[] {
       case "S8":
       case "S9":
         return permit;
-      case "S10": {
-        const published = Object.values(card.portals ?? {}).some((p) => p.wanted);
+      case "S10":
         return [need("Live on at least one portal", card.liveOn.length > 0 || published)];
-      }
     }
   }
   switch (card.step) {

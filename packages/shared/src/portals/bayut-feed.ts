@@ -62,14 +62,24 @@ const TYPE: Record<string, string> = {
 const FURNISHED = { furnished: "Yes", semi_furnished: "Partly", unfurnished: "No" } as const;
 const PORTAL_WORD = { bayut: "Bayut", dubizzle: "dubizzle" } as const;
 
-/** Text inside an element or attribute: the five XML characters escaped. */
+/**
+ * Characters XML 1.0 forbids anywhere, even escaped: C0 controls other than tab,
+ * line feed and carriage return, U+FFFE/U+FFFF, and a surrogate half on its own.
+ * They arrive with ordinary copy-paste (a PowerPoint soft return is U+000B) and
+ * one of them makes the whole document unreadable — every listing, not just its
+ * own (final review, 7 Nov 2026). Each becomes a space.
+ */
+const NOT_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+export const xmlSafe = (s: string): string => s.replace(NOT_XML, " ");
+
+/** Text inside an element or attribute: forbidden characters out, the five XML characters escaped. */
 export function xmlText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  return xmlSafe(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
 /** A CDATA section that survives "]]>" inside the text (split across two sections). */
 export function cdata(s: string): string {
-  return `<![CDATA[${s.split("]]>").join("]]]]><![CDATA[>")}]]>`;
+  return `<![CDATA[${xmlSafe(s).split("]]>").join("]]]]><![CDATA[>")}]]>`;
 }
 
 const el = (tag: string, value: string) => `<${tag}>${xmlText(value)}</${tag}>`;

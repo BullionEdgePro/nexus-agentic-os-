@@ -130,27 +130,27 @@ test("2. photos go in order, up to thirty", db, async () => {
   assert.deepEqual(await lib.unitPhotoBytes(SFS, unit, added[0]), JPEG);
   assert.equal(await lib.unitPhotoBytes(OTHER, unit, added[0]), null);
   // Back to five for the rest.
-  for (const photoId of added.slice(5)) assert.equal(await lib.removeUnitPhoto(SFS, unit, photoId), true);
+  for (const photoId of added.slice(5)) assert.equal(await lib.removeUnitPhoto(SFS, unit, photoId, aisha), true);
   assert.equal((await positions()).length, 5);
 });
 
 test("3. removing the middle photo closes the gap", db, async () => {
   const before = (await positions()).map((p) => p.id);
-  assert.equal(await lib.removeUnitPhoto(SFS, unit, before[2]), true);
+  assert.equal(await lib.removeUnitPhoto(SFS, unit, before[2], aisha), true);
   assert.deepEqual(await positions(), [before[0], before[1], before[3], before[4]].map((photoId, position) => ({ id: photoId, position })));
-  assert.equal(await lib.removeUnitPhoto(SFS, unit, before[2]), false);
+  assert.equal(await lib.removeUnitPhoto(SFS, unit, before[2], aisha), false);
 });
 
 test("4. an order that does not name every photo is refused whole", db, async () => {
   const ids = (await positions()).map((p) => p.id);
   const words = { refused: "The order must list each of this unit's photos once." };
-  assert.deepEqual(await lib.orderUnitPhotos(SFS, unit, ids.slice(1)), words);
-  assert.deepEqual(await lib.orderUnitPhotos(SFS, unit, [ids[0], ids[0], ids[1], ids[2]]), words);
+  assert.deepEqual(await lib.orderUnitPhotos(SFS, unit, ids.slice(1), aisha), words);
+  assert.deepEqual(await lib.orderUnitPhotos(SFS, unit, [ids[0], ids[0], ids[1], ids[2]], aisha), words);
   assert.deepEqual((await positions()).map((p) => p.id), ids);
   const reversed = [...ids].reverse();
-  assert.equal(await lib.orderUnitPhotos(SFS, unit, reversed), true);
+  assert.equal(await lib.orderUnitPhotos(SFS, unit, reversed, aisha), true);
   assert.deepEqual((await positions()).map((p) => p.id), reversed);
-  assert.equal(await lib.orderUnitPhotos(SFS, id(999), reversed), null);
+  assert.equal(await lib.orderUnitPhotos(SFS, id(999), reversed, aisha), null);
 });
 
 test("5. a ready unit switches on, and the feed publishes it without anything private", db, async () => {
@@ -229,6 +229,49 @@ test("11. the ORN and an agent's BRN are set, and cleared, in their own business
   assert.equal(await lib.setEmployeeBrn(SFS, AISHA, null), true);
   assert.equal(await lib.setEmployeeBrn(SFS, OTHER_STAFF, "123"), false);
   assert.equal(await lib.setEmployeeBrn(SFS, AISHA, "45678"), true);
+});
+
+const updatedAt = async () =>
+  (await owner.query(`select updated_at from property_units where id = $1`, [unit])).rows[0].updated_at.getTime();
+const later = async (before) => {
+  // updated_at is now() of the change's transaction: wait past it, then compare.
+  await new Promise((r) => setTimeout(r, 15));
+  return (await updatedAt()) > before;
+};
+
+test("13. photo and switch changes count as a change to the listing (final review)", db, async () => {
+  let before = await updatedAt();
+  const added = await lib.addUnitPhoto(SFS, unit, photo, aisha);
+  assert.ok(await later(before), "adding a photo");
+  before = await updatedAt();
+  const ids = (await positions()).map((p) => p.id);
+  await lib.orderUnitPhotos(SFS, unit, [ids.at(-1), ...ids.slice(0, -1)], aisha);
+  assert.ok(await later(before), "reordering");
+  before = await updatedAt();
+  assert.equal(await lib.removeUnitPhoto(SFS, unit, added.id, aisha), true);
+  assert.ok(await later(before), "removing a photo");
+  before = await updatedAt();
+  await lib.setUnitPortal(SFS, unit, "bayut", true, aisha, asAisha, TODAY);
+  assert.ok(await later(before), "switching a portal");
+  const by = (await owner.query(`select updated_by_employee_id from property_units where id = $1`, [unit])).rows[0];
+  assert.equal(by.updated_by_employee_id, AISHA);
+});
+
+test("14. an agent who has left the staff takes their units off the portals (final review)", db, async () => {
+  assert.equal((await lib.publishedListings(SFS, ["bayut", "dubizzle"], TODAY, url)).length, 1);
+  await owner.query(`update employees set is_active = false where id = $1`, [AISHA]);
+  try {
+    assert.deepEqual(await lib.publishedListings(SFS, ["bayut", "dubizzle"], TODAY, url), []);
+    await lib.setUnitPortal(SFS, unit, "dubizzle", false, aisha, asAisha, TODAY);
+    assert.deepEqual(await lib.setUnitPortal(SFS, unit, "dubizzle", true, aisha, asAisha, TODAY), {
+      refused: "Before it can go on the portals: an agent still on the staff.",
+    });
+    const b = await lib.getBoard({ organizationId: SFS, timezone: TZ, viewer: asAisha });
+    assert.deepEqual(b.agentsGone, [AISHA]);
+  } finally {
+    await owner.query(`update employees set is_active = true where id = $1`, [AISHA]);
+  }
+  assert.deepEqual((await lib.getBoard({ organizationId: SFS, timezone: TZ, viewer: asAisha })).agentsGone, []);
 });
 
 test("12. the agents an admin gives BRNs to: this business's active staff, by name", db, async () => {

@@ -69,7 +69,15 @@ const HOMES: readonly (PropertyType | null)[] = ["apartment", "villa", "townhous
  * let, sold or withdrawn (the board lists open cards only, so it defaults to
  * open); `agentBrn` is the card's agent's licence, null when there is none.
  */
-export type ListingContext = { today: string; orn: string | null; agentBrn: string | null; photoCount: number; closed?: boolean };
+export type ListingContext = {
+  today: string;
+  orn: string | null;
+  agentBrn: string | null;
+  photoCount: number;
+  closed?: boolean;
+  /** False when the card's agent has left the staff (final review): their name, licence and phone must not go out. */
+  agentActive?: boolean;
+};
 
 const blank = (s: string | null | undefined) => s === null || s === undefined || s.trim() === "";
 
@@ -94,6 +102,7 @@ export function portalProblems(unit: BoardUnit, ctx: ListingContext): string[] {
   const missing = MIN_PHOTOS - ctx.photoCount;
   if (missing > 0) need.push(ctx.photoCount === 0 ? `${MIN_PHOTOS} photos` : missing === 1 ? "1 more photo" : `${missing} more photos`);
   if (unit.agent === null) need.push("an agent on the card");
+  else if (ctx.agentActive === false) need.push("an agent still on the staff");
   else if (blank(ctx.agentBrn)) need.push("the agent's BRN");
   if (blank(ctx.orn)) need.push("the agency's ORN");
   return need;

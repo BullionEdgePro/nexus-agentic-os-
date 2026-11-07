@@ -196,6 +196,11 @@ test("the listing's fields are checked (7 Nov 2026: portal listings)", () => {
   assert.deepEqual(parseUnitFields({ availableFrom: "2026-12-01", subCommunity: "Bay Square", building: "Building 4" }), {
     fields: { availableFrom: "2026-12-01", subCommunity: "Bay Square", building: "Building 4" },
   });
+  // Pasted control characters are kept out, so the card shows what the feed publishes (final review).
+  assert.deepEqual(parseUnitFields({ title: "Sea\u000bview villa", building: "Tower\u0001A", subCommunity: "Bay\u000cSquare" }), {
+    fields: { title: "Sea view villa", building: "Tower A", subCommunity: "Bay Square" },
+  });
+  assert.deepEqual(parseUnitFields({ description: "One.\nTwo.\u0000\tThree." }), { fields: { description: "One.\nTwo. \tThree." } });
 });
 
 test("money is a number of dirhams; commas, signs and words are refused", () => {

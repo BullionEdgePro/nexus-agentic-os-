@@ -15,6 +15,7 @@ import {
 import { stepFigures } from "@/lib/workflow/step-figures";
 import { BoardColumn, useBoardDrag } from "../../../kit/board";
 import { aed, cardTitle, WorkflowCard } from "./board-card";
+import { isPublished } from "./portals-section";
 
 /**
  * The workflow board (3 Nov 2026): the boss's two lanes as rows of columns,
@@ -175,6 +176,7 @@ export function WorkflowBoardView({
                         onOpen={(el) => onOpen(card, el)}
                         handlers={drag.cardHandlers(card.id, card.step)}
                         dragging={drag.dragging === card.id}
+                        published={card.kind === "unit" && isPublished(card, board)}
                       />
                     ))}
                     {hidden > 0 ? <p className="wf-board-hidden">+{hidden} with colleagues</p> : null}

@@ -7,10 +7,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import {
   NEW_ADDRESS_WARNING,
   PortalSettingsButton,
   PortalSettingsView,
+  pendingSaves,
 } from "@/app/deck/workflow/board/portal-settings";
 
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
@@ -74,4 +76,22 @@ test("each agent's BRN can be filled in", () => {
   assert.match(html, /value="45678"/);
   assert.match(html, /Bilal Ahmed/);
   assert.equal(html.match(/aria-label="BRN for /g)?.length, 2);
+});
+
+test("what is still unsaved when the window closes is saved, and nothing else (final review)", () => {
+  const drafts = { orn: "12345", brns: { e1: "45678", e2: "" } };
+  assert.deepEqual(pendingSaves(drafts, SETTINGS), []);
+  assert.deepEqual(pendingSaves({ orn: "54321", brns: { e1: "", e2: "88123" } }, SETTINGS), [
+    { kind: "orn", value: "54321" },
+    { kind: "brn", id: "e1", value: null },
+    { kind: "brn", id: "e2", value: "88123" },
+  ]);
+  // An agent the window does not list is never saved.
+  assert.deepEqual(pendingSaves({ orn: "12345", brns: { e9: "1" } }, SETTINGS), []);
+});
+
+test("a save does not remount the window, so what is being typed stays (final review)", () => {
+  const src = readFileSync(new URL("../app/deck/workflow/board/portal-settings.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /key=\{generation\}/);
+  assert.match(src, /pendingSaves\(/);
 });

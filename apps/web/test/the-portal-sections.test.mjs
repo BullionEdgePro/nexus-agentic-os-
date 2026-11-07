@@ -117,3 +117,15 @@ test("saving the listing sends only what was touched, in the API's shapes", () =
   // Amenities in another order are the same amenities.
   assert.deepEqual(unsavedChanges(READY, draftOf(READY), READY.liveOn, new Set(["amenities"]), ["balcony"]), { changes: {} });
 });
+
+test("Portals + social is done only when a portal is wanted AND the unit is ready (spec §5; final review)", async () => {
+  const { isPublished } = await import("@/app/deck/workflow/board/portals-section");
+  const s10 = { ...READY, step: "S10", portals: { ...OFF, bayut: { wanted: true } } };
+  assert.equal(isPublished(s10, BOARD), true);
+  assert.equal(isPublished({ ...s10, permitExpiresOn: "2026-11-06" }, BOARD), false);
+  assert.equal(isPublished({ ...s10, portals: OFF }, BOARD), false);
+  const done = detail(s10);
+  assert.match(done, /Live on at least one portal<span class="wf-board-need-state"> — done/);
+  const expired = detail({ ...s10, permitExpiresOn: "2026-11-06" });
+  assert.match(expired, /Live on at least one portal<span class="wf-board-need-state"> — missing/);
+});

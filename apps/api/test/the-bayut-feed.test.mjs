@@ -144,6 +144,24 @@ test("whatever staff type, the document stays well formed and says what they typ
   assert.equal(child(l, "Property_Description").text, "Ends ]]> here <script>&amp;");
 });
 
+test("characters XML forbids never reach the feed, so one pasted listing cannot break them all (final review)", () => {
+  const FORBIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const pasted = {
+    ...LISTING,
+    title: "Sea\u000bview\u000cvilla",
+    description: "One\u0000two\u0007three \uFFFE end\uD800 lone",
+    building: "Tower\u0001A",
+    agent: { ...LISTING.agent, name: "Aisha\u001fKhan" },
+  };
+  const xml = bayutFeedXml([pasted], AT);
+  assert.doesNotMatch(xml, FORBIDDEN);
+  const l = parse(xml).children[0];
+  assert.equal(textOf(l, "Property_Title"), "Sea view villa");
+  assert.equal(textOf(l, "Tower_Name"), "Tower A");
+  assert.equal(child(l, "Property_Description").text, "One two three   end  lone");
+  assert.equal(xmlText("ok\tline\nnext"), "ok\tline\nnext");
+});
+
 test("a listing only for dubizzle names only dubizzle; Property Finder is never in this feed", () => {
   const l = parse(bayutFeedXml([{ ...LISTING, portals: ["dubizzle", "property_finder"] }], AT)).children[0];
   assert.deepEqual(child(l, "Portals").children.map((p) => p.text), ["dubizzle"]);

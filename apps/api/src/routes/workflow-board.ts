@@ -36,6 +36,7 @@ import {
   PROPERTY_TYPES,
   REAL_ESTATE_WORKFLOW,
   workflowFor,
+  xmlSafe,
   type PortalTarget,
 } from "@nexus/shared";
 import { PHOTO_MAX_BYTES, PHOTO_TOO_LARGE, readBoardPhoto } from "../lib/board-photo-upload.js";
@@ -126,9 +127,15 @@ const area: Check = nullable((v) => {
   const n = typeof v === "number" ? v : typeof v === "string" && /^\d+(\.\d{1,2})?$/.test(v.trim()) ? Number(v.trim()) : NaN;
   return Number.isFinite(n) && n > 0 && n < 1e8 ? ok(n) : bad;
 });
+/**
+ * Listing text: like text(), with the characters the portals' XML forbids made
+ * spaces (final review), so the card shows exactly what the feed publishes.
+ */
+const listingText = (max: number): Check =>
+  nullable((v) => (typeof v === "string" && v.length <= max ? ok(xmlSafe(v).trim() || null) : bad));
 /** The city: blank is Dubai, the business's own. */
 const city: Check = (v) =>
-  v === null ? ok("Dubai") : typeof v === "string" && v.length <= 100 ? ok(v.trim() || "Dubai") : bad;
+  v === null ? ok("Dubai") : typeof v === "string" && v.length <= 100 ? ok(xmlSafe(v).trim() || "Dubai") : bad;
 /** Amenities: known keys, each once. */
 const amenities: Check = (v) =>
   Array.isArray(v) && v.every((a) => (AMENITIES as readonly unknown[]).includes(a)) && new Set(v).size === v.length ? ok(v) : bad;
@@ -150,14 +157,14 @@ const UNIT_CHECKS: Record<keyof UnitFields, Check> = {
   ownerContactId: id,
   agentEmployeeId: id,
   notes: text(4000),
-  title: text(120),
-  description: text(5000),
+  title: listingText(120),
+  description: listingText(5000),
   sizeSqft: area,
   bathrooms: whole(0, 20),
   furnishing: oneOf(FURNISHING),
   city,
-  subCommunity: text(200),
-  building: text(200),
+  subCommunity: listingText(200),
+  building: listingText(200),
   parking: whole(0, 20),
   amenities,
   availableFrom: day,
@@ -395,7 +402,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos/order", async (c
   if (!Array.isArray(ids) || ids.length > 30 || !ids.every((x) => typeof x === "string" && x.length > 0 && x.length <= 64)) {
     return c.json({ error: "ids must list the photos." }, 400);
   }
-  const result = await orderUnitPhotos(w.organization.id, c.req.param("id"), ids as string[]);
+  const result = await orderUnitPhotos(w.organization.id, c.req.param("id"), ids as string[], w.actor);
   if (result === null) return c.json({ error: "Card not found" }, 404);
   if (result !== true) return c.json({ error: result.refused }, 422);
   return c.json({ ok: true });
@@ -404,7 +411,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos/order", async (c
 workflowBoardRoute.delete("/:slug/workflow-board/units/:id/photos/:photoId", async (c) => {
   const w = await writer(c);
   if (!w.organization) return w.answer;
-  const removed = await removeUnitPhoto(w.organization.id, c.req.param("id"), c.req.param("photoId"));
+  const removed = await removeUnitPhoto(w.organization.id, c.req.param("id"), c.req.param("photoId"), w.actor);
   return removed ? c.json({ ok: true }) : c.json({ error: "Photo not found" }, 404);
 });
 

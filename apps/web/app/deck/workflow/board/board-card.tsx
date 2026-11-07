@@ -56,7 +56,8 @@ export function permitBadge(unit: BoardUnit, today: string): { text: string; ton
   return null;
 }
 
-export const isMissing = (card: BoardCard) => stepNeeds(card).some((n) => !n.done);
+/** Something this step needs is missing; `published` is a unit wanted on a portal AND ready (portal listings spec §5). */
+export const isMissing = (card: BoardCard, published = false) => stepNeeds(card, published).some((n) => !n.done);
 
 export function WorkflowCard({
   card,
@@ -66,6 +67,7 @@ export function WorkflowCard({
   onOpen,
   handlers,
   dragging = false,
+  published = false,
 }: {
   card: BoardCard;
   today: string;
@@ -74,11 +76,13 @@ export function WorkflowCard({
   onOpen: (el: HTMLElement) => void;
   handlers?: CardHandlers;
   dragging?: boolean;
+  /** A unit wanted on a portal and ready: Portals + social is then done. */
+  published?: boolean;
 }) {
   const title = cardTitle(card);
   const lines = cardLines(card, now, timezone);
   const badge = card.kind === "unit" ? permitBadge(card, today) : null;
-  const missing = isMissing(card);
+  const missing = isMissing(card, published);
   const label = [
     `${title}.`,
     `${lines.join(", ")}.`,

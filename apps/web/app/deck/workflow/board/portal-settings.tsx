@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getPortalSettings,
@@ -42,6 +42,24 @@ export function PortalSettingsButton({ isAdmin, onOpen }: { isAdmin: boolean; on
 
 const digits = (s: string) => s.replace(/\D/g, "").slice(0, 10);
 
+export type SettingsDrafts = { orn: string; brns: Record<string, string> };
+export type PendingSave = { kind: "orn"; value: string | null } | { kind: "brn"; id: string; value: string | null };
+
+/**
+ * What the window holds that is not saved yet (final review): saved on close,
+ * so an ORN or BRN typed and then closed with Escape — which unmounts the field
+ * without a blur — is not lost. Only agents the window lists are ever saved.
+ */
+export function pendingSaves(drafts: SettingsDrafts, settings: PortalSettingsData): PendingSave[] {
+  const saves: PendingSave[] = [];
+  if (drafts.orn !== (settings.orn ?? "")) saves.push({ kind: "orn", value: drafts.orn || null });
+  for (const agent of settings.agents) {
+    const draft = drafts.brns[agent.id];
+    if (draft !== undefined && draft !== (agent.brn ?? "")) saves.push({ kind: "brn", id: agent.id, value: draft || null });
+  }
+  return saves;
+}
+
 export function PortalSettingsView({
   settings,
   timezone,
@@ -61,6 +79,20 @@ export function PortalSettingsView({
 }) {
   const [orn, setOrn] = useState(settings.orn ?? "");
   const [brns, setBrns] = useState<Record<string, string>>(() => Object.fromEntries(settings.agents.map((a) => [a.id, a.brn ?? ""])));
+  // A save answers with the new settings without remounting this view, so what
+  // is being typed in another field stays; anything unsaved is saved on close.
+  const latest = useRef({ drafts: { orn, brns } as SettingsDrafts, settings, onSaveOrn, onSaveBrn });
+  latest.current = { drafts: { orn, brns }, settings, onSaveOrn, onSaveBrn };
+  useEffect(
+    () => () => {
+      const { drafts, settings: saved, onSaveOrn: saveOrn, onSaveBrn: saveBrn } = latest.current;
+      for (const save of pendingSaves(drafts, saved)) {
+        if (save.kind === "orn") saveOrn(save.value);
+        else saveBrn(save.id, save.value);
+      }
+    },
+    []
+  );
   return (
     <div className="wf-window wf-board-detail">
       <p className="wf-window-tag">Portals</p>
@@ -159,7 +191,6 @@ export function PortalSettingsView({
 export function PortalSettings({ slug, timezone }: { slug: BusinessSlug; timezone: string }) {
   const [settings, setSettings] = useState<PortalSettingsData | null>(null);
   const [message, setMessage] = useState("");
-  const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,17 +206,15 @@ export function PortalSettings({ slug, timezone }: { slug: BusinessSlug; timezon
     };
   }, [slug]);
 
-  /** A fresh view after a save, so its inputs start from what was saved. */
+  /** The saved settings become the view's baseline; its drafts are left as they are. */
   const show = (s: PortalSettingsData, said: string) => {
     setSettings(s);
-    setGeneration((g) => g + 1);
     setMessage(said);
   };
 
   if (!settings) return <p className="wf-board-empty">{message || "Loading the portal settings…"}</p>;
   return (
     <PortalSettingsView
-      key={generation}
       settings={settings}
       timezone={timezone}
       message={message}

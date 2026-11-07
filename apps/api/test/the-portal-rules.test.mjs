@@ -141,11 +141,21 @@ test("the sentence staff read", () => {
   assert.equal(portalProblemSentence(["a price", "the size"]), "Before it can go on the portals: a price, the size.");
 });
 
-test("Portals + social is done when the unit is published from Nexus", () => {
+test("Portals + social is done when the unit is published from Nexus: wanted AND ready (spec §5; final review)", () => {
   const s10 = unit({ step: "S10", liveOn: [] });
   assert.deepEqual(stepNeeds(s10), [{ label: "Live on at least one portal", done: false }]);
   const wanted = unit({ step: "S10", liveOn: [], portals: { ...OFF, bayut: { wanted: true } } });
-  assert.deepEqual(stepNeeds(wanted), [{ label: "Live on at least one portal", done: true }]);
+  // Wanted is not published: the caller says whether it is also ready.
+  assert.deepEqual(stepNeeds(wanted), [{ label: "Live on at least one portal", done: false }]);
+  assert.deepEqual(stepNeeds(wanted, true), [{ label: "Live on at least one portal", done: true }]);
+  // A tick by hand still counts, as it always did.
+  assert.deepEqual(stepNeeds(unit({ step: "S10", liveOn: ["meta"] })), [{ label: "Live on at least one portal", done: true }]);
+});
+
+test("an agent who has left the staff takes the unit off the portals (final review)", () => {
+  assert.deepEqual(portalProblems(READY, { ...CTX, agentActive: false }), ["an agent still on the staff"]);
+  // Still on the staff is the default.
+  assert.deepEqual(portalProblems(READY, { ...CTX, agentActive: true }), []);
 });
 
 test("the portal-neutral listing carries what a portal publishes, and nothing private", () => {

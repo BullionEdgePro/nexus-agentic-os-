@@ -36,11 +36,18 @@ const actorIds = (actor: Actor): [string | null, string | null] =>
   "employeeId" in actor ? [actor.employeeId, null] : [null, actor.adminId];
 const EVERYONE: Viewer = { employeeId: null, seesAll: true };
 
-/** The open unit, locked for a change to its photos; null when there is none or it is closed. */
-async function lockOpenUnit(organizationId: string, unitId: string): Promise<boolean> {
+/**
+ * The open unit, locked AND marked changed for a change to its listing; false
+ * when there is none or it is closed. A photo or a switch is a change to what
+ * the portals show, so it moves the listing's "last updated" on as an edit does
+ * (final review) — one statement both locks the row and records it.
+ */
+async function touchOpenUnit(organizationId: string, unitId: string, actor: Actor): Promise<boolean> {
+  const [employeeId, adminId] = actorIds(actor);
   const { rowCount } = await getPool().query(
-    `select 1 from property_units where organization_id = $1 and id = $2 and closed_at is null for update`,
-    [organizationId, unitId]
+    `update property_units set updated_at = now(), updated_by_employee_id = $3, updated_by_admin_id = $4
+      where organization_id = $1 and id = $2 and closed_at is null`,
+    [organizationId, unitId, employeeId, adminId]
   );
   return (rowCount ?? 0) > 0;
 }
@@ -53,7 +60,7 @@ export async function addUnitPhoto(
   actor: Actor
 ): Promise<{ id: string } | Refused | null> {
   return withTenant(organizationId, async () => {
-    if (!(await lockOpenUnit(organizationId, unitId))) return null;
+    if (!(await touchOpenUnit(organizationId, unitId, actor))) return null;
     const { rows: count } = await getPool().query<{ n: number }>(`select count(*)::int as n from unit_photos where unit_id = $1`, [unitId]);
     if (count[0].n >= MAX_PHOTOS) return { refused: TOO_MANY };
     const [employeeId, adminId] = actorIds(actor);
@@ -78,9 +85,9 @@ export async function unitPhotoBytes(organizationId: string, unitId: string, pho
 }
 
 /** Puts the photos in this order; every photo exactly once, or nothing changes. */
-export async function orderUnitPhotos(organizationId: string, unitId: string, ids: string[]): Promise<true | Refused | null> {
+export async function orderUnitPhotos(organizationId: string, unitId: string, ids: string[], actor: Actor): Promise<true | Refused | null> {
   return withTenant(organizationId, async () => {
-    if (!(await lockOpenUnit(organizationId, unitId))) return null;
+    if (!(await touchOpenUnit(organizationId, unitId, actor))) return null;
     const { rows } = await getPool().query<{ id: string }>(`select id from unit_photos where unit_id = $1`, [unitId]);
     const have = new Set(rows.map((r) => String(r.id)));
     if (ids.length !== have.size || new Set(ids).size !== ids.length || !ids.every((x) => have.has(x))) return { refused: BAD_ORDER };
@@ -96,9 +103,9 @@ export async function orderUnitPhotos(organizationId: string, unitId: string, id
 }
 
 /** Removes a photo and closes the gap it leaves. */
-export async function removeUnitPhoto(organizationId: string, unitId: string, photoId: string): Promise<boolean> {
+export async function removeUnitPhoto(organizationId: string, unitId: string, photoId: string, actor: Actor): Promise<boolean> {
   return withTenant(organizationId, async () => {
-    if (!(await lockOpenUnit(organizationId, unitId))) return false;
+    if (!(await touchOpenUnit(organizationId, unitId, actor))) return false;
     const { rowCount } = await getPool().query(`delete from unit_photos where unit_id = $1 and id = $2`, [unitId, photoId]);
     if (!rowCount) return false;
     await getPool().query(
@@ -115,9 +122,19 @@ export async function removeUnitPhoto(organizationId: string, unitId: string, ph
 async function listingContext(organizationId: string, unit: BoardUnit, today: string, closed: boolean) {
   const { rows: s } = await getPool().query<{ orn: string | null }>(`select orn from portal_settings where organization_id = $1`, [organizationId]);
   const { rows: a } = unit.agent
-    ? await getPool().query<{ brn: string | null }>(`select brn from employees where organization_id = $1 and id = $2`, [organizationId, unit.agent.id])
-    : { rows: [] as { brn: string | null }[] };
-  return { today, orn: s[0]?.orn ?? null, agentBrn: a[0]?.brn ?? null, photoCount: unit.photos.length, closed };
+    ? await getPool().query<{ brn: string | null; is_active: boolean }>(
+        `select brn, is_active from employees where organization_id = $1 and id = $2`,
+        [organizationId, unit.agent.id]
+      )
+    : { rows: [] as { brn: string | null; is_active: boolean }[] };
+  return {
+    today,
+    orn: s[0]?.orn ?? null,
+    agentBrn: a[0]?.brn ?? null,
+    agentActive: a[0] ? a[0].is_active : true,
+    photoCount: unit.photos.length,
+    closed,
+  };
 }
 
 /**
@@ -142,6 +159,7 @@ export async function setUnitPortal(
       if (sentence) return { refused: sentence };
     }
     const [employeeId, adminId] = actorIds(actor);
+    if (!(await touchOpenUnit(organizationId, unitId, actor))) return "closed";
     await getPool().query(
       `insert into unit_portals (organization_id, unit_id, portal, wanted, changed_by_employee_id, changed_by_admin_id)
        values ($1, $2, $3, $4, $5, $6)
@@ -232,16 +250,30 @@ export async function publishedListings(
     const { rows: s } = await getPool().query<{ orn: string | null }>(`select orn from portal_settings where organization_id = $1`, [organizationId]);
     const orn = s[0]?.orn ?? null;
     const agentIds = [...new Set(units.map((u) => u.agent?.id).filter((x): x is string => !!x))];
-    const { rows: agents } = await getPool().query<{ id: string; full_name: string; email: string | null; whatsapp_number: string | null; brn: string | null }>(
-      `select id, full_name, email, whatsapp_number, brn from employees where organization_id = $1 and id = any($2::uuid[])`,
+    const { rows: agents } = await getPool().query<{
+      id: string;
+      full_name: string;
+      email: string | null;
+      whatsapp_number: string | null;
+      brn: string | null;
+      is_active: boolean;
+    }>(
+      `select id, full_name, email, whatsapp_number, brn, is_active from employees where organization_id = $1 and id = any($2::uuid[])`,
       [organizationId, agentIds]
     );
     const byId = new Map(agents.map((a) => [String(a.id), a]));
     const listings: PortalListing[] = [];
     for (const unit of units) {
       const agent = unit.agent ? byId.get(unit.agent.id) : undefined;
-      const problems = portalProblems(unit, { today, orn, agentBrn: agent?.brn ?? null, photoCount: unit.photos.length });
-      if (problems.length > 0 || !agent?.brn || !orn) continue;
+      // An agent who has left the staff is never published (final review).
+      const problems = portalProblems(unit, {
+        today,
+        orn,
+        agentBrn: agent?.brn ?? null,
+        agentActive: agent ? agent.is_active : true,
+        photoCount: unit.photos.length,
+      });
+      if (problems.length > 0 || !agent?.brn || !agent.is_active || !orn) continue;
       listings.push(
         toPortalListing(unit, {
           orn,

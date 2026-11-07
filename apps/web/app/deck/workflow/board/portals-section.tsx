@@ -29,8 +29,14 @@ export function readiness(unit: BoardUnit, board: Board): string[] {
     today: board.today,
     orn: board.ornSet ? "on file" : null,
     agentBrn: unit.agent && board.agentBrns?.[unit.agent.id] ? "on file" : null,
+    agentActive: unit.agent ? !(board.agentsGone ?? []).includes(unit.agent.id) : true,
     photoCount: unit.photos.length,
   });
+}
+
+/** Wanted on a portal AND ready: what Portals + social counts as live (spec §5). */
+export function isPublished(unit: BoardUnit, board: Board): boolean {
+  return Object.values(unit.portals).some((p) => p.wanted) && readiness(unit, board).length === 0;
 }
 
 /** "10:42, 7 Nov" in the business's own zone. */

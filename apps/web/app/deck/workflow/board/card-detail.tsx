@@ -22,7 +22,7 @@ import { MoveMenu } from "./move-menu";
 import { aed, cardTitle } from "./board-card";
 import { MONEY_HELP, toAed } from "./add-card";
 import { PhotosSection } from "./photos-section";
-import { PortalsSection } from "./portals-section";
+import { isPublished, PortalsSection } from "./portals-section";
 
 /**
  * A card's window on the workflow board (3 Nov 2026): what its step needs, its
@@ -232,7 +232,7 @@ export function CardDetail({
   const base = useId();
   const stepName = (id: string | null) => (id ? workflow.steps.find((s) => s.id === id)?.name ?? id : "");
   const title = cardTitle(card);
-  const needs = stepNeeds(card);
+  const needs = stepNeeds(card, card.kind === "unit" && isPublished(card, board));
   const groups = [...new Set(fields.map((f) => f.group))];
 
   async function save() {
