@@ -50,6 +50,24 @@ export type BoardUnit = {
   agent: Person | null;
   notes: string | null;
   dealIds: string[];
+  /** When the card last changed: the portals' "last updated". */
+  updatedAt: string;
+  // The listing (spec 2026-11-07-portal-listings-design.md §2).
+  title: string | null;
+  description: string | null;
+  sizeSqft: number | null;
+  bathrooms: number | null;
+  furnishing: "furnished" | "semi_furnished" | "unfurnished" | null;
+  city: string;
+  subCommunity: string | null;
+  building: string | null;
+  parking: number | null;
+  amenities: string[];
+  availableFrom: string | null;
+  /** In order; the first is the cover. No bytes on the board. */
+  photos: { id: string; width: number; height: number }[];
+  /** The publish switches; what is actually published is wanted AND ready. */
+  portals: Record<"bayut" | "dubizzle" | "property_finder", { wanted: boolean }>;
 };
 
 export type BoardDeal = {
@@ -84,6 +102,12 @@ export type Board = {
   closed30: { let: number; sold: number; won: number; commissionAed: number };
   /** The business's own date, from the server — never the browser's clock. */
   today: string;
+  /** The Bayut/dubizzle feed: null until an admin makes its address. */
+  portalFeed: { lastReadAt: string | null } | null;
+  /** Whether the business's ORN is on file. */
+  ornSet: boolean;
+  /** Employee id → whether that agent has a BRN on file. */
+  agentBrns: Record<string, boolean>;
 };
 
 export type CardMove = {
@@ -193,8 +217,10 @@ export function stepNeeds(card: BoardCard): { label: string; done: boolean }[] {
       case "S8":
       case "S9":
         return permit;
-      case "S10":
-        return [need("Live on at least one portal", card.liveOn.length > 0)];
+      case "S10": {
+        const published = Object.values(card.portals ?? {}).some((p) => p.wanted);
+        return [need("Live on at least one portal", card.liveOn.length > 0 || published)];
+      }
     }
   }
   switch (card.step) {
