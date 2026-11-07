@@ -17,3 +17,4 @@ export * from "./workflows/index.js";
 export * from "./whatsapp-identity.js";
 export * from "./portals/listing.js";
 export * from "./portals/bayut-feed.js";
+export * from "./portals/pf-sync.js";
