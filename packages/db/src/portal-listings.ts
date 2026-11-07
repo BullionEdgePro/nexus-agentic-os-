@@ -29,6 +29,7 @@ import { unitsWhere, type Actor, type Viewer } from "./workflow-board.js";
 
 export const MAX_PHOTOS = 30;
 const TOO_MANY = "A unit has at most 30 photos.";
+export const POCKET_STAYS_OFF = "A pocket listing stays off the portals — turn Pocket off to publish it.";
 const BAD_ORDER = "The order must list each of this unit's photos once.";
 
 type Refused = { refused: string };
@@ -118,8 +119,8 @@ export async function removeUnitPhoto(organizationId: string, unitId: string, ph
   });
 }
 
-/** The ORN, the agent's BRN and the photo count: what the rule needs beside the card. */
-async function listingContext(organizationId: string, unit: BoardUnit, today: string, closed: boolean) {
+/** The ORN, the agent's BRN and the photo count: what the rule needs beside the card. Pocket shares use the same. */
+export async function listingContext(organizationId: string, unit: BoardUnit, today: string, closed: boolean) {
   const { rows: s } = await getPool().query<{ orn: string | null }>(`select orn from portal_settings where organization_id = $1`, [organizationId]);
   const { rows: a } = unit.agent
     ? await getPool().query<{ brn: string | null; is_active: boolean }>(
@@ -154,6 +155,8 @@ export async function setUnitPortal(
     const [current] = await unitsWhere(organizationId, viewer, "u.id = $4", [unitId]);
     if (!current) return null;
     if (current.closed) return "closed";
+    // A pocket listing is off-market: its switches only ever go off (pocket listings, 7 Nov 2026).
+    if (wanted && current.pocket.on) return { refused: POCKET_STAYS_OFF };
     if (wanted) {
       const sentence = portalProblemSentence(portalProblems(current, await listingContext(organizationId, current, today, false)));
       if (sentence) return { refused: sentence };
@@ -242,7 +245,9 @@ export async function publishedListings(
     const units = await unitsWhere(
       organizationId,
       EVERYONE,
-      `u.closed_at is null and exists (select 1 from unit_portals up where up.unit_id = u.id and up.wanted and up.portal = any($4::text[]))`,
+      // A pocket unit is never published, whatever a switch says (pocket listings, 7 Nov 2026).
+      `u.closed_at is null and not u.pocket
+         and exists (select 1 from unit_portals up where up.unit_id = u.id and up.wanted and up.portal = any($4::text[]))`,
       [targets],
       "u.updated_at desc"
     );

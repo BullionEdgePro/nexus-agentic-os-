@@ -9,6 +9,7 @@ import {
   type CardMove,
   type DealStep,
   type PfState,
+  type PocketShare,
   type Portal,
   type PropertyType,
   type Purpose,
@@ -138,7 +139,7 @@ const NOT_STAFF = "That person is not on this business's staff.";
 const KEEP_PERMIT = "An advertised unit keeps its Form A date, Trakheesi permit number and permit expiry.";
 
 // $1 business, $2 sees all, $3 the viewer's employee id.
-const SEES_DEAL = `($2::boolean or ct.owner_employee_id = $3::uuid or d.agent_employee_id = $3::uuid)`;
+export const SEES_DEAL = `($2::boolean or ct.owner_employee_id = $3::uuid or d.agent_employee_id = $3::uuid)`;
 
 const UNIT_SELECT = `
   select u.id, u.step, u.in_step_since, u.reference, u.community, u.property_type, u.bedrooms, u.purpose,
@@ -155,6 +156,22 @@ const UNIT_SELECT = `
          coalesce((select json_object_agg(up.portal, json_build_object(
                      'wanted', up.wanted, 'state', up.remote_state, 'message', up.remote_message, 'syncedAt', up.synced_at))
                      from unit_portals up where up.unit_id = u.id), '{}'::json) as portals,
+         u.pocket, u.pocket_since,
+         -- Pocket shares this viewer may see (a colleague's client stays hidden from staff); never the token.
+         coalesce((
+           select json_agg(json_build_object(
+                    'id', s.id, 'dealId', s.deal_id, 'contactName', coalesce(ct.display_name, ct.external_id, ct.wa_id),
+                    'sharedBy', coalesce(se.full_name, sa.full_name), 'createdAt', s.created_at, 'expiresAt', s.expires_at,
+                    'revokedAt', s.revoked_at, 'firstViewedAt', s.first_viewed_at, 'lastViewedAt', s.last_viewed_at,
+                    'viewCount', s.view_count, 'interestedAt', s.interested_at,
+                    'active', s.revoked_at is null and s.expires_at > now()) order by s.created_at)
+             from unit_pocket_shares s
+             join property_deals d on d.id = s.deal_id
+             left join contacts ct on ct.id = d.contact_id
+             left join employees se on se.id = s.created_by_employee_id
+             left join admins sa on sa.id = s.created_by_admin_id
+            where s.unit_id = u.id and ${SEES_DEAL}
+         ), '[]'::json) as pocket_shares,
          case when $2::boolean or oc.owner_employee_id = $3::uuid
               then coalesce(oc.display_name, oc.external_id, oc.wa_id) end as owner_name,
          ag.id as agent_id, ag.full_name as agent_name,
@@ -238,6 +255,29 @@ function toUnit(row: Row): BoardUnit {
       height: Number(p.height),
     })),
     portals: portalRows(row.portals as Record<string, PortalRow> | null),
+    pocket: {
+      on: Boolean(row.pocket),
+      since: row.pocket_since ? iso(row.pocket_since) : null,
+      shares: ((row.pocket_shares as Record<string, unknown>[] | null) ?? []).map(toPocketShare),
+    },
+  };
+}
+
+const isoOrNull = (v: unknown) => (v ? iso(v) : null);
+function toPocketShare(s: Record<string, unknown>): PocketShare {
+  return {
+    id: String(s.id),
+    dealId: String(s.dealId),
+    contactName: str(s.contactName),
+    sharedBy: str(s.sharedBy),
+    createdAt: iso(s.createdAt),
+    expiresAt: iso(s.expiresAt),
+    revokedAt: isoOrNull(s.revokedAt),
+    firstViewedAt: isoOrNull(s.firstViewedAt),
+    lastViewedAt: isoOrNull(s.lastViewedAt),
+    viewCount: Number(s.viewCount ?? 0),
+    interestedAt: isoOrNull(s.interestedAt),
+    active: Boolean(s.active),
   };
 }
 

@@ -108,9 +108,9 @@ export function portalProblems(unit: BoardUnit, ctx: ListingContext): string[] {
   return need;
 }
 
-/** "Before it can go on the portals: a, b." — null when nothing is missing. */
-export function portalProblemSentence(problems: string[]): string | null {
-  return problems.length === 0 ? null : `Before it can go on the portals: ${problems.join(", ")}.`;
+/** "Before it can go on the portals: a, b." — null when nothing is missing. A pocket share says "Before it can be shared". */
+export function portalProblemSentence(problems: string[], lead = "Before it can go on the portals"): string | null {
+  return problems.length === 0 ? null : `${lead}: ${problems.join(", ")}.`;
 }
 
 /** What every portal publishes about a unit: never the owner, notes or deals. */
