@@ -45,6 +45,11 @@ mock.module("@nexus/db", {
     newPortalFeed: stub("newPortalFeed"),
     setEmployeeBrn: stub("setEmployeeBrn"),
     portalAgents: async () => answers.portalAgents ?? [],
+    pfConnectionView: async () => ({ saved: false, environment: null, keyEnding: null, checkedAt: null, checkError: null }),
+    savePfConnection: stub("savePfConnection"),
+    recordPfCheck: stub("recordPfCheck"),
+    clearPfConnection: stub("clearPfConnection"),
+    pfCredentials: stub("pfCredentials"),
   },
 });
 
@@ -225,6 +230,7 @@ test("an admin reads and sets the ORN and the feed address", async () => {
     lastReadAt: "2026-11-07T06:42:00.000Z",
     lastReadBy: "BayutBot",
     agents: [{ id: "emp-aisha", name: "Aisha Khan", brn: "45678" }],
+    propertyFinder: { saved: false, environment: null, keyEnding: null, checkedAt: null, checkError: null, listingCallsReady: false },
   });
   res = await json(OPERATOR, "PATCH", "/portal-settings", { orn: "12AB" });
   assert.deepEqual([res.status, (await res.json()).error], [400, "Invalid orn."]);

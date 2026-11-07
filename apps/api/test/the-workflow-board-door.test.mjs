@@ -50,6 +50,11 @@ mock.module("@nexus/db", {
     newPortalFeed: stub("newPortalFeed"),
     setEmployeeBrn: stub("setEmployeeBrn"),
     portalAgents: stub("portalAgents"),
+    pfConnectionView: stub("pfConnectionView"),
+    savePfConnection: stub("savePfConnection"),
+    recordPfCheck: stub("recordPfCheck"),
+    clearPfConnection: stub("clearPfConnection"),
+    pfCredentials: stub("pfCredentials"),
   },
 });
 

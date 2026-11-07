@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import {
   addUnitPhoto,
   cardHistory,
+  clearPfConnection,
   closeDeal,
   closeUnit,
   createDeal,
@@ -13,9 +14,13 @@ import {
   moveUnit,
   newPortalFeed,
   orderUnitPhotos,
+  pfConnectionView,
+  pfCredentials,
   portalAgents,
   portalSettings,
+  recordPfCheck,
   removeUnitPhoto,
+  savePfConnection,
   setEmployeeBrn,
   setPortalOrn,
   setUnitPortal,
@@ -31,6 +36,7 @@ import {
 import {
   AMENITIES,
   FURNISHING,
+  PF_LISTING_CALLS_READY,
   PORTAL_TARGETS,
   PORTALS,
   PROPERTY_TYPES,
@@ -41,7 +47,9 @@ import {
 } from "@nexus/shared";
 import { PHOTO_MAX_BYTES, PHOTO_TOO_LARGE, readBoardPhoto } from "../lib/board-photo-upload.js";
 import { jpegSize } from "../lib/jpeg-size.js";
+import { pfClient, type PfAnswer } from "../lib/property-finder.js";
 import { apiBaseUrl } from "../lib/public-urls.js";
+import { queuePfCycle, queuePfUnit } from "../queue/pf-sync-queue.js";
 import type { SessionScope } from "../lib/session.js";
 
 /**
@@ -222,6 +230,21 @@ function answerClose(c: Context, result: CloseAnswer) {
 }
 
 /** A card, or one of the module's other answers, as a response. */
+/**
+ * Property Finder follows a unit half a minute after a write to it succeeds
+ * (7 Nov 2026) — listing details, photos, the switch, a move or a close all
+ * change what should be on Property Finder. Never in the way of the write: when
+ * Redis is down the ten-minute cycle picks the change up.
+ */
+function followOnPropertyFinder(res: Response, organizationId: string, unitId: string): Response {
+  if (res.status >= 200 && res.status < 300) {
+    void queuePfUnit(organizationId, unitId).catch((err) =>
+      console.error("[property-finder] could not queue the unit:", err instanceof Error ? err.message : err)
+    );
+  }
+  return res;
+}
+
 function answerCard(c: Context, result: unknown, created = false) {
   if (result === null) return c.json({ error: "Card not found" }, 404);
   if (result === "closed") return c.json({ error: CLOSED }, 409);
@@ -285,7 +308,8 @@ workflowBoardRoute.patch("/:slug/workflow-board/units/:id", async (c) => {
   if (!w.organization) return w.answer;
   const parsed = parseUnitFields(await body(c));
   if ("error" in parsed) return c.json({ error: parsed.error }, 400);
-  return answerCard(c, await updateUnit(w.organization.id, w.actor, w.viewer, c.req.param("id"), parsed.fields));
+  const unitId = c.req.param("id");
+  return followOnPropertyFinder(answerCard(c, await updateUnit(w.organization.id, w.actor, w.viewer, unitId, parsed.fields)), w.organization.id, unitId);
 });
 
 workflowBoardRoute.post("/:slug/workflow-board/units/:id/move", async (c) => {
@@ -293,7 +317,12 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/move", async (c) => {
   if (!w.organization) return w.answer;
   const move = moveBody(await body(c));
   if (!move) return c.json({ error: "from and to must be step ids." }, 400);
-  return answerMove(c, await moveUnit(w.organization.id, w.organization.timezone, w.actor, w.viewer, c.req.param("id"), move.from, move.to));
+  const unitId = c.req.param("id");
+  return followOnPropertyFinder(
+    answerMove(c, await moveUnit(w.organization.id, w.organization.timezone, w.actor, w.viewer, unitId, move.from, move.to)),
+    w.organization.id,
+    unitId
+  );
 });
 
 workflowBoardRoute.post("/:slug/workflow-board/units/:id/close", async (c) => {
@@ -301,7 +330,12 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/close", async (c) => {
   if (!w.organization) return w.answer;
   const close = closeBody(await body(c));
   if (!close) return c.json({ error: "reason is required." }, 400);
-  return answerClose(c, await closeUnit(w.organization.id, w.actor, w.viewer, c.req.param("id"), close.reason, close.note));
+  const unitId = c.req.param("id");
+  return followOnPropertyFinder(
+    answerClose(c, await closeUnit(w.organization.id, w.actor, w.viewer, unitId, close.reason, close.note)),
+    w.organization.id,
+    unitId
+  );
 });
 
 workflowBoardRoute.post("/:slug/workflow-board/deals", async (c) => {
@@ -384,7 +418,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos", async (c) => {
   const result = await addUnitPhoto(w.organization.id, c.req.param("id"), { bytes, ...size }, w.actor);
   if (result === null) return c.json({ error: "Card not found" }, 404);
   if ("refused" in result) return c.json({ error: result.refused }, 422);
-  return c.json({ id: result.id, ...size }, 201);
+  return followOnPropertyFinder(c.json({ id: result.id, ...size }, 201), w.organization.id, c.req.param("id"));
 });
 
 workflowBoardRoute.get("/:slug/workflow-board/units/:id/photos/:photoId", async (c) => {
@@ -405,14 +439,16 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos/order", async (c
   const result = await orderUnitPhotos(w.organization.id, c.req.param("id"), ids as string[], w.actor);
   if (result === null) return c.json({ error: "Card not found" }, 404);
   if (result !== true) return c.json({ error: result.refused }, 422);
-  return c.json({ ok: true });
+  return followOnPropertyFinder(c.json({ ok: true }), w.organization.id, c.req.param("id"));
 });
 
 workflowBoardRoute.delete("/:slug/workflow-board/units/:id/photos/:photoId", async (c) => {
   const w = await writer(c);
   if (!w.organization) return w.answer;
   const removed = await removeUnitPhoto(w.organization.id, c.req.param("id"), c.req.param("photoId"), w.actor);
-  return removed ? c.json({ ok: true }) : c.json({ error: "Photo not found" }, 404);
+  return removed
+    ? followOnPropertyFinder(c.json({ ok: true }), w.organization.id, c.req.param("id"))
+    : c.json({ error: "Photo not found" }, 404);
 });
 
 workflowBoardRoute.post("/:slug/workflow-board/units/:id/portals/:portal", async (c) => {
@@ -431,7 +467,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/portals/:portal", async
     w.viewer,
     todayIn(w.organization.timezone)
   );
-  return answerCard(c, result);
+  return followOnPropertyFinder(answerCard(c, result), w.organization.id, c.req.param("id"));
 });
 
 /** Settings and licences are an admin's: the business, or the answer to send. */
@@ -448,7 +484,49 @@ async function settingsView(organizationId: string) {
     lastReadAt: s.feedLastReadAt,
     lastReadBy: s.feedLastReadBy,
     agents: await portalAgents(organizationId),
+    // Never the key or the secret: whether one is saved, its last four characters and the last check.
+    propertyFinder: { ...(await pfConnectionView(organizationId)), listingCallsReady: PF_LISTING_CALLS_READY },
   };
+}
+
+const PF_KEY_MISSING = "Enter the API key and secret.";
+const PF_ENVIRONMENT = "Choose Sandbox or Live.";
+const PF_NO_KEY = "No Property Finder key is saved.";
+const PF_CHECKING = "Checking already — try again in a few seconds.";
+const PF_KEY_SHAPE = /^[\x21-\x7E]{1,200}$/;
+const PF_CHECK_EVERY_MS = 10_000;
+
+/** The key, secret and environment from the admin's form, or the words to send back. */
+function pfKeyInput(raw: Record<string, unknown>): { key: string; secret: string; environment: "sandbox" | "live" } | { error: string } {
+  const key = typeof raw.apiKey === "string" ? raw.apiKey.trim() : "";
+  const secret = typeof raw.apiSecret === "string" ? raw.apiSecret.trim() : "";
+  if (!PF_KEY_SHAPE.test(key) || !PF_KEY_SHAPE.test(secret)) return { error: PF_KEY_MISSING };
+  if (raw.environment !== "sandbox" && raw.environment !== "live") return { error: PF_ENVIRONMENT };
+  return { key, secret, environment: raw.environment };
+}
+
+/** One token request per business every 10 seconds, so a double click does not send two. */
+const lastPfCheck = new Map<string, number>();
+function mayCheckPf(organizationId: string): boolean {
+  const now = Date.now();
+  const last = lastPfCheck.get(organizationId);
+  if (last !== undefined && now - last < PF_CHECK_EVERY_MS) return false;
+  lastPfCheck.set(organizationId, now);
+  return true;
+}
+
+/** What a check says, in the admin's words (null: the key works). */
+function pfCheckError(answer: PfAnswer): string | null {
+  if (answer.ok) return null;
+  if (answer.kind === "unreachable") return `Could not reach Property Finder: ${answer.message}`;
+  return `Property Finder refused the key: ${answer.message}`;
+}
+
+/** A key that works starts a cycle at once; never in the way of the answer. */
+function syncPropertyFinderSoon(): void {
+  void queuePfCycle().catch((err) =>
+    console.error("[property-finder] could not queue a cycle:", err instanceof Error ? err.message : err)
+  );
 }
 
 /** Digits, 1 to 10 of them; blank or null clears it; anything else is refused (undefined). */
@@ -479,6 +557,39 @@ workflowBoardRoute.post("/:slug/workflow-board/portal-settings/feed", async (c) 
   const { organization, answer } = await adminBusiness(c);
   if (!organization) return answer;
   await newPortalFeed(organization.id);
+  return c.json(await settingsView(organization.id));
+});
+
+// Property Finder's key (7 Nov 2026). Saved whatever the check says, with what
+// it said, so a wrong secret can be corrected without retyping the key.
+workflowBoardRoute.put("/:slug/workflow-board/portal-settings/property-finder", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  const input = pfKeyInput(await body(c));
+  if ("error" in input) return c.json({ error: input.error }, 400);
+  if (!mayCheckPf(organization.id)) return c.json({ error: PF_CHECKING }, 409);
+  const checkError = pfCheckError(await pfClient.checkKey(input));
+  await savePfConnection(organization.id, { ...input, checkError });
+  if (!checkError) syncPropertyFinderSoon();
+  return c.json(await settingsView(organization.id));
+});
+
+workflowBoardRoute.post("/:slug/workflow-board/portal-settings/property-finder/check", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  const creds = await pfCredentials(organization.id);
+  if (!creds) return c.json({ error: PF_NO_KEY }, 404);
+  if (!mayCheckPf(organization.id)) return c.json({ error: PF_CHECKING }, 409);
+  const checkError = pfCheckError(await pfClient.checkKey(creds));
+  await recordPfCheck(organization.id, checkError);
+  if (!checkError) syncPropertyFinderSoon();
+  return c.json(await settingsView(organization.id));
+});
+
+workflowBoardRoute.delete("/:slug/workflow-board/portal-settings/property-finder", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  await clearPfConnection(organization.id);
   return c.json(await settingsView(organization.id));
 });
 
