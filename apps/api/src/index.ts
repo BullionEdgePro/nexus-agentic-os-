@@ -56,6 +56,7 @@ import { isJobStalled, type ScheduledJob } from "@nexus/shared";
 import { readQueueHealth } from "./queue/queue-health.js";
 import { tenantContext, webhookContext } from "./middleware/tenant-context.js";
 import { teamUploadGate } from "./lib/team-upload.js";
+import { boardPhotoGate } from "./lib/board-photo-upload.js";
 
 const app = new Hono();
 
@@ -85,6 +86,9 @@ app.use("/api/*", requireAuth);
 // read another business's entire customer history, so the checks live in front
 // of every tenant path rather than in the routes that remembered to ask.
 app.use("/api/organizations/:slug/*", requireTenantScope);
+// A unit's photo is read BEFORE the tenant transaction below opens, so a slow
+// upload never holds a connection inside a transaction (portal listings, 7 Nov 2026).
+app.use("/api/organizations/:slug/*", boardPhotoGate);
 // THE BUSINESS'S OWN ROWS, enforced by the database too (3 Nov 2026). Mounted
 // here, where `:slug` is visible -- on `/api/*` below it never is, so every API
 // request used to run across all businesses. This one opens the business's

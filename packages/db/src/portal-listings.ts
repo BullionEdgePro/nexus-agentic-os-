@@ -67,7 +67,7 @@ export async function addUnitPhoto(
 }
 
 /** A photo's bytes for the signed-in board; null when it is not this unit's. */
-export async function unitPhotoBytes(organizationId: string, unitId: string, photoId: string): Promise<Uint8Array | null> {
+export async function unitPhotoBytes(organizationId: string, unitId: string, photoId: string): Promise<Uint8Array<ArrayBuffer> | null> {
   return withTenant(organizationId, async () => {
     const { rows } = await getPool().query<{ bytes: Buffer }>(
       `select bytes from unit_photos where organization_id = $1 and unit_id = $2 and id = $3`,
@@ -271,7 +271,7 @@ export async function noteFeedRead(organizationId: string, userAgent: string): P
  * at least one portal. One lookup across businesses finds the business; the
  * bytes are read inside it.
  */
-export async function publicPhoto(photoId: string): Promise<Uint8Array | null> {
+export async function publicPhoto(photoId: string): Promise<Uint8Array<ArrayBuffer> | null> {
   const found = await withAllTenants("portal photo: the id names its business", async () => {
     const { rows } = await getPool().query<{ organization_id: string }>(
       `select p.organization_id from unit_photos p join property_units u on u.id = p.unit_id

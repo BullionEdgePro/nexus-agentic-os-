@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import {
+  addUnitPhoto,
   cardHistory,
   closeDeal,
   closeUnit,
@@ -10,6 +11,14 @@ import {
   linkUnit,
   moveDeal,
   moveUnit,
+  newPortalFeed,
+  orderUnitPhotos,
+  portalSettings,
+  removeUnitPhoto,
+  setEmployeeBrn,
+  setPortalOrn,
+  setUnitPortal,
+  unitPhotoBytes,
   unlinkUnit,
   updateDeal,
   updateUnit,
@@ -18,7 +27,19 @@ import {
   type UnitFields,
   type Viewer,
 } from "@nexus/db";
-import { AMENITIES, FURNISHING, PORTALS, PROPERTY_TYPES, REAL_ESTATE_WORKFLOW, workflowFor } from "@nexus/shared";
+import {
+  AMENITIES,
+  FURNISHING,
+  PORTAL_TARGETS,
+  PORTALS,
+  PROPERTY_TYPES,
+  REAL_ESTATE_WORKFLOW,
+  workflowFor,
+  type PortalTarget,
+} from "@nexus/shared";
+import { PHOTO_MAX_BYTES, PHOTO_TOO_LARGE, readBoardPhoto } from "../lib/board-photo-upload.js";
+import { jpegSize } from "../lib/jpeg-size.js";
+import { apiBaseUrl } from "../lib/public-urls.js";
 import type { SessionScope } from "../lib/session.js";
 
 /**
@@ -326,4 +347,137 @@ workflowBoardRoute.delete("/:slug/workflow-board/deals/:id/units/:unitId", async
   const w = await writer(c);
   if (!w.organization) return w.answer;
   return answerCard(c, await unlinkUnit(w.organization.id, w.actor, w.viewer, c.req.param("id"), c.req.param("unitId")));
+});
+
+// ---------------------------------------------------------------------------
+// Portal listings (7 Nov 2026): a unit's photos, its publish switches, the
+// business's portal settings and each agent's BRN.
+// Spec: docs/superpowers/specs/2026-11-07-portal-listings-design.md §2, §3, §5, §9
+// ---------------------------------------------------------------------------
+
+const NOT_JPEG = "Photos must be JPEG.";
+const TOO_SMALL = "Too small for the portals: at least 800 × 600 pixels.";
+const ADMINS_ONLY = "Only an admin can change portal settings.";
+
+/** The business's own date, never the server's or the browser's. */
+const todayIn = (timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
+
+workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const upload = await readBoardPhoto(c);
+  if (!upload.ok) return c.json({ error: upload.error }, upload.status);
+  if (!upload.file) return c.json({ error: "Add a photo." }, 400);
+  if (upload.file.size > PHOTO_MAX_BYTES) return c.json({ error: PHOTO_TOO_LARGE }, 413);
+  const bytes = new Uint8Array(await upload.file.arrayBuffer());
+  const size = upload.file.type === "image/jpeg" ? jpegSize(bytes) : null;
+  if (!size) return c.json({ error: NOT_JPEG }, 400);
+  if (size.width < 800 || size.height < 600) return c.json({ error: TOO_SMALL }, 422);
+  const result = await addUnitPhoto(w.organization.id, c.req.param("id"), { bytes, ...size }, w.actor);
+  if (result === null) return c.json({ error: "Card not found" }, 404);
+  if ("refused" in result) return c.json({ error: result.refused }, 422);
+  return c.json({ id: result.id, ...size }, 201);
+});
+
+workflowBoardRoute.get("/:slug/workflow-board/units/:id/photos/:photoId", async (c) => {
+  const { organization, answer } = await boardBusiness(c);
+  if (!organization) return answer;
+  const bytes = await unitPhotoBytes(organization.id, c.req.param("id"), c.req.param("photoId"));
+  if (!bytes) return c.json({ error: "Photo not found" }, 404);
+  return c.body(bytes, 200, { "content-type": "image/jpeg", "cache-control": "private, max-age=300" });
+});
+
+workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos/order", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const ids = (await body(c)).ids;
+  if (!Array.isArray(ids) || ids.length > 30 || !ids.every((x) => typeof x === "string" && x.length > 0 && x.length <= 64)) {
+    return c.json({ error: "ids must list the photos." }, 400);
+  }
+  const result = await orderUnitPhotos(w.organization.id, c.req.param("id"), ids as string[]);
+  if (result === null) return c.json({ error: "Card not found" }, 404);
+  if (result !== true) return c.json({ error: result.refused }, 422);
+  return c.json({ ok: true });
+});
+
+workflowBoardRoute.delete("/:slug/workflow-board/units/:id/photos/:photoId", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const removed = await removeUnitPhoto(w.organization.id, c.req.param("id"), c.req.param("photoId"));
+  return removed ? c.json({ ok: true }) : c.json({ error: "Photo not found" }, 404);
+});
+
+workflowBoardRoute.post("/:slug/workflow-board/units/:id/portals/:portal", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const portal = c.req.param("portal");
+  if (!(PORTAL_TARGETS as readonly string[]).includes(portal)) return c.json({ error: "Unknown portal." }, 404);
+  const wanted = (await body(c)).wanted;
+  if (typeof wanted !== "boolean") return c.json({ error: "wanted must be true or false." }, 400);
+  const result = await setUnitPortal(
+    w.organization.id,
+    c.req.param("id"),
+    portal as PortalTarget,
+    wanted,
+    w.actor,
+    w.viewer,
+    todayIn(w.organization.timezone)
+  );
+  return answerCard(c, result);
+});
+
+/** Settings and licences are an admin's: the business, or the answer to send. */
+async function adminBusiness(c: Context) {
+  if (scopeOf(c).role !== "operator") return { answer: c.json({ error: ADMINS_ONLY }, 403), organization: undefined };
+  return boardBusiness(c);
+}
+
+async function settingsView(organizationId: string) {
+  const s = await portalSettings(organizationId);
+  return {
+    orn: s.orn,
+    feedUrl: s.feedToken ? `${apiBaseUrl()}/portal-feeds/${s.feedToken}/bayut.xml` : null,
+    lastReadAt: s.feedLastReadAt,
+    lastReadBy: s.feedLastReadBy,
+  };
+}
+
+/** Digits, 1 to 10 of them; blank or null clears it; anything else is refused (undefined). */
+function licence(v: unknown): string | null | undefined {
+  if (v === null) return null;
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  if (t === "") return null;
+  return /^\d{1,10}$/.test(t) ? t : undefined;
+}
+
+workflowBoardRoute.get("/:slug/workflow-board/portal-settings", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  return c.json(await settingsView(organization.id));
+});
+
+workflowBoardRoute.patch("/:slug/workflow-board/portal-settings", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  const orn = licence((await body(c)).orn);
+  if (orn === undefined) return c.json({ error: "Invalid orn." }, 400);
+  await setPortalOrn(organization.id, orn);
+  return c.json(await settingsView(organization.id));
+});
+
+workflowBoardRoute.post("/:slug/workflow-board/portal-settings/feed", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  await newPortalFeed(organization.id);
+  return c.json(await settingsView(organization.id));
+});
+
+workflowBoardRoute.patch("/:slug/workflow-board/agents/:employeeId/brn", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  const brn = licence((await body(c)).brn);
+  if (brn === undefined) return c.json({ error: "Invalid brn." }, 400);
+  const saved = await setEmployeeBrn(organization.id, c.req.param("employeeId"), brn);
+  return saved ? c.json({ ok: true }) : c.json({ error: "Employee not found" }, 404);
 });

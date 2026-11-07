@@ -39,6 +39,16 @@ mock.module("@nexus/db", {
     linkUnit: stub("linkUnit"),
     unlinkUnit: stub("unlinkUnit"),
     cardHistory: stub("cardHistory"),
+    // Portal listings (7 Nov 2026), tested in the-portal-door.test.mjs.
+    addUnitPhoto: stub("addUnitPhoto"),
+    unitPhotoBytes: stub("unitPhotoBytes"),
+    orderUnitPhotos: stub("orderUnitPhotos"),
+    removeUnitPhoto: stub("removeUnitPhoto"),
+    setUnitPortal: stub("setUnitPortal"),
+    portalSettings: stub("portalSettings"),
+    setPortalOrn: stub("setPortalOrn"),
+    newPortalFeed: stub("newPortalFeed"),
+    setEmployeeBrn: stub("setEmployeeBrn"),
   },
 });
 
