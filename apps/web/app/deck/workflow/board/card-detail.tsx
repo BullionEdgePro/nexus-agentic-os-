@@ -446,7 +446,8 @@ export function CardDetail({
         ) : null}
         {card.kind === "unit" ? (
           <section className="wf-window-part wf-board-fields">
-            <h3>Live on</h3>
+            <h3>Live on, ticked by hand</h3>
+            <p className="wf-board-empty">Your own note of where it is advertised. The Portals switches above are what Nexus publishes.</p>
             {PORTALS.map((p) => (
               <label key={p} className="wf-board-flag">
                 <input

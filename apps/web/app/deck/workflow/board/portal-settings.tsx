@@ -74,9 +74,9 @@ export function PortalSettingsView({
       <section className="wf-window-part wf-board-fields">
         <h3>Agency ORN</h3>
         <div className="wf-board-field">
-          <label htmlFor="portal-orn">Agency ORN</label>
           <input
             id="portal-orn"
+            aria-label="Agency ORN"
             inputMode="numeric"
             value={orn}
             onChange={(e) => setOrn(digits(e.target.value))}

@@ -51,6 +51,9 @@ test("a unit's window has the Listing, Photos and Portals sections", () => {
   assert.match(html, /Size, sq ft/);
   assert.match(html, /<textarea[^>]*aria-label="Description"/);
   assert.match(html, /Balcony/);
+  // The manual ticks say they are a note, so nobody takes them for publishing.
+  assert.match(html, /<h3>Live on, ticked by hand<\/h3>/);
+  assert.match(html, /The Portals switches above are what Nexus publishes\./);
 });
 
 test("photos are in order, the first is the cover, and each can move or go", () => {
