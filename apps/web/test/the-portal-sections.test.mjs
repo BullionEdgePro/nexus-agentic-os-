@@ -154,3 +154,11 @@ test("Property Finder's line says exactly where the unit stands", () => {
   assert.equal(pf({}), "Sending to Property Finder…");
   assert.equal(pf({ state: "unpublished", syncedAt: AT }), "Sending to Property Finder…");
 });
+
+test("a key check that could not reach Property Finder does not say the key was refused (final review)", () => {
+  const unit = { ...READY, portals: { ...OFF, property_finder: { wanted: true, state: null, message: null, syncedAt: null } } };
+  assert.equal(
+    portalState(unit, "property_finder", { ...BOARD, pfConnection: "check-failed" }, TZ),
+    "Property Finder could not be reached to check the key — an admin can check it again in Portal settings"
+  );
+});

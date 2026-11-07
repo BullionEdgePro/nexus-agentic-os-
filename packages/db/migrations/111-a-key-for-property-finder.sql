@@ -29,6 +29,11 @@ alter table portal_settings add column if not exists pf_key_ending text;
 alter table portal_settings add column if not exists pf_environment text;
 alter table portal_settings add column if not exists pf_checked_at timestamptz;
 alter table portal_settings add column if not exists pf_check_error text;
+-- Which Property Finder account the units' references belong to: a SHA-256 of
+-- the environment and the key, never the key. Kept through a disconnect, so the
+-- same key coming back keeps its listings; another account (Sandbox → Live, or a
+-- new key) starts every unit afresh rather than updating listings it cannot see.
+alter table portal_settings add column if not exists pf_account text;
 
 alter table portal_settings drop constraint if exists portal_settings_pf_environment;
 alter table portal_settings add constraint portal_settings_pf_environment

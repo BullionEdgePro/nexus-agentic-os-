@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PfRemote, PfState } from "@nexus/shared";
 import { getPool, withAllTenants, withTenant } from "./client.js";
 import { openToken, sealToken } from "./token-crypto.js";
@@ -25,23 +26,46 @@ export type PfConnectionView = {
 
 const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
 
-/** Saves the key and secret sealed, with what the check said; the ORN and feed are left alone. */
+/** Which Property Finder account a key is: a one-way hash of the environment and the key. */
+const pfAccount = (environment: PfEnvironment, key: string) => createHash("sha256").update(`${environment}:${key}`).digest("hex");
+
+/**
+ * Saves the key and secret sealed, with what the check said; the ORN and feed
+ * are left alone. Another Property Finder account than the one the units'
+ * references belong to — Sandbox to Live, or a new key — starts every unit
+ * afresh (final review): the new account has none of the old listings.
+ */
 export async function savePfConnection(
   organizationId: string,
   input: { key: string; secret: string; environment: PfEnvironment; checkError: string | null }
 ): Promise<void> {
   const keySealed = sealToken(input.key);
   const secretSealed = sealToken(input.secret);
+  const account = pfAccount(input.environment, input.key);
   return withTenant(organizationId, async () => {
+    const before = await getPool().query<{ pf_account: string | null }>(
+      `select pf_account from portal_settings where organization_id = $1`,
+      [organizationId]
+    );
     await getPool().query(
-      `insert into portal_settings (organization_id, pf_key_sealed, pf_secret_sealed, pf_key_ending, pf_environment, pf_checked_at, pf_check_error)
-       values ($1, $2, $3, $4, $5, now(), $6)
+      `insert into portal_settings (organization_id, pf_key_sealed, pf_secret_sealed, pf_key_ending, pf_environment, pf_checked_at, pf_check_error, pf_account)
+       values ($1, $2, $3, $4, $5, now(), $6, $7)
        on conflict (organization_id) do update
          set pf_key_sealed = excluded.pf_key_sealed, pf_secret_sealed = excluded.pf_secret_sealed,
              pf_key_ending = excluded.pf_key_ending, pf_environment = excluded.pf_environment,
-             pf_checked_at = now(), pf_check_error = excluded.pf_check_error`,
-      [organizationId, keySealed, secretSealed, input.key.slice(-4), input.environment, input.checkError]
+             pf_checked_at = now(), pf_check_error = excluded.pf_check_error, pf_account = excluded.pf_account`,
+      [organizationId, keySealed, secretSealed, input.key.slice(-4), input.environment, input.checkError, account]
     );
+    const previous = before.rows[0]?.pf_account ?? null;
+    if (previous !== null && previous !== account) {
+      await getPool().query(
+        `update unit_portals
+            set remote_ref = null, remote_state = null, remote_message = null, remote_fingerprint = null, synced_at = null
+          where organization_id = $1 and portal = 'property_finder'
+            and (remote_ref is not null or remote_state is not null or synced_at is not null)`,
+        [organizationId]
+      );
+    }
   });
 }
 
@@ -124,9 +148,10 @@ export async function pfBusinesses(): Promise<{ organizationId: string; timezone
 }
 
 /**
- * The units the sync looks at: wanted on Property Finder, or still live there —
- * closed units included, so a closed unit comes off. Never-sent first, then the
- * longest since its last answer.
+ * The units the sync looks at: wanted on Property Finder, or possibly still
+ * live there — a reference Property Finder has not taken down, whatever its last
+ * answer (final review) — closed units included, so a closed unit comes off.
+ * Never-sent first, then the longest since its last answer.
  */
 export async function pfUnitsToSync(organizationId: string, limit: number): Promise<{ unitId: string; remote: PfRemote }[]> {
   return withTenant(organizationId, async () => {
@@ -134,7 +159,7 @@ export async function pfUnitsToSync(organizationId: string, limit: number): Prom
       `select up.unit_id, up.remote_ref, up.remote_state, up.remote_fingerprint
          from unit_portals up
         where up.organization_id = $1 and up.portal = 'property_finder'
-          and (up.wanted or up.remote_state = 'live')
+          and (up.wanted or (up.remote_ref is not null and up.remote_state is distinct from 'unpublished'))
         order by up.synced_at asc nulls first, up.unit_id
         limit $2`,
       [organizationId, limit]

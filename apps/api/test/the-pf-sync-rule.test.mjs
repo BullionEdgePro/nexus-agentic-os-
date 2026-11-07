@@ -39,12 +39,19 @@ test("a refusal waits for the listing to change", () => {
   assert.equal(pfNextStep(live("f2"), remote(null, "refused", "f1")), "create");
 });
 
-test("a unit that should not be live comes off only if it is live", () => {
+test("a unit that should not be live comes off unless Property Finder already took it down", () => {
   assert.equal(pfNextStep(off, remote("PF-1", "live", "f1")), "unpublish");
-  for (const state of [null, "unpublished", "refused", "failed"]) {
-    assert.equal(pfNextStep(off, remote("PF-1", state, "f1")), "none", String(state));
-  }
+  assert.equal(pfNextStep(off, remote("PF-1", "unpublished", "f1")), "none");
   assert.equal(pfNextStep(off, remote(null, null, null)), "none");
+  assert.equal(pfNextStep(off, remote(null, "refused", "f1")), "none", "never created, nothing to take down");
+});
+
+test("a listing that may still be live comes off even when its last change was refused or failed (final review)", () => {
+  // A live listing whose update was refused, or whose publish timed out, is still
+  // advertised on Property Finder: a closed or switched-off unit must come off.
+  for (const state of ["refused", "failed", null]) {
+    assert.equal(pfNextStep(off, remote("PF-1", state, "f1")), "unpublish", String(state));
+  }
 });
 
 test("the listing calls are switched off until Property Finder's format is known", () => {

@@ -25,9 +25,14 @@ import { logger } from "../lib/logger.js";
  * Spec: docs/superpowers/specs/2026-11-07-property-finder-connection-design.md §5
  */
 
-const UNITS_PER_CYCLE = 50;
-/** One unit's own job looks it up among the business's units; there are dozens, not thousands. */
-const UNITS_FOR_ONE = 10_000;
+/**
+ * Every unit is looked at each cycle; at most 50 steps are SENT (final review).
+ * A unit in step costs nothing to look at, and a cap on units looked at would
+ * show the same oldest fifty every cycle — an expired permit past the fiftieth
+ * would never come off.
+ */
+const STEPS_PER_CYCLE = 50;
+const UNITS_LOOKED_AT = 10_000;
 
 type Options = { client: PfClient; ready: boolean };
 
@@ -107,6 +112,9 @@ async function syncOne(
     const c = await client.createListing(creds, listing!);
     if (!c.ok) return fail(c).then(() => true);
     if (!c.ref) return fail({ ok: false, kind: "unreachable", message: "Property Finder answered without a listing reference" }).then(() => true);
+    // The reference is written the moment Property Finder gives it, before
+    // publishing: whatever happens next, the listing is never created twice.
+    await recordPfStep(organizationId, unitId, { ref: c.ref, state: "unpublished", message: null, fingerprint: fingerprint! });
     await publish(c.ref, fingerprint!);
     return true;
   }
@@ -123,9 +131,18 @@ export async function runPfCycle(opts: Options): Promise<{ businesses: number; s
   if (!opts.ready) return result;
   for (const business of await pfBusinesses()) {
     result.businesses += 1;
-    const done = await syncBusiness(business.organizationId, business.timezone, opts, null);
-    result.steps += done.steps;
-    result.failed += done.failed;
+    // One business's error never stops the others (final review).
+    try {
+      const done = await syncBusiness(business.organizationId, business.timezone, opts, null);
+      result.steps += done.steps;
+      result.failed += done.failed;
+    } catch (err) {
+      result.failed += 1;
+      logger.warn(
+        { organizationId: business.organizationId, err: err instanceof Error ? err.message : String(err) },
+        "Property Finder sync failed for this business — the others go on, and it is tried again next cycle"
+      );
+    }
   }
   return result;
 }
@@ -147,12 +164,11 @@ async function syncBusiness(
   const done = { steps: 0, failed: 0 };
   const creds = await pfCredentials(organizationId);
   if (!creds) return done;
-  const units = (await pfUnitsToSync(organizationId, onlyUnit ? UNITS_FOR_ONE : UNITS_PER_CYCLE)).filter(
-    (u) => !onlyUnit || u.unitId === onlyUnit
-  );
+  const units = (await pfUnitsToSync(organizationId, UNITS_LOOKED_AT)).filter((u) => !onlyUnit || u.unitId === onlyUnit);
   if (units.length === 0) return done;
   const live = await shouldBeLive(organizationId, timezone);
   for (const unit of units) {
+    if (done.steps >= STEPS_PER_CYCLE) break;
     try {
       if (await syncOne(organizationId, creds, opts.client, unit.unitId, unit.remote, live)) done.steps += 1;
     } catch (err) {

@@ -23,11 +23,16 @@ export type PfState = "live" | "unpublished" | "refused" | "failed";
 export type PfRemote = { ref: string | null; state: PfState | null; fingerprint: string | null };
 export type PfStep = "create" | "update" | "publish" | "unpublish" | "none";
 
-/** Where a business stands with Property Finder, for the board. */
-export type PfConnection = "none" | "key-refused" | "waiting-format" | "connected";
+/**
+ * Where a business stands with Property Finder, for the board. "check-failed":
+ * the last check could not reach Property Finder — not a refusal (final review).
+ */
+export type PfConnection = "none" | "key-refused" | "check-failed" | "waiting-format" | "connected";
 
 export function pfNextStep(should: { live: boolean; fingerprint: string | null }, remote: PfRemote): PfStep {
-  if (!should.live) return remote.state === "live" ? "unpublish" : "none";
+  // A listing Property Finder has not taken down may still be advertised — even
+  // when its last change was refused or failed (final review) — so it comes off.
+  if (!should.live) return remote.ref && remote.state !== "unpublished" ? "unpublish" : "none";
   const changed = should.fingerprint !== remote.fingerprint;
   if (remote.state === "refused" && !changed) return "none";
   if (!remote.ref) return "create";

@@ -130,6 +130,15 @@ test("a saved key shows its ending, environment and check time, never the key", 
   assert.doesNotMatch(pfView({ ...PF_SAVED, listingCallsReady: true }), /once its listing format is added/);
 });
 
+test("browsers are told the secret is not a login to save (final review)", () => {
+  // A text field then a password field looks like a sign-in form; "off" is
+  // ignored on password fields, so the browser would offer to save the Property
+  // Finder secret as the Nexus password and fill it into the sign-in page.
+  const html = pfView(PF_NONE);
+  const secret = html.match(/<input[^>]*aria-label="API secret"[^>]*>/)[0];
+  assert.match(secret, /autocomplete="new-password"/i);
+});
+
 test("a refused key shows the refusal", () => {
   const html = pfView({ ...PF_SAVED, checkError: "Property Finder refused the key: invalid client" });
   assert.match(html, /Property Finder refused the key: invalid client/);

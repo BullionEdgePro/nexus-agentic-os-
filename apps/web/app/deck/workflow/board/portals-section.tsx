@@ -67,6 +67,7 @@ function propertyFinderState(row: BoardUnit["portals"]["property_finder"], board
   const connection = board.pfConnection ?? "none";
   if (connection === "none") return "Waiting for the Property Finder connection";
   if (connection === "key-refused") return "Property Finder refused the key — an admin can check it in Portal settings";
+  if (connection === "check-failed") return "Property Finder could not be reached to check the key — an admin can check it again in Portal settings";
   if (connection === "waiting-format") return "Key saved — waiting for Property Finder's listing format";
   if (row.state === "live") return row.syncedAt ? `Live on Property Finder — updated ${readAt(row.syncedAt, timezone)}` : "Live on Property Finder";
   if (row.state === "refused") return `Property Finder refused it: ${row.message ?? "no reason given"}`;

@@ -316,3 +316,97 @@ test("12. an unpublish Property Finder refuses is tried again, not forgotten", d
   assert.ok(calls.includes("unpublish PF-U1"));
   assert.equal((await row(U1)).remote_state, "unpublished");
 });
+
+// Final review (7 Nov 2026).
+const N = id(26); // a second ready unit
+const U3 = id(27); // live, switched off, past the fiftieth
+const U4 = id(28); // live, switched off, in SFS while OTHER fails
+
+test("13. a live listing whose last change was refused still comes off when switched off (final review)", db, async () => {
+  await owner.query(`update property_units set title = 'Bright one-bed, a refused edit' where id = $1`, [R]);
+  reset();
+  script.update = () => ({ ok: false, kind: "refused", message: "Price is too low" });
+  await run();
+  assert.equal((await row(R)).remote_state, "refused");
+  delete script.update;
+  await owner.query(`update unit_portals set wanted = false where unit_id = $1 and portal = 'property_finder'`, [R]);
+  calls.length = 0;
+  await run();
+  assert.ok(calls.includes("unpublish PF-21"), JSON.stringify(calls));
+  assert.equal((await row(R)).remote_state, "unpublished");
+});
+
+test("14. a created listing keeps its reference even when publishing is refused (final review)", db, async () => {
+  await owner.query(
+    `insert into property_units (id, organization_id, step, reference, community, property_type, bedrooms, purpose, price_aed,
+                                 form_a_signed_on, permit_number, permit_expires_on, agent_employee_id, title, description,
+                                 size_sqft, bathrooms, furnishing, sub_community, building, amenities)
+     values ($1, $2, 'S9', 'Bay Square 4 · 1103', 'Business Bay', 'apartment', 2, 'rent', 125000,
+             '2026-10-28', '71451', '2099-10-27', $3, 'Two-bed with canal view',
+             'A two-bedroom apartment on a high floor, with a balcony over the canal.',
+             1100, 2, 'unfurnished', 'Bay Square', 'Building 4', array['balcony'])`,
+    [N, SFS, AISHA]
+  );
+  for (let i = 0; i < 3; i++) {
+    await owner.query(
+      `insert into unit_photos (organization_id, unit_id, position, bytes, width, height, size) values ($1, $2, $3, '\\xffd8ff', 2048, 1536, 3)`,
+      [SFS, N, i]
+    );
+  }
+  await owner.query(`insert into unit_portals (organization_id, unit_id, portal, wanted) values ($1, $2, 'property_finder', true)`, [SFS, N]);
+  reset();
+  script.publish = () => ({ ok: false, kind: "key-refused", message: "insufficient scope" });
+  await run();
+  assert.deepEqual(calls, ["create " + N, "publish PF-26"]);
+  const n = await row(N);
+  assert.equal(n.remote_ref, "PF-26", "the reference is kept although publishing stopped the business");
+  assert.equal(n.remote_state, "unpublished");
+  assert.match(n.remote_fingerprint, /^[0-9a-f]{64}$/);
+  assert.equal((await lib.pfConnectionView(SFS)).checkError, "Property Finder refused the key: insufficient scope");
+  delete script.publish;
+  await lib.recordPfCheck(SFS, null);
+  calls.length = 0;
+  await run();
+  assert.ok(!calls.includes("create " + N), "never created twice");
+  assert.ok(calls.includes("publish PF-26"), JSON.stringify(calls));
+  assert.equal((await row(N)).remote_state, "live");
+});
+
+test("15. past the fiftieth unit, one that must come off still comes off (final review)", db, async () => {
+  await owner.query(`insert into property_units (organization_id, step, reference) select $1, 'S5', 'Bulk ' || g from generate_series(1, 55) g`, [SFS]);
+  await owner.query(
+    `insert into unit_portals (organization_id, unit_id, portal, wanted)
+     select $1, id, 'property_finder', true from property_units where organization_id = $1 and reference like 'Bulk %'`,
+    [SFS]
+  );
+  await owner.query(`insert into property_units (id, organization_id, step, reference) values ($1, $2, 'S5', 'Off · 3')`, [U3, SFS]);
+  await owner.query(
+    `insert into unit_portals (organization_id, unit_id, portal, wanted, remote_ref, remote_state, synced_at)
+     values ($1, $2, 'property_finder', false, 'PF-U3', 'live', '2026-11-07T05:00:00Z')`,
+    [SFS, U3]
+  );
+  reset();
+  await run();
+  assert.ok(calls.includes("unpublish PF-U3"), `${calls.length} calls: ${calls.slice(0, 5).join(", ")}`);
+  assert.equal((await row(U3)).remote_state, "unpublished");
+});
+
+test("16. one business's error does not stop the others (final review)", db, async () => {
+  // An invalid timezone makes OTHER's run throw before any call; SFS comes after it.
+  await owner.query(`update organizations set timezone = 'Mars/Olympus' where id = $1`, [OTHER]);
+  await lib.recordPfCheck(OTHER, null);
+  await owner.query(`insert into property_units (id, organization_id, step, reference) values ($1, $2, 'S5', 'Off · 4')`, [U4, SFS]);
+  await owner.query(
+    `insert into unit_portals (organization_id, unit_id, portal, wanted, remote_ref, remote_state)
+     values ($1, $2, 'property_finder', false, 'PF-U4', 'live')`,
+    [SFS, U4]
+  );
+  reset();
+  try {
+    const result = await run();
+    assert.ok(calls.includes("unpublish PF-U4"), JSON.stringify(calls));
+    assert.ok(result.failed >= 1, "the failed business is counted");
+  } finally {
+    await owner.query(`update organizations set timezone = 'Asia/Dubai' where id = $1`, [OTHER]);
+  }
+});

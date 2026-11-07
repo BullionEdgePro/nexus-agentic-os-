@@ -194,3 +194,32 @@ test("6. the board says where Property Finder stands", db, async () => {
   });
   assert.deepEqual(a.portals.bayut, { wanted: false, state: null, message: null, syncedAt: null });
 });
+
+test("7. a different Property Finder account starts the units afresh; the same one keeps them (final review)", db, async () => {
+  const pfRow = async () =>
+    (await owner.query(`select wanted, remote_ref, remote_state, remote_message, remote_fingerprint, synced_at from unit_portals where unit_id = $1 and portal = 'property_finder'`, [A])).rows[0];
+  await lib.recordPfStep(SFS, A, { ref: "PF-A", state: "live", message: null, fingerprint: "fa" });
+  await lib.savePfConnection(SFS, { key: KEY, secret: SECRET, environment: "sandbox", checkError: null });
+  assert.equal((await pfRow()).remote_ref, "PF-A", "the same key keeps the units");
+  await lib.clearPfConnection(SFS);
+  await lib.savePfConnection(SFS, { key: KEY, secret: "a-new-secret", environment: "sandbox", checkError: null });
+  assert.equal((await pfRow()).remote_ref, "PF-A", "disconnecting and coming back with the same key keeps them");
+  await lib.savePfConnection(SFS, { key: KEY, secret: SECRET, environment: "live", checkError: null });
+  const fresh = await pfRow();
+  assert.deepEqual(
+    { ...fresh, wanted: fresh.wanted },
+    { wanted: true, remote_ref: null, remote_state: null, remote_message: null, remote_fingerprint: null, synced_at: null },
+    "a Live account knows nothing of the Sandbox listings"
+  );
+  await lib.recordPfStep(SFS, A, { ref: "PF-A2", state: "live", message: null, fingerprint: "fa2" });
+  await lib.savePfConnection(SFS, { key: "another-key-9999", secret: SECRET, environment: "live", checkError: null });
+  assert.equal((await pfRow()).remote_ref, null, "another key is another account");
+});
+
+test("8. a check that could not reach Property Finder is not a refused key on the board (final review)", db, async () => {
+  await lib.recordPfCheck(SFS, "Could not reach Property Finder: HTTP 503");
+  const b = await lib.getBoard({ organizationId: SFS, timezone: TZ, viewer: asAisha });
+  assert.equal(b.pfConnection, "check-failed");
+  await lib.recordPfCheck(SFS, "Property Finder refused the key: invalid client");
+  assert.equal((await lib.getBoard({ organizationId: SFS, timezone: TZ, viewer: asAisha })).pfConnection, "key-refused");
+});

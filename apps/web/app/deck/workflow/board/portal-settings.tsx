@@ -130,7 +130,9 @@ export function PfSection({
               id="pf-secret"
               type="password"
               aria-label="API secret"
-              autoComplete="off"
+              // Not a login: "off" is ignored on password fields, and the browser would offer to
+              // save the secret as the Nexus password and fill it into the sign-in page (final review).
+              autoComplete="new-password"
               value={apiSecret}
               onChange={(e) => setApiSecret(e.target.value)}
             />

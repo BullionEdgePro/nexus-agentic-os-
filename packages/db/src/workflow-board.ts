@@ -453,7 +453,17 @@ export async function getBoard(input: { organizationId: string; timezone: string
       ornSet: !!s?.orn,
       agentBrns: Object.fromEntries(brns.rows.map((r) => [String(r.id), r.has])),
       agentsGone: brns.rows.filter((r) => !r.is_active).map((r) => String(r.id)),
-      pfConnection: !s?.pf_saved ? "none" : s.pf_check_error ? "key-refused" : PF_LISTING_CALLS_READY ? "connected" : "waiting-format",
+      // A check that could not reach Property Finder is not a refused key (final review); the
+      // words are the API's own ("Could not reach Property Finder: …", routes/workflow-board.ts).
+      pfConnection: !s?.pf_saved
+        ? "none"
+        : s.pf_check_error
+          ? s.pf_check_error.startsWith("Could not reach Property Finder")
+            ? "check-failed"
+            : "key-refused"
+          : PF_LISTING_CALLS_READY
+            ? "connected"
+            : "waiting-format",
     };
   });
 }
