@@ -1,5 +1,6 @@
 import type { Lane, Workflow, WorkflowStep } from "./types.js";
 import type { PfConnection, PfState } from "../portals/pf-sync.js";
+import type { PocketShare } from "../portals/pocket.js";
 
 /**
  * The workflow board's rules (3 Nov 2026): SFS staff move units through the
@@ -76,6 +77,8 @@ export type BoardUnit = {
     "bayut" | "dubizzle" | "property_finder",
     { wanted: boolean; state: PfState | null; message: string | null; syncedAt: string | null }
   >;
+  /** Off-market (pocket listings, 7 Nov 2026): never on the portals, shared privately, one link per buyer. */
+  pocket: { on: boolean; since: string | null; shares: PocketShare[] };
 };
 
 export type BoardDeal = {
@@ -234,6 +237,8 @@ export function stepNeeds(card: BoardCard, published = false): { label: string; 
       case "S9":
         return permit;
       case "S10":
+        // A pocket unit is never on a portal: it is done when shared privately (pocket listings).
+        if (card.pocket?.on) return [need("Shared privately with a buyer", published)];
         return [need("Live on at least one portal", card.liveOn.length > 0 || published)];
     }
   }
