@@ -164,6 +164,29 @@ test("View as staff is look-only: every write answers 403", async () => {
   assert.equal(calls.length, 0);
 });
 
+test("the listing's fields are checked (7 Nov 2026: portal listings)", () => {
+  assert.deepEqual(parseUnitFields({ amenities: ["balcony", "central_ac"] }), { fields: { amenities: ["balcony", "central_ac"] } });
+  assert.deepEqual(parseUnitFields({ amenities: ["helipad"] }), { error: "Invalid amenities." });
+  assert.deepEqual(parseUnitFields({ amenities: ["balcony", "balcony"] }), { error: "Invalid amenities." });
+  // A blank city is Dubai, the business's own.
+  assert.deepEqual(parseUnitFields({ city: "  " }), { fields: { city: "Dubai" } });
+  assert.deepEqual(parseUnitFields({ city: null }), { fields: { city: "Dubai" } });
+  assert.deepEqual(parseUnitFields({ city: "Dubai Marina" }), { fields: { city: "Dubai Marina" } });
+  assert.deepEqual(parseUnitFields({ sizeSqft: "812.5" }), { fields: { sizeSqft: 812.5 } });
+  assert.deepEqual(parseUnitFields({ sizeSqft: 0 }), { error: "Invalid sizeSqft." });
+  assert.deepEqual(parseUnitFields({ bathrooms: 21 }), { error: "Invalid bathrooms." });
+  assert.deepEqual(parseUnitFields({ parking: 2 }), { fields: { parking: 2 } });
+  assert.deepEqual(parseUnitFields({ furnishing: "half" }), { error: "Invalid furnishing." });
+  assert.deepEqual(parseUnitFields({ furnishing: "semi_furnished" }), { fields: { furnishing: "semi_furnished" } });
+  assert.deepEqual(parseUnitFields({ title: "x".repeat(121) }), { error: "Invalid title." });
+  // Line breaks inside a description are kept; only the ends are trimmed.
+  assert.deepEqual(parseUnitFields({ description: "  One.\nTwo.  " }), { fields: { description: "One.\nTwo." } });
+  assert.deepEqual(parseUnitFields({ description: "x".repeat(5001) }), { error: "Invalid description." });
+  assert.deepEqual(parseUnitFields({ availableFrom: "2026-12-01", subCommunity: "Bay Square", building: "Building 4" }), {
+    fields: { availableFrom: "2026-12-01", subCommunity: "Bay Square", building: "Building 4" },
+  });
+});
+
 test("money is a number of dirhams; commas, signs and words are refused", () => {
   assert.ok("error" in parseUnitFields({ priceAed: "1,200,000" }));
   assert.deepEqual(parseUnitFields({ priceAed: "1200000" }), { fields: { priceAed: 1200000 } });

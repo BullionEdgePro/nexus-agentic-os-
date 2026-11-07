@@ -57,6 +57,18 @@ export type UnitFields = Partial<{
   ownerContactId: string | null;
   agentEmployeeId: string | null;
   notes: string | null;
+  // The listing (spec 2026-11-07-portal-listings-design.md §2).
+  title: string | null;
+  description: string | null;
+  sizeSqft: number | null;
+  bathrooms: number | null;
+  furnishing: BoardUnit["furnishing"];
+  city: string;
+  subCommunity: string | null;
+  building: string | null;
+  parking: number | null;
+  amenities: string[];
+  availableFrom: string | null;
 }>;
 
 export type DealFields = Partial<{
@@ -94,6 +106,17 @@ const UNIT_COLUMNS: Record<keyof UnitFields, string> = {
   ownerContactId: "owner_contact_id",
   agentEmployeeId: "agent_employee_id",
   notes: "notes",
+  title: "title",
+  description: "description",
+  sizeSqft: "size_sqft",
+  bathrooms: "bathrooms",
+  furnishing: "furnishing",
+  city: "city",
+  subCommunity: "sub_community",
+  building: "building",
+  parking: "parking",
+  amenities: "amenities",
+  availableFrom: "available_from",
 };
 
 const DEAL_COLUMNS: Record<keyof DealFields, string> = {
@@ -119,7 +142,15 @@ const UNIT_SELECT = `
   select u.id, u.step, u.in_step_since, u.reference, u.community, u.property_type, u.bedrooms, u.purpose,
          u.price_aed::text as price_aed, u.cheques, u.ejari_ready, u.title_deed, u.owner_docs,
          u.form_a_signed_on::text as form_a_signed_on, u.permit_number, u.permit_expires_on::text as permit_expires_on,
-         u.live_on, u.owner_contact_id, u.notes, u.closed_at,
+         u.live_on, u.owner_contact_id, u.notes, u.closed_at, u.updated_at,
+         u.title, u.description, u.size_sqft::text as size_sqft, u.bathrooms, u.furnishing, u.city,
+         u.sub_community, u.building, u.parking, u.amenities, u.available_from::text as available_from,
+         coalesce((
+           select json_agg(json_build_object('id', p.id, 'width', p.width, 'height', p.height) order by p.position)
+             from unit_photos p
+            where p.unit_id = u.id
+         ), '[]'::json) as photos,
+         coalesce((select json_object_agg(up.portal, up.wanted) from unit_portals up where up.unit_id = u.id), '{}'::json) as portals,
          case when $2::boolean or oc.owner_employee_id = $3::uuid
               then coalesce(oc.display_name, oc.external_id, oc.wa_id) end as owner_name,
          ag.id as agent_id, ag.full_name as agent_name,
@@ -185,6 +216,33 @@ function toUnit(row: Row): BoardUnit {
     agent: person(row),
     notes: str(row.notes),
     dealIds: (row.deal_ids as string[] | null) ?? [],
+    updatedAt: iso(row.updated_at),
+    title: str(row.title),
+    description: str(row.description),
+    sizeSqft: num(row.size_sqft),
+    bathrooms: num(row.bathrooms),
+    furnishing: (row.furnishing as BoardUnit["furnishing"]) ?? null,
+    city: String(row.city ?? "Dubai"),
+    subCommunity: str(row.sub_community),
+    building: str(row.building),
+    parking: num(row.parking),
+    amenities: (row.amenities as string[] | null) ?? [],
+    availableFrom: str(row.available_from),
+    photos: ((row.photos as { id: string; width: number; height: number }[] | null) ?? []).map((p) => ({
+      id: String(p.id),
+      width: Number(p.width),
+      height: Number(p.height),
+    })),
+    portals: wantedPortals(row.portals as Record<string, boolean> | null),
+  };
+}
+
+/** All three switches, off unless a row says otherwise. */
+function wantedPortals(rows: Record<string, boolean> | null): BoardUnit["portals"] {
+  return {
+    bayut: { wanted: rows?.bayut === true },
+    dubizzle: { wanted: rows?.dubizzle === true },
+    property_finder: { wanted: rows?.property_finder === true },
   };
 }
 
@@ -334,6 +392,20 @@ export async function getBoard(input: { organizationId: string; timezone: string
       [organizationId]
     );
     const c = closed.rows[0];
+    // What the Portals section needs to say what is missing (portal listings, 7 Nov 2026).
+    const settings = await db.query<{ orn: string | null; feed_token: string | null; feed_last_read_at: Date | null }>(
+      `select orn, feed_token, feed_last_read_at from portal_settings where organization_id = $1`,
+      [organizationId]
+    );
+    const s = settings.rows[0];
+    const brns = await db.query<{ id: string; has: boolean }>(
+      `select e.id, e.brn is not null as has
+         from employees e
+        where e.organization_id = $1
+          and e.id in (select u.agent_employee_id from property_units u
+                        where u.organization_id = $1 and u.closed_at is null and u.agent_employee_id is not null)`,
+      [organizationId]
+    );
     return {
       units: units.rows.map(toUnit),
       deals: deals.rows.map(toDeal),
@@ -346,6 +418,9 @@ export async function getBoard(input: { organizationId: string; timezone: string
       })),
       closed30: { let: c.let, sold: c.sold, won: c.won, commissionAed: Number(c.commission) },
       today: await businessToday(timezone),
+      portalFeed: s?.feed_token ? { lastReadAt: s.feed_last_read_at ? iso(s.feed_last_read_at) : null } : null,
+      ornSet: !!s?.orn,
+      agentBrns: Object.fromEntries(brns.rows.map((r) => [String(r.id), r.has])),
     };
   });
 }

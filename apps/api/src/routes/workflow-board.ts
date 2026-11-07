@@ -18,7 +18,7 @@ import {
   type UnitFields,
   type Viewer,
 } from "@nexus/db";
-import { PORTALS, PROPERTY_TYPES, REAL_ESTATE_WORKFLOW, workflowFor } from "@nexus/shared";
+import { AMENITIES, FURNISHING, PORTALS, PROPERTY_TYPES, REAL_ESTATE_WORKFLOW, workflowFor } from "@nexus/shared";
 import type { SessionScope } from "../lib/session.js";
 
 /**
@@ -99,6 +99,17 @@ const portals: Check = (v) =>
   Array.isArray(v) && v.every((p) => (PORTALS as readonly unknown[]).includes(p)) && new Set(v).size === v.length ? ok(v) : bad;
 /** A unit's reference: trimmed, kept even when blank so the rule can refuse it. */
 const reference: Check = (v) => (typeof v === "string" && v.length <= 200 ? ok(v.trim()) : bad);
+/** A size in sq ft: like money, but more than nothing. */
+const area: Check = nullable((v) => {
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\d+(\.\d{1,2})?$/.test(v.trim()) ? Number(v.trim()) : NaN;
+  return Number.isFinite(n) && n > 0 && n < 1e8 ? ok(n) : bad;
+});
+/** The city: blank is Dubai, the business's own. */
+const city: Check = (v) =>
+  v === null ? ok("Dubai") : typeof v === "string" && v.length <= 100 ? ok(v.trim() || "Dubai") : bad;
+/** Amenities: known keys, each once. */
+const amenities: Check = (v) =>
+  Array.isArray(v) && v.every((a) => (AMENITIES as readonly unknown[]).includes(a)) && new Set(v).size === v.length ? ok(v) : bad;
 
 const UNIT_CHECKS: Record<keyof UnitFields, Check> = {
   reference,
@@ -117,6 +128,17 @@ const UNIT_CHECKS: Record<keyof UnitFields, Check> = {
   ownerContactId: id,
   agentEmployeeId: id,
   notes: text(4000),
+  title: text(120),
+  description: text(5000),
+  sizeSqft: area,
+  bathrooms: whole(0, 20),
+  furnishing: oneOf(FURNISHING),
+  city,
+  subCommunity: text(200),
+  building: text(200),
+  parking: whole(0, 20),
+  amenities,
+  availableFrom: day,
 };
 
 const DEAL_CHECKS: Record<keyof DealFields, Check> = {
