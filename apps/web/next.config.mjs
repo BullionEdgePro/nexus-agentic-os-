@@ -38,6 +38,16 @@ const nextConfig = {
           { key: "Service-Worker-Allowed", value: "/" },
         ],
       },
+      // A pocket listing's private page (7 Nov 2026): never stored, never sent
+      // on as a referrer, never indexed (spec 2026-11-07-pocket-listings-design.md §5).
+      {
+        source: "/pocket/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
     ];
   },
 };

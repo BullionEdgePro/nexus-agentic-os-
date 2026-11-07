@@ -156,13 +156,28 @@ test("a link is revoked", async () => {
   assert.deepEqual([gone.status, await gone.json()], [404, { error: "Link not found" }]);
 });
 
-test("the private page's listing, never stored, never indexed, and its view noted", async () => {
+test("the private page's listing, never stored, never indexed — and reading it is not a view", async () => {
   answers.pocketShareView = { organizationId: SFS.id, shareId: "s-1", view: { title: "Palm villa with beach access" } };
   const res = await pub.request(`/pocket-shares/${TOKEN}`);
   assert.equal(res.status, 200);
   privateHeaders(res);
   assert.deepEqual(await res.json(), { title: "Palm villa with beach access" });
+  // WhatsApp fetches a link for its preview as the agent sends it: a page read
+  // is not the buyer opening it (final: views come from the page's own beacon).
+  assert.equal(called("notePocketView").length, 0);
+});
+
+test("the page's own beacon counts the view", async () => {
+  answers.pocketShareView = { organizationId: SFS.id, shareId: "s-1", view: { title: "x" } };
+  const res = await pub.request(`/pocket-shares/${TOKEN}/view`, { method: "POST" });
+  assert.deepEqual([res.status, await res.json()], [200, { ok: true }]);
+  privateHeaders(res);
   assert.deepEqual(called("notePocketView"), [[SFS.id, "s-1"]]);
+  answers.pocketShareView = null;
+  assert.equal((await pub.request(`/pocket-shares/${TOKEN}/view`, { method: "POST" })).status, 404);
+  calls.length = 0;
+  assert.equal((await pub.request(`/pocket-shares/bad/view`, { method: "POST" })).status, 404);
+  assert.equal(called("pocketShareView").length, 0);
 });
 
 test("one unavailable answer for every reason; a malformed token is not looked up", async () => {

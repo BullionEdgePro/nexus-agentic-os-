@@ -31,12 +31,21 @@ pocketPublicRoute.get("/:token", async (c) => {
   if (!TOKEN.test(token)) return unavailable(c);
   const found = await pocketShareView(token);
   if (!found) return unavailable(c);
-  // Counting a view is never in the way of the page.
-  void notePocketView(found.organizationId, found.shareId).catch((err) =>
-    console.error("[pocket] could not note the view:", err instanceof Error ? err.message : err)
-  );
+  // Reading is not viewing: WhatsApp fetches the page for its link preview as
+  // the agent sends it. The page's own beacon (below) counts a view.
   keepPrivate(c);
   return c.json(found.view);
+});
+
+/** The page's own beacon, sent by its script once a person has it open — link-preview bots run no script. */
+pocketPublicRoute.post("/:token/view", async (c) => {
+  const token = c.req.param("token");
+  if (!TOKEN.test(token)) return unavailable(c);
+  const found = await pocketShareView(token);
+  if (!found) return unavailable(c);
+  await notePocketView(found.organizationId, found.shareId);
+  keepPrivate(c);
+  return c.json({ ok: true });
 });
 
 pocketPublicRoute.get("/:token/photos/:file", async (c) => {

@@ -191,6 +191,7 @@ const PUBLIC_BY_DESIGN = {
   "GET /pocket-shares/:token": "a pocket listing's private page, opened by a buyer with no session; the token names its business",
   "GET /pocket-shares/:token/photos/:file": "that page's photos, served only for the token's own unit while the link works",
   "POST /pocket-shares/:token/interest": "that page's \"I'm interested\"; the token names its business and its share",
+  "POST /pocket-shares/:token/view": "that page's view beacon; the token names its business and its share",
 };
 
 test("every public-by-design route is still a real route", () => {

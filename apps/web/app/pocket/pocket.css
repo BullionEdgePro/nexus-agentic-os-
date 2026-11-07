@@ -1,0 +1,65 @@
+/* A pocket listing's private page (7 Nov 2026): one card, readable on a phone first. */
+.pocket-page {
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+  background: var(--paper, #f6f1e7);
+  color: var(--ink, #1d1b18);
+  font-family: var(--font-body, system-ui, sans-serif);
+}
+.pocket-card {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pocket-head { display: flex; flex-direction: column; gap: 2px; }
+.pocket-business { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
+.pocket-private { margin: 0; font-size: 13px; font-weight: 600; color: var(--slate, #5d5a55); }
+.pocket-note { margin: 0; font-size: 13px; color: var(--slate, #5d5a55); }
+.pocket-photos {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  border-radius: 14px;
+}
+.pocket-photos img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  scroll-snap-align: start;
+  border-radius: 14px;
+  background: var(--pebble, #e9e2d4);
+}
+.pocket-title { margin: 4px 0 0; font-family: var(--font-display, inherit); font-size: 26px; line-height: 1.2; }
+.pocket-price { margin: 0; font-size: 22px; font-weight: 700; }
+.pocket-place { margin: 0; font-size: 15px; color: var(--slate, #5d5a55); }
+.pocket-facts, .pocket-amenities { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pocket-facts li, .pocket-amenities li { padding: 4px 10px; border-radius: 999px; background: var(--pebble, #e9e2d4); font-size: 13px; }
+.pocket-description { margin: 0; font-size: 15px; line-height: 1.55; white-space: pre-line; }
+.pocket-agent { padding: 12px 14px; border-radius: 14px; background: var(--pebble, #e9e2d4); }
+.pocket-agent-name { margin: 0 0 2px; font-weight: 700; }
+.pocket-licence { margin: 0; font-size: 13px; color: var(--slate, #5d5a55); }
+.pocket-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pocket-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink, #1d1b18);
+  color: var(--paper, #f6f1e7);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pocket-button.quiet { background: transparent; color: var(--ink, #1d1b18); box-shadow: inset 0 0 0 1.5px currentColor; }
+.pocket-button:disabled { opacity: 0.6; cursor: default; }
+.pocket-thanks { margin: 0; font-weight: 700; }
+.pocket-gone { margin: 40px 0; font-size: 17px; text-align: center; }

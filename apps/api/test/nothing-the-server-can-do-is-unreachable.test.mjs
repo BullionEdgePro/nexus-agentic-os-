@@ -73,6 +73,7 @@ const REACHED_ELSEWHERE = {
   "GET /pocket-shares/:token": "read by the private listing page (app/pocket/[token]) on the server, for a buyer with no session",
   "GET /pocket-shares/:token/photos/:file": "the private listing page's <img> addresses",
   "POST /pocket-shares/:token/interest": "the private listing page's \"I'm interested\" button",
+  "POST /pocket-shares/:token/view": "the private listing page's view beacon, sent by its script once open",
 };
 
 function handlers() {
