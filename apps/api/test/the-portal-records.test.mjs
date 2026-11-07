@@ -26,7 +26,7 @@ function body(name) {
 
 const IN_BUSINESS = [
   "addUnitPhoto", "unitPhotoBytes", "orderUnitPhotos", "removeUnitPhoto", "setUnitPortal", "portalSettings",
-  "setPortalOrn", "newPortalFeed", "publishedListings", "noteFeedRead", "setEmployeeBrn",
+  "setPortalOrn", "newPortalFeed", "publishedListings", "noteFeedRead", "setEmployeeBrn", "portalAgents",
 ];
 
 test("everything runs as the business; only the two public lookups look across businesses, once", () => {
@@ -229,4 +229,15 @@ test("11. the ORN and an agent's BRN are set, and cleared, in their own business
   assert.equal(await lib.setEmployeeBrn(SFS, AISHA, null), true);
   assert.equal(await lib.setEmployeeBrn(SFS, OTHER_STAFF, "123"), false);
   assert.equal(await lib.setEmployeeBrn(SFS, AISHA, "45678"), true);
+});
+
+test("12. the agents an admin gives BRNs to: this business's active staff, by name", db, async () => {
+  await owner.query(
+    `insert into employees (id, organization_id, employee_code, full_name, brn, is_active) values ($1, $3, 'PR3', 'Bilal Ahmed', null, true), ($2, $3, 'PR4', 'Gone Person', '999', false)`,
+    [id(13), id(14), SFS]
+  );
+  assert.deepEqual(await lib.portalAgents(SFS), [
+    { id: AISHA, name: "Aisha Khan", brn: "45678" },
+    { id: id(13), name: "Bilal Ahmed", brn: null },
+  ]);
 });

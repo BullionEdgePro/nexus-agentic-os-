@@ -2723,7 +2723,14 @@ export function getCardHistory(slug: BusinessSlug, kind: CardKind, id: string): 
  * own words ("Before it can go on the portals: …").
  */
 export type PortalTargetName = "bayut" | "dubizzle" | "property_finder";
-export type PortalSettingsView = { orn: string | null; feedUrl: string | null; lastReadAt: string | null; lastReadBy: string | null };
+export type PortalSettingsData = {
+  orn: string | null;
+  feedUrl: string | null;
+  lastReadAt: string | null;
+  lastReadBy: string | null;
+  /** The business's active staff and their broker licences. */
+  agents: { id: string; name: string; brn: string | null }[];
+};
 
 /** Where an <img> loads a unit's photo; it carries the session cookie itself. */
 export function unitPhotoUrl(slug: BusinessSlug, unitId: string, photoId: string): string {
@@ -2748,15 +2755,15 @@ export function setUnitPortalWanted(slug: BusinessSlug, unitId: string, portal: 
   return request(`/api/organizations/${slug}/workflow-board/units/${encodeURIComponent(unitId)}/portals/${portal}`, { method: "POST", body: JSON.stringify({ wanted }) });
 }
 
-export function getPortalSettings(slug: BusinessSlug): Promise<PortalSettingsView> {
+export function getPortalSettings(slug: BusinessSlug): Promise<PortalSettingsData> {
   return request(`/api/organizations/${slug}/workflow-board/portal-settings`);
 }
 
-export function savePortalOrn(slug: BusinessSlug, orn: string | null): Promise<PortalSettingsView> {
+export function savePortalOrn(slug: BusinessSlug, orn: string | null): Promise<PortalSettingsData> {
   return request(`/api/organizations/${slug}/workflow-board/portal-settings`, { method: "PATCH", body: JSON.stringify({ orn }) });
 }
 
-export function makeNewPortalFeed(slug: BusinessSlug): Promise<PortalSettingsView> {
+export function makeNewPortalFeed(slug: BusinessSlug): Promise<PortalSettingsData> {
   return request(`/api/organizations/${slug}/workflow-board/portal-settings/feed`, { method: "POST" });
 }
 

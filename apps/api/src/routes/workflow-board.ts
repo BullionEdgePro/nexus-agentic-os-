@@ -13,6 +13,7 @@ import {
   moveUnit,
   newPortalFeed,
   orderUnitPhotos,
+  portalAgents,
   portalSettings,
   removeUnitPhoto,
   setEmployeeBrn,
@@ -439,6 +440,7 @@ async function settingsView(organizationId: string) {
     feedUrl: s.feedToken ? `${apiBaseUrl()}/portal-feeds/${s.feedToken}/bayut.xml` : null,
     lastReadAt: s.feedLastReadAt,
     lastReadBy: s.feedLastReadBy,
+    agents: await portalAgents(organizationId),
   };
 }
 

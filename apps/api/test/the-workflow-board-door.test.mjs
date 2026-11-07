@@ -49,6 +49,7 @@ mock.module("@nexus/db", {
     setPortalOrn: stub("setPortalOrn"),
     newPortalFeed: stub("newPortalFeed"),
     setEmployeeBrn: stub("setEmployeeBrn"),
+    portalAgents: stub("portalAgents"),
   },
 });
 

@@ -295,3 +295,14 @@ export async function setEmployeeBrn(organizationId: string, employeeId: string,
     return (rowCount ?? 0) > 0;
   });
 }
+
+/** The business's active staff and their BRNs, for an admin to fill in. */
+export async function portalAgents(organizationId: string): Promise<{ id: string; name: string; brn: string | null }[]> {
+  return withTenant(organizationId, async () => {
+    const { rows } = await getPool().query<{ id: string; full_name: string; brn: string | null }>(
+      `select id, full_name, brn from employees where organization_id = $1 and is_active order by full_name`,
+      [organizationId]
+    );
+    return rows.map((r) => ({ id: String(r.id), name: r.full_name, brn: r.brn }));
+  });
+}

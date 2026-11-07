@@ -44,6 +44,7 @@ mock.module("@nexus/db", {
     setPortalOrn: stub("setPortalOrn"),
     newPortalFeed: stub("newPortalFeed"),
     setEmployeeBrn: stub("setEmployeeBrn"),
+    portalAgents: async () => answers.portalAgents ?? [],
   },
 });
 
@@ -216,12 +217,14 @@ test("portal settings and BRNs are for admins only", async () => {
 
 test("an admin reads and sets the ORN and the feed address", async () => {
   answers.portalSettings = { orn: "12345", feedToken: "T".repeat(43), feedLastReadAt: "2026-11-07T06:42:00.000Z", feedLastReadBy: "BayutBot" };
+  answers.portalAgents = [{ id: "emp-aisha", name: "Aisha Khan", brn: "45678" }];
   let res = await json(OPERATOR, "GET", "/portal-settings");
   assert.deepEqual(await res.json(), {
     orn: "12345",
     feedUrl: `https://api.nexusagenticos.com/portal-feeds/${"T".repeat(43)}/bayut.xml`,
     lastReadAt: "2026-11-07T06:42:00.000Z",
     lastReadBy: "BayutBot",
+    agents: [{ id: "emp-aisha", name: "Aisha Khan", brn: "45678" }],
   });
   res = await json(OPERATOR, "PATCH", "/portal-settings", { orn: "12AB" });
   assert.deepEqual([res.status, (await res.json()).error], [400, "Invalid orn."]);

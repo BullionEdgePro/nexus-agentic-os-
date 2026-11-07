@@ -8,6 +8,7 @@ import {
   createBoardUnit,
   getCardHistory,
   getContacts,
+  getMe,
   getWorkflowBoard,
   linkBoardUnit,
   moveBoardCard,
@@ -28,6 +29,7 @@ import {
 import { PORTAL_PHOTO, shrinkTo } from "@/lib/team-chat/shrink-image";
 import { updatedLabel } from "@/lib/workflow/pulse";
 import { PORTAL_LABEL } from "./portals-section";
+import { PortalSettings, PortalSettingsButton } from "./portal-settings";
 import { CardWindow } from "../../../kit/card-window";
 import { WorkflowBoardView, type AddRequest } from "./board-view";
 import { CardDetail } from "./card-detail";
@@ -68,6 +70,20 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
   // mount, since the preview lives in this tab's sessionStorage.
   const [canEdit, setCanEdit] = useState(true);
   useEffect(() => setCanEdit(!viewingAs()), []);
+  // Portal settings are an admin's; "View as staff" sees what staff see.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (!cancelled) setIsAdmin(me.role === "operator" && !viewingAs());
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     const asked = ++requestId.current;
@@ -229,6 +245,7 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
           <button type="button" className="kit-pill quiet" disabled={loading} aria-busy={loading} onClick={() => void load()}>
             Refresh
           </button>
+          <PortalSettingsButton isAdmin={isAdmin} onOpen={() => setSettingsOpen(true)} />
         </div>
       </div>
       <p className="wf-board-status" role="status" aria-live="polite">
@@ -340,6 +357,20 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
             )
           }
         />
+      ) : null}
+
+      {settingsOpen ? (
+        <CardWindow
+          open
+          title="Portal settings"
+          onClose={() => {
+            setSettingsOpen(false);
+            void load(); // an ORN, a BRN or a new feed changes what the cards say
+          }}
+          origin={null}
+        >
+          <PortalSettings slug={slug} timezone={audit?.business.timezone ?? "Asia/Dubai"} />
+        </CardWindow>
       ) : null}
 
       {adding ? (

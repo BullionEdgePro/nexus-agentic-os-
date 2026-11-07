@@ -334,3 +334,5 @@
 .wf-board-portal-state { font-size: 13px; color: var(--slate); }
 .wf-board-portal-warn { color: var(--warn); font-weight: 600; }
 .wf-board-portal-needs { margin: 4px 0 0; font-size: 13px; color: var(--warn); }
+.wf-board-feed { margin: 4px 0; font-size: 13px; overflow-wrap: anywhere; }
+.wf-board-feed code { padding: 4px 6px; border-radius: var(--r); background: var(--pebble); color: var(--ink); }
