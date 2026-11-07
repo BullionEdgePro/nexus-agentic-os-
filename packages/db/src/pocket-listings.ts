@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { POCKET_SHARE_DAYS, portalProblems, portalProblemSentence, type PocketShare } from "@nexus/shared";
-import { getPool, withTenant } from "./client.js";
+import { getPool, withAllTenants, withTenant } from "./client.js";
 import { listingContext } from "./portal-listings.js";
 import { SEES_DEAL, unitsWhere, type Actor, type Viewer } from "./workflow-board.js";
 
@@ -194,6 +194,182 @@ export async function createPocketShare(
       recipient: { firstName: firstWord(deal.display_name), number },
       unit: { title: unit.title ?? "", community: unit.community ?? "", priceAed: unit.priceAed ?? 0 },
       agentFirstName: firstWord(unit.agent?.name),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The private page (no sign-in). A token is looked up across businesses once;
+// everything after runs as the business it names. Every rule is checked on
+// every read, so a link stops working the moment one stops holding.
+// Spec: docs/superpowers/specs/2026-11-07-pocket-listings-design.md §1, §5, §6
+// ---------------------------------------------------------------------------
+
+const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const EVERYONE: Viewer = { employeeId: null, seesAll: true };
+const VIEW_EVERY_MINUTES = 10;
+
+/** What the private page shows — never the building, the reference, the owner, the notes. */
+export type PocketView = {
+  businessName: string;
+  recipientFirstName: string | null;
+  title: string;
+  description: string;
+  purpose: "rent" | "sale";
+  priceAed: number;
+  propertyType: string;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  sizeSqft: number;
+  furnishing: string | null;
+  community: string;
+  subCommunity: string | null;
+  amenities: string[];
+  availableFrom: string | null;
+  photoIds: string[];
+  agent: { name: string; firstName: string; brn: string; whatsapp: string | null };
+  orn: string;
+  permitNumber: string;
+  expiresAt: string;
+};
+type Found = { organizationId: string; shareId: string; unitId: string; createdBy: string | null; view: PocketView };
+
+const todayIn = (timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
+
+async function findShare(token: string): Promise<Found | null> {
+  if (!TOKEN.test(token)) return null;
+  const share = await withAllTenants("pocket listing: the token names its business", async () => {
+    const { rows } = await getPool().query<{
+      id: string;
+      organization_id: string;
+      unit_id: string;
+      deal_id: string;
+      created_by_employee_id: string | null;
+      expires_at: Date;
+      name: string;
+      timezone: string;
+    }>(
+      `select s.id, s.organization_id, s.unit_id, s.deal_id, s.created_by_employee_id, s.expires_at, o.name, o.timezone
+         from unit_pocket_shares s join organizations o on o.id = s.organization_id
+        where s.token = $1 and s.revoked_at is null and s.expires_at > now() and o.is_active`,
+      [token]
+    );
+    return rows[0] ?? null;
+  });
+  if (!share) return null;
+  const organizationId = String(share.organization_id);
+  return withTenant(organizationId, async () => {
+    const [unit] = await unitsWhere(organizationId, EVERYONE, "u.id = $4", [String(share.unit_id)]);
+    if (!unit || unit.closed || !unit.pocket.on) return null;
+    const ctx = await listingContext(organizationId, unit, todayIn(share.timezone), false);
+    if (portalProblems(unit, ctx).length > 0) return null;
+    const { rows: agents } = await getPool().query<{ full_name: string; brn: string | null; whatsapp_number: string | null }>(
+      `select full_name, brn, whatsapp_number from employees where organization_id = $1 and id = $2`,
+      [organizationId, unit.agent!.id]
+    );
+    const { rows: deals } = await getPool().query<{ display_name: string | null }>(
+      `select ct.display_name from property_deals d left join contacts ct on ct.id = d.contact_id where d.organization_id = $1 and d.id = $2`,
+      [organizationId, String(share.deal_id)]
+    );
+    const agent = agents[0];
+    if (!agent?.brn || !ctx.orn) return null;
+    return {
+      organizationId,
+      shareId: String(share.id),
+      unitId: unit.id,
+      createdBy: share.created_by_employee_id ? String(share.created_by_employee_id) : null,
+      view: {
+        businessName: share.name,
+        recipientFirstName: firstWord(deals[0]?.display_name),
+        title: unit.title!,
+        description: unit.description!,
+        purpose: unit.purpose!,
+        priceAed: unit.priceAed!,
+        propertyType: unit.propertyType!,
+        bedrooms: unit.bedrooms,
+        bathrooms: unit.bathrooms,
+        sizeSqft: unit.sizeSqft!,
+        furnishing: unit.furnishing,
+        community: unit.community!,
+        subCommunity: unit.subCommunity,
+        amenities: unit.amenities,
+        availableFrom: unit.availableFrom,
+        photoIds: unit.photos.map((p) => p.id),
+        agent: {
+          name: agent.full_name,
+          firstName: firstWord(agent.full_name) ?? agent.full_name,
+          brn: agent.brn,
+          whatsapp: agent.whatsapp_number && /^\d{6,20}$/.test(agent.whatsapp_number) ? agent.whatsapp_number : null,
+        },
+        orn: ctx.orn,
+        permitNumber: unit.permitNumber!,
+        expiresAt: iso(share.expires_at)!,
+      },
+    };
+  });
+}
+
+/** The private page's listing, or null when the link does not work (one answer for every reason). */
+export async function pocketShareView(token: string): Promise<{ organizationId: string; shareId: string; view: PocketView } | null> {
+  const found = await findShare(token);
+  return found ? { organizationId: found.organizationId, shareId: found.shareId, view: found.view } : null;
+}
+
+/** A view, counted at most once per ten minutes, so a refresh is not a second view. */
+export async function notePocketView(organizationId: string, shareId: string): Promise<void> {
+  return withTenant(organizationId, async () => {
+    await getPool().query(
+      `update unit_pocket_shares
+          set view_count = view_count + 1, first_viewed_at = coalesce(first_viewed_at, now()), last_viewed_at = now()
+        where organization_id = $1 and id = $2
+          and (last_viewed_at is null or last_viewed_at < now() - make_interval(mins => $3))`,
+      [organizationId, shareId, VIEW_EVERY_MINUTES]
+    );
+  });
+}
+
+/** One of the link's unit's photos, while the link works; null otherwise. */
+export async function pocketPhoto(token: string, photoId: string): Promise<Uint8Array<ArrayBuffer> | null> {
+  const found = await findShare(token);
+  if (!found) return null;
+  return withTenant(found.organizationId, async () => {
+    const { rows } = await getPool().query<{ bytes: Buffer }>(
+      `select bytes from unit_photos where organization_id = $1 and unit_id = $2 and id::text = $3`,
+      [found.organizationId, found.unitId, photoId]
+    );
+    return rows[0] ? new Uint8Array(rows[0].bytes) : null;
+  });
+}
+
+/**
+ * "I'm interested": recorded the first time; `first` says whether this press
+ * was it, `notify` whom to tell (the unit's agent, else whoever shared it).
+ */
+export async function recordPocketInterest(token: string): Promise<{
+  first: boolean;
+  notify: string | null;
+  title: string;
+  recipientFirstName: string | null;
+  agentFirstName: string | null;
+} | null> {
+  const found = await findShare(token);
+  if (!found) return null;
+  return withTenant(found.organizationId, async () => {
+    const { rowCount } = await getPool().query(
+      `update unit_pocket_shares set interested_at = now() where organization_id = $1 and id = $2 and interested_at is null`,
+      [found.organizationId, found.shareId]
+    );
+    const { rows } = await getPool().query<{ agent_employee_id: string | null }>(
+      `select agent_employee_id from property_units where organization_id = $1 and id = $2`,
+      [found.organizationId, found.unitId]
+    );
+    const agentId = rows[0]?.agent_employee_id ? String(rows[0].agent_employee_id) : null;
+    return {
+      first: (rowCount ?? 0) > 0,
+      notify: agentId ?? found.createdBy,
+      title: found.view.title,
+      recipientFirstName: found.view.recipientFirstName,
+      agentFirstName: found.view.agent.firstName,
     };
   });
 }
