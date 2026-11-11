@@ -584,6 +584,12 @@
   font-size: 0.88rem;
   color: var(--ink);
 }
+/* The count may carry a sentence (why the quick message is off): it wraps in
+   its own space, and the buttons keep their place beside it. */
+.ct-bar > span {
+  flex: 1 1 220px;
+  min-width: 0;
+}
 .ct-bar > div {
   display: flex;
   flex-wrap: wrap;

@@ -223,7 +223,11 @@ export function ClientsTab({
                 {" "}
                 · <strong>{chosenFree}</strong> can get a free message
               </>
-            ) : null}
+            ) : (
+              // Why "Quick message (0)" is greyed out (11 Nov 2026): the owner
+              // read it as broken. It is WhatsApp's rule, so the bar says so.
+              <> · none wrote to {where} in the last 24 hours, so WhatsApp allows them an approved message only</>
+            )}
           </span>
           <div>
             <button type="button" className="cmp-link" onClick={() => onChange(new Set())}>

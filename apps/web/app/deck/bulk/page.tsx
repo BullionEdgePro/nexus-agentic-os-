@@ -63,6 +63,36 @@ const STATUS_WORDS: Record<string, string> = {
 
 export default function BulkMessagingPage() {
   const [business, setBusiness] = useState<BusinessSlug>("zipicka");
+
+  return (
+    <div className={`deck-root ${fontVariables}`}>
+      <header className="mc-head">
+        <h1>Bulk messaging</h1>
+        <p>Admins only. Choose the business, the number it goes from, the customers, then the message.</p>
+      </header>
+
+      <BusinessTabs value={business} onChange={(slug) => slug && setBusiness(slug)} includeAll={false} />
+
+      {/* Built anew for each business (11 Nov 2026) — see BulkFor. */}
+      <BulkFor key={business} business={business} />
+    </div>
+  );
+}
+
+/**
+ * Everything under the business tabs, for ONE business.
+ *
+ * It is keyed by the business, so switching builds it anew (11 Nov 2026). It
+ * used to be one component that outlived the switch, and the number chosen for
+ * the business before was asked of the next one: on going from Zipicka to SFS
+ * the page requested SFS's view of Zipicka's number, the server rightly refused
+ * ("That number is not one of this business's connected numbers."), and when
+ * that refusal beat SFS's own list back it stayed on screen in red above a
+ * number that was connected and working. Nothing chosen for one business — its
+ * number, customers, message, or an error — can now reach another, and an
+ * answer that arrives late for the business before lands on nothing.
+ */
+function BulkFor({ business }: { business: BusinessSlug }) {
   const [numbers, setNumbers] = useState<BulkNumber[] | null>(null);
   const [campaigns, setCampaigns] = useState<BroadcastSummary[]>([]);
   const [numberId, setNumberId] = useState("");
@@ -87,11 +117,8 @@ export default function BulkMessagingPage() {
     }
   }, []);
 
+  // Nothing to clear first: this part starts empty for each business.
   useEffect(() => {
-    setNumbers(null);
-    setView(null);
-    setPicked(new Set());
-    setCustomersTab("pick");
     void loadOverview(business);
   }, [business, loadOverview]);
 
@@ -158,14 +185,7 @@ export default function BulkMessagingPage() {
   }
 
   return (
-    <div className={`deck-root ${fontVariables}`}>
-      <header className="mc-head">
-        <h1>Bulk messaging</h1>
-        <p>Admins only. Choose the business, the number it goes from, the customers, then the message.</p>
-      </header>
-
-      <BusinessTabs value={business} onChange={(slug) => slug && setBusiness(slug)} includeAll={false} />
-
+    <>
       {error ? <p className="mc-error">{error}</p> : null}
 
       <section className="bk-step">
@@ -357,7 +377,7 @@ export default function BulkMessagingPage() {
           <p className="mc-empty">Nothing sent for this business yet.</p>
         )}
       </section>
-    </div>
+    </>
   );
 }
 
