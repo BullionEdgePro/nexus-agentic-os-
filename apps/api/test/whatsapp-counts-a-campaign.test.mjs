@@ -65,6 +65,22 @@ const pricing = {
   id: "27906775185687997",
 };
 
+// What Meta really sent on 13 Nov 2026, live, when asked for volumes alone: no cost on any point.
+const volumesOnly = {
+  currency: "AED",
+  pricing_analytics: {
+    data: [
+      {
+        data_points: [
+          { start: 1794484800, end: 1794486600, pricing_type: "REGULAR", pricing_category: "MARKETING", volume: 142 },
+          { start: 1794484800, end: 1794486600, pricing_type: "FREE_CUSTOMER_SERVICE", pricing_category: "SERVICE", volume: 6 },
+          { start: 1794486600, end: 1794488400, pricing_type: "REGULAR", pricing_category: "MARKETING", volume: 3 },
+        ],
+      },
+    ],
+  },
+};
+
 test("delivered is Meta's count of template messages; the cost is what it charged, in the account's currency", () => {
   assert.deepEqual(countFrom(messaging, pricing), { delivered: 150, cost: 32.89, currency: "AED" });
 });
@@ -73,8 +89,18 @@ test("without the charges, the count still shows -- and says nothing about money
   assert.deepEqual(countFrom(messaging, null), { delivered: 150, cost: null, currency: null });
 });
 
-test("without the message count, the messages Meta priced stand in for it", () => {
-  assert.deepEqual(countFrom(null, pricing), { delivered: 150, cost: 32.89, currency: "AED" });
+test("without the message count, the template messages Meta priced stand in for it", () => {
+  // 141 + 3 marketing. The 6 free replies inside the customer's window are
+  // conversation, not campaign, and are left out.
+  assert.deepEqual(countFrom(null, pricing), { delivered: 144, cost: 32.89, currency: "AED" });
+});
+
+test("an answer with no charges in it says nothing about money -- never a made-up zero", () => {
+  // What Meta really sent on 13 Nov 2026, live: asked without metric_types, every
+  // point came back with a volume and NO cost. Read as 0, the first SFS campaign
+  // would have "cost nothing" where Meta's dashboard said AED 32.89.
+  assert.deepEqual(countFrom(messaging, volumesOnly), { delivered: 150, cost: null, currency: "AED" });
+  assert.deepEqual(countFrom(null, volumesOnly), { delivered: 145, cost: null, currency: "AED" });
 });
 
 test("nothing from Meta is nothing -- not a zero", () => {
@@ -98,7 +124,8 @@ function metaAnswering(answers) {
     const text = decodeURIComponent(String(url));
     asked.push({ url: text, auth: init?.headers?.Authorization });
     const key = text.includes("display_phone_number") ? "number" : text.includes("pricing_analytics") ? "pricing" : "messaging";
-    const answer = answers[key];
+    // The request that names COST may be answered differently from the one that does not.
+    const answer = key === "pricing" && text.includes("metric_types") && answers.pricingWithCost ? answers.pricingWithCost : answers[key];
     if (answer instanceof Error) throw answer;
     return new Response(JSON.stringify(answer.body), { status: answer.status ?? 200, headers: { "content-type": "application/json" } });
   };
@@ -119,6 +146,7 @@ test("Meta is asked about that number only, template messages only, in half hour
   assert.match(m.url, /\.product_types\(\[0\]\)/, "template messages: what a campaign sends");
   const p = meta.asked.find((request) => request.url.includes("pricing_analytics"));
   assert.match(p.url, /fields=currency,pricing_analytics\.start\(1794484800\)\.end\(1794571200\)\.granularity\(HALF_HOUR\)\.phone_numbers\(\["971504805436"\]\)/);
+  assert.match(p.url, /\.metric_types\(\["COST","VOLUME"\]\)/, "asked for outright: left out, Meta sends volumes and no charges");
   assert.ok(meta.asked.every((request) => request.auth === "Bearer probe-token"));
 });
 
@@ -135,6 +163,22 @@ test("Meta refusing the charges still leaves the count; Meta refusing both leave
   } finally {
     meta.restore();
   }
+});
+
+test("Meta keeps the charges of an account connected through a partner app; the count still comes", async () => {
+  // Live, 13 Nov 2026, the SFS account: "(#10) Application does not have permission
+  // for this action -- COST is not shown for businesses who bill through a partner".
+  // Nexus connects numbers as a partner app, so this is every customer's account.
+  const refusal = { status: 400, body: { error: { message: "Application does not have permission for this action", code: 10, error_subcode: 2388184 } } };
+  const meta = metaAnswering({ number: { body: { display_phone_number: "+971 50 480 5436" } }, messaging: { body: messaging }, pricingWithCost: refusal, pricing: { body: volumesOnly } });
+  try {
+    assert.deepEqual(await readWhatsAppCount(ask), { delivered: 150, cost: null, currency: "AED" });
+  } finally {
+    meta.restore();
+  }
+  const priced = meta.asked.filter((request) => request.url.includes("pricing_analytics"));
+  assert.equal(priced.length, 2, "asked again, for the volumes alone");
+  assert.doesNotMatch(priced[1].url, /metric_types/);
 });
 
 test("a number Meta will not name cannot be asked about", async () => {

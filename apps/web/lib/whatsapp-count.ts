@@ -10,7 +10,7 @@
 export interface WhatsAppCount {
   /** Template messages Meta counts as delivered from the campaign's number in the day after it went. */
   delivered: number;
-  /** About what Meta charged for them; null when it did not say. */
+  /** About what Meta charged for them; null when it would not say. */
   cost: number | null;
   /** The WhatsApp account's currency, as Meta names it ("AED"). */
   currency: string | null;
@@ -18,6 +18,13 @@ export interface WhatsAppCount {
 
 export function whatsAppCountLine(count: WhatsAppCount): string {
   const delivered = `WhatsApp counts ${count.delivered.toLocaleString("en-US")} delivered`;
+  // Charged nothing: no talk of money.
+  if (count.cost === 0) return delivered;
   // "About": Meta itself calls these approximate charges until the invoice.
-  return count.cost && count.currency ? `${delivered} · about ${count.currency} ${count.cost.toFixed(2)}` : delivered;
+  if (count.cost && count.currency) return `${delivered} · about ${count.currency} ${count.cost.toFixed(2)}`;
+  // THE CHARGE META KEEPS TO ITSELF. It will not give charges to a partner app
+  // for a customer's account ("COST is not shown for businesses who bill through
+  // a partner" — live, 13 Nov 2026), which is every number connected from Nexus.
+  // The owner asked what a campaign cost, twice; the honest answer is where it is.
+  return `${delivered} · for the cost, see WhatsApp Manager`;
 }

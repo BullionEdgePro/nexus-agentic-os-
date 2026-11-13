@@ -52,6 +52,7 @@ interface Point {
   delivered?: unknown;
   volume?: unknown;
   cost?: unknown;
+  pricing_category?: unknown;
 }
 const total = (points: Point[], key: keyof Point): number =>
   points.reduce((sum, point) => sum + (typeof point[key] === "number" ? (point[key] as number) : 0), 0);
@@ -61,7 +62,15 @@ const total = (points: Point[], key: keyof Point): number =>
  *
  * Either may be missing (refused, unsupported on this Graph version, timed
  * out). The message count is the better "delivered" — it is template messages
- * only; when it is missing, the messages Meta PRICED in the stretch stand in.
+ * only; when it is missing, the template messages Meta PRICED in the stretch
+ * stand in (its SERVICE rows are free replies inside a customer's window:
+ * conversation, not campaign).
+ *
+ * A POINT WITH NO COST IS NOT A COST OF ZERO. Live, 13 Nov 2026: asked without
+ * metric_types, Meta sent every point with a volume and no cost at all, and
+ * summing "nothing" to 0 would have said the first SFS campaign cost nothing
+ * where Meta's dashboard said AED 32.89. Charges are known only when a point
+ * carries one — or when Meta answered with no points at all, a true zero.
  */
 export function countFrom(messaging: unknown, pricing: unknown): WhatsAppCount | null {
   const analytics = (messaging as { analytics?: { data_points?: Point[] } } | null)?.analytics;
@@ -69,9 +78,11 @@ export function countFrom(messaging: unknown, pricing: unknown): WhatsAppCount |
   if (!analytics && !priced) return null;
   const pricedPoints = (priced?.data ?? []).flatMap((part) => part.data_points ?? []);
   const currency = (pricing as { currency?: unknown } | null)?.currency;
+  const templates = pricedPoints.filter((point) => point.pricing_category !== "SERVICE");
+  const chargesKnown = pricedPoints.length === 0 || pricedPoints.some((point) => typeof point.cost === "number");
   return {
-    delivered: analytics ? total(analytics.data_points ?? [], "delivered") : total(pricedPoints, "volume"),
-    cost: priced ? Math.round(total(pricedPoints, "cost") * 100) / 100 : null,
+    delivered: analytics ? total(analytics.data_points ?? [], "delivered") : total(templates, "volume"),
+    cost: priced && chargesKnown ? Math.round(total(pricedPoints, "cost") * 100) / 100 : null,
     currency: priced && typeof currency === "string" ? currency : null,
   };
 }
@@ -108,10 +119,18 @@ export async function readWhatsAppCount(input: {
   if (!digits) return null;
 
   const stretch = `.start(${input.start}).end(${input.end}).granularity(HALF_HOUR).phone_numbers(["${digits}"])`;
+  const priced = (metrics: string) =>
+    ask(input.wabaId, `currency,pricing_analytics${stretch}${metrics}.dimensions(["PRICING_CATEGORY","PRICING_TYPE"])`, input.token);
   const [messaging, pricing] = await Promise.all([
     // product_types 0: template messages — what a campaign sends.
     ask(input.wabaId, `analytics${stretch}.product_types([0])`, input.token),
-    ask(input.wabaId, `currency,pricing_analytics${stretch}.dimensions(["PRICING_CATEGORY","PRICING_TYPE"])`, input.token),
+    // THE CHARGES, WHERE META WILL GIVE THEM. They must be named outright (left
+    // out, Meta sends volumes and no cost) — and for an account connected
+    // through a partner app, which is every number connected from Nexus, Meta
+    // refuses the whole request: "COST is not shown for businesses who bill
+    // through a partner" (live, 13 Nov 2026). So a refusal is asked again for
+    // the volumes alone, and the screen points at WhatsApp Manager for the cost.
+    priced(`.metric_types(["COST","VOLUME"])`).then((answer) => answer ?? priced("")),
   ]);
   return countFrom(messaging, pricing);
 }
