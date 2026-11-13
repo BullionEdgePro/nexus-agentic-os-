@@ -485,12 +485,20 @@ export interface BroadcastSummary extends BroadcastRow {
    */
   sent: number;
   /**
-   * Confirmed delivered by a receipt from Meta.
+   * Known to have arrived: a receipt from Meta, or the customer's own reply.
    *
    * Zero for every campaign sent before migration 051, and that is not a
    * measurement — nothing wrote this state, so the honest reading of a zero on
    * an old campaign is "unknown", which is why the screen says so rather than
    * printing a bare 0.
+   *
+   * A REPLY IS PROOF TOO (13 Nov 2026). The first SFS campaign reached about
+   * 150 phones by Meta's own dashboard, and Meta pushed four "delivered"
+   * receipts for that number — so the screen said 4 while nine customers were
+   * answering the message. Someone still at 'sent' who has written to the
+   * campaign's number since their send counts here. It is worked out when read,
+   * not written back: the row keeps what Meta's receipts said, and campaigns
+   * already sent are counted rightly without a backfill.
    */
   delivered: number;
   failed: number;
@@ -516,13 +524,40 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     failed: string;
     failure_reasons: string[] | null;
   }>(
-    `select b.id, b.organization_id, b.template_id, b.status, b.audience_filter,
+    // WHO HAS WRITTEN IN, AND ON WHICH NUMBER — read once, not once per recipient.
+    // Nothing indexes conversations or messages by customer, so asking "has
+    // this one replied?" per recipient would walk the business's conversations
+    // hundreds of times a page load. One pass over its inbound messages since
+    // the oldest campaign listed rides idx_messages_org_created instead.
+    // Unpinned is the business's own number, as in lastInboundByContact.
+    `with listed as (
+       select created_at from broadcasts where organization_id = $1 order by created_at desc limit 50
+     ),
+     wrote as (
+       select c.contact_id,
+              coalesce(c.phone_number_id, co.whatsapp_phone_number_id) as on_number,
+              max(m.created_at)                                        as last_at
+         from messages m
+         join conversations c on c.id = m.conversation_id
+         join organizations co on co.id = c.organization_id
+        where m.organization_id = $1
+          and c.organization_id = $1
+          and m.direction = 'inbound'
+          and m.created_at >= (select min(created_at) from listed)
+        group by 1, 2
+     )
+     select b.id, b.organization_id, b.template_id, b.status, b.audience_filter,
             b.scheduled_at, b.created_at, b.channel, b.email_subject, b.from_mailbox,
             t.meta_template_name                              as template_name,
             count(r.id) filter (where r.status = 'pending')::text as not_sent,
             count(r.id)::text                                 as recipients,
             count(r.id) filter (where r.status in ('sent', 'delivered'))::text as sent,
-            count(r.id) filter (where r.status = 'delivered')::text          as delivered,
+            -- A receipt from Meta, or the customer's own reply on the campaign's
+            -- number since their send (13 Nov 2026 -- see BroadcastSummary.delivered).
+            count(r.id) filter (
+              where r.status = 'delivered'
+                 or (r.status = 'sent' and b.channel = 'whatsapp' and w.last_at >= r.sent_at)
+            )::text                                                          as delivered,
             count(r.id) filter (where r.status = 'failed')::text as failed,
             -- WHY, not only how many. "3 failed" sends somebody to read logs
             -- they do not have; "3 failed -- recipient not in allowed list" is
@@ -538,6 +573,10 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
        -- join would hide it from the history altogether.
        left join message_templates t on t.id = b.template_id
        left join broadcast_recipients r on r.broadcast_id = b.id
+       left join organizations o on o.id = b.organization_id
+       -- At most one row per customer and number, so no recipient is doubled.
+       left join wrote w on w.contact_id = r.contact_id
+                        and w.on_number = coalesce(b.from_phone_number_id, o.whatsapp_phone_number_id)
       where b.organization_id = $1
       group by b.id, t.meta_template_name
       order by b.created_at desc
@@ -562,6 +601,37 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     sent: Number(row.sent),
     delivered: Number(row.delivered),
     failed: Number(row.failed),
+  }));
+}
+
+/**
+ * When each WhatsApp campaign of a business went out, and from which number —
+ * newest first, and only campaigns that have sent something (13 Nov 2026).
+ *
+ * For asking Meta what IT counted for the same number over the same hours: its
+ * dashboard knew 150 deliveries of a campaign whose receipts here said 4.
+ */
+export async function campaignSendTimes(
+  organizationId: string
+): Promise<Array<{ id: string; fromPhoneNumberId: string | null; firstSentAt: string }>> {
+  const { rows } = await getPool().query<{ id: string; from_phone_number_id: string | null; first_sent_at: string }>(
+    `select b.id, coalesce(b.from_phone_number_id, o.whatsapp_phone_number_id) as from_phone_number_id,
+            min(r.sent_at) as first_sent_at
+       from broadcasts b
+       join organizations o on o.id = b.organization_id
+       join broadcast_recipients r on r.broadcast_id = b.id
+      where b.organization_id = $1
+        and b.channel = 'whatsapp'
+        and r.sent_at is not null
+      group by b.id, o.whatsapp_phone_number_id
+      order by min(r.sent_at) desc
+      limit 20`,
+    [organizationId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    fromPhoneNumberId: row.from_phone_number_id,
+    firstSentAt: new Date(row.first_sent_at).toISOString(),
   }));
 }
 

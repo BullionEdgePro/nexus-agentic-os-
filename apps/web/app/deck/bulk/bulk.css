@@ -290,3 +290,17 @@
 .deck-root .na-field em { font-style: normal; font-size: 0.78rem; color: var(--slate); }
 .deck-root .na-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .deck-root .na-label { flex: 1 1 220px; }
+
+/* WhatsApp's own count of a campaign, under ours (13 Nov 2026): quieter than
+   the figure it sits beneath, and free to wrap in a narrow column. */
+.bk-wa-count {
+  display: block;
+  margin-top: 4px;
+  max-width: 22ch;
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--slate);
+  white-space: normal;
+  text-align: left;
+}

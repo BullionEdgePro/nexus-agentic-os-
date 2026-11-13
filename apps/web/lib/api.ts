@@ -3275,6 +3275,16 @@ export function getBulkOverview(
   return request(`/api/bulk/${orgSlug}`);
 }
 
+/**
+ * What WhatsApp itself counted for the newest campaigns, by campaign id (13 Nov
+ * 2026). A campaign WhatsApp gave no answer for is simply not in the list.
+ */
+export function getBulkWhatsAppCounts(
+  orgSlug: BusinessSlug
+): Promise<{ counts: Record<string, import("./whatsapp-count").WhatsAppCount> }> {
+  return request(`/api/bulk/${orgSlug}/whatsapp-counts`);
+}
+
 export interface BulkNumberView {
   templates: Array<{ id: string; name: string; language: string; bodyParamCount: number }>;
   customers: Array<{ id: string; displayName: string | null; waId: string; lastInboundAt: string | null }>;

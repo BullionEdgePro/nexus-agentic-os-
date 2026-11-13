@@ -7,6 +7,7 @@ import {
   controlBroadcast,
   getBulkNumber,
   getBulkOverview,
+  getBulkWhatsAppCounts,
   getBulkTemplateText,
   getBulkTestStatus,
   readableError,
@@ -24,6 +25,7 @@ import { fontVariables } from "@/lib/fonts";
 import { play } from "@/lib/sound";
 import { tenantName } from "@/lib/tenants";
 import { templateOptionLabel } from "@/lib/template-option-label";
+import { whatsAppCountLine, type WhatsAppCount } from "@/lib/whatsapp-count";
 import { AddNumbers } from "./add-numbers";
 import { AiWriter } from "./ai-writer";
 import { NewApproved } from "./new-approved";
@@ -95,6 +97,7 @@ export default function BulkMessagingPage() {
 function BulkFor({ business }: { business: BusinessSlug }) {
   const [numbers, setNumbers] = useState<BulkNumber[] | null>(null);
   const [campaigns, setCampaigns] = useState<BroadcastSummary[]>([]);
+  const [whatsAppCounts, setWhatsAppCounts] = useState<Record<string, WhatsAppCount>>({});
   const [numberId, setNumberId] = useState("");
   const [view, setView] = useState<BulkNumberView | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -112,6 +115,12 @@ function BulkFor({ business }: { business: BusinessSlug }) {
       setNumbers(data.numbers);
       setCampaigns(data.campaigns);
       setNumberId((current) => (data.numbers.some((n) => n.phoneNumberId === current) ? current : data.numbers[0]?.phoneNumberId ?? ""));
+      // WHATSAPP'S OWN COUNT (13 Nov 2026), apart from the first load: Meta can
+      // be slow, and its silence is not an error here — the line under the
+      // campaign is simply not shown.
+      void getBulkWhatsAppCounts(slug)
+        .then((data) => setWhatsAppCounts(data.counts))
+        .catch(() => undefined);
     } catch (err) {
       setError(readableError(err, "Could not load bulk messaging."));
     }
@@ -342,7 +351,15 @@ function BulkFor({ business }: { business: BusinessSlug }) {
                   <td className="mc-num">
                     {campaign.sent} of {campaign.recipients}
                   </td>
-                  <td className="mc-num">{campaign.delivered || "—"}</td>
+                  <td className="mc-num">
+                    {campaign.delivered || "—"}
+                    {/* Nexus knows a delivery by Meta's receipt or the customer's
+                        reply; Meta does not always send the receipts, so its own
+                        count stands beside ours (lib/whatsapp-count.ts). */}
+                    {whatsAppCounts[campaign.id] ? (
+                      <span className="bk-wa-count">{whatsAppCountLine(whatsAppCounts[campaign.id])}</span>
+                    ) : null}
+                  </td>
                   <td className="mc-num">
                     {campaign.failed || "—"}
                     {campaign.failureReasons.length ? (

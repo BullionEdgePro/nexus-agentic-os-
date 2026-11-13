@@ -14,6 +14,7 @@ import {
   createBroadcastRecipients,
   updateBroadcastStatus,
   listBroadcasts,
+  campaignSendTimes,
   connectionSecret,
   insertOutboundMessage,
   isWaIdOptedOut,
@@ -36,6 +37,7 @@ import { pendingFrom } from "../lib/pending-templates.js";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 import { sendQuickMessages } from "../lib/quick-send.js";
+import { whatsAppCountsFor } from "../lib/whatsapp-count.js";
 import {
   chosenIds,
   staffTemplateParams,
@@ -170,6 +172,28 @@ adminBulkRoute.get("/:slug", async (c) => {
       failureReasons: [...new Set(campaign.failureReasons.map(explainSendError))],
     })),
   });
+});
+
+/**
+ * What WhatsApp itself counted for the business's newest campaigns: delivered,
+ * and what it charged (13 Nov 2026). Apart from the page's first load, so Meta
+ * being slow or silent never holds up the screen — and a campaign Meta will not
+ * answer for is simply absent. See lib/whatsapp-count.ts.
+ */
+adminBulkRoute.get("/:slug/whatsapp-counts", async (c) => {
+  const resolved = await resolve(c, null);
+  if ("error" in resolved) return c.json({ error: resolved.error }, resolved.status);
+  const { organization, numbers } = resolved;
+  const campaigns = await withTenant(organization.id, () => campaignSendTimes(organization.id));
+  const counts = await whatsAppCountsFor(campaigns, {
+    // Only a number still connected here: its account and key are how Meta is asked.
+    account: async (phoneNumberId) => {
+      const number = numbers.find((candidate) => candidate.phoneNumberId === phoneNumberId);
+      if (!number?.wabaId) return null;
+      return { wabaId: number.wabaId, token: await tokenFor(organization.id, number, organization.whatsappBusinessAccountId) };
+    },
+  });
+  return c.json({ counts });
 });
 
 /**

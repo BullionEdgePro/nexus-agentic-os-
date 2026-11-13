@@ -28,7 +28,13 @@ test("accepted and delivered are counted separately", () => {
   // delivered message was necessarily accepted first — it is the honest ceiling
   // on what a campaign achieved.
   assert.match(BROADCASTS, /filter \(where r\.status in \('sent', 'delivered'\)\)::text as sent/);
-  assert.match(BROADCASTS, /filter \(where r\.status = 'delivered'\)::text\s+as delivered/);
+  // Delivered is still its own count, and still never merely "accepted": a
+  // receipt from Meta, or (13 Nov 2026) the customer's own reply on the
+  // campaign's number since their send — see a-reply-is-proof-of-delivery.
+  assert.match(
+    BROADCASTS,
+    /filter \(\s*where r\.status = 'delivered'\s+or \(r\.status = 'sent' and b\.channel = 'whatsapp' and w\.last_at >= r\.sent_at\)\s*\)::text\s+as delivered/
+  );
   assert.match(API, /delivered: number;/);
 });
 
