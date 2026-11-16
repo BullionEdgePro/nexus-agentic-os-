@@ -1,4 +1,5 @@
 import { bucketKeys, fillBuckets, type AuditDays, type WorkflowAudit } from "@nexus/shared";
+import { customersWhoWrote } from "./broadcasts.js";
 import { getPool, withTenant } from "./client.js";
 import { contactServedBy } from "./contacts.js";
 
@@ -162,9 +163,20 @@ export async function getWorkflowAudit(input: {
          (select count(*) from broadcast_recipients br join broadcasts b on b.id = br.broadcast_id
            where b.organization_id = $1 and coalesce(br.sent_at, b.created_at) >= ${START}
              and br.status in ('sent', 'delivered'))::text as outreach_sent,
-         (select count(*) from broadcast_recipients br join broadcasts b on b.id = br.broadcast_id
+         -- KNOWN TO HAVE ARRIVED, AS BULK COUNTS IT (16 Nov 2026): Meta's receipt,
+         -- or the customer's own reply on the campaign's number since their send.
+         -- This read was left on receipts alone when Bulk learned the rule, and
+         -- the two screens gave 4 and 17 for one campaign. A 'sent' recipient in
+         -- the period was sent in it, so a reply since their send is in it too.
+         (select count(*) from broadcast_recipients br
+            join broadcasts b on b.id = br.broadcast_id
+            join organizations bo on bo.id = b.organization_id
+            left join (${customersWhoWrote(START)}) w
+                   on w.contact_id = br.contact_id
+                  and w.on_number = coalesce(b.from_phone_number_id, bo.whatsapp_phone_number_id)
            where b.organization_id = $1 and coalesce(br.sent_at, b.created_at) >= ${START}
-             and br.status = 'delivered')::text as outreach_delivered,
+             and (br.status = 'delivered'
+                  or (br.status = 'sent' and b.channel = 'whatsapp' and w.last_at >= br.sent_at)))::text as outreach_delivered,
          (select count(*) from broadcast_recipients br join broadcasts b on b.id = br.broadcast_id
            where b.organization_id = $1 and coalesce(br.sent_at, b.created_at) >= ${START}
              and br.status = 'failed')::text as outreach_failed,

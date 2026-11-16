@@ -504,6 +504,37 @@ export interface BroadcastSummary extends BroadcastRow {
   failed: number;
 }
 
+/**
+ * WHO HAS WRITTEN IN, AND ON WHICH NUMBER: one row per customer and number,
+ * with when they last wrote, from the business's inbound messages since a
+ * moment. `$1` is the business; `sinceSql` is an SQL expression for the moment.
+ *
+ * ONE PIECE OF SQL, BECAUSE TWO SCREENS COUNT WITH IT. "A reply is proof of
+ * delivery" (13 Nov 2026) was first written into Bulk's list alone, and three
+ * days later the Workflow page was still saying "Delivered 4" for a campaign
+ * Bulk called 17. Both now join this and apply the same test — a recipient at
+ * 'sent' whose customer's `last_at` is at or after their `sent_at` — so the
+ * rule cannot move on one screen and stay behind on the other.
+ *
+ * Read once per query, not once per recipient: nothing indexes conversations or
+ * messages by customer, and one pass over the business's inbound since the
+ * moment rides idx_messages_org_created. Unpinned is the business's own number,
+ * as in lastInboundByContact.
+ */
+export function customersWhoWrote(sinceSql: string): string {
+  return `select c.contact_id,
+              coalesce(c.phone_number_id, co.whatsapp_phone_number_id) as on_number,
+              max(m.created_at)                                        as last_at
+         from messages m
+         join conversations c on c.id = m.conversation_id
+         join organizations co on co.id = c.organization_id
+        where m.organization_id = $1
+          and c.organization_id = $1
+          and m.direction = 'inbound'
+          and m.created_at >= ${sinceSql}
+        group by 1, 2`;
+}
+
 export async function listBroadcasts(organizationId: string): Promise<BroadcastSummary[]> {
   const { rows } = await getPool().query<{
     id: string;
@@ -524,28 +555,11 @@ export async function listBroadcasts(organizationId: string): Promise<BroadcastS
     failed: string;
     failure_reasons: string[] | null;
   }>(
-    // WHO HAS WRITTEN IN, AND ON WHICH NUMBER — read once, not once per recipient.
-    // Nothing indexes conversations or messages by customer, so asking "has
-    // this one replied?" per recipient would walk the business's conversations
-    // hundreds of times a page load. One pass over its inbound messages since
-    // the oldest campaign listed rides idx_messages_org_created instead.
-    // Unpinned is the business's own number, as in lastInboundByContact.
+    // Who has written in since the oldest campaign listed — see customersWhoWrote.
     `with listed as (
        select created_at from broadcasts where organization_id = $1 order by created_at desc limit 50
      ),
-     wrote as (
-       select c.contact_id,
-              coalesce(c.phone_number_id, co.whatsapp_phone_number_id) as on_number,
-              max(m.created_at)                                        as last_at
-         from messages m
-         join conversations c on c.id = m.conversation_id
-         join organizations co on co.id = c.organization_id
-        where m.organization_id = $1
-          and c.organization_id = $1
-          and m.direction = 'inbound'
-          and m.created_at >= (select min(created_at) from listed)
-        group by 1, 2
-     )
+     wrote as (${customersWhoWrote("(select min(created_at) from listed)")})
      select b.id, b.organization_id, b.template_id, b.status, b.audience_filter,
             b.scheduled_at, b.created_at, b.channel, b.email_subject, b.from_mailbox,
             t.meta_template_name                              as template_name,
