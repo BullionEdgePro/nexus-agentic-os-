@@ -32,6 +32,17 @@ export type BayutConnection = "none" | "token-refused" | "check-failed" | "conne
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * A publish was asked and Bayut has not made it live: `pending`, or a `draft`
+ * with a publish behind it (Bayut showed a listing it had, or was asked to
+ * publish, as a draft). Waited for, never asked again (rule 7) — the rule and
+ * the card both ask this, so the card never promises a publish the rule does
+ * not make (final review, 24 Nov 2026).
+ */
+export function bayutPublishAwaited(portal: { state: string | null; publishedAt: string | null }): boolean {
+  return portal.state === "pending" || (portal.state === "draft" && portal.publishedAt !== null);
+}
+
 export function bayutNextSteps(
   should: { portals: BayutPortal[]; fingerprint: string | null },
   remote: BayutRemote,
@@ -57,12 +68,13 @@ export function bayutNextSteps(
     const { state, publishedAt } = remote.portals[p];
     // 8. Credit guard: never published twice within 24 hours.
     if (publishedAt && now.getTime() - Date.parse(publishedAt) < DAY_MS) return false;
-    if (state === null || state === "unpublished" || state === "failed") return true;
-    // A draft never published is ready; a draft that has a publish behind it is waited for like pending (7).
-    if (state === "draft") return publishedAt === null;
+    // 7. Pending, and a draft that has a publish behind it, are waited for.
+    if (bayutPublishAwaited(remote.portals[p])) return false;
+    // A draft never published is ready.
+    if (state === null || state === "unpublished" || state === "failed" || state === "draft") return true;
     // 3. A refusal waits for the listing to change.
     if (state === "refused") return changed;
-    return false; // pending (7) and live
+    return false; // live
   };
   const toPublish = wanted.filter(sendable);
 

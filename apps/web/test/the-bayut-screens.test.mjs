@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { readFileSync } from "node:fs";
-import { REAL_ESTATE_WORKFLOW } from "@nexus/shared";
+import { REAL_ESTATE_WORKFLOW, bayutNextSteps } from "@nexus/shared";
 import {
   BAYUT_ACCOUNT_CHANGED,
   BAYUT_CREDITS_NOTE,
@@ -126,6 +126,74 @@ test("dubizzle's line says dubizzle wherever the listing is; Bayut's connection,
   assert.equal(d({}), "Sending to dubizzle…");
 });
 
+const OLD = "2026-11-21T08:00:00.000Z"; // two days before NOW
+
+test("a draft with a publish behind it reads like pending: sent, and waited for (final review I2)", () => {
+  // Bayut showed a live listing, or one Nexus asked to publish, as a draft: Nexus never asks again.
+  for (const publishedAt of [ASKED, OLD]) {
+    assert.equal(line("bayut", { state: "draft", publishedAt }), `Sent to Bayut ${publishedAt === ASKED ? "23" : "21"} Nov — waiting for Bayut to publish it`);
+    assert.equal(line("dubizzle", { state: "draft", publishedAt }), `Sent to dubizzle ${publishedAt === ASKED ? "23" : "21"} Nov — waiting for Bayut to publish it`);
+  }
+  assert.equal(line("bayut", { state: "draft", publishedAt: ASKED, permitComment: "Permit under review" }), "Waiting for Bayut's permit check — Permit under review");
+  assert.equal(
+    line("bayut", { state: "draft", publishedAt: OLD }, { bayutConnection: "none" }),
+    "Bayut connection removed — listings already on Bayut stay until removed in Profolio"
+  );
+  // Never published: Nexus sends it.
+  assert.equal(line("bayut", { state: "draft" }), "Sending to Bayut…");
+});
+
+test("the card never promises a publish the sync rule does not make, for every state and publish time the job writes (final review I2)", () => {
+  const LATER = (h) => NOW + h * 3600_000;
+  for (const portal of ["bayut", "dubizzle"]) {
+    for (const state of [null, "draft", "pending", "live", "unpublished", "refused", "failed"]) {
+      for (const publishedAt of [null, ASKED, OLD]) {
+        const row = { state, publishedAt, syncedAt: SYNCED, message: state === "refused" ? "Bad photo" : null };
+        const words = line(portal, row);
+        const remote = {
+          ref: "BY-1",
+          fingerprint: "f",
+          portals: { bayut: { state: null, publishedAt: null }, dubizzle: { state: null, publishedAt: null }, [portal]: { state, publishedAt } },
+        };
+        const publishes = (at) => bayutNextSteps({ portals: [portal], fingerprint: "f" }, remote, new Date(at)).some((s) => s.kind === "publish");
+        const what = `${portal} ${state} ${publishedAt}: "${words}"`;
+        if (/^Sending to /.test(words)) assert.equal(publishes(NOW), true, what);
+        else if (/^Published less than a day ago/.test(words)) {
+          assert.equal(publishes(NOW), false, what);
+          assert.equal(publishes(LATER(24)), true, what);
+        } else if (/^Could not reach Bayut — trying again/.test(words)) assert.equal(publishes(LATER(24)), true, what);
+        else if (/^(Sent to |Waiting for Bayut's permit check|Live on |Bayut refused it)/.test(words)) assert.equal(publishes(LATER(48)), false, what);
+        else assert.fail(`a line this test does not know: ${what}`);
+      }
+    }
+  }
+});
+
+test("Live on at least one portal counts Bayut and dubizzle only once Bayut shows them live; Property Finder as before (final review I3)", () => {
+  const s10 = (portal, row, board = {}) =>
+    isPublished({ ...READY, step: "S10", portals: { ...OFF, [portal]: { ...ROW, wanted: true, ...row } } }, { ...BOARD, ...board });
+  for (const portal of ["bayut", "dubizzle"]) {
+    for (const state of [null, "draft", "pending", "refused", "failed", "unpublished"]) {
+      assert.equal(s10(portal, { state, publishedAt: ASKED }), false, `${portal} ${state}`);
+    }
+    assert.equal(s10(portal, { state: "live" }), true, portal);
+    assert.equal(s10(portal, {}, { bayutConnection: "none" }), false, `${portal}: no token, nothing sent`);
+    assert.equal(s10(portal, { state: "live" }, {}), true);
+    assert.equal(s10(portal, { state: "live", wanted: false }), false, `${portal}: coming off`);
+  }
+  assert.equal(s10("property_finder", {}), true, "Property Finder: wanted and ready, as before");
+  const card = (row) => {
+    const unit = { ...READY, step: "S10", portals: { ...OFF, bayut: { ...ROW, wanted: true, ...row } } };
+    return render(CardDetail, {
+      workflow: REAL_ESTATE_WORKFLOW, card: unit, board: { ...BOARD, units: [unit] }, history: [], now: NOW, timezone: TZ, origin: null,
+      message: "", onSave: async () => true, onMove: noop, onCloseCard: noop, onLink: noop, onUnlink: noop, onDismiss: noop,
+      photoSrc: (p) => `/photos/${p}`, canEdit: true, onAddPhotos: noop, onMovePhoto: noop, onRemovePhoto: noop, onSwitchPortal: noop,
+    });
+  };
+  assert.match(card({ state: "pending", publishedAt: ASKED }), /Live on at least one portal<span class="wf-board-need-state"> — missing/);
+  assert.match(card({ state: "live", syncedAt: SYNCED }), /Live on at least one portal<span class="wf-board-need-state"> — done/);
+});
+
 test("after Disconnect, a listing already on Bayut says it stays until removed in Profolio (ruling 2)", () => {
   const removed = "Bayut connection removed — listings already on Bayut stay until removed in Profolio";
   for (const portal of ["bayut", "dubizzle"]) {
@@ -164,8 +232,8 @@ test("a unit ready for the portals but not for Bayut keeps Bayut's switches off 
   assert.equal(html.match(/disabled=""/g)?.length, 2);
   assert.match(html, /Before it can go on Bayut and dubizzle: the Bayut location\./);
   assert.doesNotMatch(html, /Before it can go on the portals/);
-  // Wanted on Bayut alone, it is not live anywhere (spec §5: wanted AND ready).
-  const onBayut = { ...unit, step: "S10", portals: { ...OFF, bayut: { ...ROW, wanted: true } } };
+  // Wanted on Bayut alone, it is not live anywhere (spec §5: wanted AND ready — and, for Bayut, live there).
+  const onBayut = { ...unit, step: "S10", portals: { ...OFF, bayut: { ...ROW, wanted: true, state: "live" } } };
   assert.equal(isPublished(onBayut, BOARD), false);
   assert.equal(isPublished({ ...onBayut, bayutLocation: PLACE }, BOARD), true);
 });
@@ -309,9 +377,10 @@ test("a refused or unreachable check says so, never Connected to a stale account
 });
 
 test("a token for another account says every switch was turned off; Disconnect asks first", () => {
+  // Said after the server has turned them off, and old listings stay (final review M5).
   assert.equal(
     BAYUT_ACCOUNT_CHANGED,
-    "This token is for another Bayut account. Every Bayut and dubizzle switch will be turned off; tick the units again to publish them there."
+    "This token belongs to a different Bayut account. Every Bayut and dubizzle switch has been turned off. Listings already on the old account stay there until removed in Profolio."
   );
   const answer = (over) => ({ orn: null, agents: AGENTS, bayut: BAYUT_SAVED, accountChanged: false, ...over });
   assert.equal(bayutSavedMessage(answer({ accountChanged: true })), BAYUT_ACCOUNT_CHANGED);

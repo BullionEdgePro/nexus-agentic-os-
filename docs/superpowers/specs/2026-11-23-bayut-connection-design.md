@@ -101,10 +101,11 @@ C. **A "Send to Bayut" button, no background job.** Simplest. Rejected: nothing 
   unit's Bayut and dubizzle switch is **turned off** and their remote columns are cleared (ref,
   state, message, fingerprint, publish time) — the old ids mean nothing on the new account, and
   nothing ticked during a Sandbox trial may go live on the real account by itself. Staff tick
-  the units they want on the new account. Before saving, the window warns: "This token is for
-  another Bayut account. Every Bayut and dubizzle switch will be turned off; tick the units
-  again to publish them there." Same agency: nothing changes. This is how SFS moves from
-  Sandbox to the real account.
+  the units they want on the new account. Once the save (or Check again) has found another
+  account, the window says: "This token belongs to a different Bayut account. Every Bayut and
+  dubizzle switch has been turned off. Listings already on the old account stay there until
+  removed in Profolio." (final review M5: said after the switches are off, so in the past
+  tense.) Same agency: nothing changes. This is how SFS moves from Sandbox to the real account.
 - **Check again**, **Disconnect** (clears the token columns and the Bayut agent links; listings
   already on Bayut stay until removed in Profolio; the card says "Bayut connection removed —
   listings already on Bayut stay until removed in Profolio").
@@ -320,8 +321,8 @@ Card, Bayut and dubizzle lines (`portalState`), first match wins:
 | No token | Waiting for the Bayut connection |
 | Token refused | Bayut refused the token — an admin can check it in Portal settings |
 | refused | Bayut refused it: <reason> |
-| pending, permit status known | Waiting for Bayut's permit check — <comment or status> |
-| pending | Sent to Bayut <date> — waiting for Bayut to publish it |
+| pending (or a draft with a publish asked), permit status known | Waiting for Bayut's permit check — <comment or status> |
+| pending (or a draft with a publish asked) | Sent to Bayut <date> — waiting for Bayut to publish it |
 | live, and Bayut refused the last change | Live on Bayut, but Bayut refused the last change: <reason> |
 | live | Live on Bayut — checked <time>. Edit it here, not in Profolio. |
 | failed | Could not reach Bayut — trying again |
@@ -332,11 +333,24 @@ Card, Bayut and dubizzle lines (`portalState`), first match wins:
 credits from SFS's account. If this unit is already on Bayut through Profolio, remove it there
 first."
 
+A draft with a publish asked (Bayut showed a listing it has, or was asked to publish, as a
+draft) is waited for like pending and never published again (§9 rule 7), so it reads exactly
+as pending; the card and the rule share one test of it, and the card never says Nexus will try
+again where the rule will not (final review I2).
+
+**Live on at least one portal** (the S10 checklist and the board card's "nothing missing")
+counts a Bayut or dubizzle portal only when it is `live` — wanted, ready, and shown active by
+Bayut; sent, pending, refused or failed is not live. Property Finder keeps its meaning (wanted
+and ready) (final review I3).
+
 Portal settings, the **Bayut and dubizzle** section replaces the feed section:
 - No token: steps (sign in to Profolio → the API token Bayut emailed, or from the dashboard),
   **API token** (password field), **Save and check**.
 - Saved: "Connected to <agency name> — token ending 1a2b, checked 10:42, 23 Nov" or "Bayut
   refused the token: <message>"; **Check again**, **Replace token**, **Disconnect** (confirm).
+- After Save and check or Check again finds another account: "This token belongs to a
+  different Bayut account. Every Bayut and dubizzle switch has been turned off. Listings already
+  on the old account stay there until removed in Profolio." (§4).
 - **Agents**: each staff member with their Bayut user choice (§5).
 - A note: "Publishing uses Bayut credits. Boosts (Hot, Signature) are bought in Profolio."
 
@@ -356,7 +370,9 @@ Staff (board writers), under `/api/organizations/:slug/workflow-board`:
 
 The board payload adds `bayutConnection: "none" | "token-refused" | "check-failed" |
 "connected"`, per unit `bayutLocation`, and per Bayut/dubizzle portal `state`, `message`,
-`permitComment`, `syncedAt`, `publishedAt`; and whether each agent is linked.
+`permitComment`, `syncedAt`, `publishedAt`; and whether each agent is linked. The checklist's
+"Live on at least one portal" counts a Bayut or dubizzle portal only when its `state` is `live`
+(§11).
 
 ## 13. Database — migration 113
 

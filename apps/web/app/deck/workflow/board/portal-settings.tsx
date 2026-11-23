@@ -188,9 +188,9 @@ export function PfSection({
 export const BAYUT_STEPS = "Sign in to Profolio → use the API token Bayut emailed you, or copy it from the Profolio dashboard. Start with the Sandbox token.";
 export const BAYUT_CREDITS_NOTE = "Publishing uses Bayut credits. Boosts (Hot, Signature) are bought in Profolio.";
 export const BAYUT_DISCONNECT_WARNING = "Nexus stops updating Bayut and dubizzle. Listings already on Bayut stay until removed in Profolio.";
-/** Said once the server has turned the switches off, when the token is another Bayut account's. */
+/** Said once the server has turned the switches off, when the token is another Bayut account's (worded as done, final review M5). */
 export const BAYUT_ACCOUNT_CHANGED =
-  "This token is for another Bayut account. Every Bayut and dubizzle switch will be turned off; tick the units again to publish them there.";
+  "This token belongs to a different Bayut account. Every Bayut and dubizzle switch has been turned off. Listings already on the old account stay there until removed in Profolio.";
 
 /** What the window says after Save and check. */
 export function bayutSavedMessage(answer: BayutCheckAnswer): string {

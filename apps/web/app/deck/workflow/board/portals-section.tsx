@@ -3,6 +3,7 @@
 import {
   BAYUT_PORTALS,
   bayutProblems,
+  bayutPublishAwaited,
   PORTAL_TARGETS,
   portalProblems,
   portalProblemSentence,
@@ -66,13 +67,22 @@ export function portalReadiness(unit: BoardUnit, board: Board, portal: PortalTar
 
 /**
  * Wanted on a portal AND ready for it: what Portals + social counts as live
- * (spec §5) — for Bayut and dubizzle, by Bayut's rule too (23 Nov 2026).
+ * (spec §5) — for Bayut and dubizzle, by Bayut's rule too (23 Nov 2026), and
+ * only once Bayut shows the listing live (final review, 24 Nov 2026): sent,
+ * pending, refused or failed is not live, and staff must not be told it is.
+ * Property Finder keeps its meaning. The card and the S10 checklist are the
+ * only callers; the feed, pocket listings and Property Finder never ask this.
  * A pocket unit is never on a portal: it counts once ready and shared privately
  * by a link that still works (pocket listings, 7 Nov 2026).
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §11
  */
 export function isPublished(unit: BoardUnit, board: Board): boolean {
   if (unit.pocket?.on) return readiness(unit, board).length === 0 && unit.pocket.shares.some((s) => s.active);
-  return PORTAL_TARGETS.some((portal) => unit.portals[portal]?.wanted && portalReadiness(unit, board, portal).length === 0);
+  return PORTAL_TARGETS.some((portal) => {
+    const row = unit.portals[portal];
+    if (!row?.wanted || portalReadiness(unit, board, portal).length > 0) return false;
+    return !isBayutPortal(portal) || row.state === "live";
+  });
 }
 
 export const POCKET_STAYS_OFF = "A pocket listing stays off the portals — turn Pocket off to publish it.";
@@ -129,14 +139,17 @@ const BAYUT_CONNECTION_REMOVED = "Bayut connection removed — listings already 
  * reaching Bayut. After Disconnect a listing already on Bayut stays there, so
  * its line says so rather than "Coming off" or "Waiting" (ruling 2). A check
  * that could not reach Bayut is not a refused token: it says so, as Property
- * Finder's does.
+ * Finder's does. A draft with a publish behind it reads exactly as pending
+ * (final review, 24 Nov 2026): the rule waits for it, never asks again, so the
+ * card never says Nexus tries again (`bayutPublishAwaited`, shared with the rule).
  * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §4, §8, §9, §11
  */
 function bayutState(unit: BoardUnit, portal: BayutPortal, board: Board, timezone: string, now: number): string {
   const row = unit.portals[portal];
   const where = PORTAL_LABEL[portal];
   const connection = board.bayutConnection ?? "none";
-  const onBayut = row.state === "live" || row.state === "pending";
+  const awaited = bayutPublishAwaited(row);
+  const onBayut = row.state === "live" || awaited;
   if (!row.wanted && row.state === "unpublished" && row.message?.startsWith(TAKEN_OFF)) {
     return `Off — ${row.message}. Tick to publish again (uses credits).`;
   }
@@ -149,7 +162,7 @@ function bayutState(unit: BoardUnit, portal: BayutPortal, board: Board, timezone
   if (connection === "token-refused") return "Bayut refused the token — an admin can check it in Portal settings";
   if (connection === "check-failed") return "Bayut could not be reached to check the token — an admin can check it again in Portal settings";
   if (row.state === "refused") return `Bayut refused it: ${row.message ?? "no reason given"}`;
-  if (row.state === "pending") {
+  if (awaited) {
     if (row.permitComment) return `Waiting for Bayut's permit check — ${row.permitComment}`;
     return `Sent to ${where}${row.publishedAt ? ` ${dayOf(row.publishedAt, timezone)}` : ""} — waiting for Bayut to publish it`;
   }

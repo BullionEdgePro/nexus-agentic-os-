@@ -122,8 +122,11 @@ test("saving the listing sends only what was touched, in the API's shapes", () =
 
 test("Portals + social is done only when a portal is wanted AND the unit is ready (spec §5; final review)", async () => {
   const { isPublished } = await import("@/app/deck/workflow/board/portals-section");
-  const s10 = { ...READY, step: "S10", portals: { ...OFF, bayut: { wanted: true } } };
+  // Bayut counts once Bayut shows it live (Bayut connection, final review I3); Property Finder once wanted and ready.
+  const s10 = { ...READY, step: "S10", portals: { ...OFF, bayut: { wanted: true, state: "live" } } };
   assert.equal(isPublished(s10, BOARD), true);
+  assert.equal(isPublished({ ...s10, portals: { ...OFF, bayut: { wanted: true } } }, BOARD), false, "not yet on Bayut");
+  assert.equal(isPublished({ ...s10, portals: { ...OFF, property_finder: { wanted: true } } }, BOARD), true);
   assert.equal(isPublished({ ...s10, permitExpiresOn: "2026-11-06" }, BOARD), false);
   assert.equal(isPublished({ ...s10, portals: OFF }, BOARD), false);
   const done = detail(s10);
