@@ -224,7 +224,7 @@ export function makeBayutClient(fetchFn: typeof fetch = fetch): BayutClient {
         next: isObj(j.links) && typeof j.links.next === "string" && j.links.next !== "",
       })),
     rejected: (token) =>
-      ask(token, "GET", "/properties/rejected", undefined, (j) =>
+      ask(token, "GET", "/properties/rejected?rejection_type=all&page=1&limit=50", undefined, (j) =>
         items(j).flatMap((r) => {
           const pd = isObj(r.property_details) ? r.property_details : null;
           if (!pd || pd.id === undefined || pd.id === null) return [];

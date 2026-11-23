@@ -154,7 +154,7 @@ test("rejected maps each item to an id and a reason", async () => {
     ],
   });
   const a = await client(f).rejected(TOKEN);
-  assert.equal(f.calls[0].url, "https://api.bayut.com/v1/properties/rejected");
+  assert.equal(f.calls[0].url, "https://api.bayut.com/v1/properties/rejected?rejection_type=all&page=1&limit=50");
   assert.deepEqual(a, {
     ok: true,
     data: [{ id: "123", reason: "Images are misleading" }, { id: "124", reason: "Permit Validation" }],
