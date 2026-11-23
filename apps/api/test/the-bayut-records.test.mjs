@@ -211,7 +211,14 @@ test("3. the board tells a check that could not reach Bayut from a refused token
 });
 
 test("4. only checked, unrefused tokens of active businesses are synced", db, async () => {
-  await lib.saveBayutConnection(OTHER, { token: "other-token-zzzz", agencyId: 303, agencyName: "Other", checkError: "Bayut refused the token: no" });
+  await lib.saveBayutConnection(OTHER, { token: "other-token-zzzz", agencyId: null, agencyName: null, checkError: "Could not reach Bayut: HTTP 503" });
+  assert.deepEqual(await lib.bayutToken(OTHER), { token: "other-token-zzzz", agencyId: null },
+    "a first check that failed still leaves the token to check again");
+  assert.deepEqual(
+    await lib.saveBayutConnection(OTHER, { token: "other-token-zzzz", agencyId: 303, agencyName: "Other", checkError: "Bayut refused the token: no" }),
+    { accountChanged: false },
+    "no account was known before"
+  );
   await lib.saveBayutConnection(ASLEEP, { token: "asleep-token-yyyy", agencyId: 404, agencyName: "Asleep", checkError: null });
   const businesses = await lib.bayutBusinesses();
   const ids = businesses.map((b) => b.organizationId);
@@ -419,8 +426,11 @@ test("12. a disconnect clears the token and the links, leaves the units, and rem
   assert.equal((await row(A, "dubizzle")).remote_ref, "BY-21", "listings already on Bayut stay");
   assert.equal((await board()).bayutConnection, "none");
   assert.ok(!(await lib.bayutBusinesses()).some((b) => b.organizationId === SFS));
-  // Without a token the card waits for the connection instead of asking for the agent's link.
+  // Without a token the card waits for the connection instead of asking for the agent's link or the location.
   assert.equal((await lib.setUnitPortal(SFS, C, "bayut", true, aisha, asAisha, TODAY)).portals.bayut.wanted, true);
+  assert.deepEqual(await lib.setUnitPortal(SFS, F, "dubizzle", true, aisha, asAisha, TODAY), {
+    refused: "Before it can go on the portals: 3 photos.",
+  }, "F has no Bayut location, and is not asked for one");
   assert.deepEqual(
     await lib.saveBayutConnection(SFS, { token: "yet-another-account-5555", agencyId: 505, agencyName: "Elsewhere", checkError: null }),
     { accountChanged: true },

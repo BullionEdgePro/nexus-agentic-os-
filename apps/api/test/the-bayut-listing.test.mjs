@@ -1,8 +1,9 @@
 // What a unit becomes on Bayut's Profolio API, and what Bayut needs first
 // (23 Nov 2026): the body leaves optional fields OUT (Bayut rejects null or
 // empty ones), a studio is -1 bedrooms, amenities go by Bayut's own ids, and
-// the unit is not ready until we know its Bayut location (and, once a token is
-// saved, the agent's Bayut user).
+// once a token is saved the unit is not ready until we know its Bayut location
+// and the agent's Bayut user (without a connection there is no location picker
+// yet, and the card waits for the connection instead).
 //
 // Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §7, §8
 import { test } from "node:test";
@@ -88,9 +89,15 @@ test("what Bayut still needs, in order", () => {
   assert.deepEqual(bayutProblems(unit, full), []);
   assert.deepEqual(bayutProblems({ ...unit, title: "x".repeat(101) }, full), ["a title of at most 100 characters"]);
   assert.deepEqual(bayutProblems({ ...unit, propertyType: "other" }, full), ["a property type Bayut takes"]);
+  assert.deepEqual(bayutProblems({ ...unit, propertyType: null }, full), [], "the portals' rule already asks for the property type");
   assert.deepEqual(bayutProblems(unit, { ...full, locationId: null }), ["the Bayut location"]);
   assert.deepEqual(bayutProblems(unit, { ...full, userId: null }), ["the agent linked to a Bayut user"]);
   assert.deepEqual(bayutProblems(unit, { ...full, userId: null, tokenSaved: false }), []);
+  assert.deepEqual(bayutProblems(unit, { tokenSaved: false, locationId: null, userId: null }), [],
+    "without a Bayut connection neither the location nor the agent's link is asked for");
+  assert.deepEqual(bayutProblems({ ...unit, propertyType: "other" }, { tokenSaved: false, locationId: null, userId: null }), [
+    "a property type Bayut takes",
+  ]);
   assert.deepEqual(
     bayutProblems({ ...unit, title: "x".repeat(101), propertyType: "other" }, { tokenSaved: true, locationId: null, userId: null }),
     ["a title of at most 100 characters", "a property type Bayut takes", "the Bayut location", "the agent linked to a Bayut user"]

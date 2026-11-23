@@ -73,12 +73,17 @@ export function matchAmenities(bayut: { id: string | number; title: { en: string
 /** What Nexus knows about Bayut beside the unit: a saved token, the unit's Bayut location, its agent's Bayut user. */
 export type BayutContext = { tokenSaved: boolean; locationId: number | null; userId: number | null };
 
-/** What the unit still needs for Bayut (after the portals' own rule), in order. */
+/**
+ * What the unit still needs for Bayut (after the portals' own rule), in order.
+ * No property type at all is the portals' rule's to say. The Bayut location and
+ * the agent's link are asked for only once a token is saved: before that there
+ * is no location picker, and the card says "Waiting for the Bayut connection".
+ */
 export function bayutProblems(unit: BoardUnit, ctx: BayutContext): string[] {
   const need: string[] = [];
   if ((unit.title?.trim() ?? "").length > 100) need.push("a title of at most 100 characters");
-  if (unit.propertyType === null || BAYUT_CATEGORY[unit.propertyType] === null) need.push("a property type Bayut takes");
-  if (ctx.locationId === null) need.push("the Bayut location");
+  if (unit.propertyType !== null && BAYUT_CATEGORY[unit.propertyType] === null) need.push("a property type Bayut takes");
+  if (ctx.tokenSaved && ctx.locationId === null) need.push("the Bayut location");
   if (ctx.tokenSaved && ctx.userId === null) need.push("the agent linked to a Bayut user");
   return need;
 }

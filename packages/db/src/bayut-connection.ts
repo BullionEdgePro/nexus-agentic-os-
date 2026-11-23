@@ -139,8 +139,13 @@ export async function bayutConnectionView(organizationId: string): Promise<Bayut
   });
 }
 
-/** The token, opened, with its agency — for the check, the location search and the sync only. Null when none is saved, it cannot be opened, or no agency is known. */
-export async function bayutToken(organizationId: string): Promise<{ token: string; agencyId: number } | null> {
+/**
+ * The token, opened, with its agency — for the check, the location search and
+ * the sync only. Null only when none is saved or it cannot be opened; the agency
+ * is null while no check has read it (a first check that failed), so the token
+ * can still be checked again. The sync skips a null agency.
+ */
+export async function bayutToken(organizationId: string): Promise<{ token: string; agencyId: number | null } | null> {
   return withTenant(organizationId, async () => {
     const { rows } = await getPool().query<{ bayut_token_sealed: string | null; bayut_agency_id: number | null }>(
       `select bayut_token_sealed, bayut_agency_id from portal_settings where organization_id = $1`,
@@ -148,8 +153,8 @@ export async function bayutToken(organizationId: string): Promise<{ token: strin
     );
     const r = rows[0];
     const token = openToken(r?.bayut_token_sealed);
-    if (!token || r?.bayut_agency_id === null || r?.bayut_agency_id === undefined) return null;
-    return { token, agencyId: Number(r.bayut_agency_id) };
+    if (!token) return null;
+    return { token, agencyId: r?.bayut_agency_id === null || r?.bayut_agency_id === undefined ? null : Number(r.bayut_agency_id) };
   });
 }
 
