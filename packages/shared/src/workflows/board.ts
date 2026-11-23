@@ -1,5 +1,6 @@
 import type { Lane, Workflow, WorkflowStep } from "./types.js";
 import type { PfConnection, PfState } from "../portals/pf-sync.js";
+import type { BayutConnection, BayutState } from "../portals/bayut-sync.js";
 import type { PocketShare } from "../portals/pocket.js";
 
 /**
@@ -75,8 +76,19 @@ export type BoardUnit = {
    */
   portals: Record<
     "bayut" | "dubizzle" | "property_finder",
-    { wanted: boolean; state: PfState | null; message: string | null; syncedAt: string | null }
+    {
+      wanted: boolean;
+      state: PfState | BayutState | null;
+      message: string | null;
+      syncedAt: string | null;
+      /** Bayut's permit answer (23 Nov 2026): the comment it gave when a permit was not accepted. */
+      permitComment: string | null;
+      /** When a publish was last asked of Bayut (the 24-hour credit guard). */
+      publishedAt: string | null;
+    }
   >;
+  /** The Bayut location this unit is placed in, once chosen (23 Nov 2026). */
+  bayutLocation: { id: number; name: string } | null;
   /** Off-market (pocket listings, 7 Nov 2026): never on the portals, shared privately, one link per buyer. */
   pocket: { on: boolean; since: string | null; shares: PocketShare[] };
 };
@@ -123,6 +135,10 @@ export type Board = {
   agentsGone: string[];
   /** Where the business stands with Property Finder (its sync, 7 Nov 2026). */
   pfConnection: PfConnection;
+  /** Where the business stands with Bayut (23 Nov 2026). */
+  bayutConnection: BayutConnection;
+  /** Employee id → whether that agent is linked to a Bayut user. */
+  bayutLinked: Record<string, boolean>;
 };
 
 export type CardMove = {

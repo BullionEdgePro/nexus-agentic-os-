@@ -26,6 +26,7 @@ export const SCHEDULED_JOBS = [
   "scheduled-messages",
   "hq-checks",
   "pf-sync",
+  "bayut-sync",
 ] as const;
 
 export type ScheduledJob = (typeof SCHEDULED_JOBS)[number];
@@ -74,6 +75,7 @@ export const JOB_STALE_AFTER_SECONDS: Record<ScheduledJob, number> = {
   // look like an outage either: listings simply stop following the board, and a
   // unit that should have come off Property Finder stays advertised.
   "pf-sync": 45 * MINUTE,
+  "bayut-sync": 45 * MINUTE,
 };
 
 /**

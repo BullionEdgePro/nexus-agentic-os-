@@ -154,7 +154,8 @@ const UNIT_SELECT = `
             where p.unit_id = u.id
          ), '[]'::json) as photos,
          coalesce((select json_object_agg(up.portal, json_build_object(
-                     'wanted', up.wanted, 'state', up.remote_state, 'message', up.remote_message, 'syncedAt', up.synced_at))
+                     'wanted', up.wanted, 'state', up.remote_state, 'message', up.remote_message, 'syncedAt', up.synced_at,
+                     'permitComment', null, 'publishedAt', null))
                      from unit_portals up where up.unit_id = u.id), '{}'::json) as portals,
          u.pocket, u.pocket_since,
          -- Pocket shares this viewer may see (a colleague's client stays hidden from staff); never the token.
@@ -255,6 +256,7 @@ function toUnit(row: Row): BoardUnit {
       height: Number(p.height),
     })),
     portals: portalRows(row.portals as Record<string, PortalRow> | null),
+    bayutLocation: null, // placeholder until Task 4 reads the real column
     pocket: {
       on: Boolean(row.pocket),
       since: row.pocket_since ? iso(row.pocket_since) : null,
@@ -281,7 +283,14 @@ function toPocketShare(s: Record<string, unknown>): PocketShare {
   };
 }
 
-type PortalRow = { wanted: boolean; state: PfState | null; message: string | null; syncedAt: string | null };
+type PortalRow = {
+  wanted: boolean;
+  state: PfState | null;
+  message: string | null;
+  syncedAt: string | null;
+  permitComment: string | null;
+  publishedAt: string | null;
+};
 
 /** All three switches, off unless a row says otherwise, with the portal's last answer (Property Finder only, so far). */
 function portalRows(rows: Record<string, PortalRow> | null): BoardUnit["portals"] {
@@ -290,6 +299,8 @@ function portalRows(rows: Record<string, PortalRow> | null): BoardUnit["portals"
     state: r?.state ?? null,
     message: r?.message ?? null,
     syncedAt: r?.syncedAt ? new Date(r.syncedAt).toISOString() : null,
+    permitComment: r?.permitComment ?? null,
+    publishedAt: r?.publishedAt ? new Date(r.publishedAt).toISOString() : null,
   });
   return { bayut: one(rows?.bayut), dubizzle: one(rows?.dubizzle), property_finder: one(rows?.property_finder) };
 }
@@ -504,6 +515,9 @@ export async function getBoard(input: { organizationId: string; timezone: string
           : PF_LISTING_CALLS_READY
             ? "connected"
             : "waiting-format",
+      // Placeholders until Task 4 reads the real columns.
+      bayutConnection: "none",
+      bayutLinked: {},
     };
   });
 }

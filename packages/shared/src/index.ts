@@ -18,5 +18,6 @@ export * from "./whatsapp-identity.js";
 export * from "./portals/listing.js";
 export * from "./portals/bayut-feed.js";
 export * from "./portals/bayut-listing.js";
+export * from "./portals/bayut-sync.js";
 export * from "./portals/pf-sync.js";
 export * from "./portals/pocket.js";
