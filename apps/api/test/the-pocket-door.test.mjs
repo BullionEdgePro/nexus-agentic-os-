@@ -44,6 +44,10 @@ mock.module("@nexus/db", {
     setUnitPocket: stub("setUnitPocket"), createPocketShare: stub("createPocketShare"), revokePocketShare: stub("revokePocketShare"),
     pocketShareView: stub("pocketShareView"), notePocketView: stub("notePocketView"), pocketPhoto: stub("pocketPhoto"),
     recordPocketInterest: stub("recordPocketInterest"),
+    // Bayut (23 Nov 2026), tested in the-bayut-door.test.mjs.
+    bayutConnectionView: stub("bayutConnectionView"), saveBayutConnection: stub("saveBayutConnection"),
+    recordBayutCheck: stub("recordBayutCheck"), clearBayutConnection: stub("clearBayutConnection"), bayutToken: stub("bayutToken"),
+    bayutAgentLinks: stub("bayutAgentLinks"), linkBayutAgent: stub("linkBayutAgent"), autoLinkBayutAgents: stub("autoLinkBayutAgents"),
   },
 });
 mock.module(new URL("../src/lib/property-finder.ts", import.meta.url).href, {
@@ -51,6 +55,9 @@ mock.module(new URL("../src/lib/property-finder.ts", import.meta.url).href, {
 });
 mock.module(new URL("../src/queue/pf-sync-queue.ts", import.meta.url).href, {
   exports: { queuePfUnit: async (...a) => calls.push(["queuePfUnit", a]), queuePfCycle: async () => undefined },
+});
+mock.module(new URL("../src/queue/bayut-sync-queue.ts", import.meta.url).href, {
+  exports: { queueBayutUnit: async (...a) => calls.push(["queueBayutUnit", a]), queueBayutCycle: async () => undefined },
 });
 mock.module(new URL("../src/services/push-dispatcher.ts", import.meta.url).href, {
   exports: { notifyPocketInterest: stub("notifyPocketInterest") },
@@ -117,6 +124,7 @@ test("the switch answers the card, and Property Finder follows", async () => {
   const [org, unit, on, actor] = called("setUnitPocket")[0];
   assert.deepEqual([org, unit, on, actor], [SFS.id, "u-1", true, { employeeId: "emp-aisha" }]);
   assert.deepEqual(called("queuePfUnit"), [[SFS.id, "u-1"]]);
+  assert.deepEqual(called("queueBayutUnit"), [[SFS.id, "u-1"]], "and so does Bayut");
   answers.setUnitPocket = "closed";
   assert.equal((await json(STAFF, "POST", "/units/u-1/pocket", { pocket: true })).status, 409);
 });

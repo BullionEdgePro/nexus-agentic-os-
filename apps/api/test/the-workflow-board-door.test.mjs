@@ -58,7 +58,20 @@ mock.module("@nexus/db", {
     setUnitPocket: stub("setUnitPocket"),
     createPocketShare: stub("createPocketShare"),
     revokePocketShare: stub("revokePocketShare"),
+    // Bayut (23 Nov 2026), tested in the-bayut-door.test.mjs.
+    bayutConnectionView: stub("bayutConnectionView"),
+    saveBayutConnection: stub("saveBayutConnection"),
+    recordBayutCheck: stub("recordBayutCheck"),
+    clearBayutConnection: stub("clearBayutConnection"),
+    bayutToken: stub("bayutToken"),
+    bayutAgentLinks: stub("bayutAgentLinks"),
+    linkBayutAgent: stub("linkBayutAgent"),
+    autoLinkBayutAgents: stub("autoLinkBayutAgents"),
   },
+});
+// Bayut follows every unit write (the-bayut-door.test.mjs); no Redis here.
+mock.module(new URL("../src/queue/bayut-sync-queue.ts", import.meta.url).href, {
+  exports: { queueBayutUnit: async () => undefined, queueBayutCycle: async () => undefined },
 });
 
 const { workflowBoardRoute, parseUnitFields, parseDealFields } = await import("../src/routes/workflow-board.ts");

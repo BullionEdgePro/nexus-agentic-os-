@@ -1,7 +1,12 @@
 import { Hono, type Context } from "hono";
 import {
   addUnitPhoto,
+  autoLinkBayutAgents,
+  bayutAgentLinks,
+  bayutConnectionView,
+  bayutToken,
   cardHistory,
+  clearBayutConnection,
   clearPfConnection,
   closeDeal,
   createPocketShare,
@@ -10,6 +15,7 @@ import {
   createUnit,
   findOrganizationBySlug,
   getBoard,
+  linkBayutAgent,
   linkUnit,
   moveDeal,
   moveUnit,
@@ -19,9 +25,11 @@ import {
   pfCredentials,
   portalAgents,
   portalSettings,
+  recordBayutCheck,
   recordPfCheck,
   removeUnitPhoto,
   revokePocketShare,
+  saveBayutConnection,
   savePfConnection,
   setEmployeeBrn,
   setUnitPocket,
@@ -32,6 +40,7 @@ import {
   updateDeal,
   updateUnit,
   type Actor,
+  type BayutLocationFields,
   type DealFields,
   type UnitFields,
   type Viewer,
@@ -50,10 +59,13 @@ import {
   xmlSafe,
   type PortalTarget,
 } from "@nexus/shared";
+import { bayutClient, type BayutAnswer } from "../lib/bayut.js";
+import { bayutPaused, bayutRedis, pauseBayut, takeBayutCalls } from "../lib/bayut-budget.js";
 import { PHOTO_MAX_BYTES, PHOTO_TOO_LARGE, readBoardPhoto } from "../lib/board-photo-upload.js";
 import { jpegSize } from "../lib/jpeg-size.js";
 import { pfClient, type PfAnswer } from "../lib/property-finder.js";
 import { apiBaseUrl, appBaseUrl } from "../lib/public-urls.js";
+import { queueBayutCycle, queueBayutUnit } from "../queue/bayut-sync-queue.js";
 import { queuePfCycle, queuePfUnit } from "../queue/pf-sync-queue.js";
 import type { SessionScope } from "../lib/session.js";
 
@@ -210,6 +222,26 @@ function parseWith<T>(raw: Record<string, unknown>, checks: Record<string, Check
 export const parseUnitFields = (raw: Record<string, unknown>) => parseWith<UnitFields>(raw, UNIT_CHECKS);
 export const parseDealFields = (raw: Record<string, unknown>) => parseWith<DealFields>(raw, DEAL_CHECKS);
 
+/** Postgres's integer: the column Bayut's location id is kept in. */
+const INTEGER_MAX = 2_147_483_647;
+
+/**
+ * The unit's Bayut location (23 Nov 2026): Bayut's location id and the name
+ * staff picked, both or neither, set on an existing card only. Checked apart
+ * from UNIT_CHECKS because the two are checked together.
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §6, §12
+ */
+function parseBayutLocation(raw: Record<string, unknown>): BayutLocationFields | { error: string } {
+  const { bayutLocationId: id, bayutLocationName: name } = raw;
+  if (id === undefined && name === undefined) return {};
+  if (id === null && name === null) return { bayutLocationId: null, bayutLocationName: null };
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (typeof id === "number" && Number.isInteger(id) && id > 0 && id <= INTEGER_MAX && trimmed.length > 0 && trimmed.length <= 300) {
+    return { bayutLocationId: id, bayutLocationName: trimmed };
+  }
+  return { error: "Invalid bayutLocation." };
+}
+
 // ---------------------------------------------------------------------------
 // Answers shared by units and deals
 // ---------------------------------------------------------------------------
@@ -234,22 +266,28 @@ function answerClose(c: Context, result: CloseAnswer) {
   return c.json({ ok: true });
 }
 
-/** A card, or one of the module's other answers, as a response. */
 /**
  * Property Finder follows a unit half a minute after a write to it succeeds
  * (7 Nov 2026) — listing details, photos, the switch, a move or a close all
- * change what should be on Property Finder. Never in the way of the write: when
- * Redis is down the ten-minute cycle picks the change up.
+ * change what should be on Property Finder — and so does Bayut (23 Nov 2026),
+ * the Bayut location among them. Never in the way of the write, and neither
+ * queue in the way of the other: when Redis is down the ten-minute cycles pick
+ * the change up.
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §10, §12
  */
-function followOnPropertyFinder(res: Response, organizationId: string, unitId: string): Response {
+function followOnPortals(res: Response, organizationId: string, unitId: string): Response {
   if (res.status >= 200 && res.status < 300) {
     void queuePfUnit(organizationId, unitId).catch((err) =>
       console.error("[property-finder] could not queue the unit:", err instanceof Error ? err.message : err)
+    );
+    void queueBayutUnit(organizationId, unitId).catch((err) =>
+      console.error("[bayut] could not queue the unit:", err instanceof Error ? err.message : err)
     );
   }
   return res;
 }
 
+/** A card, or one of the module's other answers, as a response. */
 function answerCard(c: Context, result: unknown, created = false) {
   if (result === null) return c.json({ error: "Card not found" }, 404);
   if (result === "closed") return c.json({ error: CLOSED }, 409);
@@ -311,10 +349,14 @@ workflowBoardRoute.post("/:slug/workflow-board/units", async (c) => {
 workflowBoardRoute.patch("/:slug/workflow-board/units/:id", async (c) => {
   const w = await writer(c);
   if (!w.organization) return w.answer;
-  const parsed = parseUnitFields(await body(c));
+  const raw = await body(c);
+  const parsed = parseUnitFields(raw);
   if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+  const location = parseBayutLocation(raw);
+  if ("error" in location) return c.json({ error: location.error }, 400);
   const unitId = c.req.param("id");
-  return followOnPropertyFinder(answerCard(c, await updateUnit(w.organization.id, w.actor, w.viewer, unitId, parsed.fields)), w.organization.id, unitId);
+  const fields = { ...parsed.fields, ...location };
+  return followOnPortals(answerCard(c, await updateUnit(w.organization.id, w.actor, w.viewer, unitId, fields)), w.organization.id, unitId);
 });
 
 workflowBoardRoute.post("/:slug/workflow-board/units/:id/move", async (c) => {
@@ -323,7 +365,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/move", async (c) => {
   const move = moveBody(await body(c));
   if (!move) return c.json({ error: "from and to must be step ids." }, 400);
   const unitId = c.req.param("id");
-  return followOnPropertyFinder(
+  return followOnPortals(
     answerMove(c, await moveUnit(w.organization.id, w.organization.timezone, w.actor, w.viewer, unitId, move.from, move.to)),
     w.organization.id,
     unitId
@@ -336,7 +378,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/close", async (c) => {
   const close = closeBody(await body(c));
   if (!close) return c.json({ error: "reason is required." }, 400);
   const unitId = c.req.param("id");
-  return followOnPropertyFinder(
+  return followOnPortals(
     answerClose(c, await closeUnit(w.organization.id, w.actor, w.viewer, unitId, close.reason, close.note)),
     w.organization.id,
     unitId
@@ -423,7 +465,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos", async (c) => {
   const result = await addUnitPhoto(w.organization.id, c.req.param("id"), { bytes, ...size }, w.actor);
   if (result === null) return c.json({ error: "Card not found" }, 404);
   if ("refused" in result) return c.json({ error: result.refused }, 422);
-  return followOnPropertyFinder(c.json({ id: result.id, ...size }, 201), w.organization.id, c.req.param("id"));
+  return followOnPortals(c.json({ id: result.id, ...size }, 201), w.organization.id, c.req.param("id"));
 });
 
 workflowBoardRoute.get("/:slug/workflow-board/units/:id/photos/:photoId", async (c) => {
@@ -444,7 +486,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/photos/order", async (c
   const result = await orderUnitPhotos(w.organization.id, c.req.param("id"), ids as string[], w.actor);
   if (result === null) return c.json({ error: "Card not found" }, 404);
   if (result !== true) return c.json({ error: result.refused }, 422);
-  return followOnPropertyFinder(c.json({ ok: true }), w.organization.id, c.req.param("id"));
+  return followOnPortals(c.json({ ok: true }), w.organization.id, c.req.param("id"));
 });
 
 workflowBoardRoute.delete("/:slug/workflow-board/units/:id/photos/:photoId", async (c) => {
@@ -452,7 +494,7 @@ workflowBoardRoute.delete("/:slug/workflow-board/units/:id/photos/:photoId", asy
   if (!w.organization) return w.answer;
   const removed = await removeUnitPhoto(w.organization.id, c.req.param("id"), c.req.param("photoId"), w.actor);
   return removed
-    ? followOnPropertyFinder(c.json({ ok: true }), w.organization.id, c.req.param("id"))
+    ? followOnPortals(c.json({ ok: true }), w.organization.id, c.req.param("id"))
     : c.json({ error: "Photo not found" }, 404);
 });
 
@@ -472,7 +514,7 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/portals/:portal", async
     w.viewer,
     todayIn(w.organization.timezone)
   );
-  return followOnPropertyFinder(answerCard(c, result), w.organization.id, c.req.param("id"));
+  return followOnPortals(answerCard(c, result), w.organization.id, c.req.param("id"));
 });
 
 // Pocket listings (7 Nov 2026): a unit kept off-market, shared one buyer at a time.
@@ -484,8 +526,8 @@ workflowBoardRoute.post("/:slug/workflow-board/units/:id/pocket", async (c) => {
   const pocket = (await body(c)).pocket;
   if (typeof pocket !== "boolean") return c.json({ error: "pocket must be true or false." }, 400);
   const unitId = c.req.param("id");
-  // Pocket on turns the portal switches off, so Property Finder follows.
-  return followOnPropertyFinder(answerCard(c, await setUnitPocket(w.organization.id, unitId, pocket, w.actor, w.viewer)), w.organization.id, unitId);
+  // Pocket on turns the portal switches off, so Property Finder and Bayut follow.
+  return followOnPortals(answerCard(c, await setUnitPocket(w.organization.id, unitId, pocket, w.actor, w.viewer)), w.organization.id, unitId);
 });
 
 workflowBoardRoute.post("/:slug/workflow-board/units/:id/pocket/shares", async (c) => {
@@ -533,15 +575,30 @@ async function settingsView(organizationId: string) {
     agents: await portalAgents(organizationId),
     // Never the key or the secret: whether one is saved, its last four characters and the last check.
     propertyFinder: { ...(await pfConnectionView(organizationId)), listingCallsReady: PF_LISTING_CALLS_READY },
+    // Never the token: as Property Finder's, with the account's Bayut users and the agent links.
+    bayut: await bayutSettings(organizationId),
+  };
+}
+
+const CHECKING = "Checking already — try again in a few seconds.";
+const CHECK_EVERY_MS = 10_000;
+
+/** One check per business every 10 seconds, so a double click does not send two — a gate for each portal. */
+function oneCheckEvery10s(): (organizationId: string) => boolean {
+  const last = new Map<string, number>();
+  return (organizationId) => {
+    const now = Date.now();
+    const then = last.get(organizationId);
+    if (then !== undefined && now - then < CHECK_EVERY_MS) return false;
+    last.set(organizationId, now);
+    return true;
   };
 }
 
 const PF_KEY_MISSING = "Enter the API key and secret.";
 const PF_ENVIRONMENT = "Choose Sandbox or Live.";
 const PF_NO_KEY = "No Property Finder key is saved.";
-const PF_CHECKING = "Checking already — try again in a few seconds.";
 const PF_KEY_SHAPE = /^[\x21-\x7E]{1,200}$/;
-const PF_CHECK_EVERY_MS = 10_000;
 
 /** The key, secret and environment from the admin's form, or the words to send back. */
 function pfKeyInput(raw: Record<string, unknown>): { key: string; secret: string; environment: "sandbox" | "live" } | { error: string } {
@@ -552,15 +609,8 @@ function pfKeyInput(raw: Record<string, unknown>): { key: string; secret: string
   return { key, secret, environment: raw.environment };
 }
 
-/** One token request per business every 10 seconds, so a double click does not send two. */
-const lastPfCheck = new Map<string, number>();
-function mayCheckPf(organizationId: string): boolean {
-  const now = Date.now();
-  const last = lastPfCheck.get(organizationId);
-  if (last !== undefined && now - last < PF_CHECK_EVERY_MS) return false;
-  lastPfCheck.set(organizationId, now);
-  return true;
-}
+/** One token request per business every 10 seconds. */
+const mayCheckPf = oneCheckEvery10s();
 
 /** What a check says, in the admin's words (null: the key works). */
 function pfCheckError(answer: PfAnswer): string | null {
@@ -614,7 +664,7 @@ workflowBoardRoute.put("/:slug/workflow-board/portal-settings/property-finder", 
   if (!organization) return answer;
   const input = pfKeyInput(await body(c));
   if ("error" in input) return c.json({ error: input.error }, 400);
-  if (!mayCheckPf(organization.id)) return c.json({ error: PF_CHECKING }, 409);
+  if (!mayCheckPf(organization.id)) return c.json({ error: CHECKING }, 409);
   const checkError = pfCheckError(await pfClient.checkKey(input));
   await savePfConnection(organization.id, { ...input, checkError });
   if (!checkError) syncPropertyFinderSoon();
@@ -626,7 +676,7 @@ workflowBoardRoute.post("/:slug/workflow-board/portal-settings/property-finder/c
   if (!organization) return answer;
   const creds = await pfCredentials(organization.id);
   if (!creds) return c.json({ error: PF_NO_KEY }, 404);
-  if (!mayCheckPf(organization.id)) return c.json({ error: PF_CHECKING }, 409);
+  if (!mayCheckPf(organization.id)) return c.json({ error: CHECKING }, 409);
   const checkError = pfCheckError(await pfClient.checkKey(creds));
   await recordPfCheck(organization.id, checkError);
   if (!checkError) syncPropertyFinderSoon();
@@ -647,4 +697,218 @@ workflowBoardRoute.patch("/:slug/workflow-board/agents/:employeeId/brn", async (
   if (brn === undefined) return c.json({ error: "Invalid brn." }, 400);
   const saved = await setEmployeeBrn(organization.id, c.req.param("employeeId"), brn);
   return saved ? c.json({ ok: true }) : c.json({ error: "Employee not found" }, 404);
+});
+
+// ---------------------------------------------------------------------------
+// Bayut (23 Nov 2026): the business's Bayut API token, each agent's Bayut user,
+// and the location search staff use on a card.
+//
+// THE TOKEN NEVER LEAVES THE SERVER: no answer, log line or error carries it.
+// The settings show its last four characters; Bayut's own words have it blanked
+// out (Bayut may echo the request — the client blanks it, and so does this file).
+//
+// A check is good only when Bayut names the agency the token belongs to (the
+// first without a parent, else the first): the sync must never send to an
+// account it cannot tell apart from the next. The token is saved whatever the
+// check says, with what it said, so it can be checked again. The Bayut users a
+// good check reads are kept in Redis a week, for the agent links. The location
+// search is cached a day for each business and search, and spends the same
+// per-business call budget as the sync.
+//
+// Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §4, §5, §6, §12, §14
+// ---------------------------------------------------------------------------
+
+const BAYUT_TOKEN_MISSING = "Enter the Bayut API token.";
+const BAYUT_NO_TOKEN = "No Bayut token is saved.";
+const BAYUT_NO_AGENCY = "Bayut answered without an agency";
+const BAYUT_UNKNOWN_USER = "Unknown Bayut user.";
+const BAYUT_SEARCH_SHORT = "Type at least 3 characters.";
+const BAYUT_CONNECT_FIRST = "Connect Bayut first.";
+const BAYUT_BUSY = "Bayut is busy — try again in a minute.";
+const BAYUT_TOKEN_REFUSED = "Bayut refused the token — an admin can check it in Portal settings";
+/** 1–500 printable characters, once trimmed. */
+const BAYUT_TOKEN_SHAPE = /^[\x20-\x7E]{1,500}$/;
+const BAYUT_USERS_FOR_S = 7 * 24 * 60 * 60;
+const BAYUT_LOCATIONS_FOR_S = 24 * 60 * 60;
+/** Bayut's own wait when a 429 does not say. */
+const BAYUT_RETRY_AFTER_S = 60;
+const BAYUT_DEEP_LEVELS = 4;
+
+const mayCheckBayut = oneCheckEvery10s();
+
+type BayutUser = { id: number; name: string; email: string | null };
+type BayutFailure = Extract<BayutAnswer<unknown>, { ok: false }>;
+type BayutCheck = { checkError: string | null; agencyId: number | null; agencyName: string | null };
+
+const bayutUsersKey = (organizationId: string) => `bayut-users:${organizationId}`;
+const blanked = (message: string, token: string) => message.split(token).join("•••");
+
+/** A value kept in Redis; nothing when it is not there or Redis cannot say. */
+async function keptForBayut(key: string): Promise<unknown> {
+  try {
+    const raw = await bayutRedis({}).get(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps a value in Redis for `seconds`; never in the way of the answer. */
+async function keepForBayut(key: string, value: unknown, seconds: number): Promise<void> {
+  try {
+    await bayutRedis({}).set(key, JSON.stringify(value), "EX", seconds);
+  } catch (err) {
+    console.error("[bayut] could not keep what Bayut said:", err instanceof Error ? err.message : err);
+  }
+}
+
+const isBayutUser = (u: unknown): u is BayutUser => {
+  const x = u as Partial<BayutUser> | null;
+  return typeof x === "object" && x !== null && typeof x.id === "number" && typeof x.name === "string" && (x.email === null || typeof x.email === "string");
+};
+
+/** The Bayut users the last good check read; none when unknown. */
+async function keptBayutUsers(organizationId: string): Promise<BayutUser[]> {
+  const list = await keptForBayut(bayutUsersKey(organizationId));
+  return Array.isArray(list) ? list.filter(isBayutUser) : [];
+}
+
+/** Keeps the users a check read, for a week; none forgets them. */
+const keepBayutUsers = (organizationId: string, users: BayutUser[]) =>
+  keepForBayut(bayutUsersKey(organizationId), users.map(({ id, name, email }) => ({ id, name, email })), BAYUT_USERS_FOR_S);
+
+/** What Portal settings shows of Bayut: never the token. */
+async function bayutSettings(organizationId: string) {
+  const view = await bayutConnectionView(organizationId);
+  const users = view.saved ? await keptBayutUsers(organizationId) : [];
+  const links = (await bayutAgentLinks(organizationId)).map(({ employeeId, bayutUserId }) => ({ employeeId, bayutUserId }));
+  return { ...view, users, links };
+}
+
+/** What a check says, in the admin's words. */
+function bayutCheckError(answer: BayutFailure, token: string): string {
+  const message = blanked(answer.message, token);
+  if (answer.kind === "token-refused" || answer.kind === "refused") return `Bayut refused the token: ${message}`;
+  return `Could not reach Bayut: ${message}`;
+}
+
+/** Asks Bayut which agency the token belongs to; good only when Bayut names one. */
+async function checkBayut(token: string): Promise<BayutCheck> {
+  const answer = await bayutClient.agencies(token);
+  if (!answer.ok) return { checkError: bayutCheckError(answer, token), agencyId: null, agencyName: null };
+  const agency = answer.data.find((a) => a.parentId === null) ?? answer.data[0];
+  if (!agency) return { checkError: BAYUT_NO_AGENCY, agencyId: null, agencyName: null };
+  return { checkError: null, agencyId: agency.id, agencyName: agency.name || null };
+}
+
+/**
+ * A check, then `record` (a save or a check again): a good check also reads the
+ * account's Bayut users — kept, and matched to staff by email after the record,
+ * which clears another account's links — and starts a cycle at once. A users
+ * read that fails fails nothing; another account whose users could not be read
+ * forgets the old account's. Whether the account changed.
+ */
+async function checkAndRecord(
+  organizationId: string,
+  token: string,
+  record: (check: BayutCheck) => Promise<{ accountChanged: boolean }>
+): Promise<boolean> {
+  const check = await checkBayut(token);
+  const users = check.agencyId === null ? null : await bayutClient.users(token, check.agencyId);
+  const { accountChanged } = await record(check);
+  if (users?.ok) {
+    await keepBayutUsers(organizationId, users.data);
+    await autoLinkBayutAgents(organizationId, users.data);
+  } else if (accountChanged) {
+    await keepBayutUsers(organizationId, []);
+  }
+  if (check.checkError === null) {
+    void queueBayutCycle().catch((err) => console.error("[bayut] could not queue a cycle:", err instanceof Error ? err.message : err));
+  }
+  return accountChanged;
+}
+
+workflowBoardRoute.put("/:slug/workflow-board/portal-settings/bayut", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  const given = (await body(c)).token;
+  const token = typeof given === "string" ? given.trim() : "";
+  if (!BAYUT_TOKEN_SHAPE.test(token)) return c.json({ error: BAYUT_TOKEN_MISSING }, 400);
+  if (!mayCheckBayut(organization.id)) return c.json({ error: CHECKING }, 409);
+  const accountChanged = await checkAndRecord(organization.id, token, (check) => saveBayutConnection(organization.id, { token, ...check }));
+  return c.json({ ...(await settingsView(organization.id)), accountChanged });
+});
+
+workflowBoardRoute.post("/:slug/workflow-board/portal-settings/bayut/check", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  const saved = await bayutToken(organization.id);
+  if (!saved) return c.json({ error: BAYUT_NO_TOKEN }, 404);
+  if (!mayCheckBayut(organization.id)) return c.json({ error: CHECKING }, 409);
+  const accountChanged = await checkAndRecord(organization.id, saved.token, (check) => recordBayutCheck(organization.id, check));
+  return c.json({ ...(await settingsView(organization.id)), accountChanged });
+});
+
+// Listings already on Bayut stay there until removed in Profolio.
+workflowBoardRoute.delete("/:slug/workflow-board/portal-settings/bayut", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  await clearBayutConnection(organization.id);
+  await keepBayutUsers(organization.id, []);
+  return c.json(await settingsView(organization.id));
+});
+
+// An agent's Bayut user, from those read at the last check; null unlinks them.
+workflowBoardRoute.put("/:slug/workflow-board/portal-settings/bayut/agents/:employeeId", async (c) => {
+  const { organization, answer } = await adminBusiness(c);
+  if (!organization) return answer;
+  const wanted = (await body(c)).bayutUserId;
+  let link: { bayutUserId: number; bayutUserName: string | null } | null = null;
+  if (wanted !== null) {
+    const user = (await keptBayutUsers(organization.id)).find((u) => u.id === wanted);
+    if (!user) return c.json({ error: BAYUT_UNKNOWN_USER }, 400);
+    link = { bayutUserId: user.id, bayutUserName: user.name || null };
+  }
+  const linked = await linkBayutAgent(organization.id, c.req.param("employeeId"), link);
+  return linked ? c.json(await settingsView(organization.id)) : c.json({ error: "Employee not found" }, 404);
+});
+
+/** What a failed search says. Bayut's 409 and 429 are "busy"; a 429 also pauses the business, as the sync does. */
+function bayutSearchError(answer: BayutFailure, token: string): { error: string; status: 429 | 502 } {
+  if (answer.kind === "rate-limited" || answer.kind === "busy") return { error: BAYUT_BUSY, status: 429 };
+  if (answer.kind === "token-refused") return { error: BAYUT_TOKEN_REFUSED, status: 502 };
+  if (answer.kind === "refused") return { error: `Bayut refused the search: ${blanked(answer.message, token)}`, status: 502 };
+  return { error: `Could not reach Bayut: ${blanked(answer.message, token)}`, status: 502 };
+}
+
+/**
+ * Staff search Bayut's locations for a card (3+ characters; `city` is the
+ * unit's, blank being Dubai). Only deep locations are offered — Bayut refuses a
+ * listing placed on an area or an emirate — named by their breadcrumb.
+ */
+workflowBoardRoute.get("/:slug/workflow-board/bayut/locations", async (c) => {
+  const w = await writer(c);
+  if (!w.organization) return w.answer;
+  const organizationId = w.organization.id;
+  const q = (c.req.query("q") ?? "").trim().slice(0, 100);
+  if (q.length < 3) return c.json({ error: BAYUT_SEARCH_SHORT }, 400);
+  const city = (c.req.query("city") ?? "").trim().slice(0, 100) || "Dubai";
+  const view = await bayutConnectionView(organizationId);
+  const saved = view.saved && view.checkedAt !== null && view.checkError === null ? await bayutToken(organizationId) : null;
+  if (!saved) return c.json({ error: BAYUT_CONNECT_FIRST }, 409);
+  const key = `bayut-locations:${organizationId}:${city.toLowerCase()}:${q.toLowerCase()}`;
+  const cached = await keptForBayut(key);
+  if (Array.isArray(cached)) return c.json(cached);
+  if ((await bayutPaused(organizationId)) || !(await takeBayutCalls(organizationId, 1))) return c.json({ error: BAYUT_BUSY }, 429);
+  const answer = await bayutClient.locations(saved.token, q, city);
+  if (!answer.ok) {
+    if (answer.kind === "rate-limited") await pauseBayut(organizationId, answer.retryAfter ?? BAYUT_RETRY_AFTER_S);
+    const failed = bayutSearchError(answer, saved.token);
+    return c.json({ error: failed.error }, failed.status);
+  }
+  const found = answer.data
+    .filter((l) => l.breadcrumb.length >= BAYUT_DEEP_LEVELS)
+    .map((l) => ({ id: l.id, name: l.breadcrumb.join(" › ").slice(0, 300) }));
+  await keepForBayut(key, found, BAYUT_LOCATIONS_FOR_S);
+  return c.json(found);
 });

@@ -53,7 +53,20 @@ mock.module("@nexus/db", {
     setUnitPocket: stub("setUnitPocket"),
     createPocketShare: stub("createPocketShare"),
     revokePocketShare: stub("revokePocketShare"),
+    // Bayut (23 Nov 2026), tested in the-bayut-door.test.mjs.
+    bayutConnectionView: async () => ({ saved: false, agencyName: null, tokenEnding: null, checkedAt: null, checkError: null }),
+    saveBayutConnection: stub("saveBayutConnection"),
+    recordBayutCheck: stub("recordBayutCheck"),
+    clearBayutConnection: stub("clearBayutConnection"),
+    bayutToken: stub("bayutToken"),
+    bayutAgentLinks: async () => [],
+    linkBayutAgent: stub("linkBayutAgent"),
+    autoLinkBayutAgents: stub("autoLinkBayutAgents"),
   },
+});
+// Bayut follows every unit write (the-bayut-door.test.mjs); no Redis here.
+mock.module(new URL("../src/queue/bayut-sync-queue.ts", import.meta.url).href, {
+  exports: { queueBayutUnit: async () => undefined, queueBayutCycle: async () => undefined },
 });
 
 const { workflowBoardRoute } = await import("../src/routes/workflow-board.ts");
@@ -234,6 +247,7 @@ test("an admin reads and sets the ORN and the feed address", async () => {
     lastReadBy: "BayutBot",
     agents: [{ id: "emp-aisha", name: "Aisha Khan", brn: "45678" }],
     propertyFinder: { saved: false, environment: null, keyEnding: null, checkedAt: null, checkError: null, listingCallsReady: false },
+    bayut: { saved: false, agencyName: null, tokenEnding: null, checkedAt: null, checkError: null, users: [], links: [] },
   });
   res = await json(OPERATOR, "PATCH", "/portal-settings", { orn: "12AB" });
   assert.deepEqual([res.status, (await res.json()).error], [400, "Invalid orn."]);

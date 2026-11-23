@@ -56,6 +56,15 @@ mock.module("@nexus/db", {
     setUnitPocket: stub("setUnitPocket"),
     createPocketShare: stub("createPocketShare"),
     revokePocketShare: stub("revokePocketShare"),
+    // Bayut (23 Nov 2026), tested in the-bayut-door.test.mjs.
+    bayutConnectionView: async () => ({ saved: false, agencyName: null, tokenEnding: null, checkedAt: null, checkError: null }),
+    saveBayutConnection: stub("saveBayutConnection"),
+    recordBayutCheck: stub("recordBayutCheck"),
+    clearBayutConnection: stub("clearBayutConnection"),
+    bayutToken: stub("bayutToken"),
+    bayutAgentLinks: async () => [],
+    linkBayutAgent: stub("linkBayutAgent"),
+    autoLinkBayutAgents: stub("autoLinkBayutAgents"),
   },
 });
 
@@ -82,6 +91,9 @@ mock.module(new URL("../src/queue/pf-sync-queue.ts", import.meta.url).href, {
       if (answers.queueDown) throw new Error("Redis is down");
     },
   },
+});
+mock.module(new URL("../src/queue/bayut-sync-queue.ts", import.meta.url).href, {
+  exports: { queueBayutUnit: async () => undefined, queueBayutCycle: async () => undefined },
 });
 
 // A check is allowed once per business every 10 seconds: each test starts 11 s later.
