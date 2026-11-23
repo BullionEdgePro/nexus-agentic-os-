@@ -68,7 +68,7 @@ const REACHED_ELSEWHERE = {
   "GET /api/organizations/:slug/export/messages.csv": "download helper on the customers page",
   "GET /api/organizations/:slug/contacts/:contactId/export.json": "download helper on the customers page",
   "GET /portal-feeds/:token/:file":
-    "read by Bayut's feed reader at the address an admin copies from Portal settings and sends Bayut — the portal fetches it, not our client",
+    "read by Bayut's feed reader at an address an admin sent Bayut — the portal fetches it, not our client (the feed is left in code, hidden from Portal settings since the Bayut connection, 23 Nov 2026)",
   "GET /portal-photos/:file": "fetched by the portals from the image addresses inside that feed",
   "GET /pocket-shares/:token": "read by the private listing page (app/pocket/[token]) on the server, for a buyer with no session",
   "GET /pocket-shares/:token/photos/:file": "the private listing page's <img> addresses",

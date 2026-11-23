@@ -1,7 +1,7 @@
 // Portal settings (7 Nov 2026): an admin's window from the board — the
-// agency's ORN, the Bayut/dubizzle feed address with Copy and New address and
-// when Bayut last read it, each agent's BRN, and where Property Finder stands.
-// Staff never see the button.
+// agency's ORN, each agent's BRN, and where Property Finder stands. Staff never
+// see the button. The feed address left the window with the Bayut connection
+// (23 Nov 2026); its Bayut and dubizzle section is in the-bayut-screens.test.mjs.
 // Spec: docs/superpowers/specs/2026-11-07-portal-listings-design.md §3, §6, §7, §8
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,7 +9,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { readFileSync } from "node:fs";
 import {
-  NEW_ADDRESS_WARNING,
   PF_DISCONNECT_WARNING,
   PfSection,
   PortalSettingsButton,
@@ -30,6 +29,7 @@ const SETTINGS = {
     { id: "e2", name: "Bilal Ahmed", brn: null },
   ],
   propertyFinder: { saved: false, environment: null, keyEnding: null, checkedAt: null, checkError: null, listingCallsReady: false },
+  bayut: { saved: false, agencyName: null, tokenEnding: null, checkedAt: null, checkError: null, users: [], links: [] },
 };
 const view = (over = {}) =>
   render(PortalSettingsView, {
@@ -37,12 +37,14 @@ const view = (over = {}) =>
     timezone: TZ,
     message: "",
     onSaveOrn: noop,
-    onNewAddress: noop,
-    onCopy: noop,
     onSaveBrn: noop,
     onSavePfKey: noop,
     onCheckPf: noop,
     onDisconnectPf: noop,
+    onSaveBayutToken: noop,
+    onCheckBayut: noop,
+    onDisconnectBayut: noop,
+    onLinkBayutAgent: noop,
   });
 
 test("only an admin sees the Portal settings button", () => {
@@ -50,29 +52,17 @@ test("only an admin sees the Portal settings button", () => {
   assert.match(render(PortalSettingsButton, { isAdmin: true, onOpen: noop }), />Portal settings</);
 });
 
-test("the window shows the ORN, the feed address and when Bayut read it", () => {
+test("the window shows the ORN, Bayut and dubizzle, and Property Finder — no feed address", () => {
   const html = view();
   assert.match(html, /<h2>Portal settings<\/h2>/);
   assert.match(html, /Agency ORN/);
   assert.match(html, /value="12345"/);
-  assert.match(html, /<h3>Bayut and dubizzle feed<\/h3>/);
-  assert.match(html, new RegExp(SETTINGS.feedUrl));
-  assert.match(html, />Copy</);
-  assert.match(html, />New address</);
-  assert.match(html, /Last read 10:42, 7 Nov/);
+  assert.match(html, /<h3>Bayut and dubizzle<\/h3>/);
+  // The feed is left in code, hidden from screens (Bayut connection, 23 Nov 2026).
+  assert.doesNotMatch(html, new RegExp(SETTINGS.feedUrl));
+  assert.doesNotMatch(html, />Copy<|>New address<|>Make the address<|Last read|Not read yet/);
   assert.match(html, /<h3>Property Finder<\/h3>/);
   assert.match(html, /A Decision Maker opens PF Expert → Developer Resources → API Credentials → New API Key\. Start with a Sandbox\./);
-});
-
-test("a feed nobody has read says so; no address yet offers to make one", () => {
-  assert.match(view({ lastReadAt: null, lastReadBy: null }), /Not read yet/);
-  const none = view({ feedUrl: null, lastReadAt: null, lastReadBy: null });
-  assert.match(none, />Make the address</);
-  assert.doesNotMatch(none, />Copy</);
-});
-
-test("a new address warns that the old one stops at once", () => {
-  assert.equal(NEW_ADDRESS_WARNING, "The old address stops working at once. Bayut must be given the new one.");
 });
 
 test("each agent's BRN can be filled in", () => {

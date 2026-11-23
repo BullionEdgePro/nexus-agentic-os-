@@ -77,16 +77,18 @@ test("look-only shows the photos and no way to change them", () => {
 test("what each portal is doing, in words", () => {
   const on = { ...OFF, bayut: { wanted: true }, property_finder: { wanted: true } };
   const unit = { ...READY, portals: on };
-  assert.equal(portalState(unit, "bayut", BOARD, TZ), "In the feed — Bayut last read it 10:42, 7 Nov");
+  // The feed's lines are gone (Bayut connection, 23 Nov 2026): every Bayut and
+  // dubizzle row is in the-bayut-screens.test.mjs.
+  assert.equal(portalState(unit, "bayut", BOARD, TZ), "Waiting for the Bayut connection");
   assert.equal(portalState(unit, "dubizzle", BOARD, TZ), "Off");
   assert.equal(portalState(unit, "property_finder", BOARD, TZ), "Waiting for the Property Finder connection");
-  assert.equal(portalState(unit, "bayut", { ...BOARD, portalFeed: { lastReadAt: null } }, TZ), "In the feed — Bayut has not read it yet");
   const dubizzle = { ...READY, portals: { ...OFF, dubizzle: { wanted: true } } };
-  assert.equal(portalState(dubizzle, "dubizzle", BOARD, TZ), "In the feed — Bayut last read it 10:42, 7 Nov");
+  assert.equal(portalState(dubizzle, "dubizzle", BOARD, TZ), "Waiting for the Bayut connection");
   const expired = { ...unit, permitExpiresOn: "2026-11-06" };
   assert.equal(portalState(expired, "bayut", BOARD, TZ), "Off the portals: a permit that has not expired");
   const html = render(PortalsSection, { unit, board: BOARD, canEdit: true, timezone: TZ, onSwitch: noop });
-  assert.match(html, /In the feed — Bayut last read it 10:42, 7 Nov/);
+  assert.doesNotMatch(html, /In the feed/);
+  assert.match(html, /Waiting for the Bayut connection/);
   assert.match(html, /Waiting for the Property Finder connection/);
 });
 

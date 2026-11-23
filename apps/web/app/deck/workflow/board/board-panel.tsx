@@ -16,6 +16,7 @@ import {
   readableError,
   removeUnitPhoto,
   revokePocketShare,
+  searchBayutLocations,
   setUnitPocket,
   setUnitPortalWanted,
   sharePocket,
@@ -384,6 +385,7 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
           onRevokePocketShare={(shareId) =>
             void fromWindow(current, () => revokePocketShare(slug, current.id, shareId), "Link revoked.")
           }
+          onSearchBayut={(q, city) => searchBayutLocations(slug, q, city)}
         />
       ) : null}
 
@@ -407,7 +409,7 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
           title="Portal settings"
           onClose={() => {
             setSettingsOpen(false);
-            void load(); // an ORN, a BRN or a new feed changes what the cards say
+            void load(); // an ORN, a BRN or the Bayut connection changes what the cards say
           }}
           origin={null}
         >

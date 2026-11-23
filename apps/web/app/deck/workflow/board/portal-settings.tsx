@@ -3,28 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import {
+  checkBayutToken,
   checkPfKey,
   disconnectPf,
   getPortalSettings,
-  makeNewPortalFeed,
+  linkBayutAgent,
   readableError,
+  removeBayutToken,
   saveAgentBrn,
+  saveBayutToken,
   savePfKey,
   savePortalOrn,
+  type BayutCheckAnswer,
+  type BayutSettings,
   type PfEnvironment,
   type PortalSettingsData,
 } from "@/lib/api";
 
 /**
  * Portal settings (7 Nov 2026): an admin's window from the board. The agency's
- * ORN and each agent's BRN go on every listing; the Bayut/dubizzle feed address
- * is what the agency sends Bayut to switch the feed on; Property Finder takes
- * the agency's API key and secret, checked and kept sealed (its connection,
+ * ORN and each agent's BRN go on every listing; Property Finder takes the
+ * agency's API key and secret, checked and kept sealed (its connection,
  * 7 Nov 2026). Staff never see the button.
  * Spec: docs/superpowers/specs/2026-11-07-portal-listings-design.md §3, §6, §7, §8
+ *
+ * Bayut and dubizzle (23 Nov 2026): the business's Bayut API token, checked
+ * and kept sealed like Property Finder's, and each agent's Bayut user, replace
+ * the feed address — the XML feed is left in code, hidden from screens.
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §4, §5, §11
  */
-
-export const NEW_ADDRESS_WARNING = "The old address stops working at once. Bayut must be given the new one.";
 
 /** "10:42, 7 Nov" in the business's own zone. */
 function when(iso: string, timezone: string): string {
@@ -178,28 +185,190 @@ export function PfSection({
   );
 }
 
+export const BAYUT_STEPS = "Sign in to Profolio → use the API token Bayut emailed you, or copy it from the Profolio dashboard. Start with the Sandbox token.";
+export const BAYUT_CREDITS_NOTE = "Publishing uses Bayut credits. Boosts (Hot, Signature) are bought in Profolio.";
+export const BAYUT_DISCONNECT_WARNING = "Nexus stops updating Bayut and dubizzle. Listings already on Bayut stay until removed in Profolio.";
+/** Said once the server has turned the switches off, when the token is another Bayut account's. */
+export const BAYUT_ACCOUNT_CHANGED =
+  "This token is for another Bayut account. Every Bayut and dubizzle switch will be turned off; tick the units again to publish them there.";
+
+/** What the window says after Save and check. */
+export function bayutSavedMessage(answer: BayutCheckAnswer): string {
+  if (answer.accountChanged) return BAYUT_ACCOUNT_CHANGED;
+  return answer.bayut.checkError ? "Token saved, but the check did not pass." : "Token saved — Bayut accepted it.";
+}
+
+/** What the window says after Check again: a token whose first check failed may turn out to be another account's. */
+export function bayutCheckedMessage(answer: BayutCheckAnswer): string {
+  if (answer.accountChanged) return BAYUT_ACCOUNT_CHANGED;
+  return answer.bayut.checkError ? "The check did not pass." : "Bayut accepts the token.";
+}
+
+/** A Bayut user's name in the choice; a link to one the last check did not read still shows. */
+function bayutUserLabel(user: BayutSettings["users"][number]): string {
+  const name = user.name.trim();
+  if (name && user.email) return `${name} (${user.email})`;
+  return name || user.email || `Bayut user ${user.id}`;
+}
+
+/**
+ * Bayut and dubizzle (23 Nov 2026). The admin pastes the API token from
+ * Profolio; Nexus checks it with Bayut and keeps it sealed — this section only
+ * ever shows its last four characters, the account the check read, or what
+ * Bayut said instead (never "Connected" beside a failed check, whose account
+ * name may be an earlier token's). The field is a password field, emptied as
+ * soon as the token is sent. Once saved, each staff member is linked to one of
+ * the Bayut users the last check read.
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §4, §5, §11
+ */
+export function BayutSection({
+  bayut,
+  agents,
+  timezone,
+  onSaveToken,
+  onCheck,
+  onDisconnect,
+  onLinkAgent,
+}: {
+  bayut: BayutSettings;
+  agents: PortalSettingsData["agents"];
+  timezone: string;
+  onSaveToken: (token: string) => void;
+  onCheck: () => void;
+  onDisconnect: () => void;
+  onLinkAgent: (employeeId: string, bayutUserId: number | null) => void;
+}) {
+  const [replacing, setReplacing] = useState(false);
+  const [token, setToken] = useState("");
+  const status =
+    bayut.checkError ??
+    `Connected to ${bayut.agencyName ?? "Bayut"} — token ending ${bayut.tokenEnding ?? "····"}${
+      bayut.checkedAt ? `, checked ${when(bayut.checkedAt, timezone)}` : ""
+    }`;
+  const linked = new Map(bayut.links.map((l) => [l.employeeId, l.bayutUserId]));
+  return (
+    <section className="wf-window-part">
+      <h3>Bayut and dubizzle</h3>
+      {bayut.saved ? (
+        <p className={bayut.checkError ? "wf-board-portal-warn" : "wf-board-status"}>{status}</p>
+      ) : (
+        <p className="wf-board-empty">{BAYUT_STEPS}</p>
+      )}
+      {!bayut.saved || replacing ? (
+        <form
+          className="wf-board-fields"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSaveToken(token);
+            setToken("");
+            setReplacing(false);
+          }}
+        >
+          <div className="wf-board-field">
+            <label htmlFor="bayut-token">API token</label>
+            <input
+              id="bayut-token"
+              type="password"
+              aria-label="API token"
+              // Not a login: as Property Finder's secret, so the browser never offers to save it as the Nexus password.
+              autoComplete="new-password"
+              spellCheck={false}
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+          </div>
+          <div className="wf-board-move-row">
+            <button type="submit" className="kit-pill">
+              Save and check
+            </button>
+            {replacing ? (
+              <button type="button" className="kit-pill quiet" onClick={() => setReplacing(false)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </form>
+      ) : (
+        <div className="wf-board-move-row">
+          <button type="button" className="kit-pill" onClick={onCheck}>
+            Check again
+          </button>
+          <button type="button" className="kit-pill quiet" onClick={() => setReplacing(true)}>
+            Replace token
+          </button>
+          <button
+            type="button"
+            className="kit-pill quiet"
+            onClick={() => {
+              if (window.confirm(BAYUT_DISCONNECT_WARNING)) onDisconnect();
+            }}
+          >
+            Disconnect
+          </button>
+        </div>
+      )}
+      {bayut.saved ? (
+        <div className="wf-board-fields">
+          <h4>Agents</h4>
+          {agents.length === 0 ? <p className="wf-board-empty">No staff yet.</p> : null}
+          {agents.map((a) => {
+            const userId = linked.get(a.id);
+            const known = userId === undefined || bayut.users.some((u) => u.id === userId);
+            return (
+              <div key={a.id} className="wf-board-field">
+                <label htmlFor={`bayut-user-${a.id}`} dir="auto">
+                  {a.name}
+                </label>
+                <select
+                  id={`bayut-user-${a.id}`}
+                  aria-label={`Bayut user for ${a.name}`}
+                  value={userId === undefined ? "" : String(userId)}
+                  onChange={(e) => onLinkAgent(a.id, e.target.value === "" ? null : Number(e.target.value))}
+                >
+                  <option value="">Not linked</option>
+                  {known ? null : <option value={String(userId)}>{`Bayut user ${userId}`}</option>}
+                  {bayut.users.map((u) => (
+                    <option key={u.id} value={String(u.id)}>
+                      {bayutUserLabel(u)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      <p className="wf-board-empty">{BAYUT_CREDITS_NOTE}</p>
+    </section>
+  );
+}
+
 export function PortalSettingsView({
   settings,
   timezone,
   message,
   onSaveOrn,
-  onNewAddress,
-  onCopy,
   onSaveBrn,
   onSavePfKey,
   onCheckPf,
   onDisconnectPf,
+  onSaveBayutToken,
+  onCheckBayut,
+  onDisconnectBayut,
+  onLinkBayutAgent,
 }: {
   settings: PortalSettingsData;
   timezone: string;
   message: string;
   onSaveOrn: (orn: string | null) => void;
-  onNewAddress: () => void;
-  onCopy: (url: string) => void;
   onSaveBrn: (employeeId: string, brn: string | null) => void;
   onSavePfKey: (input: PfKeyInput) => void;
   onCheckPf: () => void;
   onDisconnectPf: () => void;
+  onSaveBayutToken: (token: string) => void;
+  onCheckBayut: () => void;
+  onDisconnectBayut: () => void;
+  onLinkBayutAgent: (employeeId: string, bayutUserId: number | null) => void;
 }) {
   const [orn, setOrn] = useState(settings.orn ?? "");
   const [brns, setBrns] = useState<Record<string, string>>(() => Object.fromEntries(settings.agents.map((a) => [a.id, a.brn ?? ""])));
@@ -244,41 +413,15 @@ export function PortalSettingsView({
         <p className="wf-board-empty">Your RERA office registration number. Every listing carries it.</p>
       </section>
 
-      <section className="wf-window-part">
-        <h3>Bayut and dubizzle feed</h3>
-        {settings.feedUrl ? (
-          <>
-            <p className="wf-board-feed">
-              <code>{settings.feedUrl}</code>
-            </p>
-            <div className="wf-board-move-row">
-              <button type="button" className="kit-pill" onClick={() => onCopy(settings.feedUrl!)}>
-                Copy
-              </button>
-              <button
-                type="button"
-                className="kit-pill quiet"
-                onClick={() => {
-                  if (window.confirm(NEW_ADDRESS_WARNING)) onNewAddress();
-                }}
-              >
-                New address
-              </button>
-            </div>
-            <p className="wf-board-empty">
-              {settings.lastReadAt ? `Last read ${when(settings.lastReadAt, timezone)}${settings.lastReadBy ? ` by ${settings.lastReadBy}` : ""}` : "Not read yet"}
-            </p>
-            <p className="wf-board-empty">Send this address to Bayut (support@bayut.com) to switch the feed on. One feed serves Bayut and dubizzle.</p>
-          </>
-        ) : (
-          <>
-            <p className="wf-board-empty">No feed address yet.</p>
-            <button type="button" className="kit-pill" onClick={onNewAddress}>
-              Make the address
-            </button>
-          </>
-        )}
-      </section>
+      <BayutSection
+        bayut={settings.bayut}
+        agents={settings.agents}
+        timezone={timezone}
+        onSaveToken={onSaveBayutToken}
+        onCheck={onCheckBayut}
+        onDisconnect={onDisconnectBayut}
+        onLinkAgent={onLinkBayutAgent}
+      />
 
       <section className="wf-window-part wf-board-fields">
         <h3>Agents&apos; BRN</h3>
@@ -344,17 +487,6 @@ export function PortalSettings({ slug, timezone }: { slug: BusinessSlug; timezon
           .then((s) => show(s, orn ? "ORN saved." : "ORN cleared."))
           .catch((err) => setMessage(readableError(err)))
       }
-      onNewAddress={() =>
-        void makeNewPortalFeed(slug)
-          .then((s) => show(s, "A new feed address is ready. Send it to Bayut."))
-          .catch((err) => setMessage(readableError(err)))
-      }
-      onCopy={(url) =>
-        void navigator.clipboard
-          .writeText(url)
-          .then(() => setMessage("Feed address copied."))
-          .catch(() => setMessage("Copy it by hand: select the address above."))
-      }
       onSaveBrn={(employeeId, brn) =>
         void saveAgentBrn(slug, employeeId, brn)
           .then(() => getPortalSettings(slug))
@@ -377,6 +509,33 @@ export function PortalSettings({ slug, timezone }: { slug: BusinessSlug; timezon
           .then((s) => show(s, "Property Finder disconnected."))
           .catch((err) => setMessage(readableError(err)))
       }
+      onSaveBayutToken={(token) => {
+        setMessage("Checking the token with Bayut…");
+        void saveBayutToken(slug, token)
+          .then((answer) => show(settingsOf(answer), bayutSavedMessage(answer)))
+          .catch((err) => setMessage(readableError(err)));
+      }}
+      onCheckBayut={() => {
+        setMessage("Checking the token with Bayut…");
+        void checkBayutToken(slug)
+          .then((answer) => show(settingsOf(answer), bayutCheckedMessage(answer)))
+          .catch((err) => setMessage(readableError(err)));
+      }}
+      onDisconnectBayut={() =>
+        void removeBayutToken(slug)
+          .then((s) => show(s, "Bayut disconnected. Listings already on Bayut stay until removed in Profolio."))
+          .catch((err) => setMessage(readableError(err)))
+      }
+      onLinkBayutAgent={(employeeId, bayutUserId) =>
+        void linkBayutAgent(slug, employeeId, bayutUserId)
+          .then((s) => show(s, bayutUserId === null ? "Bayut link removed." : "Bayut user linked."))
+          .catch((err) => setMessage(readableError(err)))
+      }
     />
   );
+}
+
+/** The settings in a save's or a check's answer, without whether the account changed. */
+function settingsOf({ accountChanged: _accountChanged, ...settings }: BayutCheckAnswer): PortalSettingsData {
+  return settings;
 }

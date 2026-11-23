@@ -2652,6 +2652,9 @@ export type UnitInput = Partial<{
   parking: number | null;
   amenities: string[];
   availableFrom: string | null;
+  // The Bayut location (Bayut connection, 23 Nov 2026): both or neither.
+  bayutLocationId: number | null;
+  bayutLocationName: string | null;
 }>;
 export type DealInput = Partial<{
   budgetAed: number | null;
@@ -2740,8 +2743,30 @@ export type PortalSettingsData = {
     checkError: string | null;
     listingCallsReady: boolean;
   };
+  /** Bayut's token (23 Nov 2026): whether one is saved, its last four characters, the account the last check read — never the token. */
+  bayut: BayutSettings;
 };
 export type PfEnvironment = "sandbox" | "live";
+
+/**
+ * Bayut and dubizzle (23 Nov 2026): what Portal settings may know of the
+ * business's Bayut API token, the Bayut users the last good check read, and
+ * which staff member is linked to which of them. The token never comes back.
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §4, §5, §12
+ */
+export type BayutSettings = {
+  saved: boolean;
+  agencyName: string | null;
+  tokenEnding: string | null;
+  checkedAt: string | null;
+  checkError: string | null;
+  users: { id: number; name: string; email: string | null }[];
+  links: { employeeId: string; bayutUserId: number }[];
+};
+/** A save or a check: the settings, and whether the token is another account's (every Bayut and dubizzle switch was then turned off). */
+export type BayutCheckAnswer = PortalSettingsData & { accountChanged: boolean };
+/** A deep Bayut location, named by its breadcrumb ("UAE › Dubai › Business Bay › …"). */
+export type BayutLocation = { id: number; name: string };
 
 /** Where an <img> loads a unit's photo; it carries the session cookie itself. */
 export function unitPhotoUrl(slug: BusinessSlug, unitId: string, photoId: string): string {
@@ -2774,6 +2799,7 @@ export function savePortalOrn(slug: BusinessSlug, orn: string | null): Promise<P
   return request(`/api/organizations/${slug}/workflow-board/portal-settings`, { method: "PATCH", body: JSON.stringify({ orn }) });
 }
 
+/** The XML feed's address: left in code, hidden from screens since the Bayut connection (23 Nov 2026, spec §16.13). */
 export function makeNewPortalFeed(slug: BusinessSlug): Promise<PortalSettingsData> {
   return request(`/api/organizations/${slug}/workflow-board/portal-settings/feed`, { method: "POST" });
 }
@@ -2792,6 +2818,33 @@ export function checkPfKey(slug: BusinessSlug): Promise<PortalSettingsData> {
 
 export function disconnectPf(slug: BusinessSlug): Promise<PortalSettingsData> {
   return request(`/api/organizations/${slug}/workflow-board/portal-settings/property-finder`, { method: "DELETE" });
+}
+
+/** Saves the Bayut API token and checks it (admins); the answer never carries it back. */
+export function saveBayutToken(slug: BusinessSlug, token: string): Promise<BayutCheckAnswer> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/bayut`, { method: "PUT", body: JSON.stringify({ token }) });
+}
+
+export function checkBayutToken(slug: BusinessSlug): Promise<BayutCheckAnswer> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/bayut/check`, { method: "POST" });
+}
+
+/** Disconnect: the token and the agent links go; listings already on Bayut stay until removed in Profolio. */
+export function removeBayutToken(slug: BusinessSlug): Promise<PortalSettingsData> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/bayut`, { method: "DELETE" });
+}
+
+/** An agent's Bayut user, one of those the last check read; null unlinks them. */
+export function linkBayutAgent(slug: BusinessSlug, employeeId: string, bayutUserId: number | null): Promise<PortalSettingsData> {
+  return request(`/api/organizations/${slug}/workflow-board/portal-settings/bayut/agents/${encodeURIComponent(employeeId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ bayutUserId }),
+  });
+}
+
+/** Bayut's deep locations matching `q` (3+ characters) in the unit's city (blank is Dubai), for a card's Bayut location. */
+export function searchBayutLocations(slug: BusinessSlug, q: string, city: string): Promise<BayutLocation[]> {
+  return request(`/api/organizations/${slug}/workflow-board/bayut/locations?q=${encodeURIComponent(q)}&city=${encodeURIComponent(city)}`);
 }
 
 /** Pocket listings (7 Nov 2026): keep a unit off-market, or bring it back. */

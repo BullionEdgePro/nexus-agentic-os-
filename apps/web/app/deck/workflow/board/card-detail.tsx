@@ -16,7 +16,7 @@ import {
   type PortalTarget,
   type Workflow,
 } from "@nexus/shared";
-import type { DealInput, UnitInput } from "@/lib/api";
+import type { BayutLocation, DealInput, UnitInput } from "@/lib/api";
 import { CardWindow } from "../../../kit/card-window";
 import { MoveMenu } from "./move-menu";
 import { aed, cardTitle } from "./board-card";
@@ -24,6 +24,7 @@ import { MONEY_HELP, toAed } from "./add-card";
 import { PhotosSection } from "./photos-section";
 import { isPublished, PortalsSection } from "./portals-section";
 import { PocketSection } from "./pocket-section";
+import { BayutLocationPicker } from "./bayut-location";
 
 /**
  * A card's window on the workflow board (3 Nov 2026): what its step needs, its
@@ -33,6 +34,10 @@ import { PocketSection } from "./pocket-section";
  * Saving sends only what changed. Closing names the ways this card may close;
  * the others are shown, disabled, with the reason.
  * Spec: docs/superpowers/specs/2026-11-03-sfs-workflow-board-design.md §2, §3, §6
+ *
+ * A unit's Listing section also holds its Bayut location (23 Nov 2026), once
+ * Bayut is connected; a pick is saved at once, not with the Save button.
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §6
  */
 
 const PORTAL_NAME: Record<Portal, string> = {
@@ -199,6 +204,7 @@ export function CardDetail({
   onSwitchPocket = () => {},
   onSharePocket = () => {},
   onRevokePocketShare = () => {},
+  onSearchBayut = async () => [],
 }: {
   workflow: Workflow;
   card: BoardCard;
@@ -227,6 +233,8 @@ export function CardDetail({
   onSwitchPocket?: (on: boolean) => void;
   onSharePocket?: (dealId: string) => void;
   onRevokePocketShare?: (shareId: string) => void;
+  /** Bayut's deep locations for the Listing section's Bayut location (23 Nov 2026). */
+  onSearchBayut?: (q: string, city: string) => Promise<BayutLocation[]>;
 }) {
   const fields = fieldsFor(card);
   const [draft, setDraft] = useState<Draft>(() => draftOf(card));
@@ -419,6 +427,16 @@ export function CardDetail({
           <section key={group} className="wf-window-part wf-board-fields">
             <h3>{group}</h3>
             {fields.filter((f) => f.group === group).map(input)}
+            {group === "Listing" && card.kind === "unit" ? (
+              // Saved at once, through the unit's own save (Bayut connection, 23 Nov 2026, spec §6).
+              <BayutLocationPicker
+                unit={card}
+                board={board}
+                canEdit={canEdit}
+                onPick={(l) => onSave({ bayutLocationId: l.id, bayutLocationName: l.name })}
+                onSearch={onSearchBayut}
+              />
+            ) : null}
             {group === "Listing" ? (
               <fieldset className="wf-board-amenities">
                 <legend>Amenities</legend>
@@ -449,7 +467,7 @@ export function CardDetail({
               onMove={onMovePhoto}
               onRemove={onRemovePhoto}
             />
-            <PortalsSection unit={card} board={board} canEdit={canEdit} timezone={timezone} onSwitch={onSwitchPortal} />
+            <PortalsSection unit={card} board={board} canEdit={canEdit} timezone={timezone} now={now} onSwitch={onSwitchPortal} />
             <PocketSection
               unit={card}
               board={board}
