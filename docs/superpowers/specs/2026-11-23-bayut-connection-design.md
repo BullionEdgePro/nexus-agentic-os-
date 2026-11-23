@@ -245,12 +245,19 @@ characters, answers `{ok:true,data} | {ok:false, kind: "refused"|"unreachable"|"
   2. **creates, updates, publishes**: the rule for every other unit wanted on Bayut/dubizzle,
      oldest `synced_at` first;
   3. **states**: page through `GET /properties?agency_id=<id>&per_page=100` (one call per 100
-     listings) and, for units Nexus holds a ref for: `active`→`live`, `inactive`→`unpublished`
-     (with §9 rule 9), `draft` stays `pending` if a publish was asked, else `draft`; for
-     `pending` units only, `GET /properties/{id}` once a cycle for the permit status and
-     comment shown on the card;
+     listings) and, for every listing Nexus holds a ref for (whatever its state, so a listing
+     Bayut turns live after Nexus stopped expecting it is seen and taken off by rule 1):
+     `active`→`live`; `inactive`→`unpublished` (with §9 rule 9) — except that a `pending`
+     portal whose publish was asked less than 24 hours ago stays `pending` (Bayut's list can
+     still show the old state; only `live`→`inactive`, or `pending` older than 24 hours, means
+     Bayut took it off); `draft` stays (or becomes) `pending` if a publish was asked in the last
+     24 hours — including a `failed` publish whose answer was lost — else `draft`. A state read
+     from the list never clears Bayut's words about a refused change (see §11);
   4. **rejections**: `GET /properties/rejected?rejection_type=all` (page 1, limit 50) — matching
-     units become `refused` with `description_en`.
+     units become `refused` with `description_en` (one call, asked before step 5 so it is never
+     starved by the per-unit calls);
+  5. **permit comments**: for `pending` units only, `GET /properties/{id}` for the permit status
+     and comment shown on the card — at most 10 per business per cycle, oldest first.
 - `unit` job (`bayut-unit-<unitId>`, 30 s delay) after a switch, listing save, photo change,
   location change, or agent link change; a token save queues a cycle.
 - **Call budget:** at most 40 Bayut calls per business per minute (job and location searches
@@ -279,6 +286,7 @@ Card, Bayut and dubizzle lines (`portalState`), first match wins:
 | refused | Bayut refused it: <reason> |
 | pending, permit status known | Waiting for Bayut's permit check — <comment or status> |
 | pending | Sent to Bayut <date> — waiting for Bayut to publish it |
+| live, and Bayut refused the last change | Live on Bayut, but Bayut refused the last change: <reason> |
 | live | Live on Bayut — checked <time>. Edit it here, not in Profolio. |
 | failed | Could not reach Bayut — trying again |
 | waiting for the 24-hour guard | Published less than a day ago — Nexus tries again <time> |
