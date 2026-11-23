@@ -711,7 +711,9 @@ workflowBoardRoute.patch("/:slug/workflow-board/agents/:employeeId/brn", async (
 // first without a parent, else the first): the sync must never send to an
 // account it cannot tell apart from the next. The token is saved whatever the
 // check says, with what it said, so it can be checked again. The Bayut users a
-// good check reads are kept in Redis a week, for the agent links. The location
+// good check reads are kept in Redis a week, for the agent links; a read of
+// them waits at most 1.5 s, so Portal settings answers while Redis is down
+// (final review, 24 Nov 2026). The location
 // search is cached a day for each business and search, and spends the same
 // per-business call budget as the sync.
 //
@@ -743,13 +745,26 @@ type BayutCheck = { checkError: string | null; agencyId: number | null; agencyNa
 const bayutUsersKey = (organizationId: string) => `bayut-users:${organizationId}`;
 const blanked = (message: string, token: string) => message.split(token).join("•••");
 
-/** A value kept in Redis; nothing when it is not there or Redis cannot say. */
+/**
+ * How long a Bayut read from Redis may take (final review, 24 Nov 2026): the
+ * connection queues commands while Redis is down (maxRetriesPerRequest null),
+ * and Portal settings — the ORN, the BRNs, Property Finder — must still answer.
+ */
+const BAYUT_REDIS_READ_MS = 1_500;
+
+/** A value kept in Redis; nothing when it is not there, Redis cannot say, or does not say within 1.5 s. */
 async function keptForBayut(key: string): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), BAYUT_REDIS_READ_MS);
+  });
   try {
-    const raw = await bayutRedis({}).get(key);
+    const raw = await Promise.race([bayutRedis({}).get(key), late]);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

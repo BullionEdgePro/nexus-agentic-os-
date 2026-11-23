@@ -311,6 +311,9 @@ Portal settings, the **Bayut and dubizzle** section replaces the feed section:
 
 Admin-only, under `/api/organizations/:slug/workflow-board/portal-settings`:
 - `GET` adds `bayut: { saved, agencyName, tokenEnding, checkedAt, checkError, users: [{id,name,email}], links: [{employeeId, bayutUserId}] }` — never the token.
+  The users come from Redis, read with a 1.5-second wait: when Redis does not answer in time
+  (or fails), the settings answer without them, as if unknown, so the ORN, BRNs and Property
+  Finder settings never hang on a Redis outage (final review R1, 24 Nov 2026).
 - `PUT /bayut` `{ token }` → check, save, answer the settings (400 "Enter the Bayut API token.").
 - `POST /bayut/check`, `DELETE /bayut`, `PUT /bayut/agents/:employeeId` `{ bayutUserId | null }`.
 

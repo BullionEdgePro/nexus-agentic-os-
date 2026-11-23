@@ -238,6 +238,27 @@ test("the settings say where Bayut stands, with the users read and the links —
   assert.deepEqual((await (await json(ADMIN, "GET", "/portal-settings")).json()).bayut.users, []);
 });
 
+test("with Redis not answering, Portal settings still answers within the 1.5-second wait, without the Bayut users (final review R1)", { timeout: 5_000 }, async () => {
+  answers.bayutConnectionView = SAVED;
+  answers.bayutAgentLinks = [{ employeeId: "emp-aisha", bayutUserId: 7, bayutUserName: "Ralph Simeon" }];
+  keepUsers(USERS);
+  const get = redis.get;
+  redis.get = () => new Promise(() => {}); // Redis down: ioredis queues the command and never answers
+  try {
+    const started = performance.now();
+    const res = await json(ADMIN, "GET", "/portal-settings");
+    const took = performance.now() - started;
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.orn, null, "the ORN, the BRNs and Property Finder still come");
+    assert.equal(body.propertyFinder.saved, false);
+    assert.deepEqual(body.bayut, { ...SAVED, users: [], links: [{ employeeId: "emp-aisha", bayutUserId: 7 }] }, "as if the users were unknown");
+    assert.ok(took >= 1_400 && took < 3_000, `answered after ${Math.round(took)} ms`);
+  } finally {
+    redis.get = get;
+  }
+});
+
 test("a token is checked with Bayut, saved with its agency, its users linked — and never answered back", async () => {
   answers.bayutConnectionView = SAVED;
   const res = await json(ADMIN, "PUT", "/portal-settings/bayut", { token: `  ${TOKEN} ` });
