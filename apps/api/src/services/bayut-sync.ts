@@ -63,12 +63,13 @@ import { logger } from "../lib/logger.js";
  *
  * Bayut's state list is read for what it says about each portal: active is
  * live, whatever Nexus held; inactive ends a live portal, a pending one more
- * than a day old, or a draft; draft keeps a pending one pending and makes a
- * publish asked in the last day pending (a failed one whose answer was lost
- * included). Nexus's own record of a removal or a refusal, and a failed
- * publish more than a day old, are never overwritten by inactive or draft. A
- * state read back never clears Bayut's words on a portal that stays live or
- * pending.
+ * than a day old, or a draft; draft keeps a pending one pending and a failed
+ * one failed (Bayut shows every new listing as a draft, so a draft cannot tell
+ * a lost publish from one never received: the 24-hour guard retries it), and
+ * turns a live one into a draft. Nexus's own record of a removal or a refusal
+ * is never overwritten by inactive or draft. A state read back never clears
+ * Bayut's words on a portal that stays live or pending, and a take-down Bayut
+ * does not accept writes nothing at all: rule 1 tries it again.
  *
  * At most 40 Bayut calls a minute for each business (`bayut-budget.ts`): when
  * spent, that business stops for this run and the next one goes on. A 429
@@ -338,9 +339,8 @@ async function remove(run: Run, unit: Unit, portals: BayutPortal[]): Promise<boo
     for (const p of portals) await record(run, unit, p, { state: "unpublished", message: null });
     return true;
   }
-  if (a.kind === "busy") return false;
-  // Still on Bayut: the state is kept, with Bayut's words, so the next run tries again.
-  for (const p of portals) await record(run, unit, p, { state: unit.held.portals[p].state ?? "live", message: a.message });
+  // Still on Bayut (or busy): nothing is written, so the state stays and the next run tries again (rule 1).
+  // No words either: the card already says "Coming off Bayut", and they could be read as a refused change.
   return false;
 }
 
@@ -472,12 +472,10 @@ async function readState(run: Run, unit: Unit, p: BayutPortal, theirs: string, s
     return; // pending less than a day old, unpublished, refused, failed: left as it is
   }
   if (theirs === "draft") {
-    // Pending stays pending however long it waits (rule 7). A lost-answer publish Bayut is checking is waited for.
-    if (state === "failed" && askedToday) await record(run, unit, p, { state: "pending", message: null });
-    else if (state === "live" || state === "draft" || state === null) {
-      const next: BayutState = askedToday ? "pending" : "draft";
-      if (next !== state) await record(run, unit, p, { state: next, ...(next === "pending" ? words : { message: null }) });
-    }
+    // Pending stays pending (rule 7: never published again). Failed stays failed, with its words: Bayut shows
+    // every new listing as a draft, so a draft cannot tell a lost publish from one Bayut never received, and
+    // the 24-hour guard retries it once the day is up.
+    if (state === "live" || state === null) await record(run, unit, p, { state: "draft", ...words });
   }
   // Any other word from Bayut: left as it is.
 }

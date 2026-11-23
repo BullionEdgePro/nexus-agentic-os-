@@ -128,6 +128,7 @@ const N = id(22); // ready, wanted on Bayut, but no Bayut location
 const M = id(23); // ready; ticked from test 9
 const P = id(24); // ready; ticked from test 11
 const O = id(25); // OTHER's, ready; ticked from test 13
+const Q = id(26); // made ready and ticked in test 9b
 const SFS_TOKEN = "sfs-sandbox-token-0000-aaaa";
 const OTHER_TOKEN = "other-sandbox-token-0000-bbbb";
 const WHO = { [SFS_TOKEN]: "sfs", [OTHER_TOKEN]: "other" };
@@ -427,27 +428,28 @@ test("5. nothing is published twice within 24 hours across two cycles", db, asyn
     assert.equal(r.remote_message, "HTTP 503");
     assert.equal(r.published_at.toISOString(), clock.toISOString(), `${p}: the publish asked is remembered`);
   }
-  const lost = clock;
   delete script.publish;
-  // The dubizzle publish did reach Bayut, which is checking it (draft); the Bayut one did not (inactive).
+  // Bayut shows dubizzle as a draft: a draft cannot tell a lost publish from one Bayut never received.
   bayutSays("BY-21", { dubizzle: "draft" });
   hoursLater(2);
   calls.length = 0;
   await run();
   assert.deepEqual(writes(), [], "not published twice within 24 hours");
-  assert.equal((await row(R, "bayut")).remote_state, "failed");
-  const d = await row(R, "dubizzle");
-  assert.equal(d.remote_state, "pending", "a lost-answer publish Bayut is checking is waited for");
-  assert.equal(d.remote_message, null);
+  for (const p of ["bayut", "dubizzle"]) {
+    const r = await row(R, p);
+    assert.equal(r.remote_state, "failed", `${p}: inactive or draft, a failed publish stays failed`);
+    assert.equal(r.remote_message, "HTTP 503", `${p}: with its words`);
+  }
   hoursLater(23);
   calls.length = 0;
   await run();
-  assert.deepEqual(writes(), ["publish BY-21 bayut"], "a day later only the publish that never arrived is asked again");
-  const b = await row(R, "bayut");
-  assert.equal(b.remote_state, "pending", "Bayut still shows it inactive, but the publish is less than a day old");
-  assert.equal(b.wanted, true, 'not taken for "Bayut took it off"');
-  assert.equal(b.published_at.toISOString(), clock.toISOString());
-  assert.equal((await row(R, "dubizzle")).published_at.toISOString(), lost.toISOString(), "dubizzle was not asked again");
+  assert.deepEqual(writes(), ["publish BY-21 bayut,dubizzle"], "a day later it is asked again, once");
+  for (const p of ["bayut", "dubizzle"]) {
+    const r = await row(R, p);
+    assert.equal(r.remote_state, "pending", `${p}: Bayut still shows the old state, but the publish is less than a day old`);
+    assert.equal(r.wanted, true, `${p}: not taken for "Bayut took it off"`);
+    assert.equal(r.published_at.toISOString(), clock.toISOString());
+  }
   bayutSays("BY-21", { bayut: "active", dubizzle: "active" });
   calls.length = 0;
   await run();
@@ -573,6 +575,59 @@ test("9. the rejected list marks the unit refused, and it is not sent again unti
   assert.ok(!writes().some((w) => w.includes(ref)), JSON.stringify(writes()));
   assert.equal((await row(P, "bayut")).remote_state, "refused");
   rejectedList = [];
+});
+
+test("9b. a new listing whose first publish never reached Bayut stays failed under Bayut's draft, and is published once a day later (re-review)", db, async () => {
+  reset();
+  await ready(Q, SFS, AISHA, 5002, "Bay Square 4 · 1106");
+  await tick(SFS, Q, "bayut");
+  script.publish = () => ({ ok: false, kind: "unreachable", message: "HTTP 503" });
+  await run();
+  const ref = await refOf(Q);
+  assert.deepEqual(writes(), [`create ${Q}`, `publish ${ref} bayut`]);
+  assert.equal(store.get(ref).portals.bayut, "draft", "Bayut shows every new listing as a draft");
+  let q = await row(Q, "bayut");
+  assert.equal(q.remote_state, "failed", "the same cycle's draft does not make it pending");
+  assert.equal(q.remote_message, "HTTP 503", "and keeps its words");
+  delete script.publish;
+  hoursLater(1);
+  calls.length = 0;
+  await run();
+  assert.deepEqual(writes(), [], "not asked again within the day");
+  assert.equal((await row(Q, "bayut")).remote_state, "failed");
+  hoursLater(24);
+  calls.length = 0;
+  await run();
+  assert.deepEqual(writes(), [`publish ${ref} bayut`], "25 hours later it is published, once");
+  q = await row(Q, "bayut");
+  assert.equal(q.remote_state, "pending");
+  assert.equal(q.remote_message, null);
+  calls.length = 0;
+  await run();
+  assert.deepEqual(writes(), [], "and waited for");
+});
+
+test("9c. a take-down Bayut does not accept writes nothing, and is tried again (re-review)", db, async () => {
+  reset();
+  const ref = await refOf(Q);
+  bayutSays(ref, { bayut: "active" });
+  await run();
+  assert.equal((await row(Q, "bayut")).remote_state, "live");
+  await tick(SFS, Q, "bayut", false);
+  const before = await row(Q, "bayut");
+  script.remove = () => ({ ok: false, kind: "refused", message: "The listing is locked." });
+  calls.length = 0;
+  await runUnit(Q);
+  assert.deepEqual(made(), [`remove ${ref} bayut`]);
+  const q = await row(Q, "bayut");
+  assert.equal(q.remote_state, "live", "the state stays, so rule 1 tries again");
+  assert.equal(q.remote_message, before.remote_message, "no words: they could be read as a refused change");
+  assert.equal(q.synced_at.toISOString(), before.synced_at.toISOString(), "nothing is written");
+  delete script.remove;
+  calls.length = 0;
+  await run();
+  assert.ok(writes().includes(`remove ${ref} bayut`), JSON.stringify(writes()));
+  assert.equal((await row(Q, "bayut")).remote_state, "unpublished");
 });
 
 test("10. a 429 pauses that business only", db, async () => {
