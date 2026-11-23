@@ -14,6 +14,7 @@ import { SCHEDULED_MESSAGES_QUEUE } from "./scheduled-messages-queue.js";
 import { SOCIAL_INBOUND_QUEUE } from "./social-inbound-queue.js";
 import { HQ_CHECKS_QUEUE } from "./hq-checks-queue.js";
 import { PF_SYNC_QUEUE } from "./pf-sync-queue.js";
+import { BAYUT_SYNC_QUEUE } from "./bayut-sync-queue.js";
 
 /**
  * What is stuck or lost in the queues — the half of the background system that
@@ -68,6 +69,7 @@ const QUEUES = [
   SCHEDULED_MESSAGES_QUEUE,
   HQ_CHECKS_QUEUE,
   PF_SYNC_QUEUE,
+  BAYUT_SYNC_QUEUE,
 ] as const;
 
 /**

@@ -49,13 +49,14 @@ const PROCESSORS = {
   "scheduled-messages": read("apps", "api", "src", "queue", "scheduled-messages-processor.ts"),
   "hq-checks": read("apps", "api", "src", "queue", "hq-checks-processor.ts"),
   "pf-sync": read("apps", "api", "src", "queue", "pf-sync-processor.ts"),
+  "bayut-sync": read("apps", "api", "src", "queue", "bayut-sync-processor.ts"),
 };
 
 test("every scheduled job is watched, and the list is the one the worker schedules", () => {
   // A job added to the worker and forgotten here would be unwatched in exactly
   // the way this whole feature exists to prevent — so the assertion runs in
   // both directions rather than checking a hand-written count.
-  assert.equal(SCHEDULED_JOBS.length, 11);
+  assert.equal(SCHEDULED_JOBS.length, 12);
 
   for (const job of SCHEDULED_JOBS) {
     const source = PROCESSORS[job];
@@ -74,7 +75,7 @@ test("every scheduled job is watched, and the list is the one the worker schedul
   // And the worker really does schedule the same number of things, best-effort.
   // If that count changes, one of these two lists is now wrong.
   const scheduled = WORKER.match(/^schedule[A-Za-z]+\(\)$/gm) ?? [];
-  assert.equal(scheduled.length, 11, "the worker schedules a different number of jobs than are watched");
+  assert.equal(scheduled.length, 12, "the worker schedules a different number of jobs than are watched");
 });
 
 test("a job that started and never finished is a different fault from one that never started", () => {

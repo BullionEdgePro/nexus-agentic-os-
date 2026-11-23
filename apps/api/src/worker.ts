@@ -35,6 +35,8 @@ import { HQ_CHECKS_QUEUE, scheduleHqChecks } from "./queue/hq-checks-queue.js";
 import { processHqChecksJob } from "./queue/hq-checks-processor.js";
 import { PF_SYNC_QUEUE, schedulePfSync } from "./queue/pf-sync-queue.js";
 import { processPfSyncJob } from "./queue/pf-sync-processor.js";
+import { BAYUT_SYNC_QUEUE, scheduleBayutSync } from "./queue/bayut-sync-queue.js";
+import { processBayutSyncJob } from "./queue/bayut-sync-processor.js";
 import { SOCIAL_INBOUND_QUEUE, getSocialInboundQueue } from "./queue/social-inbound-queue.js";
 import { processSocialInboundJob } from "./queue/social-processor.js";
 import type { SocialInboundJob } from "@nexus/shared";
@@ -204,6 +206,19 @@ pfSyncWorker.on("failed", (job, err) => logger.error({ jobId: job?.id, err }, "P
 schedulePfSync()
   .then(() => logger.info("Property Finder sync scheduled (every 10m)"))
   .catch((err) => logger.warn({ err }, "Could not schedule the Property Finder sync"));
+
+// Bayut and dubizzle (23 Nov 2026): the ten-minute cycle and each unit's own
+// run. One at a time, so the cycle and a unit's job never work on the same
+// unit at once (two creates would make two listings on Bayut), and the call
+// budget is spent by one runner.
+const bayutSyncWorker = new Worker(BAYUT_SYNC_QUEUE, processBayutSyncJob, {
+  connection: getRedisConnection(),
+  concurrency: 1,
+});
+bayutSyncWorker.on("failed", (job, err) => logger.error({ jobId: job?.id, err }, "Bayut sync job failed"));
+scheduleBayutSync()
+  .then(() => logger.info("Bayut sync scheduled (every 10m)"))
+  .catch((err) => logger.warn({ err }, "Could not schedule the Bayut sync"));
 scheduleHqChecks()
   .then(() => logger.info("Business HQ checks scheduled (daily 06:00 Asia/Dubai)"))
   .catch((err) => logger.warn({ err }, "Could not schedule Business HQ checks"));
@@ -305,6 +320,7 @@ async function shutdown() {
     forecastWorker.close(),
     scheduledMessagesWorker.close(),
     pfSyncWorker.close(),
+    bayutSyncWorker.close(),
   ]);
   process.exit(0);
 }
