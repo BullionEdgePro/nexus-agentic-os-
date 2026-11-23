@@ -4,10 +4,20 @@ import type { BayutListingBody, BayutPortal } from "@nexus/shared";
  * Bayut's Profolio API (23 Nov 2026) — the only code that knows its addresses.
  *
  * Auth is one bearer token the agency copies from its Profolio dashboard. Every
- * call maps to a plain answer: 401/403 → token-refused, 409 → busy (Bayut is
- * still working on the same listing), 429 → rate-limited (with Bayut's own
+ * call maps to a plain answer: 401 → token-refused, 409 → busy (Bayut is still
+ * working on the same listing), 429 → rate-limited (with Bayut's own
  * retry_after, default 60 s), other 4xx → refused (Bayut's own words, with the
- * first error of each field), 5xx / network / 15 s timeout → unreachable.
+ * first error of each field; a 404 also says `notFound`), 5xx / network / 15 s
+ * timeout → unreachable.
+ *
+ * A 403 refuses the token only on the token check, `GET /agencies` (final
+ * review, 24 Nov 2026): anywhere else it is Bayut refusing that one call — too
+ * few credits, a user not allowed to post — and stopping the whole business for
+ * it would stop every take-down with it.
+ *
+ * Each rejection carries its date (`property_details.last_updated`, as the docs
+ * show it; else `updated_at`; none when neither reads as a date), so the sync can
+ * tell an old rejection from one of the listing Bayut is checking now.
  *
  * The token never comes back in a message: Bayut may echo the request, so every
  * message that can hold Bayut's text has the token replaced by "•••". Nothing in
@@ -23,6 +33,8 @@ type Failure = {
   kind: "refused" | "unreachable" | "token-refused" | "busy" | "rate-limited";
   message: string;
   retryAfter?: number;
+  /** A 404: what was asked for is not on Bayut. */
+  notFound?: true;
 };
 export type BayutAnswer<T> = { ok: true; data: T } | Failure;
 
@@ -46,7 +58,8 @@ export type BayutClient = {
     agencyId: number,
     page: number,
   ): Promise<BayutAnswer<{ items: { id: string; portals: Portals }[]; next: boolean }>>;
-  rejected(token: string): Promise<BayutAnswer<{ id: string; reason: string }[]>>;
+  /** `at`: when Bayut rejected it (ISO), null when Bayut gives no date. */
+  rejected(token: string): Promise<BayutAnswer<{ id: string; reason: string; at: string | null }[]>>;
 };
 
 const TIMEOUT_MS = 15_000;
@@ -103,8 +116,17 @@ function retryAfter(text: string): number {
 
 type Sent = { ok: true; json: unknown } | Failure;
 
+/** The token check: the one call whose 403 means the token itself is refused. */
+const TOKEN_CHECK = { forbiddenRefusesToken: true };
+
 export function makeBayutClient(fetchFn: typeof fetch = fetch): BayutClient {
-  async function send(token: string, method: string, path: string, body?: unknown): Promise<Sent> {
+  async function send(
+    token: string,
+    method: string,
+    path: string,
+    body?: unknown,
+    { forbiddenRefusesToken = false } = {},
+  ): Promise<Sent> {
     let res: Response;
     try {
       const headers: Record<string, string> = { authorization: `Bearer ${token}`, accept: "application/json" };
@@ -121,9 +143,10 @@ export function makeBayutClient(fetchFn: typeof fetch = fetch): BayutClient {
     if (res.ok) return { ok: true, json: await res.json().catch(() => null) };
     const text = await res.text().catch(() => "");
     const message = said(bodyMessage(text, res.status), token);
-    if (res.status === 401 || res.status === 403) return { ok: false, kind: "token-refused", message };
+    if (res.status === 401 || (res.status === 403 && forbiddenRefusesToken)) return { ok: false, kind: "token-refused", message };
     if (res.status === 409) return { ok: false, kind: "busy", message };
     if (res.status === 429) return { ok: false, kind: "rate-limited", message, retryAfter: retryAfter(text) };
+    if (res.status === 404) return { ok: false, kind: "refused", message, notFound: true };
     if (res.status >= 400 && res.status < 500) return { ok: false, kind: "refused", message };
     return { ok: false, kind: "unreachable", message: `HTTP ${res.status}` };
   }
@@ -136,8 +159,9 @@ export function makeBayutClient(fetchFn: typeof fetch = fetch): BayutClient {
     body: unknown,
     read: (json: Json) => T | null,
     unreadable = "Bayut answered in a form Nexus could not read",
+    options: { forbiddenRefusesToken?: boolean } = {},
   ): Promise<BayutAnswer<T>> {
-    const sent = await send(token, method, path, body);
+    const sent = await send(token, method, path, body, options);
     if (!sent.ok) return sent;
     const data = isObj(sent.json) ? read(sent.json) : null;
     if (data === null) return { ok: false, kind: "unreachable", message: unreadable };
@@ -152,6 +176,11 @@ export function makeBayutClient(fetchFn: typeof fetch = fetch): BayutClient {
   const items = (j: Json): Json[] =>
     Array.isArray(j.data) ? j.data.filter(isObj).map((i) => (isObj(i.data) ? i.data : i)) : [];
   const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  /** A date Bayut gives, as ISO; null when it is not one. */
+  const when = (v: unknown): string | null => {
+    const ms = typeof v === "string" ? Date.parse(v) : Number.NaN;
+    return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+  };
   const portalsOf = (v: unknown): Portals =>
     Array.isArray(v)
       ? v.filter(isObj).map((p) => ({ name: String(p.name ?? "").toLowerCase(), state: String(p.state ?? "").toLowerCase() }))
@@ -160,11 +189,18 @@ export function makeBayutClient(fetchFn: typeof fetch = fetch): BayutClient {
 
   return {
     agencies: (token) =>
-      ask(token, "GET", "/agencies?per_page=100", undefined, (j) =>
-        items(j).flatMap((a) => {
-          const id = num(a.id);
-          return id === null ? [] : [{ id, parentId: num(a.parent_id), name: str(a.name) ?? "" }];
-        }),
+      ask(
+        token,
+        "GET",
+        "/agencies?per_page=100",
+        undefined,
+        (j) =>
+          items(j).flatMap((a) => {
+            const id = num(a.id);
+            return id === null ? [] : [{ id, parentId: num(a.parent_id), name: str(a.name) ?? "" }];
+          }),
+        undefined,
+        TOKEN_CHECK,
       ),
     users: (token, agencyId) =>
       ask(token, "GET", `/users?agency_id=${agencyId}&per_page=100`, undefined, (j) =>
@@ -229,7 +265,7 @@ export function makeBayutClient(fetchFn: typeof fetch = fetch): BayutClient {
           const pd = isObj(r.property_details) ? r.property_details : null;
           if (!pd || pd.id === undefined || pd.id === null) return [];
           const vd = isObj(r.validation_details) ? r.validation_details : {};
-          return [{ id: String(pd.id), reason: str(vd.description_en) ?? str(vd.category) ?? "" }];
+          return [{ id: String(pd.id), reason: str(vd.description_en) ?? str(vd.category) ?? "", at: when(pd.last_updated) ?? when(pd.updated_at) }];
         }),
       ),
   };

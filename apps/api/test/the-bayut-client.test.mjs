@@ -146,26 +146,62 @@ test("agencies and amenities are read plainly", async () => {
   assert.deepEqual(am, { ok: true, data: [{ id: "9", title: { en: "Gym" } }] });
 });
 
-test("rejected maps each item to an id and a reason", async () => {
+test("rejected maps each item to an id, a reason and the rejection's date (none when Bayut gives none)", async () => {
   const f = fakeFetch(200, {
     data: [
-      { property_details: { id: 123 }, validation_details: { category: "Moderation", status_code: null, description_en: "Images are misleading" } },
+      {
+        property_details: { id: 123, last_updated: "2026-09-11T06:54:00Z" },
+        validation_details: { category: "Moderation", status_code: null, description_en: "Images are misleading" },
+      },
       { property_details: { id: 124 }, validation_details: { category: "Permit Validation", description_en: "" } },
+      { property_details: { id: 125, last_updated: "not a date", updated_at: "2026-09-12T08:00:00.000000Z" }, validation_details: {} },
+      { property_details: { id: 126, last_updated: "yesterday" }, validation_details: { description_en: "Duplicate" } },
     ],
   });
   const a = await client(f).rejected(TOKEN);
   assert.equal(f.calls[0].url, "https://api.bayut.com/v1/properties/rejected?rejection_type=all&page=1&limit=50");
   assert.deepEqual(a, {
     ok: true,
-    data: [{ id: "123", reason: "Images are misleading" }, { id: "124", reason: "Permit Validation" }],
+    data: [
+      { id: "123", reason: "Images are misleading", at: "2026-09-11T06:54:00.000Z" },
+      { id: "124", reason: "Permit Validation", at: null },
+      { id: "125", reason: "", at: "2026-09-12T08:00:00.000Z" },
+      { id: "126", reason: "Duplicate", at: null },
+    ],
   });
 });
 
-test("401 and 403 mean the token is refused", async () => {
+test("a 401 anywhere, or a 403 on the token check, means the token is refused (final review I6)", async () => {
   const a = await client(fakeFetch(401, "Unauthenticated")).agencies(TOKEN);
   assert.deepEqual(a, { ok: false, kind: "token-refused", message: "HTTP 401" });
   const b = await client(fakeFetch(403, { message: "The action is not authorized." })).agencies(TOKEN);
   assert.deepEqual(b, { ok: false, kind: "token-refused", message: "The action is not authorized." });
+  for (const call of [(c) => c.create(TOKEN, {}), (c) => c.publish(TOKEN, "1", ["bayut"]), (c) => c.remove(TOKEN, "1", ["bayut"]), (c) => c.list(TOKEN, 3, 1)]) {
+    assert.deepEqual(await call(client(fakeFetch(401, "Unauthenticated"))), { ok: false, kind: "token-refused", message: "HTTP 401" });
+  }
+});
+
+test("a 403 on any other call is that call's own refusal, with Bayut's words — never the token (final review I6)", async () => {
+  const words = { message: `Insufficient credits for ${TOKEN}.` };
+  for (const call of [
+    (c) => c.create(TOKEN, {}),
+    (c) => c.update(TOKEN, "1", {}),
+    (c) => c.publish(TOKEN, "1", ["bayut"]),
+    (c) => c.remove(TOKEN, "1", ["bayut"]),
+    (c) => c.show(TOKEN, "1"),
+    (c) => c.list(TOKEN, 3, 1),
+    (c) => c.rejected(TOKEN),
+    (c) => c.users(TOKEN, 3),
+    (c) => c.amenities(TOKEN),
+    (c) => c.locations(TOKEN, "Marina", "Dubai"),
+  ]) {
+    assert.deepEqual(await call(client(fakeFetch(403, words))), { ok: false, kind: "refused", message: "Insufficient credits for •••." });
+  }
+});
+
+test("a 404 says the listing is not there (final review M2)", async () => {
+  const a = await client(fakeFetch(404, { message: "Not Found" })).remove(TOKEN, "1", ["bayut"]);
+  assert.deepEqual(a, { ok: false, kind: "refused", message: "Not Found", notFound: true });
 });
 
 test("409 is busy", async () => {
@@ -198,8 +234,8 @@ test("422 with an array of string arrays (permit validate) appends the first str
 });
 
 test("other 4xx are refused; a non-JSON body falls back to the status", async () => {
-  const a = await client(fakeFetch(404, { message: "Not Found" })).remove(TOKEN, "1", ["bayut"]);
-  assert.deepEqual(a, { ok: false, kind: "refused", message: "Not Found" });
+  const a = await client(fakeFetch(422, { message: "Not valid" })).remove(TOKEN, "1", ["bayut"]);
+  assert.deepEqual(a, { ok: false, kind: "refused", message: "Not valid" });
   const b = await client(fakeFetch(400, "<html>")).show(TOKEN, "1");
   assert.deepEqual(b, { ok: false, kind: "refused", message: "HTTP 400" });
 });
