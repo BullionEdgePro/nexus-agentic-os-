@@ -250,9 +250,12 @@ characters, answers `{ok:true,data} | {ok:false, kind: "refused"|"unreachable"|"
      `active`→`live`; `inactive`→`unpublished` (with §9 rule 9) — except that a `pending`
      portal whose publish was asked less than 24 hours ago stays `pending` (Bayut's list can
      still show the old state; only `live`→`inactive`, or `pending` older than 24 hours, means
-     Bayut took it off); `draft` stays (or becomes) `pending` if a publish was asked in the last
-     24 hours — including a `failed` publish whose answer was lost — else `draft`. A state read
-     from the list never clears Bayut's words about a refused change (see §11);
+     Bayut took it off); `draft` keeps a `pending` portal `pending` (rule 7: it is never published
+     again), keeps a `failed` portal `failed` (Bayut shows every new listing as a draft, so a
+     draft cannot tell a lost publish from one Bayut never received; the 24-hour guard retries
+     it once a day), and otherwise records `draft`. A state read from the list never clears
+     Bayut's words about a refused change (see §11), and a failed take-down writes no words
+     (rule 1 retries it, and the card says "Coming off Bayut");
   4. **rejections**: `GET /properties/rejected?rejection_type=all` (page 1, limit 50) — matching
      units become `refused` with `description_en` (one call, asked before step 5 so it is never
      starved by the per-unit calls);
