@@ -166,7 +166,12 @@ A Bayut listing is posted by a Bayut user (`user_id`); the BRN lives on that use
 Everything not in the table is left out. **Amenity ids**: after each successful check the job
 reads `GET /amenities` once and keeps a map from Nexus keys to Bayut ids by matching titles
 (case-insensitive, ignoring punctuation) against a fixed list of Bayut titles per key in the
-same module; keys with no match are not sent. The map is stored in Redis per business.
+same module; keys with no match are not sent. The map is stored in Redis per business and
+read again once a day; the last good map is also kept, with no expiry, and a failed read falls
+back to it. When no map was ever read for the business, that run creates and updates nothing
+(removals and Bayut's lists still run): sending a listing without its amenities and then with
+them would send every live listing twice, and make a refused one look changed when nobody
+changed it (final review I4, 24 Nov 2026).
 
 The fingerprint (§9) is the SHA-256 of the canonical `toBayutListing` output.
 
@@ -235,11 +240,17 @@ Steps run in order; a failing step stops that unit's later steps for this run.
 `apps/api/src/queue/bayut-sync-queue.ts` + `bayut-sync-processor.ts`, BullMQ queue
 `bayut-sync`, worker concurrency 1; the service `apps/api/src/services/bayut-sync.ts`; the
 client `apps/api/src/lib/bayut.ts` (injectable fetch, 15 s timeout, messages trimmed to 300
-characters, answers `{ok:true,data} | {ok:false, kind: "refused"|"unreachable"|"token-refused"|"busy"|"rate-limited", message, retryAfter?}`).
+characters, answers `{ok:true,data} | {ok:false, kind: "refused"|"unreachable"|"token-refused"|"busy"|"rate-limited", message, retryAfter?, notFound?}`;
+`notFound` marks a 404; each rejection carries its date, `property_details.last_updated`).
 
 - `cycle` every 10 minutes (fixed job id; heartbeat `bayut-sync` in `SCHEDULED_JOBS`, stale
-  after 45 minutes). For each business with a checked token, in this order (compliance first,
-  so a spent call budget can never hold back a take-down):
+  after 45 minutes). First, **checked again**: a business whose last check could not reach
+  Bayut (check-failed, "Could not reach Bayut: …", not a refused token) and whose agency is
+  known is checked again with one `GET /agencies` (inside the call budget), recorded as Check
+  again records it (another account turns the switches off and forgets the old account's
+  users); if it passes, the business syncs in this cycle. A refused token is never checked
+  again automatically (final review I6). Then, for each business with a checked token, in this
+  order (compliance first, so a spent call budget can never hold back a take-down):
   1. **removals**: run the rule for every unit with a ref whose result is a `remove` (unticked,
      permit expired, card closed, agent left);
   2. **creates, updates, publishes**: the rule for every other unit wanted on Bayut/dubizzle,
@@ -255,10 +266,16 @@ characters, answers `{ok:true,data} | {ok:false, kind: "refused"|"unreachable"|"
      draft cannot tell a lost publish from one Bayut never received; the 24-hour guard retries
      it once a day), and otherwise records `draft`. A state read from the list never clears
      Bayut's words about a refused change (see §11), and a failed take-down writes no words
-     (rule 1 retries it, and the card says "Coming off Bayut");
+     (rule 1 retries it, and the card says "Coming off Bayut"). A page that cannot be read is
+     logged (business, page, Bayut's answer — never the token); what was read is used;
   4. **rejections**: `GET /properties/rejected?rejection_type=all` (page 1, limit 50) — matching
      units become `refused` with `description_en` (one call, asked before step 5 so it is never
-     starved by the per-unit calls);
+     starved by the per-unit calls). Page 1 keeps old rejections, so a rejection applies to a
+     portal only when its date (`property_details.last_updated`) is at or after that portal's
+     `published_at`, or the portal has no `published_at` at all; a rejection with no date is not
+     applied to a portal that has a `published_at` — a listing staff fixed and published again is
+     being checked anew. A `live` portal is never set refused from this list unless step 3 read
+     the whole state list in this same run (Bayut's `active` wins) (final review I1);
   5. **permit comments**: for `pending` units only, `GET /properties/{id}` for the permit status
      and comment shown on the card — at most 10 per business per cycle, oldest first.
 - `unit` job (`bayut-unit-<unitId>`, 30 s delay) after a switch, listing save, photo change,
@@ -268,9 +285,25 @@ characters, answers `{ok:true,data} | {ok:false, kind: "refused"|"unreachable"|"
   stops that business until `retry_after` has passed. A 409 is `busy`: left for the next run.
 - Answers written on each portal's `unit_portals` row: `remote_ref`, `remote_state`,
   `remote_message` (Bayut's words, or null), `remote_fingerprint` (after create/update
-  success, or on refusal), `published_at` (new, the last publish asked), `synced_at`. 401/403 →
-  `token-refused`: nothing written on units, `bayut_check_error` set, that business stops. One
-  unit's failure never stops the next. Enqueueing never fails an API request.
+  success, or on refusal), `published_at` (new, the last publish asked), `synced_at`.
+  `published_at` is written just before the publish call, so a worker stopped mid-call cannot
+  publish it again in the next cycle, and put back when Bayut answers that it did not take the
+  publish (refused, 409, 429, refused token); the answer then sets `pending`/`failed` as before
+  (final review M3).
+- **Only a 401 anywhere, or a 403 on `GET /agencies` (the token check), is `token-refused`**:
+  nothing written on units, `bayut_check_error` set (only while it is still the token saved),
+  that business stops. A 403 on a property call is that unit's own refusal: on a create, update
+  or publish the portal is `refused` with Bayut's words (trimmed, token blanked), as other
+  refusals; on a take-down nothing is written and rule 1 retries it (ruling 12). A 404 on a
+  take-down means the listing is not there: the portal is recorded `unpublished`, so it is not
+  asked for ever (final review I6, M2). One unit's failure never stops the next. Enqueueing
+  never fails an API request.
+- **A run writes only onto its own account:** every write a run makes on a Bayut or dubizzle
+  row lands only while `portal_settings.bayut_agency_id` is still the agency the run started
+  with — one condition in the same statement, so an account change in progress is waited for,
+  never raced. A write that lands nowhere means an admin replaced the token with another
+  account's mid-run: the run stops there, writing and sending nothing more, and the cleared rows
+  stay cleared (final review I5).
 - Photo addresses must answer while Bayut fetches them: they do, because a unit being sent is
   wanted and ready (the existing photo route rule).
 
@@ -348,7 +381,8 @@ but its section leaves Portal settings and the card stops saying "In the feed".
 Pure: `toBayutListing` (every row of §7, optional fields left out not null, studio −1, rent
 frequency), `bayutProblems`, `bayutNextSteps` (every rule of §9 including the 24-hour guard and
 a refusal kept until a change), card words for every row of §11. Client with injected fetch:
-headers, 401/403 → token-refused, 422 → refused with Bayut's message, 429 → rate-limited with
+headers, 401 (anywhere) and 403 on the token check → token-refused, 403 elsewhere → refused,
+404 → refused with `notFound`, rejection dates, 422 → refused with Bayut's message, 429 → rate-limited with
 `retry_after`, 409 → busy, 5xx/timeout → unreachable, the token never in a message. DB: sealing
 (no plain token stored), agent links, the clear on agency change. Processor with a fake client:
 create → publish, update on change, remove on untick / expired permit / closed card, rejected

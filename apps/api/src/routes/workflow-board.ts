@@ -60,6 +60,7 @@ import {
   type PortalTarget,
 } from "@nexus/shared";
 import { bayutClient, type BayutAnswer } from "../lib/bayut.js";
+import { bayutCheckOf, bayutUsersKey, type BayutCheck } from "../lib/bayut-check.js";
 import { bayutPaused, bayutRedis, pauseBayut, takeBayutCalls } from "../lib/bayut-budget.js";
 import { PHOTO_MAX_BYTES, PHOTO_TOO_LARGE, readBoardPhoto } from "../lib/board-photo-upload.js";
 import { jpegSize } from "../lib/jpeg-size.js";
@@ -722,7 +723,6 @@ workflowBoardRoute.patch("/:slug/workflow-board/agents/:employeeId/brn", async (
 
 const BAYUT_TOKEN_MISSING = "Enter the Bayut API token.";
 const BAYUT_NO_TOKEN = "No Bayut token is saved.";
-const BAYUT_NO_AGENCY = "Bayut answered without an agency";
 const BAYUT_UNKNOWN_USER = "Unknown Bayut user.";
 const BAYUT_SEARCH_SHORT = "Type at least 3 characters.";
 const BAYUT_CONNECT_FIRST = "Connect Bayut first.";
@@ -740,9 +740,7 @@ const mayCheckBayut = oneCheckEvery10s();
 
 type BayutUser = { id: number; name: string; email: string | null };
 type BayutFailure = Extract<BayutAnswer<unknown>, { ok: false }>;
-type BayutCheck = { checkError: string | null; agencyId: number | null; agencyName: string | null };
 
-const bayutUsersKey = (organizationId: string) => `bayut-users:${organizationId}`;
 const blanked = (message: string, token: string) => message.split(token).join("•••");
 
 /**
@@ -800,20 +798,9 @@ async function bayutSettings(organizationId: string) {
   return { ...view, users, links };
 }
 
-/** What a check says, in the admin's words. */
-function bayutCheckError(answer: BayutFailure, token: string): string {
-  const message = blanked(answer.message, token);
-  if (answer.kind === "token-refused" || answer.kind === "refused") return `Bayut refused the token: ${message}`;
-  return `Could not reach Bayut: ${message}`;
-}
-
-/** Asks Bayut which agency the token belongs to; good only when Bayut names one. */
+/** Asks Bayut which agency the token belongs to; good only when Bayut names one (the words: `bayut-check.ts`). */
 async function checkBayut(token: string): Promise<BayutCheck> {
-  const answer = await bayutClient.agencies(token);
-  if (!answer.ok) return { checkError: bayutCheckError(answer, token), agencyId: null, agencyName: null };
-  const agency = answer.data.find((a) => a.parentId === null) ?? answer.data[0];
-  if (!agency) return { checkError: BAYUT_NO_AGENCY, agencyId: null, agencyName: null };
-  return { checkError: null, agencyId: agency.id, agencyName: agency.name || null };
+  return bayutCheckOf(await bayutClient.agencies(token), token);
 }
 
 /**

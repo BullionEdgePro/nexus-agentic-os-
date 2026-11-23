@@ -27,16 +27,22 @@ function body(name) {
   return SRC.slice(start, next < 0 ? undefined : next);
 }
 
-test("everything runs as the business; only the list of connected businesses looks across them, once", () => {
+test("everything runs as the business; only the lists of businesses to sync and to check again look across them, once each", () => {
   for (const name of [
     "saveBayutConnection", "recordBayutCheck", "clearBayutConnection", "bayutConnectionView", "bayutToken",
     "bayutAgentLinks", "linkBayutAgent", "autoLinkBayutAgents", "bayutListings", "bayutUnitsToSync",
-    "bayutUnitsHeld", "recordBayutStep", "bayutTakenOff",
+    "bayutUnitsHeld", "recordBayutStep", "bayutTakenOff", "bayutPublishAsked",
   ]) {
     assert.match(body(name), /withTenant\(organizationId,/, name);
     assert.doesNotMatch(body(name), /withAllTenants/, name);
   }
   assert.equal(body("bayutBusinesses").match(/withAllTenants\(/g)?.length, 1);
+  assert.equal(body("bayutBusinessesToCheckAgain").match(/withAllTenants\(/g)?.length, 1);
+  // The run's writes are kept to its own account in the same statement (final review I5): no read, then write.
+  assert.match(SRC, /const ON_THE_RUNS_ACCOUNT = [^\n]*\n\s*`exists \(select 1 from portal_settings ps where ps\.organization_id = \$1 and ps\.bayut_agency_id = \$\{agency\} for share\)`/);
+  for (const name of ["recordBayutStep", "bayutTakenOff", "bayutPublishAsked"]) {
+    assert.match(body(name), /where[^`]*\$\{ON_THE_RUNS_ACCOUNT\("\$\d+::integer"\)\}/, name);
+  }
 });
 
 const OWNER_URL = process.env.AUDIT_TEST_OWNER_URL;
@@ -321,15 +327,15 @@ test("7. the units to sync: wanted on Bayut or dubizzle, or still held there —
 });
 
 test("8. an answer is written on one portal's row without touching its switch", db, async () => {
-  await lib.recordBayutStep(SFS, C, "dubizzle", { ref: "BY-3", state: "draft", message: null, fingerprint: "fc" });
+  await lib.recordBayutStep(SFS, 101, C, "dubizzle", { ref: "BY-3", state: "draft", message: null, fingerprint: "fc" });
   let r = await row(C, "dubizzle");
   assert.equal(r.wanted, true);
   assert.equal(r.remote_ref, "BY-3");
   assert.equal(r.remote_state, "draft");
   assert.equal(r.remote_fingerprint, "fc");
   assert.ok(r.synced_at);
-  await lib.recordBayutStep(SFS, C, "dubizzle", { state: "pending", message: null, publishedAt: new Date("2026-11-23T08:00:00Z") });
-  await lib.recordBayutStep(SFS, C, "dubizzle", { state: "refused", message: "Bayut did not accept the permit.", permitComment: "Permit number does not match the unit" });
+  await lib.recordBayutStep(SFS, 101, C, "dubizzle", { state: "pending", message: null, publishedAt: new Date("2026-11-23T08:00:00Z") });
+  await lib.recordBayutStep(SFS, 101, C, "dubizzle", { state: "refused", message: "Bayut did not accept the permit.", permitComment: "Permit number does not match the unit" });
   r = await row(C, "dubizzle");
   assert.equal(r.remote_ref, "BY-3", "no ref given keeps the ref");
   assert.equal(r.remote_fingerprint, "fc", "no fingerprint given keeps it");
@@ -337,23 +343,23 @@ test("8. an answer is written on one portal's row without touching its switch", 
   assert.equal(r.remote_state, "refused");
   assert.equal(r.remote_message, "Bayut did not accept the permit.");
   assert.equal(r.permit_comment, "Permit number does not match the unit");
-  await lib.recordBayutStep(SFS, C, "dubizzle", { state: "failed", message: "Bayut answered HTTP 503." });
+  await lib.recordBayutStep(SFS, 101, C, "dubizzle", { state: "failed", message: "Bayut answered HTTP 503." });
   assert.equal((await row(C, "dubizzle")).permit_comment, "Permit number does not match the unit", "no permit comment given keeps it");
   const card = (await board()).units.find((u) => u.id === C);
   assert.deepEqual({ ...card.portals.dubizzle, syncedAt: typeof card.portals.dubizzle.syncedAt }, {
     wanted: true, state: "failed", message: "Bayut answered HTTP 503.", syncedAt: "string",
     permitComment: "Permit number does not match the unit", publishedAt: "2026-11-23T08:00:00.000Z",
   });
-  await lib.recordBayutStep(SFS, C, "dubizzle", { state: "live", message: null, permitComment: null });
+  await lib.recordBayutStep(SFS, 101, C, "dubizzle", { state: "live", message: null, permitComment: null });
   assert.equal((await row(C, "dubizzle")).permit_comment, null, "a null permit comment clears it");
-  await lib.recordBayutStep(SFS, C, "bayut", { ref: "BY-3", state: "draft", message: null, fingerprint: "fc" });
+  await lib.recordBayutStep(SFS, 101, C, "bayut", { ref: "BY-3", state: "draft", message: null, fingerprint: "fc" });
   r = await row(C, "bayut");
   assert.equal(r.wanted, false, "a unit with no Bayut row gets one, switched off");
   assert.equal(r.remote_ref, "BY-3");
 });
 
 test("9. taken off by Bayut turns the switch off with the date; the other portal is untouched", db, async () => {
-  await lib.bayutTakenOff(SFS, A, "bayut", "21 Nov");
+  await lib.bayutTakenOff(SFS, 101, A, "bayut", "21 Nov");
   const r = await row(A, "bayut");
   assert.equal(r.wanted, false);
   assert.equal(r.changed_by_employee_id, null, "changed by the system");
@@ -423,7 +429,7 @@ test("11. another account turns every Bayut and dubizzle switch off and clears w
 
 test("12. a disconnect clears the token and the links, leaves the units, and remembers the account", db, async () => {
   await lib.linkBayutAgent(SFS, AISHA, { bayutUserId: 70, bayutUserName: "Aisha K" });
-  await lib.recordBayutStep(SFS, A, "dubizzle", { ref: "BY-21", state: "live", message: null, fingerprint: "g1" });
+  await lib.recordBayutStep(SFS, 202, A, "dubizzle", { ref: "BY-21", state: "live", message: null, fingerprint: "g1" });
   await lib.clearBayutConnection(SFS);
   const r = await raw(SFS);
   for (const c of ["bayut_token_sealed", "bayut_token_ending", "bayut_checked_at", "bayut_check_error"]) assert.equal(r[c], null, c);
@@ -494,19 +500,19 @@ test("14. the first agency a check records switches nothing off (task review)", 
 
 test("15. an answer given without a message keeps Bayut's words; a null message clears them (fix round)", db, async () => {
   const WORDS = "The given data was invalid. price: The price must be at least 1000.";
-  await lib.recordBayutStep(SFS, A, "bayut", { ref: "BY-60", state: "live", message: WORDS, fingerprint: "k1" });
+  await lib.recordBayutStep(SFS, 606, A, "bayut", { ref: "BY-60", state: "live", message: WORDS, fingerprint: "k1" });
   const first = await row(A, "bayut");
-  await lib.recordBayutStep(SFS, A, "bayut", { state: "live" });
+  await lib.recordBayutStep(SFS, 606, A, "bayut", { state: "live" });
   let r = await row(A, "bayut");
   assert.equal(r.remote_message, WORDS, "a state read back from Bayut keeps the words");
   assert.ok(r.synced_at >= first.synced_at);
-  await lib.recordBayutStep(SFS, A, "bayut", { state: "pending", permitComment: "Compliance status is Pending our team's review" });
+  await lib.recordBayutStep(SFS, 606, A, "bayut", { state: "pending", permitComment: "Compliance status is Pending our team's review" });
   r = await row(A, "bayut");
   assert.equal(r.remote_message, WORDS);
   assert.equal(r.remote_state, "pending");
-  await lib.recordBayutStep(SFS, A, "bayut", { state: "live", message: null });
+  await lib.recordBayutStep(SFS, 606, A, "bayut", { state: "live", message: null });
   assert.equal((await row(A, "bayut")).remote_message, null, "a null message clears them");
-  await lib.recordBayutStep(SFS, E, "dubizzle", { ref: "BY-61", state: "unpublished" });
+  await lib.recordBayutStep(SFS, 606, E, "dubizzle", { ref: "BY-61", state: "unpublished" });
   r = await row(E, "dubizzle");
   assert.equal(r.remote_message, null, "a new row without a message has none");
   assert.equal(r.wanted, false);
@@ -535,4 +541,52 @@ test("16. every unit holding a Bayut ref is listed, whatever its state or switch
   assert.equal(held.find((u) => u.unitId === E).remote.ref, "BY-61");
   assert.deepEqual((await lib.bayutUnitsHeld(OTHER)).map((u) => u.unitId), [O], "one business's units only");
   await owner.query(`update property_units set closed_at = null, closed_reason = null where id = $1`, [D]);
+});
+
+test("17. a run's write lands only while the business is still on the run's Bayut account (final review I5)", db, async () => {
+  assert.equal((await raw(SFS)).bayut_agency_id, 606);
+  const before = await row(A, "bayut");
+  // A run that started on account 101: everything it writes is dropped, and says so.
+  assert.equal(await lib.recordBayutStep(SFS, 101, A, "bayut", { ref: "BY-OLD", state: "pending", message: null, publishedAt: new Date("2026-11-24T08:00:00Z") }), false);
+  assert.deepEqual(await row(A, "bayut"), before, "the row is untouched");
+  assert.equal(await lib.recordBayutStep(SFS, 101, F, "bayut", { ref: "BY-OLD", state: "draft", message: null, fingerprint: "old" }), false);
+  assert.equal(await row(F, "bayut"), undefined, "no row is made for the old account's listing");
+  assert.equal(await lib.bayutTakenOff(SFS, 101, A, "dubizzle", "24 Nov"), false);
+  assert.equal(await lib.bayutPublishAsked(SFS, 101, A, "bayut", new Date("2026-11-24T08:00:00Z")), false);
+  assert.deepEqual(await row(A, "bayut"), before);
+  // The account held: written.
+  assert.equal(await lib.recordBayutStep(SFS, 606, A, "bayut", { state: "live" }), true);
+  assert.equal((await row(A, "bayut")).remote_state, "live");
+});
+
+test("18. the time a publish is asked is written on its own, and can be put back (final review M3)", db, async () => {
+  const asked = new Date("2026-11-24T09:00:00Z");
+  const before = await row(A, "bayut");
+  assert.equal(await lib.bayutPublishAsked(SFS, 606, A, "bayut", asked), true);
+  let r = await row(A, "bayut");
+  assert.equal(r.published_at.toISOString(), asked.toISOString());
+  assert.equal(r.remote_state, before.remote_state, "the state is left as it is");
+  assert.equal(r.remote_message, before.remote_message);
+  assert.equal(r.synced_at.toISOString(), before.synced_at.toISOString(), "not an answer from Bayut");
+  assert.equal(await lib.bayutPublishAsked(SFS, 606, A, "bayut", null), true);
+  r = await row(A, "bayut");
+  assert.equal(r.published_at, null, "put back as it was");
+});
+
+test("19. the businesses to check again: Bayut could not be reached, the account is known, the business active (final review I6)", db, async () => {
+  const ids = async () => (await lib.bayutBusinessesToCheckAgain()).map((b) => b.organizationId);
+  assert.deepEqual((await ids()).filter((x) => [SFS, OTHER, ASLEEP].includes(x)), [], "every check passed");
+  await lib.recordBayutCheck(SFS, failed("Could not reach Bayut: HTTP 503"));
+  await lib.recordBayutCheck(ASLEEP, failed("Could not reach Bayut: HTTP 503"));
+  assert.deepEqual((await ids()).filter((x) => [SFS, OTHER, ASLEEP].includes(x)), [SFS], "an inactive business is not checked");
+  const sfs = (await lib.bayutBusinessesToCheckAgain()).find((b) => b.organizationId === SFS);
+  assert.deepEqual(sfs, { organizationId: SFS, timezone: TZ });
+  await lib.recordBayutCheck(SFS, failed("Bayut refused the token: Unauthenticated."));
+  assert.ok(!(await ids()).includes(SFS), "a refused token is never checked again by itself");
+  await lib.recordBayutCheck(SFS, failed("Could not reach Bayut: HTTP 503"));
+  await owner.query(`update portal_settings set bayut_agency_id = null where organization_id = $1`, [SFS]);
+  assert.ok(!(await ids()).includes(SFS), "nor one whose account was never read");
+  await owner.query(`update portal_settings set bayut_agency_id = 606 where organization_id = $1`, [SFS]);
+  await lib.recordBayutCheck(SFS, { checkError: null, agencyId: 606, agencyName: "SFS Real Estate" });
+  assert.ok(!(await ids()).includes(SFS));
 });

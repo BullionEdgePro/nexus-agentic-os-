@@ -558,9 +558,10 @@ test("9. the rejected list marks the unit refused, and it is not sent again unti
   const ref = await refOf(P);
   assert.equal((await row(R, "dubizzle")).remote_state, "live");
   rejectedList = [
-    { id: ref, reason: "Images are misleading" },
-    { id: "BY-999", reason: "A listing Nexus did not make" },
-    { id: "BY-21", reason: "An old rejection of a listing Bayut shows active" },
+    // Dated after P's publish: Bayut's answer to the listing it is checking now.
+    { id: ref, reason: "Images are misleading", at: clock.toISOString() },
+    { id: "BY-999", reason: "A listing Nexus did not make", at: null },
+    { id: "BY-21", reason: "An old rejection of a listing Bayut shows active", at: clock.toISOString() },
   ];
   const mBefore = await row(M, "bayut");
   await run();

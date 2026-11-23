@@ -198,6 +198,27 @@ export async function bayutBusinesses(): Promise<{ organizationId: string; timez
   });
 }
 
+/**
+ * Active businesses whose last check could not reach Bayut — the API's own
+ * words, "Could not reach Bayut: …", as the board's check-failed — and whose
+ * Bayut agency is known (final review, 24 Nov 2026): the sync checks each again
+ * at the start of a cycle, so a Bayut outage during Check again does not stop
+ * every take-down until an admin checks once more. A refused token is never
+ * checked again by itself.
+ */
+export async function bayutBusinessesToCheckAgain(): Promise<{ organizationId: string; timezone: string }[]> {
+  return withAllTenants("bayut sync: which businesses' tokens to check again", async () => {
+    const { rows } = await getPool().query<{ organization_id: string; timezone: string }>(
+      `select ps.organization_id, o.timezone
+         from portal_settings ps join organizations o on o.id = ps.organization_id
+        where o.is_active and ps.bayut_token_sealed is not null and ps.bayut_agency_id is not null
+          and ps.bayut_check_error like 'Could not reach Bayut%'
+        order by ps.organization_id`
+    );
+    return rows.map((r) => ({ organizationId: String(r.organization_id), timezone: r.timezone }));
+  });
+}
+
 /** Each linked agent's Bayut user. */
 export async function bayutAgentLinks(organizationId: string): Promise<BayutAgentLink[]> {
   return withTenant(organizationId, async () => {
@@ -372,30 +393,47 @@ export async function bayutUnitsHeld(
 }
 
 /**
- * Bayut's answer for one portal of one unit. The switch is never touched; a
- * ref, fingerprint, publish time, permit comment or message not given keeps
- * the one held (a null permit comment or message clears it) — so a state read
- * back from Bayut keeps Bayut's words about a refused change; a unit with no
- * row for that portal gets one, switched off.
+ * A sync run's writes are its own Bayut account's (final review, 24 Nov 2026).
+ * A run holds the token it started with; if an admin replaces it with another
+ * account's meanwhile, `recordAgency` clears every Bayut and dubizzle row, and
+ * the run must not write the old account's ids and states back onto them (the
+ * next cycle would ask the new account to take down an id it never made). So
+ * each write below lands only where `portal_settings.bayut_agency_id` still is
+ * the run's — one condition in the same statement, its row locked FOR SHARE:
+ * an account change in progress is waited for and then seen, never raced. A
+ * write that lands nowhere says false: the run is stale.
+ */
+const ON_THE_RUNS_ACCOUNT = (agency: string) =>
+  `exists (select 1 from portal_settings ps where ps.organization_id = $1 and ps.bayut_agency_id = ${agency} for share)`;
+
+/**
+ * Bayut's answer for one portal of one unit, from a run on account `agencyId`.
+ * The switch is never touched; a ref, fingerprint, publish time, permit comment
+ * or message not given keeps the one held (a null permit comment or message
+ * clears it) — so a state read back from Bayut keeps Bayut's words about a
+ * refused change; a unit with no row for that portal gets one, switched off.
+ * False, writing nothing, when the business is no longer on that account.
  */
 export async function recordBayutStep(
   organizationId: string,
+  agencyId: number,
   unitId: string,
   portal: BayutPortal,
   r: { ref?: string; state: BayutState; message?: string | null; fingerprint?: string; publishedAt?: Date; permitComment?: string | null }
-): Promise<void> {
+): Promise<boolean> {
   return withTenant(organizationId, async () => {
-    await getPool().query(
+    const { rowCount } = await getPool().query(
       `insert into unit_portals (organization_id, unit_id, portal, wanted, remote_ref, remote_state, remote_message, remote_fingerprint,
                                  published_at, permit_comment, synced_at)
-       values ($1, $2, $3, false, $4, $5, $6, $7, $8, left($9, 300), now())
+       select $1::uuid, $2::uuid, $3::text, false, $4::text, $5::text, $6::text, $7::text, $8::timestamptz, left($9::text, 300), now()
+        where ${ON_THE_RUNS_ACCOUNT("$12::integer")}
        on conflict (unit_id, portal) do update
          set remote_ref = coalesce(excluded.remote_ref, unit_portals.remote_ref),
              remote_state = excluded.remote_state,
-             remote_message = case when $11 then excluded.remote_message else unit_portals.remote_message end,
+             remote_message = case when $11::boolean then excluded.remote_message else unit_portals.remote_message end,
              remote_fingerprint = coalesce(excluded.remote_fingerprint, unit_portals.remote_fingerprint),
              published_at = coalesce(excluded.published_at, unit_portals.published_at),
-             permit_comment = case when $10 then excluded.permit_comment else unit_portals.permit_comment end,
+             permit_comment = case when $10::boolean then excluded.permit_comment else unit_portals.permit_comment end,
              synced_at = now()`,
       [
         organizationId,
@@ -409,8 +447,36 @@ export async function recordBayutStep(
         r.permitComment ?? null,
         r.permitComment !== undefined,
         r.message !== undefined,
+        agencyId,
       ]
     );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/**
+ * The time a publish was asked, written on its own just before the publish is
+ * sent (final review, 24 Nov 2026): a worker stopped in the middle of the call
+ * has already counted it, so the next run cannot publish it again (the 24-hour
+ * guard, and a draft with a publish behind it is waited for). Null, or the time
+ * held before, puts it back when Bayut answers that it did not take the
+ * publish. Not an answer from Bayut: the state and synced_at are left alone.
+ * False when the business is no longer on the run's account.
+ */
+export async function bayutPublishAsked(
+  organizationId: string,
+  agencyId: number,
+  unitId: string,
+  portal: BayutPortal,
+  at: Date | null
+): Promise<boolean> {
+  return withTenant(organizationId, async () => {
+    const { rowCount } = await getPool().query(
+      `update unit_portals set published_at = $4::timestamptz
+        where organization_id = $1 and unit_id = $2 and portal = $3 and ${ON_THE_RUNS_ACCOUNT("$5::integer")}`,
+      [organizationId, unitId, portal, at, agencyId]
+    );
+    return (rowCount ?? 0) > 0;
   });
 }
 
@@ -419,16 +485,18 @@ export async function recordBayutStep(
  * (it expired, Bayut removed it, or someone did in Profolio): the switch goes
  * off, changed by the system, with the date. Nexus never republishes on its
  * own — staff tick it again to spend the credits. `on` is the business's date,
- * as the caller shows it (e.g. "21 Nov").
+ * as the caller shows it (e.g. "21 Nov"). False when the business is no longer
+ * on the run's account `agencyId`.
  */
-export async function bayutTakenOff(organizationId: string, unitId: string, portal: BayutPortal, on: string): Promise<void> {
+export async function bayutTakenOff(organizationId: string, agencyId: number, unitId: string, portal: BayutPortal, on: string): Promise<boolean> {
   return withTenant(organizationId, async () => {
-    await getPool().query(
+    const { rowCount } = await getPool().query(
       `update unit_portals
           set wanted = false, changed_by_employee_id = null, changed_by_admin_id = null, changed_at = now(),
               remote_state = 'unpublished', remote_message = $4, synced_at = now()
-        where organization_id = $1 and unit_id = $2 and portal = $3`,
-      [organizationId, unitId, portal, `Bayut took it off on ${on}`]
+        where organization_id = $1 and unit_id = $2 and portal = $3 and ${ON_THE_RUNS_ACCOUNT("$5::integer")}`,
+      [organizationId, unitId, portal, `Bayut took it off on ${on}`, agencyId]
     );
+    return (rowCount ?? 0) > 0;
   });
 }

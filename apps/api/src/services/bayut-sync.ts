@@ -14,7 +14,9 @@ import {
 } from "@nexus/shared";
 import {
   bayutBusinesses,
+  bayutBusinessesToCheckAgain,
   bayutListings,
+  bayutPublishAsked,
   bayutTakenOff,
   bayutToken,
   bayutUnitsHeld,
@@ -24,6 +26,7 @@ import {
 } from "@nexus/db";
 import type { BayutAnswer, BayutClient } from "../lib/bayut.js";
 import { bayutBudget, bayutRedis, type BayutRedis, type Budget } from "../lib/bayut-budget.js";
+import { bayutCheckOf, bayutUsersKey } from "../lib/bayut-check.js";
 import { apiBaseUrl } from "../lib/public-urls.js";
 import { logger } from "../lib/logger.js";
 
@@ -58,8 +61,24 @@ import { logger } from "../lib/logger.js";
  *   off with the date (rule 9) — but only a live one, or a pending one whose
  *   publish is more than a day old: Bayut's list can still show the old state
  *   for a while after a publish;
+ * - the time a publish is asked is written just before it is sent, so a worker
+ *   stopped in the middle of the call never publishes it again; it is put back
+ *   when Bayut answers that it did not take it (refused, busy, 429, token);
  * - the rejected list never marks refused a portal the state list showed
- *   active in this run: Bayut's word that it is live wins.
+ *   active in this run: Bayut's word that it is live wins. Nor a live one
+ *   unless this run read Bayut's whole state list, nor with a rejection dated
+ *   before the portal's last publish: Bayut's first page keeps old rejections,
+ *   and a listing staff fixed and published again is being checked anew. An
+ *   undated rejection applies only to a portal never published;
+ * - with no amenity map ever read for the business, no listing is created or
+ *   updated: sent without amenities, then with them, each live listing would
+ *   be sent twice, and a refused one would look changed when nobody changed
+ *   it. A failed read falls back to the last good map, kept with no expiry.
+ *
+ * Every write lands only while the business is still on the run's Bayut
+ * account (`recordBayutStep`): a token replaced by another account's mid-run
+ * clears the rows, and the run stops at its first write that lands nowhere,
+ * so it neither writes the old account's ids back nor sends anything more.
  *
  * Bayut's state list is read for what it says about each portal: active is
  * live, whatever Nexus held; inactive ends a live portal, a pending one more
@@ -74,18 +93,24 @@ import { logger } from "../lib/logger.js";
  * At most 40 Bayut calls a minute for each business (`bayut-budget.ts`): when
  * spent, that business stops for this run and the next one goes on. A 429
  * pauses that business for Bayut's retry_after; a 409 leaves the unit for the
- * next run, writing nothing; a refused token is recorded on the business's
- * settings and stops it. One unit's failure never stops the next, and one
- * business's never stops another's. The token never appears in a log line.
+ * next run, writing nothing; a refused token (a 401, `bayut.ts`) is recorded on
+ * the business's settings, if it is still the token saved, and stops it. A 404
+ * on a take-down means the listing is not there: it is recorded taken off. One
+ * unit's failure never stops the next, and one business's never stops
+ * another's. The token never appears in a log line.
  *
- * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §1, §9, §10, §11
+ * A business whose last check could not reach Bayut, with a known account, is
+ * checked again at the start of each cycle — one `GET /agencies` — and synced
+ * in that cycle if it passes; a refused token never is (final review I6).
+ *
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §1, §7, §9, §10, §11
  */
 
 type Options = {
   client: BayutClient;
   budget?: Budget;
   now?: () => Date;
-  /** Where Bayut's amenity ids are kept for a day (and the budget's counts, when no budget is given). */
+  /** Where Bayut's amenity ids are kept (and the budget's counts, when no budget is given). */
   redis?: BayutRedis;
 };
 
@@ -96,20 +121,27 @@ type Run = {
   organizationId: string;
   timezone: string;
   token: string;
+  /** The Bayut account the run started on: every write is kept to it. */
   agencyId: number;
   client: BayutClient;
   budget: Budget;
   redis: () => BayutRedis;
   now: Date;
-  amenityIds: AmenityIds | null;
+  /** The time now, for a publish asked (`now` is when the run started). */
+  clock: () => Date;
+  /** Bayut's amenity ids for this run; null until read, "none" when no map could be had. */
+  amenityIds: AmenityIds | "none" | null;
   /** `<unitId> <portal>` shown active by this run's state list. */
   active: Set<string>;
+  /** True when this run read Bayut's whole state list, every page. */
+  statesRead: boolean;
   done: { steps: number; failed: number };
 };
 /** A message left out keeps Bayut's words on the row; null clears them. */
 type Write = { state: BayutState; message?: string | null; fingerprint?: string; publishedAt?: Date; permitComment?: string | null };
 
 const AMENITIES_KEPT_SECONDS = 24 * 60 * 60;
+const USERS_FORGOTTEN_SECONDS = 7 * 24 * 60 * 60;
 const DEFAULT_RETRY_AFTER = 60;
 /** 10,000 listings: a bound on the state list even when the budget cannot count (Redis down). */
 const MAX_PAGES = 100;
@@ -145,10 +177,26 @@ const why = (err: unknown) => (err instanceof Error ? err.message : String(err))
 class TokenRefused extends Error {}
 /** The call budget is spent, or Bayut asked Nexus to wait: the business stops for this run. */
 class Stop extends Error {}
+/** A write landed nowhere: the business is no longer on the run's Bayut account. The run stops, writing nothing more. */
+class Stale extends Stop {
+  constructor() {
+    super("the Bayut account changed during this run");
+  }
+}
 
-/** Every business with a checked token and a known agency. */
+/**
+ * Every business with a checked token and a known agency — first checking
+ * again, once, those whose last check could not reach Bayut.
+ */
 export async function runBayutCycle(opts: Options): Promise<{ businesses: number; steps: number; failed: number }> {
   const result = { businesses: 0, steps: 0, failed: 0 };
+  for (const { organizationId } of await bayutBusinessesToCheckAgain()) {
+    try {
+      await checkAgain(organizationId, opts);
+    } catch (err) {
+      logger.warn({ organizationId, err: why(err) }, "Could not check the Bayut token again — tried again next cycle");
+    }
+  }
   for (const business of await bayutBusinesses()) {
     result.businesses += 1;
     try {
@@ -173,6 +221,31 @@ export async function runBayutUnit(organizationId: string, unitId: string, opts:
   await syncBusiness(business, opts, unitId);
 }
 
+/**
+ * A token whose last check could not reach Bayut, checked again by the sync:
+ * one `GET /agencies`, inside the call budget, recorded as Check again records
+ * it (another account turns the switches off). The Bayut users are not read
+ * again; another account forgets the old account's, as Check again does.
+ */
+async function checkAgain(organizationId: string, opts: Options): Promise<void> {
+  const held = await bayutToken(organizationId);
+  if (!held || held.agencyId === null) return;
+  const budget = opts.budget ?? bayutBudget({ redis: opts.redis, now: opts.now });
+  if ((await budget.paused(organizationId)) || !(await budget.take(organizationId, 1))) return;
+  const answer = await opts.client.agencies(held.token);
+  if (!answer.ok && answer.kind === "rate-limited") await budget.pause(organizationId, answer.retryAfter ?? DEFAULT_RETRY_AFTER);
+  const check = bayutCheckOf(answer, held.token);
+  const { accountChanged } = await recordBayutCheck(organizationId, check);
+  if (accountChanged) {
+    try {
+      await bayutRedis({ redis: opts.redis }).set(bayutUsersKey(organizationId), "[]", "EX", USERS_FORGOTTEN_SECONDS);
+    } catch (err) {
+      logger.warn({ organizationId, err: why(err) }, "Could not forget the old Bayut account's users in Redis");
+    }
+  }
+  logger.info({ organizationId, passed: check.checkError === null, accountChanged }, "The Bayut sync checked the token again");
+}
+
 async function syncBusiness(
   business: { organizationId: string; timezone: string },
   opts: Options,
@@ -183,7 +256,8 @@ async function syncBusiness(
   if (!held || held.agencyId === null) return { steps: 0, failed: 0 };
   const budget = opts.budget ?? bayutBudget({ redis: opts.redis, now: opts.now });
   if (await budget.paused(organizationId)) return { steps: 0, failed: 0 };
-  const now = opts.now?.() ?? new Date();
+  const clock = () => opts.now?.() ?? new Date();
+  const now = clock();
   const run: Run = {
     organizationId,
     timezone,
@@ -193,8 +267,10 @@ async function syncBusiness(
     budget,
     redis: () => bayutRedis({ redis: opts.redis }),
     now,
+    clock,
     amenityIds: null,
     active: new Set(),
+    statesRead: false,
     done: { steps: 0, failed: 0 },
   };
   try {
@@ -222,7 +298,10 @@ async function syncBusiness(
     await permitChecks(run, onBayut);
   } catch (err) {
     if (err instanceof TokenRefused) {
-      await recordBayutCheck(organizationId, { checkError: `Bayut refused the token: ${err.message}`, agencyId: null, agencyName: null });
+      // Only on the token the run used: one an admin saved meanwhile has its own check.
+      if ((await bayutToken(organizationId))?.token === held.token) {
+        await recordBayutCheck(organizationId, { checkError: `Bayut refused the token: ${err.message}`, agencyId: null, agencyName: null });
+      }
       logger.warn({ organizationId }, "Bayut refused the token — this business's sync stops until an admin checks it");
     } else if (err instanceof Stop) {
       logger.info({ organizationId, why: err.message }, "Bayut sync stopped for this business — the next run goes on");
@@ -234,11 +313,17 @@ async function syncBusiness(
 }
 
 /**
- * One Bayut call, counted against the budget. A refused token and a 429 stop
- * the business (the 429 pauses it first); every other answer is the caller's.
+ * One Bayut call, counted against the budget; `sending`, if given, runs once
+ * the budget allows the call, just before it is sent. A refused token and a 429
+ * stop the business (the 429 pauses it first); every other answer is the caller's.
  */
-async function ask<T>(run: Run, call: (client: BayutClient, token: string) => Promise<BayutAnswer<T>>): Promise<BayutAnswer<T>> {
+async function ask<T>(
+  run: Run,
+  call: (client: BayutClient, token: string) => Promise<BayutAnswer<T>>,
+  sending?: () => Promise<void>
+): Promise<BayutAnswer<T>> {
   if (!(await run.budget.take(run.organizationId, 1))) throw new Stop("the call budget for this minute is spent");
+  await sending?.();
   const answer = await call(run.client, run.token);
   if (answer.ok) return answer;
   if (answer.kind === "token-refused") throw new TokenRefused(answer.message);
@@ -264,12 +349,24 @@ async function each(run: Run, unit: Unit, work: () => Promise<void>): Promise<vo
   }
 }
 
-/** Bayut's answer on one portal's row, with the unit's ref, and kept in step in memory. */
+/** Bayut's answer on one portal's row, with the unit's ref, and kept in step in memory. Stale when it lands nowhere. */
 async function record(run: Run, unit: Unit, portal: BayutPortal, w: Write): Promise<void> {
-  await recordBayutStep(run.organizationId, unit.unitId, portal, { ...(unit.held.ref ? { ref: unit.held.ref } : {}), ...w });
+  const written = await recordBayutStep(run.organizationId, run.agencyId, unit.unitId, portal, {
+    ...(unit.held.ref ? { ref: unit.held.ref } : {}),
+    ...w,
+  });
+  if (!written) throw new Stale();
   const before = unit.held.portals[portal];
   unit.held.portals[portal] = { state: w.state, publishedAt: w.publishedAt ? w.publishedAt.toISOString() : before.publishedAt };
   if (w.fingerprint) unit.held.fingerprint = w.fingerprint;
+}
+
+/** When a publish was asked, on its own (null: none); kept in step in memory. Stale when it lands nowhere. */
+async function publishAsked(run: Run, unit: Unit, portal: BayutPortal, at: string | null): Promise<void> {
+  if (!(await bayutPublishAsked(run.organizationId, run.agencyId, unit.unitId, portal, at === null ? null : new Date(at)))) {
+    throw new Stale();
+  }
+  unit.held.portals[portal] = { ...unit.held.portals[portal], publishedAt: at };
 }
 
 /** (1) Whatever Bayut may still advertise, or is checking, that should not be live comes off first. */
@@ -291,8 +388,12 @@ async function sends(run: Run, units: Unit[], wanted: Map<string, Wanted>): Prom
   for (const unit of units) {
     const want = wanted.get(unit.unitId);
     if (unit.stopped || !want) continue;
+    // No amenity map was ever read: nothing is created or updated this run (each listing would be sent twice).
+    if (run.amenityIds === "none") return;
     await each(run, unit, async () => {
-      const body = toBayutListing(want.listing, { userId: want.userId, locationId: want.locationId, amenityIds: await amenities(run) });
+      const amenityIds = await amenities(run);
+      if (amenityIds === null) return;
+      const body = toBayutListing(want.listing, { userId: want.userId, locationId: want.locationId, amenityIds });
       const fingerprint = bayutFingerprint(body);
       const { held } = unit;
       // Rule 3 before Bayut ever took it: a refused listing is not created again until it changes.
@@ -309,22 +410,43 @@ async function sends(run: Run, units: Unit[], wanted: Map<string, Wanted>): Prom
   }
 }
 
-/** Bayut's amenity ids, read once a day for each business; none this run when Bayut cannot say. */
-async function amenities(run: Run): Promise<AmenityIds> {
-  if (run.amenityIds) return run.amenityIds;
-  const key = `bayut-amenities:${run.organizationId}`;
+/** A map kept in Redis under `key`; null when it is not there or Redis cannot give it back. */
+async function keptAmenities(run: Run, key: string): Promise<AmenityIds | null> {
   try {
     const kept = await run.redis().get(key);
-    if (kept) return (run.amenityIds = JSON.parse(kept) as AmenityIds);
+    return kept ? (JSON.parse(kept) as AmenityIds) : null;
   } catch (err) {
     logger.warn({ organizationId: run.organizationId, err: why(err) }, "Could not read Bayut's amenity ids from Redis");
+    return null;
   }
+}
+
+/**
+ * Bayut's amenity ids: read from Bayut once a day for each business, and the
+ * last good map kept with no expiry, for a day Bayut cannot say (final review,
+ * 24 Nov 2026). Null when no map was ever read: the caller then sends nothing.
+ */
+async function amenities(run: Run): Promise<AmenityIds | null> {
+  if (run.amenityIds) return run.amenityIds === "none" ? null : run.amenityIds;
+  const fresh = `bayut-amenities:${run.organizationId}`;
+  const lastGood = `bayut-amenities-last:${run.organizationId}`;
+  const kept = await keptAmenities(run, fresh);
+  if (kept) return (run.amenityIds = kept);
   const a = await ask(run, (c, t) => c.amenities(t));
-  // A listing is never held back for its amenities: without them it is sent without them.
-  if (!a.ok) return (run.amenityIds = {});
+  if (!a.ok) {
+    const last = await keptAmenities(run, lastGood);
+    if (last) return (run.amenityIds = last);
+    run.amenityIds = "none";
+    logger.info(
+      { organizationId: run.organizationId, kind: a.kind, message: a.message },
+      "Bayut's amenity ids could not be read and none are kept — no listing is created or updated this run"
+    );
+    return null;
+  }
   const ids = matchAmenities(a.data);
   try {
-    await run.redis().set(key, JSON.stringify(ids), "EX", AMENITIES_KEPT_SECONDS);
+    await run.redis().set(fresh, JSON.stringify(ids), "EX", AMENITIES_KEPT_SECONDS);
+    await run.redis().set(lastGood, JSON.stringify(ids));
   } catch (err) {
     logger.warn({ organizationId: run.organizationId, err: why(err) }, "Could not keep Bayut's amenity ids in Redis");
   }
@@ -335,7 +457,8 @@ async function amenities(run: Run): Promise<AmenityIds> {
 async function remove(run: Run, unit: Unit, portals: BayutPortal[]): Promise<boolean> {
   const a = await ask(run, (c, t) => c.remove(t, unit.held.ref!, portals));
   run.done.steps += 1;
-  if (a.ok) {
+  // A 404: the listing is not on Bayut, so it is off — recorded, or it would be asked for ever.
+  if (a.ok || a.notFound) {
     for (const p of portals) await record(run, unit, p, { state: "unpublished", message: null });
     return true;
   }
@@ -405,13 +528,35 @@ async function send(
     return false;
   }
 
-  // publish
-  const a = await ask(run, (c, t) => c.publish(t, held.ref!, step.portals));
+  // publish: the time it is asked is written first, so a worker stopped in the middle of the call has counted it.
+  const asked = run.clock();
+  const before = new Map(step.portals.map((p) => [p, held.portals[p].publishedAt]));
+  let counted = false;
+  // Bayut did not take the publish: the time held before comes back, so it is asked again (or, refused, not counted).
+  const putBack = async () => {
+    for (const p of step.portals) await publishAsked(run, unit, p, before.get(p) ?? null);
+  };
+  let a: BayutAnswer<null>;
+  try {
+    a = await ask(
+      run,
+      (c, t) => c.publish(t, held.ref!, step.portals),
+      async () => {
+        for (const p of step.portals) await publishAsked(run, unit, p, asked.toISOString());
+        counted = true;
+      }
+    );
+  } catch (err) {
+    // A 429 or a refused token: Bayut did not take it.
+    if (counted && (err instanceof TokenRefused || (err instanceof Stop && !(err instanceof Stale)))) await putBack();
+    throw err;
+  }
   run.done.steps += 1;
   if (a.ok) {
-    for (const p of step.portals) await record(run, unit, p, { state: "pending", message: null, publishedAt: run.now });
+    for (const p of step.portals) await record(run, unit, p, { state: "pending", message: null, publishedAt: asked });
     return true;
   }
+  if (a.kind === "busy" || a.kind === "refused") await putBack();
   if (a.kind === "busy") return false;
   for (const p of step.portals) {
     // A publish that may have reached Bayut counts for the 24-hour guard; a refused one does not.
@@ -419,7 +564,7 @@ async function send(
       run,
       unit,
       p,
-      a.kind === "refused" ? { state: "refused", message: a.message, fingerprint } : { state: "failed", message: a.message, publishedAt: run.now }
+      a.kind === "refused" ? { state: "refused", message: a.message, fingerprint } : { state: "failed", message: a.message, publishedAt: asked }
     );
   }
   return false;
@@ -430,9 +575,19 @@ async function states(run: Run, units: Unit[], wanted: Map<string, Wanted>): Pro
   const seen = new Map<string, { name: string; state: string }[]>();
   for (let page = 1; page <= MAX_PAGES; page++) {
     const a = await ask(run, (c, t) => c.list(t, run.agencyId, page));
-    if (!a.ok) break; // what was read is used; the rest waits for the next cycle
+    if (!a.ok) {
+      // What was read is used; the rest waits for the next cycle. Bayut's words have the token blanked (bayut.ts).
+      logger.warn(
+        { organizationId: run.organizationId, page, status: a.kind, message: a.message },
+        "Could not read Bayut's state list — what was read is used, the rest waits for the next cycle"
+      );
+      break;
+    }
     for (const item of a.data.items) seen.set(item.id, item.portals);
-    if (!a.data.next) break;
+    if (!a.data.next) {
+      run.statesRead = true;
+      break;
+    }
   }
   for (const unit of units) {
     const portals = seen.get(unit.held.ref!);
@@ -461,7 +616,7 @@ async function readState(run: Run, unit: Unit, p: BayutPortal, theirs: string, s
     if (state === "live" || (state === "pending" && !askedToday)) {
       if (stillWanted) {
         // Rule 9: Bayut took it down. The switch goes off; staff decide whether to spend the credits again.
-        await bayutTakenOff(run.organizationId, unit.unitId, p, dayMonthIn(run.timezone, run.now));
+        if (!(await bayutTakenOff(run.organizationId, run.agencyId, unit.unitId, p, dayMonthIn(run.timezone, run.now)))) throw new Stale();
         unit.held.portals[p] = { state: "unpublished", publishedAt };
         return;
       }
@@ -480,6 +635,14 @@ async function readState(run: Run, unit: Unit, p: BayutPortal, theirs: string, s
   // Any other word from Bayut: left as it is.
 }
 
+/**
+ * A rejection that may be of what Bayut holds now: one dated at or after the
+ * portal's last publish, or any rejection of a portal never published. Bayut's
+ * first page keeps old ones, and an undated one cannot be told from them.
+ */
+const rejectedSince = (rejectedAt: string | null, publishedAt: string | null): boolean =>
+  publishedAt === null || (rejectedAt !== null && Date.parse(rejectedAt) >= Date.parse(publishedAt));
+
 /** (4) Bayut's rejected list, one call: the listings Nexus made become refused with Bayut's reason. */
 async function rejections(run: Run, units: Unit[]): Promise<void> {
   const a = await ask(run, (c, t) => c.rejected(t));
@@ -488,9 +651,11 @@ async function rejections(run: Run, units: Unit[]): Promise<void> {
     for (const unit of units.filter((u) => u.held.ref === rejection.id)) {
       await each(run, unit, async () => {
         for (const p of BAYUT_PORTALS) {
-          const s = unit.held.portals[p].state;
-          if (s !== "pending" && s !== "draft" && s !== "live") continue;
+          const { state, publishedAt } = unit.held.portals[p];
+          if (state !== "pending" && state !== "draft" && state !== "live") continue;
           if (run.active.has(at(unit, p))) continue; // Bayut shows it live: that wins
+          if (state === "live" && !run.statesRead) continue; // and without Bayut's whole list, it may be showing it live
+          if (!rejectedSince(rejection.at, publishedAt)) continue; // an older publish's rejection
           await record(run, unit, p, { state: "refused", message: rejection.reason || null });
         }
       });
