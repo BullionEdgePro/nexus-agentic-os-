@@ -98,7 +98,7 @@ before(async () => {
     [A, B]
   );
   await owner.query(
-    `insert into employees (id, organization_id, name, email) values ($1, $2, 'Agent A', 'a@example.test'), ($3, $4, 'Agent B', 'b@example.test')`,
+    `insert into employees (id, organization_id, employee_code, full_name, email) values ($1, $2, 'BA1', 'Agent A', 'a@example.test'), ($3, $4, 'BB1', 'Agent B', 'b@example.test')`,
     [A_EMP, A, B_EMP, B]
   );
   await owner.query(`insert into property_units (id, organization_id, step, reference) values ($1, $2, 'S5', 'Marina 1 · 101')`, [A_UNIT, A]);
