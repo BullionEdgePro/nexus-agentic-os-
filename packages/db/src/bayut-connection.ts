@@ -302,7 +302,28 @@ type RemoteRow = {
   d_fingerprint: string | null;
   d_state: BayutState | null;
   d_published_at: Date | null;
+  b_synced_at: Date | null;
+  d_synced_at: Date | null;
 };
+
+/** One unit's Bayut and dubizzle rows, as both the sync's lists read them. */
+const REMOTE_FROM = `select u.id as unit_id,
+         b.remote_ref as b_ref, b.remote_fingerprint as b_fingerprint, b.remote_state as b_state, b.published_at as b_published_at,
+         d.remote_ref as d_ref, d.remote_fingerprint as d_fingerprint, d.remote_state as d_state, d.published_at as d_published_at,
+         b.synced_at as b_synced_at, d.synced_at as d_synced_at
+    from property_units u
+    left join unit_portals b on b.unit_id = u.id and b.portal = 'bayut'
+    left join unit_portals d on d.unit_id = u.id and d.portal = 'dubizzle'`;
+
+const toRemote = (r: RemoteRow): BayutRemote => ({
+  // One Bayut listing serves both portals: the same ref on both rows.
+  ref: r.b_ref ?? r.d_ref,
+  fingerprint: r.b_fingerprint ?? r.d_fingerprint,
+  portals: {
+    bayut: { state: r.b_state, publishedAt: iso(r.b_published_at) },
+    dubizzle: { state: r.d_state, publishedAt: iso(r.d_published_at) },
+  },
+});
 
 /**
  * The units the Bayut sync looks at: wanted on Bayut or dubizzle, or possibly
@@ -313,12 +334,7 @@ type RemoteRow = {
 export async function bayutUnitsToSync(organizationId: string): Promise<{ unitId: string; remote: BayutRemote }[]> {
   return withTenant(organizationId, async () => {
     const { rows } = await getPool().query<RemoteRow>(
-      `select u.id as unit_id,
-              b.remote_ref as b_ref, b.remote_fingerprint as b_fingerprint, b.remote_state as b_state, b.published_at as b_published_at,
-              d.remote_ref as d_ref, d.remote_fingerprint as d_fingerprint, d.remote_state as d_state, d.published_at as d_published_at
-         from property_units u
-         left join unit_portals b on b.unit_id = u.id and b.portal = 'bayut'
-         left join unit_portals d on d.unit_id = u.id and d.portal = 'dubizzle'
+      `${REMOTE_FROM}
         where u.organization_id = $1
           and exists (select 1 from unit_portals up
                        where up.unit_id = u.id and up.portal in ('bayut', 'dubizzle')
@@ -326,32 +342,47 @@ export async function bayutUnitsToSync(organizationId: string): Promise<{ unitId
         order by least(b.synced_at, d.synced_at) asc nulls first, u.id`,
       [organizationId]
     );
+    return rows.map((r) => ({ unitId: String(r.unit_id), remote: toRemote(r) }));
+  });
+}
+
+/**
+ * Every unit holding a Bayut ref on its Bayut or dubizzle row, whatever its
+ * state or switch (fix round, 24 Nov 2026): Bayut's state list is read for all
+ * of them, so a listing Bayut makes live after Nexus stopped expecting it is
+ * seen — and then taken off by the sync's rule. With when each row was last
+ * answered, so the permit checks go to the longest waiting first.
+ */
+export async function bayutUnitsHeld(
+  organizationId: string
+): Promise<{ unitId: string; remote: BayutRemote; syncedAt: Record<BayutPortal, string | null> }[]> {
+  return withTenant(organizationId, async () => {
+    const { rows } = await getPool().query<RemoteRow>(
+      `${REMOTE_FROM}
+        where u.organization_id = $1 and (b.remote_ref is not null or d.remote_ref is not null)
+        order by u.id`,
+      [organizationId]
+    );
     return rows.map((r) => ({
       unitId: String(r.unit_id),
-      remote: {
-        // One Bayut listing serves both portals: the same ref on both rows.
-        ref: r.b_ref ?? r.d_ref,
-        fingerprint: r.b_fingerprint ?? r.d_fingerprint,
-        portals: {
-          bayut: { state: r.b_state, publishedAt: iso(r.b_published_at) },
-          dubizzle: { state: r.d_state, publishedAt: iso(r.d_published_at) },
-        },
-      },
+      remote: toRemote(r),
+      syncedAt: { bayut: iso(r.b_synced_at), dubizzle: iso(r.d_synced_at) },
     }));
   });
 }
 
 /**
  * Bayut's answer for one portal of one unit. The switch is never touched; a
- * ref, fingerprint, publish time or permit comment not given keeps the one
- * held (a null permit comment clears it); a unit with no row for that portal
- * gets one, switched off.
+ * ref, fingerprint, publish time, permit comment or message not given keeps
+ * the one held (a null permit comment or message clears it) — so a state read
+ * back from Bayut keeps Bayut's words about a refused change; a unit with no
+ * row for that portal gets one, switched off.
  */
 export async function recordBayutStep(
   organizationId: string,
   unitId: string,
   portal: BayutPortal,
-  r: { ref?: string; state: BayutState; message: string | null; fingerprint?: string; publishedAt?: Date; permitComment?: string | null }
+  r: { ref?: string; state: BayutState; message?: string | null; fingerprint?: string; publishedAt?: Date; permitComment?: string | null }
 ): Promise<void> {
   return withTenant(organizationId, async () => {
     await getPool().query(
@@ -361,7 +392,7 @@ export async function recordBayutStep(
        on conflict (unit_id, portal) do update
          set remote_ref = coalesce(excluded.remote_ref, unit_portals.remote_ref),
              remote_state = excluded.remote_state,
-             remote_message = excluded.remote_message,
+             remote_message = case when $11 then excluded.remote_message else unit_portals.remote_message end,
              remote_fingerprint = coalesce(excluded.remote_fingerprint, unit_portals.remote_fingerprint),
              published_at = coalesce(excluded.published_at, unit_portals.published_at),
              permit_comment = case when $10 then excluded.permit_comment else unit_portals.permit_comment end,
@@ -372,11 +403,12 @@ export async function recordBayutStep(
         portal,
         r.ref ?? null,
         r.state,
-        r.message,
+        r.message ?? null,
         r.fingerprint ?? null,
         r.publishedAt ?? null,
         r.permitComment ?? null,
         r.permitComment !== undefined,
+        r.message !== undefined,
       ]
     );
   });

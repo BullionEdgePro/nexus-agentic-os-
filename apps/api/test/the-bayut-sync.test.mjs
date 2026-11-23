@@ -228,6 +228,8 @@ let owner;
 let dbTurn;
 let lib;
 let sync;
+/** A unit ready for the portals, with photos (set in `before`). */
+let ready;
 
 const row = async (unit, portal) =>
   (await owner.query(`select * from unit_portals where unit_id = $1 and portal = $2`, [unit, portal])).rows[0];
@@ -263,7 +265,7 @@ before(async () => {
        ($2, $4, 'BYS2', 'Omar Ali', 'omar@other.ae', '971501114412', '45679')`,
     [AISHA, OMAR, SFS, OTHER]
   );
-  const ready = async (unit, org, agent, location, reference) => {
+  ready = async (unit, org, agent, location, reference) => {
     await owner.query(
       `insert into property_units (id, organization_id, step, reference, community, property_type, bedrooms, purpose, price_aed,
                                    form_a_signed_on, permit_number, permit_expires_on, agent_employee_id, title, description,
@@ -321,8 +323,8 @@ test("1. create then publish, the ref written on both rows before the publish; t
     `create ${R}`,
     "publish BY-21 bayut,dubizzle",
     "list 101 1",
-    "show BY-21",
     "rejected",
+    "show BY-21",
   ]);
   for (const p of ["bayut", "dubizzle"]) {
     assert.equal(atPublish[p].remote_ref, "BY-21", `${p} held the ref before the publish`);
@@ -350,7 +352,7 @@ test("1. create then publish, the ref written on both rows before the publish; t
 test("2. a unit Bayut cannot take is never sent (no Bayut location); a pending publish is not asked again", db, async () => {
   reset();
   await run();
-  assert.deepEqual(made(), ["list 101 1", "show BY-21", "rejected"], "the amenity ids come from Redis");
+  assert.deepEqual(made(), ["list 101 1", "rejected", "show BY-21"], "the amenity ids come from Redis");
   assert.ok(!everyCall.some((c) => c.includes(N)), "N was never sent");
   assert.equal((await row(N, "bayut")).remote_state, null);
 });
@@ -377,7 +379,7 @@ test("3. Bayut makes it live; a changed listing is updated and not republished w
   assert.deepEqual(writes(), [], "sent once");
 });
 
-test("4. unticked → removed, including a pending one; then nothing more is asked of Bayut", db, async () => {
+test("4. unticked → removed, including a pending one; Bayut's list is still read, and a late 'active' is taken off", db, async () => {
   reset();
   await owner.query(`update unit_portals set remote_state = 'pending' where unit_id = $1 and portal = 'dubizzle'`, [R]);
   bayutSays("BY-21", { dubizzle: "draft" });
@@ -394,7 +396,17 @@ test("4. unticked → removed, including a pending one; then nothing more is ask
   }
   calls.length = 0;
   await run();
-  assert.deepEqual(made(), [], "nothing held on Bayut, nothing wanted");
+  assert.deepEqual(made(), ["list 101 1", "rejected"], "nothing to send, but Nexus still reads what Bayut holds of its own");
+  // Bayut makes it live after Nexus stopped expecting it: it is seen, and rule 1 takes it off.
+  bayutSays("BY-21", { bayut: "active" });
+  calls.length = 0;
+  await run();
+  assert.deepEqual(writes(), []);
+  assert.equal((await row(R, "bayut")).remote_state, "live", "what Bayut shows is recorded");
+  calls.length = 0;
+  await run();
+  assert.deepEqual(writes(), ["remove BY-21 bayut"], "and taken off on the next run");
+  assert.equal((await row(R, "bayut")).remote_state, "unpublished");
 });
 
 test("5. nothing is published twice within 24 hours across two cycles", db, async () => {
@@ -415,23 +427,27 @@ test("5. nothing is published twice within 24 hours across two cycles", db, asyn
     assert.equal(r.remote_message, "HTTP 503");
     assert.equal(r.published_at.toISOString(), clock.toISOString(), `${p}: the publish asked is remembered`);
   }
+  const lost = clock;
   delete script.publish;
+  // The dubizzle publish did reach Bayut, which is checking it (draft); the Bayut one did not (inactive).
+  bayutSays("BY-21", { dubizzle: "draft" });
   hoursLater(2);
   calls.length = 0;
   await run();
   assert.deepEqual(writes(), [], "not published twice within 24 hours");
+  assert.equal((await row(R, "bayut")).remote_state, "failed");
+  const d = await row(R, "dubizzle");
+  assert.equal(d.remote_state, "pending", "a lost-answer publish Bayut is checking is waited for");
+  assert.equal(d.remote_message, null);
   hoursLater(23);
-  rejectedList = [{ id: "BY-21", reason: "A rejection from before this publish" }];
   calls.length = 0;
   await run();
-  rejectedList = [];
-  assert.deepEqual(writes(), ["publish BY-21 bayut,dubizzle"], "a day later it is asked again");
-  for (const p of ["bayut", "dubizzle"]) {
-    const r = await row(R, p);
-    assert.equal(r.remote_state, "pending", `${p}: Bayut still shows it inactive and rejected, but the publish was asked this run`);
-    assert.equal(r.wanted, true, `${p}: not taken for "Bayut took it off"`);
-    assert.equal(r.published_at.toISOString(), clock.toISOString());
-  }
+  assert.deepEqual(writes(), ["publish BY-21 bayut"], "a day later only the publish that never arrived is asked again");
+  const b = await row(R, "bayut");
+  assert.equal(b.remote_state, "pending", "Bayut still shows it inactive, but the publish is less than a day old");
+  assert.equal(b.wanted, true, 'not taken for "Bayut took it off"');
+  assert.equal(b.published_at.toISOString(), clock.toISOString());
+  assert.equal((await row(R, "dubizzle")).published_at.toISOString(), lost.toISOString(), "dubizzle was not asked again");
   bayutSays("BY-21", { bayut: "active", dubizzle: "active" });
   calls.length = 0;
   await run();
@@ -457,6 +473,30 @@ test("6. Bayut took it off → the switch turns off with the date, and nothing i
   assert.deepEqual(writes(), [], "never republished on its own");
   assert.equal((await row(R, "bayut")).remote_message, `Bayut took it off on ${dayMonth(new Date(clock.getTime() - 25 * 3600_000))}`,
     "the words stay while nothing changes");
+});
+
+test("6b. ticked again: the unit's job publishes, and a cycle reading Bayut's old 'inactive' does not switch it off (review)", db, async () => {
+  reset();
+  await tick(SFS, R, "bayut");
+  await runUnit(R);
+  assert.deepEqual(made(), ["publish BY-21 bayut"]);
+  assert.equal((await row(R, "bayut")).remote_state, "pending");
+  hoursLater(1);
+  calls.length = 0;
+  await run();
+  assert.deepEqual(writes(), []);
+  let b = await row(R, "bayut");
+  assert.equal(b.remote_state, "pending", "Bayut's list can still show the old state");
+  assert.equal(b.wanted, true, "the switch stays on");
+  // Still inactive a day after the publish: Bayut took it off.
+  hoursLater(24);
+  calls.length = 0;
+  await run();
+  assert.deepEqual(writes(), [], "never republished on its own");
+  b = await row(R, "bayut");
+  assert.equal(b.wanted, false);
+  assert.equal(b.remote_state, "unpublished");
+  assert.equal(b.remote_message, `Bayut took it off on ${dayMonth(clock)}`);
 });
 
 test("7. an expired permit takes it off in the same cycle even when the budget is nearly spent", db, async () => {
@@ -596,7 +636,7 @@ test("13. an update that cannot reach Bayut leaves a live portal live, so nothin
   await runUnit(M);
   let m = await row(M, "bayut");
   assert.equal(m.remote_state, "live");
-  assert.equal(m.remote_message, "HTTP 503");
+  assert.equal(m.remote_message, null, "not a refusal: the card is not told Bayut refused the change");
   assert.equal(m.remote_fingerprint, before, "the old fingerprint is kept, so it is sent again");
   delete script.update;
   hoursLater(25);
@@ -606,6 +646,33 @@ test("13. an update that cannot reach Bayut leaves a live portal live, so nothin
   m = await row(M, "bayut");
   assert.equal(m.remote_state, "live");
   assert.equal(m.remote_message, null);
+});
+
+test("13b. a change Bayut refuses on a live or pending listing keeps Bayut's words through the cycle, and is not resent (review)", db, async () => {
+  reset();
+  const WORDS = "The given data was invalid. price: The price must be at least 1000.";
+  const pRef = await refOf(P);
+  assert.equal((await row(M, "bayut")).remote_state, "live");
+  assert.equal((await row(P, "bayut")).remote_state, "pending");
+  await retitle(M, "Two-bed, a change Bayut refuses");
+  await retitle(P, "One-bed, a change Bayut refuses");
+  script.update = () => ({ ok: false, kind: "refused", message: WORDS });
+  await run();
+  assert.ok(writes().includes("update BY-22") && writes().includes(`update ${pRef}`), JSON.stringify(writes()));
+  assert.ok(made().includes("list 101 1") && made().includes(`show ${pRef}`), "the state list and the permit check both ran");
+  let m = await row(M, "bayut");
+  const p = await row(P, "bayut");
+  assert.equal(m.remote_state, "live");
+  assert.equal(m.remote_message, WORDS, "the state list keeps Bayut's words");
+  assert.equal(p.remote_state, "pending");
+  assert.equal(p.remote_message, WORDS, "the permit check keeps Bayut's words");
+  assert.equal(p.permit_comment, PERMIT_CHECK);
+  delete script.update;
+  calls.length = 0;
+  await run();
+  assert.ok(!writes().some((w) => w.startsWith("update ")), "the refused change is not resent");
+  m = await row(M, "bayut");
+  assert.equal(m.remote_message, WORDS, "and the words stay");
 });
 
 test("14. a 409 leaves the unit for the next run, writing nothing", db, async () => {
@@ -622,6 +689,31 @@ test("14. a 409 leaves the unit for the next run, writing nothing", db, async ()
   calls.length = 0;
   await runUnit(M);
   assert.deepEqual(made(), ["update BY-22"]);
+});
+
+test("14b. with many pending units the rejected list is still read, and at most 10 permit checks go to the longest waiting (review)", db, async () => {
+  reset();
+  const many = Array.from({ length: 12 }, (_, i) => id(31 + i));
+  for (const [i, unit] of many.entries()) {
+    await ready(unit, SFS, AISHA, 5002, `Bulk · ${i + 1}`);
+    await tick(SFS, unit, "bayut");
+  }
+  const unlimited = { take: async () => true, pause: async () => {}, paused: async () => false };
+  const shows = () => made().filter((w) => w.startsWith("show "));
+  await run({ budget: unlimited });
+  assert.equal(writes().filter((w) => w.startsWith("create ")).length, 12);
+  const first = shows();
+  assert.equal(first.length, 10, "at most 10 permit checks a cycle");
+  assert.ok(made().indexOf("rejected") < made().indexOf(first[0]), "the rejected list is asked before the permit checks");
+  // Five calls left: the state list, the rejected list, then three permit checks.
+  let left = 5;
+  const five = { take: async (_org, n) => (left -= n) >= 0, pause: async () => {}, paused: async () => false };
+  calls.length = 0;
+  await run({ budget: five });
+  assert.deepEqual(made().slice(0, 2), ["list 101 1", "rejected"]);
+  const next = shows();
+  assert.equal(next.length, 3);
+  assert.ok(next.every((s) => !first.includes(s)), `the longest waiting first: ${JSON.stringify(next)} after ${JSON.stringify(first)}`);
 });
 
 test("15. a unit's own job works on that unit only and does not read Bayut's lists", db, async () => {

@@ -12,7 +12,16 @@ import {
   type BayutStep,
   type PortalListing,
 } from "@nexus/shared";
-import { bayutBusinesses, bayutListings, bayutTakenOff, bayutToken, bayutUnitsToSync, recordBayutCheck, recordBayutStep } from "@nexus/db";
+import {
+  bayutBusinesses,
+  bayutListings,
+  bayutTakenOff,
+  bayutToken,
+  bayutUnitsHeld,
+  bayutUnitsToSync,
+  recordBayutCheck,
+  recordBayutStep,
+} from "@nexus/db";
 import type { BayutAnswer, BayutClient } from "../lib/bayut.js";
 import { bayutBudget, bayutRedis, type BayutRedis, type Budget } from "../lib/bayut-budget.js";
 import { apiBaseUrl } from "../lib/public-urls.js";
@@ -25,9 +34,13 @@ import { logger } from "../lib/logger.js";
  *
  * The order is compliance first, so a spent call budget never holds back a
  * take-down: (1) removals, (2) creates, updates and publishes, oldest answer
- * first, (3) Bayut's state list, and the permit check of each pending unit,
- * (4) Bayut's rejected list. A unit's own job, half a minute after it changed,
- * runs (1) and (2) for that unit only.
+ * first, (3) Bayut's state list, read for EVERY unit Nexus holds a ref for
+ * (whatever its state, so a listing Bayut makes live after Nexus stopped
+ * expecting it is seen, and then taken off by rule 1), (4) Bayut's rejected
+ * list — one call, asked before (5) so the per-unit calls never starve it —
+ * and (5) the permit check of pending units, at most 10 a cycle, the longest
+ * waiting first. A unit's own job, half a minute after it changed, runs (1)
+ * and (2) for that unit only.
  *
  * Credits are spent only when staff ask:
  * - the ref is written on both portal rows the moment Bayut gives it, before
@@ -38,17 +51,24 @@ import { logger } from "../lib/logger.js";
  * - a refusal remembers what was refused and waits for the listing to change,
  *   also before Bayut ever took it (rule 3 for a listing with no ref yet);
  * - a failed update never marks a live or pending portal failed or refused:
- *   it is still advertised, and either word would let it be published again;
- * - a portal Bayut took down that Nexus held live or pending, still wanted and
- *   ready, has its switch turned off with the date (rule 9) — never one whose
- *   publish was asked in this same run, which Bayut has not had time to act on;
+ *   it is still advertised, and either word would let it be published again.
+ *   A refused one keeps Bayut's words (the card says the last change was
+ *   refused); one that could not reach Bayut writes nothing and is sent again;
+ * - a portal Bayut took down, still wanted and ready, has its switch turned
+ *   off with the date (rule 9) — but only a live one, or a pending one whose
+ *   publish is more than a day old: Bayut's list can still show the old state
+ *   for a while after a publish;
  * - the rejected list never marks refused a portal the state list showed
  *   active in this run: Bayut's word that it is live wins.
  *
  * Bayut's state list is read for what it says about each portal: active is
- * live, whatever Nexus held; inactive ends a live, pending or draft portal;
- * draft keeps a pending one pending. Nexus's own record of a removal, a
- * refusal or a failed attempt is never overwritten by inactive or draft.
+ * live, whatever Nexus held; inactive ends a live portal, a pending one more
+ * than a day old, or a draft; draft keeps a pending one pending and makes a
+ * publish asked in the last day pending (a failed one whose answer was lost
+ * included). Nexus's own record of a removal or a refusal, and a failed
+ * publish more than a day old, are never overwritten by inactive or draft. A
+ * state read back never clears Bayut's words on a portal that stays live or
+ * pending.
  *
  * At most 40 Bayut calls a minute for each business (`bayut-budget.ts`): when
  * spent, that business stops for this run and the next one goes on. A 429
@@ -70,7 +90,7 @@ type Options = {
 
 type AmenityIds = Partial<Record<Amenity, string>>;
 type Wanted = { listing: PortalListing; portals: BayutPortal[]; userId: number; locationId: number };
-type Unit = { unitId: string; held: BayutRemote; stopped: boolean };
+type Unit = { unitId: string; held: BayutRemote; stopped: boolean; syncedAt?: Record<BayutPortal, string | null> };
 type Run = {
   organizationId: string;
   timezone: string;
@@ -81,17 +101,19 @@ type Run = {
   redis: () => BayutRedis;
   now: Date;
   amenityIds: AmenityIds | null;
-  /** `<unitId> <portal>` published in this run, or shown active by this run's state list. */
-  asked: Set<string>;
+  /** `<unitId> <portal>` shown active by this run's state list. */
   active: Set<string>;
   done: { steps: number; failed: number };
 };
-type Write = { state: BayutState; message: string | null; fingerprint?: string; publishedAt?: Date; permitComment?: string | null };
+/** A message left out keeps Bayut's words on the row; null clears them. */
+type Write = { state: BayutState; message?: string | null; fingerprint?: string; publishedAt?: Date; permitComment?: string | null };
 
 const AMENITIES_KEPT_SECONDS = 24 * 60 * 60;
 const DEFAULT_RETRY_AFTER = 60;
 /** 10,000 listings: a bound on the state list even when the budget cannot count (Redis down). */
 const MAX_PAGES = 100;
+const PERMIT_CHECKS_PER_CYCLE = 10;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** A stable fingerprint of the body as it would be sent, keys sorted (as `pfFingerprint`). */
 export function bayutFingerprint(body: BayutListingBody): string {
@@ -171,7 +193,6 @@ async function syncBusiness(
     redis: () => bayutRedis({ redis: opts.redis }),
     now,
     amenityIds: null,
-    asked: new Set(),
     active: new Set(),
     done: { steps: 0, failed: 0 },
   };
@@ -179,16 +200,25 @@ async function syncBusiness(
     const units: Unit[] = (await bayutUnitsToSync(organizationId))
       .filter((u) => !onlyUnit || u.unitId === onlyUnit)
       .map((u) => ({ unitId: u.unitId, held: structuredClone(u.remote), stopped: false }));
-    if (units.length === 0) return run.done;
-    const wanted = new Map((await bayutListings(organizationId, todayIn(timezone, now), photoUrl)).map((w) => [w.listing.reference, w]));
-    await removals(run, units, wanted);
-    await sends(run, units, wanted);
+    // Nothing to sync means nothing is wanted: no unit can be wanted and ready.
+    let wanted = new Map<string, Wanted>();
+    if (units.length > 0) {
+      wanted = new Map((await bayutListings(organizationId, todayIn(timezone, now), photoUrl)).map((w) => [w.listing.reference, w]));
+      await removals(run, units, wanted);
+      await sends(run, units, wanted);
+    }
     if (onlyUnit) return run.done;
-    const onBayut = units.filter((u) => u.held.ref);
+    // Read again after the sends: every unit Nexus holds a ref for, as now written.
+    const onBayut: Unit[] = (await bayutUnitsHeld(organizationId)).map((u) => ({
+      unitId: u.unitId,
+      held: u.remote,
+      stopped: false,
+      syncedAt: u.syncedAt,
+    }));
     if (onBayut.length === 0) return run.done;
     await states(run, onBayut, wanted);
-    await permitChecks(run, onBayut);
     await rejections(run, onBayut);
+    await permitChecks(run, onBayut);
   } catch (err) {
     if (err instanceof TokenRefused) {
       await recordBayutCheck(organizationId, { checkError: `Bayut refused the token: ${err.message}`, agencyId: null, agencyName: null });
@@ -360,9 +390,13 @@ async function send(
       const { state, publishedAt } = held.portals[p];
       if (wantedPortals.includes(p)) {
         // Still advertised (or waiting on Bayut): the state stays, so it is never published again for this.
+        // A refusal keeps Bayut's words (the last change was refused); an unanswered update is simply sent again.
         const advertised = state === "live" || state === "pending" || (state === "draft" && publishedAt !== null);
-        const next: BayutState = advertised && state ? state : refused ? "refused" : "failed";
-        await record(run, unit, p, { state: next, message: a.message, ...(refused ? { fingerprint } : {}) });
+        if (advertised && state) {
+          if (refused) await record(run, unit, p, { state, message: a.message, fingerprint });
+          continue;
+        }
+        await record(run, unit, p, { state: refused ? "refused" : "failed", message: a.message, ...(refused ? { fingerprint } : {}) });
       } else if (refused) {
         // Both rows remember what was refused, so it waits for a change.
         await record(run, unit, p, { state: state ?? "unpublished", message: null, fingerprint });
@@ -375,10 +409,7 @@ async function send(
   const a = await ask(run, (c, t) => c.publish(t, held.ref!, step.portals));
   run.done.steps += 1;
   if (a.ok) {
-    for (const p of step.portals) {
-      await record(run, unit, p, { state: "pending", message: null, publishedAt: run.now });
-      run.asked.add(at(unit, p));
-    }
+    for (const p of step.portals) await record(run, unit, p, { state: "pending", message: null, publishedAt: run.now });
     return true;
   }
   if (a.kind === "busy") return false;
@@ -394,7 +425,7 @@ async function send(
   return false;
 }
 
-/** (3) Bayut's state list, one call per 100 listings, read for the units Nexus holds a ref for. */
+/** (3) Bayut's state list, one call per 100 listings, read for every unit Nexus holds a ref for. */
 async function states(run: Run, units: Unit[], wanted: Map<string, Wanted>): Promise<void> {
   const seen = new Map<string, { name: string; state: string }[]>();
   for (let page = 1; page <= MAX_PAGES; page++) {
@@ -417,14 +448,17 @@ async function states(run: Run, units: Unit[], wanted: Map<string, Wanted>): Pro
 
 async function readState(run: Run, unit: Unit, p: BayutPortal, theirs: string, stillWanted: boolean): Promise<void> {
   const { state, publishedAt } = unit.held.portals[p];
+  // A publish asked in the last day: Bayut's list can still show the state from before it.
+  const askedToday = publishedAt !== null && run.now.getTime() - Date.parse(publishedAt) < DAY_MS;
+  // A portal that stays live or pending keeps Bayut's words about a refused change.
+  const words = state === "live" || state === "pending" ? {} : { message: null };
   if (theirs === "active") {
     run.active.add(at(unit, p));
-    await record(run, unit, p, { state: "live", message: null });
+    await record(run, unit, p, { state: "live", ...words });
     return;
   }
   if (theirs === "inactive") {
-    if (state === "live" || state === "pending") {
-      if (run.asked.has(at(unit, p))) return; // asked moments ago: Bayut has not acted on it yet
+    if (state === "live" || (state === "pending" && !askedToday)) {
       if (stillWanted) {
         // Rule 9: Bayut took it down. The switch goes off; staff decide whether to spend the credits again.
         await bayutTakenOff(run.organizationId, unit.unitId, p, dayMonthIn(run.timezone, run.now));
@@ -435,31 +469,20 @@ async function readState(run: Run, unit: Unit, p: BayutPortal, theirs: string, s
       return;
     }
     if (state === "draft" || state === null) await record(run, unit, p, { state: "unpublished", message: null });
-    return;
+    return; // pending less than a day old, unpublished, refused, failed: left as it is
   }
   if (theirs === "draft") {
-    // A publish asked and not yet acted on stays pending (rule 7).
-    if (state === "live") await record(run, unit, p, { state: publishedAt ? "pending" : "draft", message: null });
-    else if (state === null) await record(run, unit, p, { state: "draft", message: null });
+    // Pending stays pending however long it waits (rule 7). A lost-answer publish Bayut is checking is waited for.
+    if (state === "failed" && askedToday) await record(run, unit, p, { state: "pending", message: null });
+    else if (state === "live" || state === "draft" || state === null) {
+      const next: BayutState = askedToday ? "pending" : "draft";
+      if (next !== state) await record(run, unit, p, { state: next, ...(next === "pending" ? words : { message: null }) });
+    }
   }
   // Any other word from Bayut: left as it is.
 }
 
-/** (3) Once a cycle, the permit check of each pending unit, for the card. */
-async function permitChecks(run: Run, units: Unit[]): Promise<void> {
-  for (const unit of units) {
-    const pending = BAYUT_PORTALS.filter((p) => unit.held.portals[p].state === "pending");
-    if (pending.length === 0) continue;
-    await each(run, unit, async () => {
-      const a = await ask(run, (c, t) => c.show(t, unit.held.ref!));
-      if (!a.ok || !a.data.permit) return;
-      const permitComment = a.data.permit.comment ?? a.data.permit.status;
-      for (const p of pending) await record(run, unit, p, { state: "pending", message: null, permitComment });
-    });
-  }
-}
-
-/** (4) Bayut's rejected list: the listings Nexus made become refused with Bayut's reason. */
+/** (4) Bayut's rejected list, one call: the listings Nexus made become refused with Bayut's reason. */
 async function rejections(run: Run, units: Unit[]): Promise<void> {
   const a = await ask(run, (c, t) => c.rejected(t));
   if (!a.ok) return;
@@ -469,10 +492,28 @@ async function rejections(run: Run, units: Unit[]): Promise<void> {
         for (const p of BAYUT_PORTALS) {
           const s = unit.held.portals[p].state;
           if (s !== "pending" && s !== "draft" && s !== "live") continue;
-          if (run.asked.has(at(unit, p)) || run.active.has(at(unit, p))) continue;
+          if (run.active.has(at(unit, p))) continue; // Bayut shows it live: that wins
           await record(run, unit, p, { state: "refused", message: rejection.reason || null });
         }
       });
     }
+  }
+}
+
+/** (5) The permit check of pending units, for the card: at most 10 a cycle, the longest waiting first. */
+async function permitChecks(run: Run, units: Unit[]): Promise<void> {
+  const waiting = units
+    .map((unit) => ({ unit, pending: BAYUT_PORTALS.filter((p) => unit.held.portals[p].state === "pending") }))
+    .filter((w) => w.pending.length > 0)
+    .map((w) => ({ ...w, since: Math.min(...w.pending.map((p) => Date.parse(w.unit.syncedAt?.[p] ?? "") || 0)) }))
+    .sort((a, b) => a.since - b.since)
+    .slice(0, PERMIT_CHECKS_PER_CYCLE);
+  for (const { unit, pending } of waiting) {
+    await each(run, unit, async () => {
+      const a = await ask(run, (c, t) => c.show(t, unit.held.ref!));
+      if (!a.ok || !a.data.permit) return;
+      const permitComment = a.data.permit.comment ?? a.data.permit.status;
+      for (const p of pending) await record(run, unit, p, { state: "pending", permitComment });
+    });
   }
 }

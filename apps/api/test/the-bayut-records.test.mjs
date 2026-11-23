@@ -31,7 +31,7 @@ test("everything runs as the business; only the list of connected businesses loo
   for (const name of [
     "saveBayutConnection", "recordBayutCheck", "clearBayutConnection", "bayutConnectionView", "bayutToken",
     "bayutAgentLinks", "linkBayutAgent", "autoLinkBayutAgents", "bayutListings", "bayutUnitsToSync",
-    "recordBayutStep", "bayutTakenOff",
+    "bayutUnitsHeld", "recordBayutStep", "bayutTakenOff",
   ]) {
     assert.match(body(name), /withTenant\(organizationId,/, name);
     assert.doesNotMatch(body(name), /withAllTenants/, name);
@@ -490,4 +490,49 @@ test("14. the first agency a check records switches nothing off (task review)", 
   assert.equal((await raw(OTHER)).bayut_agency_id, 707);
   assert.equal((await lib.bayutConnectionView(OTHER)).agencyName, "Other - Sandbox");
   assert.ok((await lib.bayutBusinesses()).some((b) => b.organizationId === OTHER));
+});
+
+test("15. an answer given without a message keeps Bayut's words; a null message clears them (fix round)", db, async () => {
+  const WORDS = "The given data was invalid. price: The price must be at least 1000.";
+  await lib.recordBayutStep(SFS, A, "bayut", { ref: "BY-60", state: "live", message: WORDS, fingerprint: "k1" });
+  const first = await row(A, "bayut");
+  await lib.recordBayutStep(SFS, A, "bayut", { state: "live" });
+  let r = await row(A, "bayut");
+  assert.equal(r.remote_message, WORDS, "a state read back from Bayut keeps the words");
+  assert.ok(r.synced_at >= first.synced_at);
+  await lib.recordBayutStep(SFS, A, "bayut", { state: "pending", permitComment: "Compliance status is Pending our team's review" });
+  r = await row(A, "bayut");
+  assert.equal(r.remote_message, WORDS);
+  assert.equal(r.remote_state, "pending");
+  await lib.recordBayutStep(SFS, A, "bayut", { state: "live", message: null });
+  assert.equal((await row(A, "bayut")).remote_message, null, "a null message clears them");
+  await lib.recordBayutStep(SFS, E, "dubizzle", { ref: "BY-61", state: "unpublished" });
+  r = await row(E, "dubizzle");
+  assert.equal(r.remote_message, null, "a new row without a message has none");
+  assert.equal(r.wanted, false);
+});
+
+test("16. every unit holding a Bayut ref is listed, whatever its state or switch, with when each row was answered (fix round)", db, async () => {
+  await owner.query(
+    `update unit_portals set wanted = false, remote_ref = 'BY-62', remote_state = 'unpublished', synced_at = '2026-11-20T08:00:00Z'
+      where unit_id = $1 and portal = 'bayut'`,
+    [B]
+  );
+  await owner.query(`update unit_portals set remote_ref = null where unit_id = $1 and portal in ('bayut', 'dubizzle')`, [C]);
+  await owner.query(`update property_units set closed_at = now(), closed_reason = 'withdrawn' where id = $1`, [D]);
+  await owner.query(`update unit_portals set remote_ref = 'BY-63', remote_state = 'unpublished' where unit_id = $1 and portal = 'bayut'`, [D]);
+  const held = await lib.bayutUnitsHeld(SFS);
+  const ids = held.map((u) => u.unitId);
+  assert.ok(ids.includes(B), "unpublished and switched off, but Nexus made it");
+  assert.ok(ids.includes(D), "a closed unit too");
+  assert.ok(ids.includes(E), "a ref on the dubizzle row alone");
+  assert.ok(!ids.includes(C), "no ref, nothing on Bayut");
+  assert.ok(!(await lib.bayutUnitsToSync(SFS)).some((u) => u.unitId === B), "the units to sync leave it out");
+  const b = held.find((u) => u.unitId === B);
+  assert.deepEqual(b.remote.portals.bayut, { state: "unpublished", publishedAt: null });
+  assert.equal(b.remote.ref, "BY-62");
+  assert.equal(b.syncedAt.bayut, "2026-11-20T08:00:00.000Z");
+  assert.equal(held.find((u) => u.unitId === E).remote.ref, "BY-61");
+  assert.deepEqual((await lib.bayutUnitsHeld(OTHER)).map((u) => u.unitId), [O], "one business's units only");
+  await owner.query(`update property_units set closed_at = null, closed_reason = null where id = $1`, [D]);
 });
