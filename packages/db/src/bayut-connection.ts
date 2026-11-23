@@ -35,63 +35,83 @@ export type BayutAgentLink = { employeeId: string; bayutUserId: number; bayutUse
 const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
 const EVERYONE: Viewer = { employeeId: null, seesAll: true };
 
+/** What one check of the token found: its error (null: Bayut answered) and the agency it read (null: none read). */
+export type BayutCheck = { checkError: string | null; agencyId: number | null; agencyName: string | null };
+
 /**
- * Saves the token sealed, with what the check said and the agency it belongs
- * to; the ORN and feed are left alone. An agency the check could not read
- * (null) keeps the one held and changes nothing else. Another agency than the
- * one held turns every Bayut and dubizzle switch off, clears what Bayut said
- * on those rows, and removes the agent links (the old account's users).
+ * The agency a check read, recorded on the saved token — the one step a save
+ * and a check share, run inside the caller's withTenant after the token row is
+ * written. No agency read (null) keeps the one held and changes nothing. An
+ * agency other than the one held turns every Bayut and dubizzle switch off
+ * (changed by the system), clears what Bayut said on those rows, and removes
+ * the agent links (the old account's users). The first agency ever read
+ * replaces nothing, so it switches nothing off. True when the account changed.
+ */
+async function recordAgency(organizationId: string, agencyId: number | null, agencyName: string | null): Promise<boolean> {
+  if (agencyId === null) return false;
+  const before = await getPool().query<{ bayut_agency_id: number | null }>(
+    `select bayut_agency_id from portal_settings where organization_id = $1 for update`,
+    [organizationId]
+  );
+  const previous = before.rows[0]?.bayut_agency_id ?? null;
+  await getPool().query(
+    `update portal_settings set bayut_agency_id = $2, bayut_agency_name = left($3, 200) where organization_id = $1`,
+    [organizationId, agencyId, agencyName]
+  );
+  if (previous === null || Number(previous) === agencyId) return false;
+  await getPool().query(
+    `update unit_portals
+        set wanted = false,
+            changed_at = case when wanted then now() else changed_at end,
+            changed_by_employee_id = case when wanted then null else changed_by_employee_id end,
+            changed_by_admin_id = case when wanted then null else changed_by_admin_id end,
+            remote_ref = null, remote_state = null, remote_message = null, remote_fingerprint = null,
+            published_at = null, permit_comment = null, synced_at = null
+      where organization_id = $1 and portal in ('bayut', 'dubizzle')`,
+    [organizationId]
+  );
+  await getPool().query(`delete from bayut_agents where organization_id = $1`, [organizationId]);
+  return true;
+}
+
+/**
+ * Saves the token sealed, with what its check said; the ORN and feed are left
+ * alone. The agency the check read is recorded as `recordAgency` says: another
+ * account than the one held starts every Bayut and dubizzle switch afresh.
  */
 export async function saveBayutConnection(
   organizationId: string,
-  input: { token: string; agencyId: number | null; agencyName: string | null; checkError: string | null }
+  input: { token: string } & BayutCheck
 ): Promise<{ accountChanged: boolean }> {
   const sealed = sealToken(input.token);
   return withTenant(organizationId, async () => {
-    const before = await getPool().query<{ bayut_agency_id: number | null }>(
-      `select bayut_agency_id from portal_settings where organization_id = $1 for update`,
-      [organizationId]
-    );
-    const previous = before.rows[0]?.bayut_agency_id ?? null;
     await getPool().query(
-      `insert into portal_settings (organization_id, bayut_token_sealed, bayut_token_ending, bayut_agency_id, bayut_agency_name, bayut_checked_at, bayut_check_error)
-       values ($1, $2, $3, $4, left($5, 200), now(), left($6, 400))
+      `insert into portal_settings (organization_id, bayut_token_sealed, bayut_token_ending, bayut_checked_at, bayut_check_error)
+       values ($1, $2, $3, now(), left($4, 400))
        on conflict (organization_id) do update
          set bayut_token_sealed = excluded.bayut_token_sealed, bayut_token_ending = excluded.bayut_token_ending,
-             bayut_agency_id = coalesce(excluded.bayut_agency_id, portal_settings.bayut_agency_id),
-             bayut_agency_name = case when excluded.bayut_agency_id is null then portal_settings.bayut_agency_name
-                                      else excluded.bayut_agency_name end,
              bayut_checked_at = now(), bayut_check_error = excluded.bayut_check_error`,
-      [organizationId, sealed, input.token.slice(-4), input.agencyId, input.agencyName, input.checkError]
+      [organizationId, sealed, input.token.slice(-4), input.checkError]
     );
-    const accountChanged = previous !== null && input.agencyId !== null && Number(previous) !== input.agencyId;
-    if (accountChanged) {
-      // Turned off by the system: no person changed these switches.
-      await getPool().query(
-        `update unit_portals
-            set wanted = false,
-                changed_at = case when wanted then now() else changed_at end,
-                changed_by_employee_id = case when wanted then null else changed_by_employee_id end,
-                changed_by_admin_id = case when wanted then null else changed_by_admin_id end,
-                remote_ref = null, remote_state = null, remote_message = null, remote_fingerprint = null,
-                published_at = null, permit_comment = null, synced_at = null
-          where organization_id = $1 and portal in ('bayut', 'dubizzle')`,
-        [organizationId]
-      );
-      await getPool().query(`delete from bayut_agents where organization_id = $1`, [organizationId]);
-    }
-    return { accountChanged };
+    return { accountChanged: await recordAgency(organizationId, input.agencyId, input.agencyName) };
   });
 }
 
-/** What the latest check of the saved token said (null: Bayut answered). */
-export async function recordBayutCheck(organizationId: string, checkError: string | null): Promise<void> {
+/**
+ * What a later check of the saved token said, and the agency it read — recorded
+ * as a save records it (task review, 24 Nov 2026): a token whose first check
+ * failed may turn out, when checked again, to be another account's, and its
+ * switches must then go off. Nothing is recorded when no token is saved.
+ */
+export async function recordBayutCheck(organizationId: string, check: BayutCheck): Promise<{ accountChanged: boolean }> {
   return withTenant(organizationId, async () => {
-    await getPool().query(
+    const { rowCount } = await getPool().query(
       `update portal_settings set bayut_checked_at = now(), bayut_check_error = left($2, 400)
         where organization_id = $1 and bayut_token_sealed is not null`,
-      [organizationId, checkError]
+      [organizationId, check.checkError]
     );
+    if (!rowCount) return { accountChanged: false };
+    return { accountChanged: await recordAgency(organizationId, check.agencyId, check.agencyName) };
   });
 }
 
@@ -158,13 +178,20 @@ export async function bayutToken(organizationId: string): Promise<{ token: strin
   });
 }
 
-/** Active businesses whose token was checked and not refused: the ones the Bayut sync works for. */
+/**
+ * Active businesses whose token was checked, not refused, and whose Bayut
+ * agency is known: the ones the Bayut sync works for. Nothing is sent to Bayut
+ * before a check has read which account the token belongs to (task review,
+ * 24 Nov 2026), so a listing can never be made on an account Nexus cannot tell
+ * apart from the next one.
+ */
 export async function bayutBusinesses(): Promise<{ organizationId: string; timezone: string }[]> {
   return withAllTenants("bayut sync: which businesses have a working token", async () => {
     const { rows } = await getPool().query<{ organization_id: string; timezone: string }>(
       `select ps.organization_id, o.timezone
          from portal_settings ps join organizations o on o.id = ps.organization_id
         where o.is_active and ps.bayut_token_sealed is not null and ps.bayut_checked_at is not null and ps.bayut_check_error is null
+          and ps.bayut_agency_id is not null
         order by ps.organization_id`
     );
     return rows.map((r) => ({ organizationId: String(r.organization_id), timezone: r.timezone }));

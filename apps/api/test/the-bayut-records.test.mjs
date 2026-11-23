@@ -59,6 +59,9 @@ const asAisha = { employeeId: AISHA, seesAll: false };
 const TOKEN = "bayut-sandbox-token-0000-7c3d";
 const url = (photoId) => `https://api.nexusagenticos.com/portal-photos/${photoId}.jpg`;
 const BAY_SQUARE = "UAE › Dubai › Business Bay › Bay Square";
+/** A check that answered, with the agency it read; one that did not, with none. */
+const SANDBOX = { checkError: null, agencyId: 101, agencyName: "SFS Real Estate - Sandbox" };
+const failed = (checkError) => ({ checkError, agencyId: null, agencyName: null });
 
 let owner;
 let dbTurn;
@@ -190,22 +193,25 @@ test("2. the view never carries the token; a check is recorded", db, async () =>
     saved: true, agencyName: "SFS Real Estate - Sandbox", tokenEnding: "7c3d", checkedAt: "string", checkError: null,
   });
   assert.equal(JSON.stringify(view).includes(TOKEN), false);
-  await lib.recordBayutCheck(SFS, "Bayut refused the token: Unauthenticated.");
+  assert.deepEqual(await lib.recordBayutCheck(SFS, failed("Bayut refused the token: Unauthenticated.")), { accountChanged: false });
   assert.equal((await lib.bayutConnectionView(SFS)).checkError, "Bayut refused the token: Unauthenticated.");
-  await lib.recordBayutCheck(SFS, null);
+  assert.equal((await raw(SFS)).bayut_agency_id, 101, "a failed check keeps the agency");
+  assert.deepEqual(await lib.recordBayutCheck(SFS, SANDBOX), { accountChanged: false });
   assert.equal((await lib.bayutConnectionView(SFS)).checkError, null);
-  await lib.recordBayutCheck(OTHER, "Bayut refused the token: no");
+  assert.deepEqual(await lib.recordBayutCheck(OTHER, { checkError: null, agencyId: 999, agencyName: "Nobody" }), { accountChanged: false });
   assert.deepEqual(await lib.bayutConnectionView(OTHER), { saved: false, agencyName: null, tokenEnding: null, checkedAt: null, checkError: null });
-  assert.equal((await raw(OTHER)).bayut_checked_at, null, "a check is only recorded on a saved token");
+  const other = await raw(OTHER);
+  assert.equal(other.bayut_checked_at, null, "a check is only recorded on a saved token");
+  assert.equal(other.bayut_agency_id, null, "nor its agency");
 });
 
 test("3. the board tells a check that could not reach Bayut from a refused token", db, async () => {
   assert.equal((await board()).bayutConnection, "connected");
-  await lib.recordBayutCheck(SFS, "Could not reach Bayut: HTTP 503");
+  await lib.recordBayutCheck(SFS, failed("Could not reach Bayut: HTTP 503"));
   assert.equal((await board()).bayutConnection, "check-failed");
-  await lib.recordBayutCheck(SFS, "Bayut refused the token: Unauthenticated.");
+  await lib.recordBayutCheck(SFS, failed("Bayut refused the token: Unauthenticated."));
   assert.equal((await board()).bayutConnection, "token-refused");
-  await lib.recordBayutCheck(SFS, null);
+  await lib.recordBayutCheck(SFS, SANDBOX);
   assert.equal((await board()).bayutConnection, "connected");
   assert.equal((await board(OTHER, { employeeId: null, seesAll: true })).bayutConnection, "none");
 });
@@ -214,6 +220,8 @@ test("4. only checked, unrefused tokens of active businesses are synced", db, as
   await lib.saveBayutConnection(OTHER, { token: "other-token-zzzz", agencyId: null, agencyName: null, checkError: "Could not reach Bayut: HTTP 503" });
   assert.deepEqual(await lib.bayutToken(OTHER), { token: "other-token-zzzz", agencyId: null },
     "a first check that failed still leaves the token to check again");
+  await owner.query(`update portal_settings set bayut_check_error = null where organization_id = $1`, [OTHER]);
+  assert.ok(!(await lib.bayutBusinesses()).some((b) => b.organizationId === OTHER), "a token whose agency is unknown is not synced");
   assert.deepEqual(
     await lib.saveBayutConnection(OTHER, { token: "other-token-zzzz", agencyId: 303, agencyName: "Other", checkError: "Bayut refused the token: no" }),
     { accountChanged: false },
@@ -437,4 +445,49 @@ test("12. a disconnect clears the token and the links, leaves the units, and rem
     "coming back with another account after a disconnect still starts afresh"
   );
   assert.equal((await row(A, "dubizzle")).remote_ref, null);
+});
+
+test("13. unknown agency, then a successful check with a different agency switches everything off (task review)", db, async () => {
+  // Another account's token, saved while Bayut could not be reached: its agency is not known yet.
+  assert.deepEqual(
+    await lib.saveBayutConnection(SFS, { token: "the-next-account-token-6666", ...failed("Could not reach Bayut: HTTP 503") }),
+    { accountChanged: false }
+  );
+  assert.equal((await raw(SFS)).bayut_agency_id, 505, "the agency held is kept");
+  assert.ok(!(await lib.bayutBusinesses()).some((b) => b.organizationId === SFS), "not synced while the check failed");
+  // Units still ticked, with ids on the account held.
+  await owner.query(
+    `update unit_portals set wanted = true, remote_ref = 'BY-51', remote_state = 'live', remote_fingerprint = 'h1'
+      where unit_id = $1 and portal in ('bayut', 'dubizzle')`,
+    [A]
+  );
+  await lib.linkBayutAgent(SFS, AISHA, { bayutUserId: 50, bayutUserName: "Aisha K" });
+  // Check again: Bayut answers, and the token is another account's.
+  assert.deepEqual(await lib.recordBayutCheck(SFS, { checkError: null, agencyId: 606, agencyName: "SFS Real Estate" }), { accountChanged: true });
+  for (const portal of ["bayut", "dubizzle"]) {
+    const r = await row(A, portal);
+    assert.equal(r.wanted, false, portal);
+    assert.equal(r.remote_ref, null, portal);
+    assert.equal(r.remote_state, null, portal);
+  }
+  assert.deepEqual(await lib.bayutAgentLinks(SFS), [], "the old account's users mean nothing on the new one");
+  assert.equal((await row(A, "property_finder")).remote_ref, "PF-A", "Property Finder is untouched");
+  const r = await raw(SFS);
+  assert.equal(r.bayut_agency_id, 606);
+  assert.equal(r.bayut_agency_name, "SFS Real Estate");
+  assert.equal(r.bayut_check_error, null);
+  assert.ok((await lib.bayutBusinesses()).some((b) => b.organizationId === SFS));
+});
+
+test("14. the first agency a check records switches nothing off (task review)", db, async () => {
+  // As if no check had ever read OTHER's agency.
+  await owner.query(`update portal_settings set bayut_agency_id = null, bayut_agency_name = null where organization_id = $1`, [OTHER]);
+  await lib.saveBayutConnection(OTHER, { token: "other-sandbox-token-7777", ...failed("Could not reach Bayut: HTTP 503") });
+  assert.deepEqual(await lib.recordBayutCheck(OTHER, { checkError: null, agencyId: 707, agencyName: "Other - Sandbox" }), { accountChanged: false });
+  const o = await row(O, "bayut");
+  assert.equal(o.wanted, true);
+  assert.equal(o.remote_ref, "BY-9");
+  assert.equal((await raw(OTHER)).bayut_agency_id, 707);
+  assert.equal((await lib.bayutConnectionView(OTHER)).agencyName, "Other - Sandbox");
+  assert.ok((await lib.bayutBusinesses()).some((b) => b.organizationId === OTHER));
 });
