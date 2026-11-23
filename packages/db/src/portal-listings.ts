@@ -1,8 +1,12 @@
 import { randomBytes } from "node:crypto";
 import {
+  BAYUT_PORTALS,
+  bayutProblems,
   portalProblems,
   portalProblemSentence,
   toPortalListing,
+  type BayutContext,
+  type BayutPortal,
   type BoardUnit,
   type PortalListing,
   type PortalTarget,
@@ -139,8 +143,35 @@ export async function listingContext(organizationId: string, unit: BoardUnit, to
 }
 
 /**
+ * What Bayut's own rule needs beside the card (23 Nov 2026): whether the business
+ * has saved a Bayut token, the unit's Bayut location, and the Bayut user its
+ * agent is linked to. The caller runs it inside withTenant.
+ * Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §5, §6, §8
+ */
+export async function bayutContextFor(organizationId: string, unit: BoardUnit): Promise<BayutContext> {
+  const { rows: s } = await getPool().query<{ saved: boolean }>(
+    `select bayut_token_sealed is not null as saved from portal_settings where organization_id = $1`,
+    [organizationId]
+  );
+  const { rows: link } = unit.agent
+    ? await getPool().query<{ bayut_user_id: number }>(
+        `select bayut_user_id from bayut_agents where organization_id = $1 and employee_id = $2`,
+        [organizationId, unit.agent.id]
+      )
+    : { rows: [] as { bayut_user_id: number }[] };
+  return {
+    tokenSaved: s[0]?.saved === true,
+    locationId: unit.bayutLocation?.id ?? null,
+    userId: link[0] ? Number(link[0].bayut_user_id) : null,
+  };
+}
+
+const isBayutPortal = (portal: PortalTarget): portal is BayutPortal => (BAYUT_PORTALS as readonly PortalTarget[]).includes(portal);
+
+/**
  * Turns a portal on or off for a unit. On is refused, in the rule's words,
- * unless the unit is ready; off is always allowed. "closed" for a closed card.
+ * unless the unit is ready — for Bayut and dubizzle, by Bayut's rule too, in the
+ * same sentence (23 Nov 2026); off is always allowed. "closed" for a closed card.
  */
 export async function setUnitPortal(
   organizationId: string,
@@ -158,7 +189,9 @@ export async function setUnitPortal(
     // A pocket listing is off-market: its switches only ever go off (pocket listings, 7 Nov 2026).
     if (wanted && current.pocket.on) return { refused: POCKET_STAYS_OFF };
     if (wanted) {
-      const sentence = portalProblemSentence(portalProblems(current, await listingContext(organizationId, current, today, false)));
+      const problems = portalProblems(current, await listingContext(organizationId, current, today, false));
+      if (isBayutPortal(portal)) problems.push(...bayutProblems(current, await bayutContextFor(organizationId, current)));
+      const sentence = portalProblemSentence(problems);
       if (sentence) return { refused: sentence };
     }
     const [employeeId, adminId] = actorIds(actor);

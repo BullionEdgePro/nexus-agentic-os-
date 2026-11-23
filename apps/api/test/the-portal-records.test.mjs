@@ -2,6 +2,8 @@
 // switches, the business's ORN and feed address, each agent's BRN, and what the
 // feed publishes — decided when it is read (wanted AND ready), never stored, so
 // a permit that expires or a card that closes leaves the portals by itself.
+// Since 23 Nov 2026 Bayut and dubizzle also need the unit's Bayut location
+// (spec 2026-11-23-bayut-connection-design.md §8), so the unit has one.
 // Spec: docs/superpowers/specs/2026-11-07-portal-listings-design.md §2, §3, §5, §6
 //
 //   AUDIT_TEST_OWNER_URL=postgres://nexus:x@localhost:55440/nexus
@@ -16,6 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..", "..");
 const SRC = readFileSync(join(root, "packages", "db", "src", "portal-listings.ts"), "utf8");
 const MIGRATION = readFileSync(join(root, "packages", "db", "migrations", "110-a-unit-goes-on-the-portals.sql"), "utf8");
+const M113 = readFileSync(join(root, "packages", "db", "migrations", "113-a-unit-goes-on-bayut.sql"), "utf8");
 
 function body(name) {
   const start = SRC.indexOf(`export async function ${name}(`);
@@ -70,6 +73,7 @@ before(async () => {
   dbTurn = await owner.connect();
   await dbTurn.query("select pg_advisory_lock(20261102)");
   await owner.query(MIGRATION);
+  await owner.query(M113);
   await owner.query(`delete from organizations where id in ($1, $2)`, [SFS, OTHER]);
   await owner.query(
     `insert into organizations (id, slug, name, whatsapp_phone_number_id, whatsapp_business_account_id, timezone)
@@ -86,11 +90,13 @@ before(async () => {
   const { rows } = await owner.query(
     `insert into property_units (organization_id, step, reference, community, property_type, bedrooms, purpose, price_aed,
                                  form_a_signed_on, permit_number, permit_expires_on, agent_employee_id, title, description,
-                                 size_sqft, bathrooms, furnishing, sub_community, building, amenities, notes, updated_at)
+                                 size_sqft, bathrooms, furnishing, sub_community, building, amenities, notes, updated_at,
+                                 bayut_location_id, bayut_location_name)
      values ($1, 'S9', 'Bay Square 4 · 1102', 'Business Bay', 'apartment', 1, 'rent', 95000,
              '2026-10-28', '71450', '2027-10-27', $2, 'Bright 1-bed with canal view',
              'A bright one-bedroom apartment on a high floor, with a balcony over the canal.',
-             812, 2, 'unfurnished', 'Bay Square', 'Building 4', array['balcony'], 'Owner wants a family', '2026-11-06T09:30:00Z')
+             812, 2, 'unfurnished', 'Bay Square', 'Building 4', array['balcony'], 'Owner wants a family', '2026-11-06T09:30:00Z',
+             5002, 'UAE › Dubai › Business Bay › Bay Square')
      returning id`,
     [SFS, AISHA]
   );
@@ -118,7 +124,7 @@ test("1. switching on a unit that is not ready is refused with the sentence; off
   const refused = await lib.setUnitPortal(SFS, unit, "bayut", true, aisha, asAisha, TODAY);
   assert.deepEqual(refused, { refused: "Before it can go on the portals: 3 photos." });
   const off = await lib.setUnitPortal(SFS, unit, "bayut", false, aisha, asAisha, TODAY);
-  assert.deepEqual(off.portals.bayut, { wanted: false, state: null, message: null, syncedAt: null });
+  assert.deepEqual(off.portals.bayut, { wanted: false, state: null, message: null, syncedAt: null, permitComment: null, publishedAt: null });
   assert.equal(await lib.setUnitPortal(SFS, id(999), "bayut", false, aisha, asAisha, TODAY), null);
 });
 
@@ -155,7 +161,7 @@ test("4. an order that does not name every photo is refused whole", db, async ()
 
 test("5. a ready unit switches on, and the feed publishes it without anything private", db, async () => {
   const on = await lib.setUnitPortal(SFS, unit, "bayut", true, aisha, asAisha, TODAY);
-  assert.deepEqual(on.portals.bayut, { wanted: true, state: null, message: null, syncedAt: null });
+  assert.deepEqual(on.portals.bayut, { wanted: true, state: null, message: null, syncedAt: null, permitComment: null, publishedAt: null });
   await lib.setUnitPortal(SFS, unit, "property_finder", true, aisha, asAisha, TODAY);
   const listings = await lib.publishedListings(SFS, ["bayut", "dubizzle"], TODAY, url);
   assert.equal(listings.length, 1);

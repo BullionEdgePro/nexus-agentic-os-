@@ -190,9 +190,9 @@ test("6. the board says where Property Finder stands", db, async () => {
   assert.equal(b.pfConnection, "key-refused");
   const a = b.units.find((u) => u.id === A);
   assert.deepEqual({ ...a.portals.property_finder, syncedAt: typeof a.portals.property_finder.syncedAt }, {
-    wanted: true, state: "refused", message: "Price is missing", syncedAt: "string",
+    wanted: true, state: "refused", message: "Price is missing", syncedAt: "string", permitComment: null, publishedAt: null,
   });
-  assert.deepEqual(a.portals.bayut, { wanted: false, state: null, message: null, syncedAt: null });
+  assert.deepEqual(a.portals.bayut, { wanted: false, state: null, message: null, syncedAt: null, permitComment: null, publishedAt: null });
 });
 
 test("7. a different Property Finder account starts the units afresh; the same one keeps them (final review)", db, async () => {

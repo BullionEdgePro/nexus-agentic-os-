@@ -71,8 +71,9 @@ export type BoardUnit = {
   photos: { id: string; width: number; height: number }[];
   /**
    * The publish switches; what is actually published is wanted AND ready. With
-   * each, the portal's last answer — only Property Finder answers so far (its
-   * sync, 7 Nov 2026); for the others they stay null.
+   * each, the portal's last answer: Property Finder's from its sync (7 Nov 2026),
+   * Bayut's on the Bayut and dubizzle rows from the Bayut sync (23 Nov 2026), with
+   * Bayut's permit comment and its last publish time; null until a portal answers.
    */
   portals: Record<
     "bayut" | "dubizzle" | "property_finder",

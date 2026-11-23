@@ -3,6 +3,7 @@ import {
   moveProblem,
   PF_LISTING_CALLS_READY,
   purposeAfterMove,
+  type BayutState,
   type Board,
   type BoardDeal,
   type BoardUnit,
@@ -74,6 +75,16 @@ export type UnitFields = Partial<{
   availableFrom: string | null;
 }>;
 
+/**
+ * The unit's Bayut location (23 Nov 2026), set on an existing card only: an id
+ * and its name, both or neither — the type keeps them together, and the API
+ * checks the pair. Spec: docs/superpowers/specs/2026-11-23-bayut-connection-design.md §6, §12
+ */
+export type BayutLocationFields =
+  | { bayutLocationId: number; bayutLocationName: string }
+  | { bayutLocationId: null; bayutLocationName: null }
+  | { bayutLocationId?: undefined; bayutLocationName?: undefined };
+
 export type DealFields = Partial<{
   budgetAed: number | null;
   offerAed: number | null;
@@ -122,6 +133,12 @@ const UNIT_COLUMNS: Record<keyof UnitFields, string> = {
   availableFrom: "available_from",
 };
 
+const UPDATE_COLUMNS: Record<keyof UnitFields | keyof BayutLocationFields, string> = {
+  ...UNIT_COLUMNS,
+  bayutLocationId: "bayut_location_id",
+  bayutLocationName: "bayut_location_name",
+};
+
 const DEAL_COLUMNS: Record<keyof DealFields, string> = {
   budgetAed: "budget_aed",
   offerAed: "offer_aed",
@@ -148,6 +165,7 @@ const UNIT_SELECT = `
          u.live_on, u.owner_contact_id, u.notes, u.closed_at, u.updated_at,
          u.title, u.description, u.size_sqft::text as size_sqft, u.bathrooms, u.furnishing, u.city,
          u.sub_community, u.building, u.parking, u.amenities, u.available_from::text as available_from,
+         u.bayut_location_id, u.bayut_location_name,
          coalesce((
            select json_agg(json_build_object('id', p.id, 'width', p.width, 'height', p.height) order by p.position)
              from unit_photos p
@@ -155,7 +173,7 @@ const UNIT_SELECT = `
          ), '[]'::json) as photos,
          coalesce((select json_object_agg(up.portal, json_build_object(
                      'wanted', up.wanted, 'state', up.remote_state, 'message', up.remote_message, 'syncedAt', up.synced_at,
-                     'permitComment', null, 'publishedAt', null))
+                     'permitComment', up.permit_comment, 'publishedAt', up.published_at))
                      from unit_portals up where up.unit_id = u.id), '{}'::json) as portals,
          u.pocket, u.pocket_since,
          -- Pocket shares this viewer may see (a colleague's client stays hidden from staff); never the token.
@@ -256,7 +274,10 @@ function toUnit(row: Row): BoardUnit {
       height: Number(p.height),
     })),
     portals: portalRows(row.portals as Record<string, PortalRow> | null),
-    bayutLocation: null, // placeholder until Task 4 reads the real column
+    bayutLocation:
+      row.bayut_location_id === null || row.bayut_location_id === undefined
+        ? null
+        : { id: Number(row.bayut_location_id), name: String(row.bayut_location_name) },
     pocket: {
       on: Boolean(row.pocket),
       since: row.pocket_since ? iso(row.pocket_since) : null,
@@ -285,14 +306,14 @@ function toPocketShare(s: Record<string, unknown>): PocketShare {
 
 type PortalRow = {
   wanted: boolean;
-  state: PfState | null;
+  state: PfState | BayutState | null;
   message: string | null;
   syncedAt: string | null;
   permitComment: string | null;
   publishedAt: string | null;
 };
 
-/** All three switches, off unless a row says otherwise, with the portal's last answer (Property Finder only, so far). */
+/** All three switches, off unless a row says otherwise, with the portal's last answer (Property Finder's, Bayut's for Bayut and dubizzle). */
 function portalRows(rows: Record<string, PortalRow> | null): BoardUnit["portals"] {
   const one = (r: PortalRow | undefined): BoardUnit["portals"]["bayut"] => ({
     wanted: r?.wanted === true,
@@ -474,14 +495,18 @@ export async function getBoard(input: { organizationId: string; timezone: string
       feed_last_read_at: Date | null;
       pf_saved: boolean;
       pf_check_error: string | null;
+      bayut_saved: boolean;
+      bayut_check_error: string | null;
     }>(
-      `select orn, feed_token, feed_last_read_at, pf_key_sealed is not null as pf_saved, pf_check_error
+      `select orn, feed_token, feed_last_read_at, pf_key_sealed is not null as pf_saved, pf_check_error,
+              bayut_token_sealed is not null as bayut_saved, bayut_check_error
          from portal_settings where organization_id = $1`,
       [organizationId]
     );
     const s = settings.rows[0];
-    const brns = await db.query<{ id: string; has: boolean; is_active: boolean }>(
-      `select e.id, e.brn is not null as has, e.is_active
+    const brns = await db.query<{ id: string; has: boolean; is_active: boolean; bayut_linked: boolean }>(
+      `select e.id, e.brn is not null as has, e.is_active,
+              exists (select 1 from bayut_agents ba where ba.organization_id = $1 and ba.employee_id = e.id) as bayut_linked
          from employees e
         where e.organization_id = $1
           and e.id in (select u.agent_employee_id from property_units u
@@ -515,9 +540,17 @@ export async function getBoard(input: { organizationId: string; timezone: string
           : PF_LISTING_CALLS_READY
             ? "connected"
             : "waiting-format",
-      // Placeholders until Task 4 reads the real columns.
-      bayutConnection: "none",
-      bayutLinked: {},
+      // As Property Finder's (23 Nov 2026): saving a token always records its check, and a check
+      // that could not reach Bayut is not a refused token — the words are the API's own
+      // ("Could not reach Bayut: …"). Spec 2026-11-23-bayut-connection-design.md §4, §12.
+      bayutConnection: !s?.bayut_saved
+        ? "none"
+        : s.bayut_check_error
+          ? s.bayut_check_error.startsWith("Could not reach Bayut")
+            ? "check-failed"
+            : "token-refused"
+          : "connected",
+      bayutLinked: Object.fromEntries(brns.rows.map((r) => [String(r.id), r.bayut_linked])),
     };
   });
 }
@@ -547,13 +580,13 @@ export async function createUnit(
   });
 }
 
-/** Saves the fields given; the step and the purpose change only by moving. */
+/** Saves the fields given (the Bayut location among them); the step and the purpose change only by moving. */
 export async function updateUnit(
   organizationId: string,
   actor: Actor,
   viewer: Viewer,
   id: string,
-  fields: UnitFields
+  fields: UnitFields & BayutLocationFields
 ): Promise<BoardUnit | "closed" | Refused | "no-contact" | null> {
   return withTenant(organizationId, async () => {
     const current = await readUnit(organizationId, viewer, id, true);
@@ -566,7 +599,7 @@ export async function updateUnit(
     }
     if (fields.ownerContactId && !(await bookContact(organizationId, viewer, fields.ownerContactId))) return "no-contact";
     if (fields.agentEmployeeId && !(await isStaff(organizationId, fields.agentEmployeeId))) return { refused: NOT_STAFF };
-    const { sql, args } = setClause(fields, UNIT_COLUMNS, 5);
+    const { sql, args } = setClause(fields, UPDATE_COLUMNS, 5);
     const [employeeId, adminId] = actorIds(actor);
     await getPool().query(
       `update property_units set ${[...sql, "updated_by_employee_id = $3", "updated_by_admin_id = $4", "updated_at = now()"].join(", ")}
