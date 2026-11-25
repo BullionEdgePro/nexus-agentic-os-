@@ -317,3 +317,17 @@
   .day-clear-mark circle,
   .day-clear-mark path { animation: none; stroke-dashoffset: 0; }
 }
+
+/* My board (25 Nov 2026): the person's own cards on the Workflow Board, and what needs them.
+   Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §4 */
+.day-board { margin-bottom: 16px; }
+.day-board-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.day-board-head h2 { margin: 0; }
+.day-board-open { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.day-board-lines { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 10px 0 0; }
+.day-board-lines dt { font-size: 13px; font-weight: 700; }
+.day-board-lines dd { margin: 0; font-size: 14px; }
+.day-board-note { margin: 10px 0 0; font-size: 14px; }
+.day-board-needs-title { margin: 14px 0 4px; font-size: 13px; font-weight: 700; }
+.day-board-needs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.day-board-needs a { font-size: 14px; }

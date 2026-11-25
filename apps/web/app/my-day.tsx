@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getMyDay, readableError, type MyDay } from "@/lib/api";
+import { MyBoard } from "./my-board";
 import "./my-day.css";
 
 /**
@@ -152,6 +153,9 @@ export function MyDay() {
           ))}
         </ul>
       ) : null}
+
+      {/* My board (25 Nov 2026): the person's own cards on the Workflow Board, even on a clear day. */}
+      <MyBoard />
 
       {clear ? null : (
         <div className="day-grid">
