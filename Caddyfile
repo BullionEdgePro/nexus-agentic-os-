@@ -27,11 +27,43 @@ www.nexusagenticos.com {
 
 broadlark.com {
 	encode zstd gzip
-	# Uploads go through the app; Caddy itself sets no body limit.
-	reverse_proxy broadlark-web:3210 {
-		# The app rate-limits on the leftmost X-Forwarded-For. Hand it exactly
-		# one address: the real visitor (via Cloudflare) or the direct caller.
-		header_up X-Forwarded-For {client_ip}
+	# 20 Nov 2026 (Ivan): open the public marketing pages to search engines.
+	# The app's own robots.ts answers 'Disallow: /' (written while sign-up was
+	# open); sign-up is REGISTRATION=approval now, so the landing page, /guide,
+	# /privacy and /terms may be indexed. Every other path stays disallowed.
+	# These two handles answer before the app. To undo: delete them and keep
+	# only the final handle's reverse_proxy, then reload Caddy.
+	handle /robots.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		respond `User-agent: *
+Allow: /$
+Allow: /guide
+Allow: /privacy
+Allow: /terms
+Allow: /opengraph-image
+Disallow: /
+
+Sitemap: https://broadlark.com/sitemap.xml
+` 200
+	}
+	handle /sitemap.xml {
+		header Content-Type "application/xml; charset=utf-8"
+		respond `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://broadlark.com/</loc></url>
+<url><loc>https://broadlark.com/guide</loc></url>
+<url><loc>https://broadlark.com/privacy</loc></url>
+<url><loc>https://broadlark.com/terms</loc></url>
+</urlset>
+` 200
+	}
+	handle {
+		# Uploads go through the app; Caddy itself sets no body limit.
+		reverse_proxy broadlark-web:3210 {
+			# The app rate-limits on the leftmost X-Forwarded-For. Hand it exactly
+			# one address: the real visitor (via Cloudflare) or the direct caller.
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 }
 
