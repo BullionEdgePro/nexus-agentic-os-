@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BUSINESSES_WITH_WORKFLOW, workflowFor, type BusinessSlug } from "@nexus/shared";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
+import { askedView, type WorkflowView } from "@/lib/workflow/board-link";
 import { fontVariables } from "@/lib/fonts";
 import { TENANTS } from "@/lib/tenants";
 import { WorkflowPanel } from "./panel";
@@ -35,12 +36,17 @@ export default function WorkflowPage() {
   const [requested, setRequested] = useState<string | null | undefined>(undefined);
   // Compact header (25 Nov 2026): the explanation waits behind an ⓘ.
   const [about, setAbout] = useState(false);
-  // A link from My board (?card= or ?view=board, 25 Nov 2026) lands on the Board tab.
-  const [view, setView] = useState<"picture" | "board">("picture");
+  // A link from My board (?card= or ?view=board, 25 Nov 2026) lands on the Board
+  // tab; undefined when the link asks for no view, and the panel then opens on
+  // this browser's last one.
+  const [view, setView] = useState<WorkflowView | undefined>(undefined);
 
+  // Read together, before the panel mounts (it waits for `requested`), so the
+  // panel starts on the view the link asked for.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.has("card") || params.get("view") === "board") setView("board");
+    const asked = askedView(window.location.search);
+    if (asked) setView(asked);
     setRequested(params.get("business"));
   }, []);
 
@@ -53,6 +59,8 @@ export default function WorkflowPage() {
       : mySlug) as BusinessSlug | null | undefined;
 
   function chooseBusiness(next: string) {
+    // A link's view was for the business it landed on; another opens on this browser's last view.
+    setView(undefined);
     setRequested(next);
     window.history.replaceState(null, "", `/deck/workflow?business=${encodeURIComponent(next)}`);
   }

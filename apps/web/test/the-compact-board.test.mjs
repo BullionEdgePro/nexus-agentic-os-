@@ -162,7 +162,7 @@ test("Only mine hides a colleague's cards", () => {
 test("the Only mine switch is for staff only, and ?card= opens a card the board holds", () => {
   const panel = read("app/deck/workflow/board/board-panel.tsx");
   assert.match(panel, /Only mine/);
-  assert.match(panel, /!board\.viewer\.seesAll/);
+  assert.match(panel, /\{board && offersOnlyMine\(board\.viewer\) \? \(/);
   assert.match(panel, /new URLSearchParams\(window\.location\.search\)\.get\("card"\)/);
   assert.match(panel, /\[\.\.\.board\.units, \.\.\.board\.deals\]\.find\(\(c\) => c\.id === wanted\)/);
   assert.match(panel, /if \(card\) \{\s*setOpened\(\{ id: card\.id, el: null \}\);/);
@@ -175,10 +175,93 @@ test("the page header is never the hidden arrow-head class (preview, 25 Nov 2026
   assert.doesNotMatch(page, /className="[^"]*\bwf-head\b/);
 });
 
+// ---- Final review (25 Nov 2026): links from My board land, and a board that names no viewer ----
+import { readdirSync } from "node:fs";
+import * as link from "@/lib/workflow/board-link";
+
 test("a link with ?card= or ?view=board lands on the Board tab", () => {
+  const { askedView } = link;
+  assert.equal(typeof askedView, "function", "lib/workflow/board-link exports no askedView");
+  assert.equal(askedView("?card=u1"), "board");
+  assert.equal(askedView("?business=sfs-international&view=board"), "board");
+  assert.equal(askedView("?business=sfs-international"), undefined);
+  assert.equal(askedView(""), undefined);
   const page = read("app/deck/workflow/page.tsx");
-  assert.match(page, /params\.has\("card"\) \|\| params\.get\("view"\) === "board"/);
+  assert.match(page, /const asked = askedView\(window\.location\.search\);\s*if \(asked\) setView\(asked\);\s*setRequested\(params\.get\("business"\)\);/);
+  // The panel mounts only once the page has read the address, so it starts on the asked view.
+  assert.match(page, /!known \|\| requested === undefined\s*\?\s*undefined/);
   assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} initialView=\{view\} \/>/);
+});
+
+test("a link's own view wins over this browser's last one, without becoming it; with none asked, the last one stays", () => {
+  // Final review I2: a stored "Live picture" took the Board away, so a My board link never opened its card.
+  const { startView } = link;
+  assert.equal(typeof startView, "function", "lib/workflow/board-link exports no startView");
+  assert.equal(startView("board", "picture"), "board");
+  assert.equal(startView("board", null), "board");
+  assert.equal(startView(undefined, "board"), "board");
+  assert.equal(startView(undefined, "picture"), "picture");
+  assert.equal(startView(undefined, null), "picture");
+  assert.equal(startView(undefined, "tiles"), "picture");
+  const panel = read("app/deck/workflow/panel.tsx");
+  assert.match(panel, /export function WorkflowPanel\(\{ slug, initialView \}: \{ slug: BusinessSlug; initialView\?: View \}\)/);
+  assert.match(panel, /useState<View>\(initialView \?\? "picture"\)/);
+  assert.match(panel, /setView\(startView\(initialView, saved\)\);/);
+  // A link is not a choice (3 Nov: "the choice is remembered per browser"): only a pick by hand is stored.
+  assert.doesNotMatch(panel, /remember\(initialView\)/);
+  assert.match(read("app/deck/hq/[slug]/tabs.tsx"), /<WorkflowPanel slug=\{slug as BusinessSlug\} \/>/);
+  const page = read("app/deck/workflow/page.tsx");
+  assert.match(page, /useState<WorkflowView \| undefined>\(undefined\)/);
+  assert.match(page, /function chooseBusiness\(next: string\) \{[^}]*setView\(undefined\);/);
+});
+
+test("?card= leaves the address once read, the Board still asked for; ?view= leaves once a view is picked by hand", () => {
+  // Final review minor 10: ?card= stayed, so every return to the Board tab, and every reload, reopened the card.
+  const { withParams } = link;
+  assert.equal(typeof withParams, "function", "lib/workflow/board-link exports no withParams");
+  const at = (search, hash = "") => ({ pathname: "/deck/workflow", search, hash });
+  const read1 = { card: null, view: "board" };
+  assert.equal(withParams(at("?card=u1"), read1), "/deck/workflow?view=board");
+  assert.equal(withParams(at("?business=sfs-international&card=u1"), read1), "/deck/workflow?business=sfs-international&view=board");
+  assert.equal(withParams(at("?card=u1&business=sfs-international", "#top"), read1), "/deck/workflow?business=sfs-international&view=board#top");
+  assert.equal(withParams(at("?view=board&card=u1"), read1), "/deck/workflow?view=board");
+  assert.equal(withParams(at("?view=board"), { view: null }), "/deck/workflow");
+  assert.equal(withParams(at("?business=sfs-international", "#workflow"), { view: null }), null, "nothing to change");
+  assert.equal(withParams(at("?view=board"), { view: "board" }), null, "nothing to change");
+  const board = read("app/deck/workflow/board/board-panel.tsx");
+  assert.match(board, /if \(wanted\) \{\s*const rest = withParams\(window\.location, \{ card: null, view: "board" \}\);\s*if \(rest !== null\) window\.history\.replaceState\(null, "", rest\);/);
+  const panel = read("app/deck/workflow/panel.tsx");
+  assert.match(panel, /function choose\(next: View\) \{\s*setView\(next\);\s*remember\(next\);[\s\S]{0,160}const rest = withParams\(window\.location, \{ view: null \}\);\s*if \(rest !== null\) window\.history\.replaceState\(null, "", rest\);/);
+});
+
+test("a board that names no viewer offers no Only mine and breaks no screen", () => {
+  // Final review minor 9: an API older than the viewer field crashed the board panel on render.
+  const { isStaffViewer, offersOnlyMine } = layout;
+  assert.equal(typeof offersOnlyMine, "function", "board-layout exports no offersOnlyMine");
+  assert.equal(offersOnlyMine({ employeeId: "e1", seesAll: false }), true);
+  assert.equal(offersOnlyMine({ employeeId: "e1", seesAll: true }), false);
+  assert.equal(offersOnlyMine({ employeeId: null, seesAll: false }), false);
+  assert.equal(offersOnlyMine(undefined), false);
+  assert.equal(isStaffViewer({ employeeId: null, seesAll: false }), true);
+  assert.equal(isStaffViewer({ employeeId: "e1", seesAll: true }), false);
+  assert.equal(isStaffViewer(undefined), false);
+  const { viewer: _gone, ...old } = BOARD;
+  assert.doesNotMatch(view({ board: old }), /class="wf-board-mine"/);
+  const files = ["app", "lib"].flatMap((dir) =>
+    readdirSync(new URL(`../${dir}`, import.meta.url), { recursive: true })
+      .map((f) => `${dir}/${String(f).replace(/\\/g, "/")}`)
+      .filter((f) => /\.tsx?$/.test(f))
+  );
+  assert.ok(files.includes("app/my-board.tsx") && files.includes("app/deck/workflow/board/board-panel.tsx"));
+  for (const f of files) assert.doesNotMatch(read(f), /\bboard\.viewer\.\w/, `${f} reads board.viewer unguarded`);
+  assert.match(read("app/my-board.tsx"), /if \(cancelled \|\| !isStaffViewer\(board\.viewer\)\) return;/);
+});
+
+test("the pocket-listing alert on an agent's phone lands on the Board", () => {
+  // Found beside I2: it linked to #board, which nothing reads, so it opened on Live picture.
+  const dispatcher = read("../api/src/services/push-dispatcher.ts");
+  assert.match(dispatcher, /url: "\/deck\/workflow\?view=board"/);
+  assert.doesNotMatch(dispatcher, /workflow#board/);
 });
 
 // ---- Final review (25 Nov 2026): a drop on an empty step lands (C1); only the dragged lane opens (I3) ----

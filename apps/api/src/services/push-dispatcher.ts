@@ -158,7 +158,8 @@ export async function notifyPocketInterest(employeeId: string, text: string): Pr
   if (!pushConfigured()) return;
   const subjects = [`e:${employeeId}`];
   const subs = devicesFor(await listPushSubscriptionsForSubjects(subjects), [{ subjects, requiresMode: "mine" }]);
-  const payload = { ...buildPlatformPayload(text), url: "/deck/workflow#board" };
+  // The Board tab (25 Nov 2026): "#board" was read by nothing, so the alert opened on Live picture.
+  const payload = { ...buildPlatformPayload(text), url: "/deck/workflow?view=board" };
   await deliver(subs, () => payload);
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { verdict, workflowFor, type AuditDays, type BusinessSlug, type WorkflowAudit } from "@nexus/shared";
 import { getWorkflowAudit, readableError } from "@/lib/api";
 import { isQuiet, updatedLabel } from "@/lib/workflow/pulse";
+import { startView, withParams, type WorkflowView } from "@/lib/workflow/board-link";
 import { openFromCard } from "../../kit/card-window";
 import { WorkflowLanes } from "./lanes";
 import { StepWindow } from "./step-window";
@@ -33,15 +34,28 @@ import { WorkflowBoardPanel } from "./board/board-panel";
 const PERIODS: AuditDays[] = [7, 30, 90];
 
 /** The live picture, or the board staff work on (3 Nov 2026); remembered per browser. */
-type View = "picture" | "board";
+type View = WorkflowView;
 const VIEWS: { id: View; label: string }[] = [
   { id: "picture", label: "Live picture" },
   { id: "board", label: "Board" },
 ];
 
-export function WorkflowPanel({ slug, initialView = "picture" }: { slug: BusinessSlug; initialView?: View }) {
+/** This browser's last view, picked by hand. Storage can refuse (a private window): then not remembered, still shown. */
+function remember(next: View) {
+  try {
+    localStorage.setItem("nexus.workflow.view", next);
+  } catch {
+    /* not remembered, still shown */
+  }
+}
+
+/**
+ * `initialView` is the view a link asked for (the Workflow page's ?view=board or
+ * ?card=); Business HQ asks for none, so it opens on this browser's last view.
+ */
+export function WorkflowPanel({ slug, initialView }: { slug: BusinessSlug; initialView?: View }) {
   const workflow = workflowFor(slug);
-  const [view, setView] = useState<View>(initialView);
+  const [view, setView] = useState<View>(initialView ?? "picture");
   const [days, setDays] = useState<AuditDays>(30);
   const [audit, setAudit] = useState<WorkflowAudit | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -84,24 +98,28 @@ export function WorkflowPanel({ slug, initialView = "picture" }: { slug: Busines
     return () => clearInterval(tick);
   }, []);
 
-  // This browser's last view. Storage can be missing or refuse (a private
-  // window); the panel then simply opens on the live picture.
+  // Where the panel opens (final review, 25 Nov 2026): the view a link asked
+  // for, else this browser's last one. Storage can be missing or refuse (a
+  // private window): the asked view, else the live picture. Once, when the
+  // panel opens — initialView is where it starts, not a view to follow; with
+  // [initialView] an admin pressing the chosen business again would re-run it.
   useEffect(() => {
+    let saved: string | null = null;
     try {
-      const saved = localStorage.getItem("nexus.workflow.view");
-      if (saved === "picture" || saved === "board") setView(saved);
+      saved = localStorage.getItem("nexus.workflow.view");
     } catch {
       /* no storage: keep the default */
     }
+    setView(startView(initialView, saved));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function choose(next: View) {
     setView(next);
-    try {
-      localStorage.setItem("nexus.workflow.view", next);
-    } catch {
-      /* not remembered, still shown */
-    }
+    remember(next);
+    // A pick by hand ends a link's ?view=, so a reload keeps the pick.
+    const rest = withParams(window.location, { view: null });
+    if (rest !== null) window.history.replaceState(null, "", rest);
   }
 
   if (!workflow) return <NoWorkflow />;

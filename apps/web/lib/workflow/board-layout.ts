@@ -16,6 +16,20 @@ export function isMine(card: BoardCard, viewer: Board["viewer"] | undefined): bo
 }
 
 /**
+ * A staff member the board names (§3.8): not an admin. A board from an API
+ * older than 25 Nov 2026 names nobody; then nothing on screen is anyone's own
+ * (no "Only mine", no My board) instead of the screen breaking.
+ */
+export function isStaffViewer(viewer: Board["viewer"] | undefined): boolean {
+  return !!viewer && !viewer.seesAll;
+}
+
+/** Whether the board offers "Only mine": to staff with an employee record, the only viewers who own cards. */
+export function offersOnlyMine(viewer: Board["viewer"] | undefined): boolean {
+  return isStaffViewer(viewer) && !!viewer?.employeeId;
+}
+
+/**
  * The lane of the card being dragged, or null when none is (final review,
  * 25 Nov 2026): only that lane's empty steps open up. A card never drops in the
  * other lane, and a deal in hand must not push the deals down under the units'

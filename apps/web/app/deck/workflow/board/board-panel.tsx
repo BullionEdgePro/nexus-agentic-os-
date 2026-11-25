@@ -32,6 +32,8 @@ import {
 } from "@/lib/api";
 import { PORTAL_PHOTO, shrinkTo } from "@/lib/team-chat/shrink-image";
 import { updatedLabel } from "@/lib/workflow/pulse";
+import { offersOnlyMine } from "@/lib/workflow/board-layout";
+import { withParams } from "@/lib/workflow/board-link";
 import { PORTAL_LABEL } from "./portals-section";
 import { PortalSettings, PortalSettingsButton } from "./portal-settings";
 import { ShareWindow, type SharedLink } from "./pocket-section";
@@ -139,11 +141,19 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
   );
 
   // A card named by ?card= opens once, on the first board received; one this
-  // viewer cannot see, or one now closed, is simply not opened.
+  // viewer cannot see, or one now closed, is simply not opened. Once read it
+  // leaves the address, the Board still asked for (business= and the rest
+  // stay), so going back to the Board tab or reloading does not open it again
+  // and a reload stays on the Board (final review, 25 Nov 2026). Written now,
+  // after the board has loaded, when the app's router already keeps history.
   useEffect(() => {
     if (!board || linkedCard.current) return;
     linkedCard.current = true;
     const wanted = new URLSearchParams(window.location.search).get("card");
+    if (wanted) {
+      const rest = withParams(window.location, { card: null, view: "board" });
+      if (rest !== null) window.history.replaceState(null, "", rest);
+    }
     const card = wanted ? [...board.units, ...board.deals].find((c) => c.id === wanted) : undefined;
     if (card) {
       setOpened({ id: card.id, el: null });
@@ -270,7 +280,7 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
             Refresh
           </button>
           <PortalSettingsButton isAdmin={isAdmin} onOpen={() => setSettingsOpen(true)} />
-          {board && !board.viewer.seesAll && board.viewer.employeeId ? (
+          {board && offersOnlyMine(board.viewer) ? (
             <button type="button" className="kit-pill quiet" aria-pressed={onlyMine} onClick={() => setOnlyMine((v) => !v)}>
               Only mine
             </button>

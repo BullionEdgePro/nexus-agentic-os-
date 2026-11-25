@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { workflowFor, type BusinessSlug } from "@nexus/shared";
 import { getWorkflowBoard, readableError } from "@/lib/api";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
+import { isStaffViewer } from "@/lib/workflow/board-layout";
 import { myBoardSummary, type MyBoardSummary } from "@/lib/workflow/my-board";
 
 /**
@@ -25,7 +26,8 @@ export function MyBoard() {
     let cancelled = false;
     getWorkflowBoard(slug)
       .then((board) => {
-        if (cancelled || board.viewer.seesAll) return;
+        // An admin's board, or one from an API that names no viewer: nothing to call theirs.
+        if (cancelled || !isStaffViewer(board.viewer)) return;
         setSummary(myBoardSummary(workflow, board, Date.now(), "Asia/Dubai"));
       })
       .catch((err) => {
