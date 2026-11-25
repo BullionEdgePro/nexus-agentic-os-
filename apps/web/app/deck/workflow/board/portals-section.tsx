@@ -66,6 +66,18 @@ export function portalReadiness(unit: BoardUnit, board: Board, portal: PortalTar
 }
 
 /**
+ * isPublished for one portal (final review, 25 Nov 2026): wanted there AND
+ * ready for it — for Bayut and dubizzle, only once Bayut shows it live. My
+ * board's "Live on Bayut" asks it for Bayut; isPublished asks it of each.
+ * Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §4
+ */
+export function isPublishedOn(unit: BoardUnit, board: Board, portal: PortalTarget): boolean {
+  const row = unit.portals[portal];
+  if (!row?.wanted || portalReadiness(unit, board, portal).length > 0) return false;
+  return !isBayutPortal(portal) || row.state === "live";
+}
+
+/**
  * Wanted on a portal AND ready for it: what Portals + social counts as live
  * (spec §5) — for Bayut and dubizzle, by Bayut's rule too (23 Nov 2026), and
  * only once Bayut shows the listing live (final review, 24 Nov 2026): sent,
@@ -78,11 +90,7 @@ export function portalReadiness(unit: BoardUnit, board: Board, portal: PortalTar
  */
 export function isPublished(unit: BoardUnit, board: Board): boolean {
   if (unit.pocket?.on) return readiness(unit, board).length === 0 && unit.pocket.shares.some((s) => s.active);
-  return PORTAL_TARGETS.some((portal) => {
-    const row = unit.portals[portal];
-    if (!row?.wanted || portalReadiness(unit, board, portal).length > 0) return false;
-    return !isBayutPortal(portal) || row.state === "live";
-  });
+  return PORTAL_TARGETS.some((portal) => isPublishedOn(unit, board, portal));
 }
 
 export const POCKET_STAYS_OFF = "A pocket listing stays off the portals — turn Pocket off to publish it.";

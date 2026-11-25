@@ -85,6 +85,11 @@ export function MyBoardView({ summary, error }: { summary: MyBoardSummary | null
                 <a href={`/deck/workflow?card=${encodeURIComponent(n.cardId)}`}>{n.text}</a>
               </li>
             ))}
+            {summary.needsMore > 0 ? (
+              <li>
+                <a href="/deck/workflow?view=board">+{summary.needsMore} more on the board</a>
+              </li>
+            ) : null}
           </ul>
         </>
       ) : null}
