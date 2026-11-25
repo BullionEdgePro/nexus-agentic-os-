@@ -464,6 +464,11 @@ export async function getBoard(input: { organizationId: string; timezone: string
     );
     // Hot = high or urgent in the last 30 days, for this business as the one
     // serving the chat (the audit's own meaning), and no open deal yet.
+    // Not a buyer (compact board, 25 Nov 2026): a contact whose number is one of
+    // this business's own staff WhatsApp lines (another business's staff are private
+    // to it), or whose name starts with the name of a business on Nexus (our own, or
+    // a sister firm). Digits only, so "+971 50 …" and "97150…" are the same line.
+    // Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3.7
     const hot = await db.query(
       `select * from (
          select distinct on (la.contact_id)
@@ -476,6 +481,12 @@ export async function getBoard(input: { organizationId: string; timezone: string
             and ($2::boolean or ct.owner_employee_id = $3::uuid)
             and not exists (select 1 from property_deals d
                              where d.organization_id = $1 and d.contact_id = la.contact_id and d.closed_at is null)
+            and not exists (select 1 from employees e
+                             where regexp_replace(coalesce(e.whatsapp_number, ''), '\\D', '', 'g') <> ''
+                               and regexp_replace(e.whatsapp_number, '\\D', '', 'g') = regexp_replace(coalesce(ct.wa_id, ''), '\\D', '', 'g'))
+            and not exists (select 1 from organizations o
+                             where length(o.name) >= 6
+                               and starts_with(lower(coalesce(ct.display_name, '')), lower(o.name)))
           order by la.contact_id, la.created_at desc
        ) h order by h.created_at desc limit 20`,
       args
@@ -514,6 +525,7 @@ export async function getBoard(input: { organizationId: string; timezone: string
       [organizationId]
     );
     return {
+      viewer: { employeeId: viewer.employeeId, seesAll: viewer.seesAll },
       units: units.rows.map(toUnit),
       deals: deals.rows.map(toDeal),
       hidden: Object.fromEntries(hidden.rows.map((r) => [r.step, r.n])),

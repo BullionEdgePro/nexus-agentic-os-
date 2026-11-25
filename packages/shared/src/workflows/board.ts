@@ -118,6 +118,8 @@ export type BoardDeal = {
 export type BoardCard = BoardUnit | BoardDeal;
 
 export type Board = {
+  /** Who is looking (compact board, 25 Nov 2026): lets the screen mark the viewer's own cards "Mine". */
+  viewer: { employeeId: string | null; seesAll: boolean };
   units: BoardUnit[];
   deals: BoardDeal[];
   /** Deals on each step the viewer may not see: counted, never named. */
