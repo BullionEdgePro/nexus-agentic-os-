@@ -122,3 +122,48 @@ test("the header is one line, the explanation behind an ⓘ", () => {
   assert.match(page, /aria-expanded=\{about\}/);
   assert.match(page, /\{about \? \(/);
 });
+
+// ---- Task 3: Mine, Only mine, a card opened by link ----------------------------------------
+import { isMine } from "@/lib/workflow/board-layout";
+
+const COLLEAGUE = { id: "e2", name: "Bilal" };
+
+test("isMine: the viewer's own cards only, and never for a viewer with no employee record", () => {
+  const mine = unit({ id: "m1" });
+  const theirs = unit({ id: "t1", agent: COLLEAGUE });
+  assert.equal(isMine(mine, { employeeId: "e1", seesAll: false }), true);
+  assert.equal(isMine(theirs, { employeeId: "e1", seesAll: false }), false);
+  assert.equal(isMine(mine, { employeeId: null, seesAll: false }), false);
+  assert.equal(isMine(unit({ id: "n1", agent: null }), { employeeId: "e1", seesAll: false }), false);
+});
+
+test("a staff member's own card is tagged Mine and listed first in its step", () => {
+  const board = {
+    ...BOARD,
+    units: [
+      unit({ id: "t1", step: "S6", reference: "Theirs", agent: COLLEAGUE, inStepSince: ago(9) }),
+      unit({ id: "m1", step: "S6", reference: "Mine one", inStepSince: ago(1) }),
+    ],
+  };
+  const html = view({ board });
+  const step = html.slice(html.indexOf('data-column="S6"'));
+  assert.ok(step.indexOf("Mine one") >= 0 && step.indexOf("Mine one") < step.indexOf("Theirs"), "mine first in its step");
+  assert.match(html, /class="wf-board-mine"[^>]*>Mine</);
+  assert.equal((html.match(/class="wf-board-mine"/g) ?? []).length, 1);
+});
+
+test("Only mine hides a colleague's cards", () => {
+  const board = { ...BOARD, units: [unit({ id: "t1", step: "S6", reference: "Theirs", agent: COLLEAGUE }), unit({ id: "m1", step: "S7", reference: "Mine one" })] };
+  const html = view({ board, onlyMine: true });
+  assert.match(html, /Mine one/);
+  assert.doesNotMatch(html, /Theirs/);
+});
+
+test("the Only mine switch is for staff only, and ?card= opens a card the board holds", () => {
+  const panel = read("app/deck/workflow/board/board-panel.tsx");
+  assert.match(panel, /Only mine/);
+  assert.match(panel, /!board\.viewer\.seesAll/);
+  assert.match(panel, /new URLSearchParams\(window\.location\.search\)\.get\("card"\)/);
+  assert.match(panel, /\[\.\.\.board\.units, \.\.\.board\.deals\]\.find\(\(c\) => c\.id === wanted\)/);
+  assert.match(panel, /if \(card\) \{\s*setOpened\(\{ id: card\.id, el: null \}\);/);
+});

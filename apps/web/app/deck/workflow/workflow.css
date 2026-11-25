@@ -293,6 +293,8 @@
 /* A card says the whole reference and the whole price: the kit cuts its lines to one (preview, 3 Nov 2026). */
 .wf-board-card .kit-card-title,
 .wf-board-card .kit-card-sub { white-space: normal; overflow-wrap: anywhere; }
+/* The viewer's own card (compact board, 25 Nov 2026 §3.8). */
+.wf-board-mine { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--ink); color: var(--paper); font-size: 11px; font-weight: 700; vertical-align: 1px; }
 .wf-board-missing { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--slate); vertical-align: middle; }
 .wf-board-badge { align-self: flex-start; margin-top: 4px; padding: 2px 8px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; }
 .wf-board-expired { background: var(--warn); color: var(--paper); }

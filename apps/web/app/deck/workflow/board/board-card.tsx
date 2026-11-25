@@ -69,6 +69,7 @@ export function WorkflowCard({
   dragging = false,
   published = false,
   pocketInterest = false,
+  mine = false,
 }: {
   card: BoardCard;
   today: string;
@@ -81,6 +82,8 @@ export function WorkflowCard({
   published?: boolean;
   /** A deal whose buyer pressed "I'm interested" on a pocket listing's private link. */
   pocketInterest?: boolean;
+  /** The viewer is this card's agent (compact board, 25 Nov 2026 §3.8): tagged "Mine". */
+  mine?: boolean;
 }) {
   const title = cardTitle(card);
   const lines = cardLines(card, now, timezone);
@@ -89,6 +92,7 @@ export function WorkflowCard({
   const interested = card.kind === "deal" && pocketInterest;
   const missing = isMissing(card, published);
   const label = [
+    mine ? "Yours." : "",
     `${title}.`,
     `${lines.join(", ")}.`,
     badge ? `${badge.text}.` : "",
@@ -109,6 +113,7 @@ export function WorkflowCard({
       {...handlers}
     >
       <span className="kit-card-title" dir="auto">
+        {mine ? <span className="wf-board-mine">Mine</span> : null}
         {title}
         {missing ? <span className="wf-board-missing" aria-hidden="true" /> : null}
       </span>

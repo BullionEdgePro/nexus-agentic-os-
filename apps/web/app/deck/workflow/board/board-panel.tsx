@@ -80,6 +80,10 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** The private link just made, shown in its own window (pocket listings). */
   const [sharedLink, setSharedLink] = useState<SharedLink | null>(null);
+  /** Staff's "Only mine" switch (compact board, 25 Nov 2026 §3.8). */
+  const [onlyMine, setOnlyMine] = useState(false);
+  /** A card named by ?card= (from My board on My Day) is opened once, on the first board. */
+  const linkedCard = useRef(false);
   useEffect(() => {
     let cancelled = false;
     getMe()
@@ -133,6 +137,19 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
     },
     [slug]
   );
+
+  // A card named by ?card= opens once, on the first board received; one this
+  // viewer cannot see, or one now closed, is simply not opened.
+  useEffect(() => {
+    if (!board || linkedCard.current) return;
+    linkedCard.current = true;
+    const wanted = new URLSearchParams(window.location.search).get("card");
+    const card = wanted ? [...board.units, ...board.deals].find((c) => c.id === wanted) : undefined;
+    if (card) {
+      setOpened({ id: card.id, el: null });
+      void loadHistory(card);
+    }
+  }, [board, loadHistory]);
 
   /** Thrown on failure, so the drag puts the card back and plays no chime. */
   const move = useCallback(
@@ -253,6 +270,11 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
             Refresh
           </button>
           <PortalSettingsButton isAdmin={isAdmin} onOpen={() => setSettingsOpen(true)} />
+          {board && !board.viewer.seesAll && board.viewer.employeeId ? (
+            <button type="button" className="kit-pill quiet" aria-pressed={onlyMine} onClick={() => setOnlyMine((v) => !v)}>
+              Only mine
+            </button>
+          ) : null}
         </div>
       </div>
       <p className="wf-board-status" role="status" aria-live="polite">
@@ -292,6 +314,7 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
           board={board}
           audit={audit}
           now={now}
+          onlyMine={onlyMine}
           onMove={move}
           onOpen={(card, el) => {
             setOpened({ id: card.id, el });

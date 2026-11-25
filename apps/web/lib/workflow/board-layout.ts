@@ -7,6 +7,14 @@ import type { Board, BoardCard, WorkflowStep } from "@nexus/shared";
  * Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3
  */
 
+/**
+ * The viewer's own card (§3.8): they are its agent. A viewer with no employee
+ * record (an admin, or "View as staff") owns nothing.
+ */
+export function isMine(card: BoardCard, viewer: Board["viewer"] | undefined): boolean {
+  return !!viewer?.employeeId && card.agent?.id === viewer.employeeId;
+}
+
 /** Hot leads shown before "Show all (N)". */
 export const HOT_SHOWN = 5;
 

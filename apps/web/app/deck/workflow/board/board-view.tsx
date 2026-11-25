@@ -13,7 +13,7 @@ import {
   type WorkflowAudit,
 } from "@nexus/shared";
 import { stepFigures } from "@/lib/workflow/step-figures";
-import { HOT_SHOWN, splitColumns } from "@/lib/workflow/board-layout";
+import { HOT_SHOWN, isMine, splitColumns } from "@/lib/workflow/board-layout";
 import { BoardColumn, useBoardDrag } from "../../../kit/board";
 import { aed, cardTitle, WorkflowCard } from "./board-card";
 import { isPublished } from "./portals-section";
@@ -58,6 +58,7 @@ export function WorkflowBoardView({
   onMove,
   onOpen,
   onAdd,
+  onlyMine = false,
 }: {
   workflow: Workflow;
   board: Board;
@@ -66,6 +67,8 @@ export function WorkflowBoardView({
   onMove: (cardId: string, from: string, to: string) => Promise<void>;
   onOpen: (card: BoardCard, el: HTMLElement | null) => void;
   onAdd: (request: AddRequest) => void;
+  /** Staff's "Only mine" switch (compact board, 25 Nov 2026 §3.8): the viewer's own cards only. */
+  onlyMine?: boolean;
 }) {
   const closedId = useId();
   const waitingId = useId();
@@ -75,7 +78,8 @@ export function WorkflowBoardView({
     onDrop: onMove,
   });
   const timezone = audit?.business.timezone ?? "Asia/Dubai";
-  const cards: BoardCard[] = [...board.units, ...board.deals];
+  const mine = (card: BoardCard) => isMine(card, board.viewer);
+  const cards: BoardCard[] = [...board.units, ...board.deals].filter((c) => !onlyMine || mine(c));
   const waiting = [...cards].sort((a, b) => Date.parse(a.inStepSince) - Date.parse(b.inStepSince)).slice(0, 3);
   const stepName = (id: string) => workflow.steps.find((s) => s.id === id)?.name ?? id;
   const closed: [string, string][] = [
@@ -123,10 +127,11 @@ export function WorkflowBoardView({
       </div>
 
       {LANES.map(({ lane, title, add, tone }) => {
-        const { filled, empty } = splitColumns(boardColumns(workflow, lane), cards, board.hidden);
+        const { filled, empty } = splitColumns(boardColumns(workflow, lane), cards, onlyMine ? {} : board.hidden);
         const column = (step: (typeof filled)[number]) => {
-          const here = cards.filter((c) => c.step === step.id);
-          const hidden = lane === "demand" ? board.hidden[step.id as keyof Board["hidden"]] ?? 0 : 0;
+          // The viewer's own cards first, each part oldest first (§3.8).
+          const here = cards.filter((c) => c.step === step.id).sort((a, b) => Number(mine(b)) - Number(mine(a)));
+          const hidden = !onlyMine && lane === "demand" ? board.hidden[step.id as keyof Board["hidden"]] ?? 0 : 0;
           return (
             <BoardColumn key={step.id} id={step.id} tone={tone} title={step.name} count={here.length} active={drag.over === step.id}>
               {here.map((card) => (
@@ -144,6 +149,7 @@ export function WorkflowBoardView({
                     card.kind === "deal" &&
                     board.units.some((u) => u.pocket?.shares.some((s) => s.dealId === card.id && s.interestedAt !== null))
                   }
+                  mine={mine(card)}
                 />
               ))}
               {hidden > 0 ? <p className="wf-board-hidden">+{hidden} with colleagues</p> : null}
