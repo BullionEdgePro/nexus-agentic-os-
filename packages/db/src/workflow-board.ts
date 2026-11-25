@@ -467,7 +467,12 @@ export async function getBoard(input: { organizationId: string; timezone: string
     // Not a buyer (compact board, 25 Nov 2026): a contact whose number is one of
     // this business's own staff WhatsApp lines (another business's staff are private
     // to it), or whose name starts with the name of a business on Nexus (our own, or
-    // a sister firm). Digits only, so "+971 50 …" and "97150…" are the same line.
+    // a sister firm). Digits only, so "+971 50 …" and "97150…" are the same line,
+    // and the last nine digits when both have nine, so "050 480 5436" and
+    // "00971 50 480 5436" are 971504805436 too. A WhatsApp username id (AE.1349…)
+    // is not a number and matches nothing. The staff are this business's by the
+    // query itself, not by row-level security alone (migration 018's convention),
+    // so a read as the owner or across every business gives the same answer.
     // Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3.7
     const hot = await db.query(
       `select * from (
@@ -481,9 +486,16 @@ export async function getBoard(input: { organizationId: string; timezone: string
             and ($2::boolean or ct.owner_employee_id = $3::uuid)
             and not exists (select 1 from property_deals d
                              where d.organization_id = $1 and d.contact_id = la.contact_id and d.closed_at is null)
-            and not exists (select 1 from employees e
-                             where regexp_replace(coalesce(e.whatsapp_number, ''), '\\D', '', 'g') <> ''
-                               and regexp_replace(e.whatsapp_number, '\\D', '', 'g') = regexp_replace(coalesce(ct.wa_id, ''), '\\D', '', 'g'))
+            and not exists (select 1
+                              from employees e
+                             cross join lateral (select regexp_replace(coalesce(e.whatsapp_number, ''), '\\D', '', 'g') as staff_digits,
+                                                        regexp_replace(coalesce(ct.wa_id, ''), '\\D', '', 'g') as contact_digits) n
+                             where e.organization_id = $1
+                               and coalesce(ct.wa_id, '') !~ '^[A-Z]{2}[.](ENT[.])?[A-Za-z0-9]{1,128}$'
+                               and n.staff_digits <> '' and n.contact_digits <> ''
+                               and (n.staff_digits = n.contact_digits
+                                    or (length(n.staff_digits) >= 9 and length(n.contact_digits) >= 9
+                                        and right(n.staff_digits, 9) = right(n.contact_digits, 9))))
             and not exists (select 1 from organizations o
                              where length(o.name) >= 6
                                and starts_with(lower(coalesce(ct.display_name, '')), lower(o.name)))
