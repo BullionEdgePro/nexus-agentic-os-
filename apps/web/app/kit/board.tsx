@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { play } from "@/lib/sound";
-import { columnAt, dropTarget, edgeScroll, visibleBoxes, type Box } from "@/lib/kit/drag";
+import { columnAt, dropTarget, edgeScroll, pageScroll, seenColumn, visibleBoxes, type Box } from "@/lib/kit/drag";
 import type { Tone } from "@/lib/kit/wait-band";
 import { kitLayer } from "./card-window";
 
@@ -15,9 +15,13 @@ import { kitLayer } from "./card-window";
  * phones do not have. A mouse starts a drag after a few pixels of movement, so
  * a click still opens the card. A finger starts one after a short hold, so a
  * swipe still scrolls the board; once it has started, the page stops scrolling
- * under the finger. The hook never moves a card itself: it asks `canDrop`, then
- * calls `onDrop`, and the page shows what the server saved — so a refused or
- * failed drop leaves the card exactly where it was.
+ * under the finger, and scrolls by itself instead while the card is held near
+ * the top or bottom of the screen (25 Nov 2026: the compact workflow board
+ * stacks its steps on a phone, so a step can sit below the screen). A drop goes
+ * only to a column the pointer is seen over — never one under the tab bar, the
+ * dock, or past the window's edge. The hook never moves a card itself: it asks
+ * `canDrop`, then calls `onDrop`, and the page shows what the server saved — so
+ * a refused or failed drop leaves the card exactly where it was.
  */
 
 const DRAG_START_PX = 6;
@@ -128,6 +132,8 @@ type Press = {
   lastX: number;
   lastY: number;
   frame: number | null;
+  /** Hears every scroll during the drag, so the column under a still pointer is found again. */
+  onScroll: (() => void) | null;
 };
 
 /** How long after a drag ends its click is swallowed, wherever the browser sends it. */
@@ -141,6 +147,11 @@ function columnBoxes(scroller: HTMLElement | null): Box[] {
   });
   const clip = scroller?.getBoundingClientRect();
   return visibleBoxes(boxes, clip ? { left: clip.left, right: clip.right, top: clip.top, bottom: clip.bottom } : null);
+}
+
+/** The column the pointer is over on the screen, if any: nothing over the tab bar, the dock, or outside the window. */
+function shownAt(x: number, y: number): string | null {
+  return document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]")?.dataset.column ?? null;
 }
 
 export function useBoardDrag({
@@ -158,7 +169,7 @@ export function useBoardDrag({
   latest.current = { canDrop, onDrop };
 
   const targetAt = (p: Press, x: number, y: number) => {
-    const to = columnAt(x, y, columnBoxes(p.scroller));
+    const to = seenColumn(columnAt(x, y, columnBoxes(p.scroller)), shownAt(x, y));
     return dropTarget(p.from, to, to ? latest.current.canDrop(p.id, p.from, to) : false);
   };
 
@@ -170,6 +181,7 @@ export function useBoardDrag({
     if (p.frame !== null) cancelAnimationFrame(p.frame);
     if (p.hold) clearTimeout(p.hold);
     if (p.stopScroll) document.removeEventListener("touchmove", p.stopScroll);
+    if (p.onScroll) window.removeEventListener("scroll", p.onScroll, { capture: true });
     p.ghost?.remove();
     setDragging(null);
     setOver(null);
@@ -186,6 +198,17 @@ export function useBoardDrag({
   }, [dragging, end]);
 
   useEffect(() => end, [end]);
+
+  // A phone decides when a touch starts whether its moves can be held still
+  // (iOS Safari, and Chrome once a finger is down), so a listener that cannot be
+  // skipped stays while a board is on the screen; the drag's own stopScroll then
+  // holds the page still under a lifted card instead of the browser taking the
+  // touch for a scroll and dropping the card (review, 25 Nov 2026).
+  useEffect(() => {
+    const keep = () => undefined;
+    document.addEventListener("touchmove", keep, { passive: false });
+    return () => document.removeEventListener("touchmove", keep);
+  }, []);
 
   function begin(p: Press) {
     p.started = true;
@@ -213,17 +236,23 @@ export function useBoardDrag({
     p.ghost = ghost;
     if (p.touch) navigator.vibrate?.(10);
     setDragging(p.id);
-    // Near the board's edge it scrolls under the card, so a column off to the
-    // side — Done, on a laptop or a phone — can still be reached.
+    // Whatever scrolls under the card (the page or the board, by the edges below
+    // or a mouse wheel), the column under the pointer is found again.
+    p.onScroll = () => {
+      if (press.current === p) setOver(targetAt(p, p.lastX, p.lastY));
+    };
+    window.addEventListener("scroll", p.onScroll, { capture: true, passive: true });
+    // Near the top or bottom of the screen the page scrolls under the card, and
+    // near the board's edge the board does, so a step below the screen, or a
+    // column off to the side (Done, on the Workspace board), can still be reached.
     const tick = () => {
       if (press.current !== p) return;
+      const dy = pageScroll(p.lastY, p.y, window.innerHeight, p.touch);
+      if (dy !== 0) window.scrollBy(0, dy);
       if (p.scroller) {
         const r = p.scroller.getBoundingClientRect();
         const dx = edgeScroll(p.lastX, r.left, r.right);
-        if (dx !== 0) {
-          p.scroller.scrollLeft += dx;
-          setOver(targetAt(p, p.lastX, p.lastY));
-        }
+        if (dx !== 0) p.scroller.scrollLeft += dx;
       }
       p.frame = requestAnimationFrame(tick);
     };
@@ -314,6 +343,7 @@ export function useBoardDrag({
           lastX: event.clientX,
           lastY: event.clientY,
           frame: null,
+          onScroll: null,
         };
         press.current = p;
         if (p.touch) {

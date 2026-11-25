@@ -180,3 +180,92 @@ test("a link with ?card= or ?view=board lands on the Board tab", () => {
   assert.match(page, /params\.has\("card"\) \|\| params\.get\("view"\) === "board"/);
   assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} initialView=\{view\} \/>/);
 });
+
+// ---- Final review (25 Nov 2026): a drop on an empty step lands (C1); only the dragged lane opens (I3) ----
+import * as layout from "@/lib/workflow/board-layout";
+
+const deal = (over) => ({
+  kind: "deal", id: "d0", step: "D5", inStepSince: ago(0), contact: { id: "c1", name: "Ahmed K." },
+  purpose: "rent", budgetAed: null, offerAed: null, ejariNumber: null, kycDone: false, formFSignedOn: null,
+  dldTransferOn: null, dealValueAed: null, commissionAed: null, agent: ME, notes: null, unitIds: [], nextViewingAt: null,
+  ...over,
+});
+
+/** The <div> that opens at `at`, through its own closing tag (React escapes "<" and ">" in text and attributes). */
+function divAt(html, at) {
+  const tag = /<(\/?)div\b[^>]*>/g;
+  tag.lastIndex = at;
+  let depth = 0;
+  for (let m; (m = tag.exec(html)); ) {
+    depth += m[1] ? -1 : 1;
+    if (depth === 0) return html.slice(at, tag.lastIndex);
+  }
+  return html.slice(at);
+}
+/** What the kit clips a drag to: the innermost .kit-board around the markup at `at` (kit/board.tsx, closest(".kit-board")). */
+function closestKitBoard(html, at) {
+  const tag = /<(\/?)div\b([^>]*)>/g;
+  const open = [];
+  for (let m; (m = tag.exec(html)) && m.index < at; ) {
+    if (m[1]) open.pop();
+    else open.push({ at: m.index, kit: /\bclass="(?:[^"]*\s)?kit-board(?:\s[^"]*)?"/.test(m[2]) });
+  }
+  const hit = open.reverse().find((o) => o.kit);
+  return hit ? divAt(html, hit.at) : null;
+}
+const columnIds = (html) => [...html.matchAll(/data-column="([^"]+)"/g)].map((m) => m[1]).sort();
+const laneIds = (lane) => boardColumns(REAL_ESTATE_WORKFLOW, lane).map((s) => s.id).sort();
+
+test("an empty step takes a drop: every step of a card's lane sits inside the board its drag is clipped to", () => {
+  // The kit takes a drop only on columns inside the dragged card's closest(".kit-board")
+  // (kit/board.tsx columnBoxes + visibleBoxes): a chip row beside that box never took one.
+  assert.match(read("app/kit/board.tsx"), /scroller: el\.closest<HTMLElement>\("\.kit-board"\)/);
+  const html = view({ board: { ...BOARD, deals: [deal({ id: "d1", step: "D4" })] } });
+  for (const [id, lane] of [["u1", "supply"], ["d1", "demand"]]) {
+    const at = html.indexOf(`data-card="${id}"`);
+    assert.ok(at >= 0, `card ${id} is drawn`);
+    const box = closestKitBoard(html, at);
+    assert.ok(box, `card ${id} sits in a .kit-board`);
+    assert.deepEqual(columnIds(box), laneIds(lane), `${lane}: every step inside the board ${id} drags in`);
+  }
+  const supply = view();
+  assert.ok(supply.indexOf('data-column="S6"') < supply.indexOf('class="wf-board-empty-steps'), "steps holding cards first");
+});
+
+test("a lane with no cards still has its board, every step a chip inside it", () => {
+  const html = view({ board: { ...BOARD, units: [], deals: [], hidden: {} } });
+  const boxes = [...html.matchAll(/<div class="kit-board wf-board-lane"[^>]*>/g)].map((m) => divAt(html, m.index));
+  assert.equal(boxes.length, 2, "one board per lane");
+  ["supply", "demand"].forEach((lane, i) => {
+    assert.match(boxes[i], /class="wf-board-empty-steps"/);
+    assert.deepEqual(columnIds(boxes[i]), laneIds(lane));
+  });
+});
+
+test("the Empty steps row is the lane grid's last row, full width", () => {
+  const css = read("app/deck/workflow/workflow.css");
+  assert.match(css, /\.wf-board-lane > \.wf-board-empty-steps \{[^}]*grid-column: 1 \/ -1;/);
+});
+
+test("only the dragged card's own lane opens its empty steps", () => {
+  const { draggedLane } = layout;
+  assert.equal(typeof draggedLane, "function", "board-layout exports no draggedLane");
+  const cards = [unit({ id: "u1", step: "S6" }), deal({ id: "d1" })];
+  assert.equal(draggedLane(cards, "u1"), "supply");
+  assert.equal(draggedLane(cards, "d1"), "demand");
+  assert.equal(draggedLane(cards, null), null);
+  assert.equal(draggedLane(cards, "gone"), null);
+  const V = read("app/deck/workflow/board/board-view.tsx");
+  assert.match(V, /const dragLane = draggedLane\(cards, drag\.dragging\);/);
+  assert.match(V, /`wf-board-empty-steps\$\{dragLane === lane \? " dragging" : ""\}`/);
+  assert.doesNotMatch(V, /wf-board-empty-steps\$\{drag\.dragging \?/);
+});
+
+test("the Hot leads box is only as tall as its leads", () => {
+  // Final review: `flex: 1 1 260px` was a width in the old wrapping row; in the lane's
+  // column it made the box at least 260px tall, a large empty frame over one or two leads.
+  const css = read("app/deck/workflow/workflow.css");
+  const rules = css.match(/\.wf-board-hot \{[^}]*\}/g) ?? [];
+  assert.ok(rules.length > 0);
+  for (const rule of rules) assert.doesNotMatch(rule, /flex:/);
+});

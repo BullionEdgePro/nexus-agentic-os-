@@ -1,4 +1,4 @@
-import type { Board, BoardCard, WorkflowStep } from "@nexus/shared";
+import type { Board, BoardCard, Lane, WorkflowStep } from "@nexus/shared";
 
 /**
  * The compact board's layout rules (25 Nov 2026), kept pure so they can be
@@ -13,6 +13,17 @@ import type { Board, BoardCard, WorkflowStep } from "@nexus/shared";
  */
 export function isMine(card: BoardCard, viewer: Board["viewer"] | undefined): boolean {
   return !!viewer?.employeeId && card.agent?.id === viewer.employeeId;
+}
+
+/**
+ * The lane of the card being dragged, or null when none is (final review,
+ * 25 Nov 2026): only that lane's empty steps open up. A card never drops in the
+ * other lane, and a deal in hand must not push the deals down under the units'
+ * opened steps.
+ */
+export function draggedLane(cards: BoardCard[], dragging: string | null): Lane | null {
+  const card = dragging ? cards.find((c) => c.id === dragging) : undefined;
+  return card ? (card.kind === "unit" ? "supply" : "demand") : null;
 }
 
 /** Hot leads shown before "Show all (N)". */

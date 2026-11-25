@@ -55,3 +55,29 @@ export function edgeScroll(x: number, left: number, right: number, zone = 48, ma
   if (x < left + zone) return -Math.round(Math.min(1, (left + zone - x) / zone) * max);
   return 0;
 }
+
+/**
+ * How far to scroll the page this frame while a card is held at height `y` of a
+ * screen `height` tall (compact board review, 25 Nov 2026): the steps stack on a
+ * phone and a finger cannot scroll the page in the middle of a drag, so a card
+ * held near the top or bottom scrolls it. Only once the card has gone 12px or
+ * more that way from where the drag began (`from`), so a card picked up near an
+ * edge, or a finger trembling there, does not set the page off. A finger's edge
+ * is a fifth of the screen, at most 160px (it covers what it points at); a
+ * mouse's is the board's 48px.
+ * Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3.4
+ */
+export function pageScroll(y: number, from: number, height: number, touch: boolean): number {
+  const step = edgeScroll(y, 0, height, touch ? Math.min(160, Math.round(height / 5)) : 48);
+  return (step > 0 && y > from + 12) || (step < 0 && y < from - 12) ? step : 0;
+}
+
+/**
+ * The column a drop may go to: the one under the pointer by the board's boxes,
+ * and only if that is also what the screen shows there (`onScreen`, the column
+ * the pointer is over on the page) — never one hidden under the phone's tab bar
+ * or the dock, nor one past the window's edge (review, 25 Nov 2026).
+ */
+export function seenColumn(byBox: string | null, onScreen: string | null): string | null {
+  return byBox !== null && byBox === onScreen ? byBox : null;
+}

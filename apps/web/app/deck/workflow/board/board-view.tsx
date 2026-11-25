@@ -13,7 +13,7 @@ import {
   type WorkflowAudit,
 } from "@nexus/shared";
 import { stepFigures } from "@/lib/workflow/step-figures";
-import { HOT_SHOWN, isMine, splitColumns } from "@/lib/workflow/board-layout";
+import { HOT_SHOWN, draggedLane, isMine, splitColumns } from "@/lib/workflow/board-layout";
 import { BoardColumn, useBoardDrag } from "../../../kit/board";
 import { aed, cardTitle, WorkflowCard } from "./board-card";
 import { isPublished } from "./portals-section";
@@ -30,8 +30,10 @@ import { isPublished } from "./portals-section";
  *
  * Compact (25 Nov 2026): the steps holding cards come first and wrap on the
  * screen — never a sideways scroll; empty steps fold into one row of chips that
- * stay drop targets (they open up while a card is dragged); the steps Nexus runs
- * by itself are one line; five hot leads, then "Show all (N)".
+ * stay drop targets (they open up while a card of their own lane is dragged, and
+ * sit inside the lane's .kit-board: the kit takes a drop only on columns inside
+ * the dragged card's own board); the steps Nexus runs by itself are one line;
+ * five hot leads, then "Show all (N)".
  * Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3
  */
 
@@ -80,6 +82,8 @@ export function WorkflowBoardView({
   const timezone = audit?.business.timezone ?? "Asia/Dubai";
   const mine = (card: BoardCard) => isMine(card, board.viewer);
   const cards: BoardCard[] = [...board.units, ...board.deals].filter((c) => !onlyMine || mine(c));
+  // Only the dragged card's own lane opens its empty steps (final review, 25 Nov 2026).
+  const dragLane = draggedLane(cards, drag.dragging);
   const waiting = [...cards].sort((a, b) => Date.parse(a.inStepSince) - Date.parse(b.inStepSince)).slice(0, 3);
   const stepName = (id: string) => workflow.steps.find((s) => s.id === id)?.name ?? id;
   const closed: [string, string][] = [
@@ -197,13 +201,17 @@ export function WorkflowBoardView({
               </div>
             ) : null}
 
-            {filled.length > 0 ? <div className="kit-board wf-board-lane">{filled.map(column)}</div> : null}
-            {empty.length > 0 ? (
-              <div className={`wf-board-empty-steps${drag.dragging ? " dragging" : ""}`}>
-                <p className="wf-board-empty-label">Empty steps</p>
-                <div className="wf-board-chips">{empty.map(column)}</div>
-              </div>
-            ) : null}
+            {/* One board per lane, the empty steps its last row: the kit takes a drop only
+                on columns inside the dragged card's closest(".kit-board") (final review C1). */}
+            <div className="kit-board wf-board-lane">
+              {filled.map(column)}
+              {empty.length > 0 ? (
+                <div className={`wf-board-empty-steps${dragLane === lane ? " dragging" : ""}`}>
+                  <p className="wf-board-empty-label">Empty steps</p>
+                  <div className="wf-board-chips">{empty.map(column)}</div>
+                </div>
+              ) : null}
+            </div>
           </section>
         );
       })}

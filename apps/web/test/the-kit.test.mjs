@@ -342,6 +342,63 @@ test("the dragged card is drawn on the kit's layer, follows from where it starte
   assert.match(B, /p\.startLeft/);
 });
 
+// ---- Compact board review (25 Nov 2026): a drag reaches every step, and drops only where it is seen ----
+import * as dragMath from "@/lib/kit/drag";
+
+test("near the top or bottom of the screen a drag scrolls the page, only the way the card went", () => {
+  // The compact workflow board stacks its steps on a phone, and a finger cannot
+  // scroll the page in the middle of a drag: a step below the screen was out of reach.
+  const { pageScroll } = dragMath;
+  assert.equal(typeof pageScroll, "function", "lib/kit/drag.ts exports no pageScroll");
+  // A phone 844px tall: a finger's edge is a fifth of the screen, at most 160px.
+  assert.equal(pageScroll(400, 300, 844, true), 0); // the middle: nothing
+  assert.equal(pageScroll(760, 400, 844, true), 9); // in the bottom edge, gone down: down
+  assert.equal(pageScroll(840, 400, 844, true), 18); // at the edge: full speed
+  assert.equal(pageScroll(20, 400, 844, true), -16); // the top edge, gone up: up
+  // Picked up in an edge and not moved on towards it: the page stays put.
+  assert.equal(pageScroll(780, 780, 844, true), 0);
+  assert.equal(pageScroll(786, 780, 844, true), 0); // a trembling finger
+  assert.equal(pageScroll(800, 780, 844, true), 13); // then 20px on towards the edge
+  assert.equal(pageScroll(760, 800, 844, true), 0);
+  assert.equal(pageScroll(20, 10, 844, true), 0);
+  // A mouse's edge is the board's 48px; a finger's is deeper.
+  assert.equal(pageScroll(800, 300, 900, false), 0);
+  assert.ok(pageScroll(800, 300, 900, true) > 0);
+  assert.equal(pageScroll(890, 300, 900, false), 14);
+  // A mouse held past the window's edge: never faster than 18px a frame.
+  assert.equal(pageScroll(2000, 300, 900, false), 18);
+  assert.equal(pageScroll(-500, 300, 900, false), -18);
+  // A tablet: the finger's edge stops at 160px.
+  assert.equal(pageScroll(1150, 300, 1366, true), 0);
+  assert.equal(pageScroll(1300, 300, 1366, true), 11);
+});
+
+test("a drop goes only to a column the pointer is seen over", () => {
+  // Not one hidden under the phone's tab bar or the dock, nor one past the window's edge.
+  const { seenColumn } = dragMath;
+  assert.equal(typeof seenColumn, "function", "lib/kit/drag.ts exports no seenColumn");
+  assert.equal(seenColumn("S7", "S7"), "S7");
+  assert.equal(seenColumn("S7", null), null);
+  assert.equal(seenColumn("S7", "S8"), null);
+  assert.equal(seenColumn(null, "S7"), null);
+  assert.equal(seenColumn(null, null), null);
+});
+
+test("the drag scrolls the page under the card, finds the step again after any scroll, and holds a lifted card's touch", () => {
+  const B = read("app/kit/board.tsx");
+  assert.match(B, /pageScroll\(p\.lastY, p\.y, window\.innerHeight, p\.touch\)/);
+  assert.match(B, /window\.scrollBy\(0, dy\)/);
+  assert.match(B, /window\.addEventListener\("scroll", p\.onScroll, \{ capture: true, passive: true \}\)/);
+  assert.match(B, /window\.removeEventListener\("scroll", p\.onScroll, \{ capture: true \}\)/);
+  assert.match(B, /seenColumn\(columnAt\(x, y, columnBoxes\(p\.scroller\)\), shownAt\(x, y\)\)/);
+  assert.match(B, /document\.elementFromPoint\(x, y\)/);
+  // A phone decides at the start of a touch whether its moves can be held still.
+  assert.match(B, /document\.addEventListener\("touchmove", keep, \{ passive: false \}\)/);
+  // The board still scrolls sideways at its own edge (the Workspace board does).
+  assert.match(B, /edgeScroll\(p\.lastX, /);
+  assert.match(B, /scrollLeft \+= dx/);
+});
+
 import { bandIndex } from "@/lib/kit/chart-math";
 
 test("a chart's line draws in by a sweep, whole at any width", () => {

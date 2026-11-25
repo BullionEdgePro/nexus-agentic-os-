@@ -267,18 +267,21 @@
 .wf-board-auto-name { font-weight: 700; color: var(--ink); }
 .wf-board-auto-fig { color: var(--slate); }
 .wf-board-auto-fig b { color: var(--ink); }
-.wf-board-hot { flex: 1 1 260px; min-width: 0; }
+.wf-board-hot { min-width: 0; }
 .wf-board-hot ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .wf-board-hot li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
 .wf-board-lane { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 /* Compact board (25 Nov 2026): the steps run by themselves as one quiet line; empty
-   steps folded into chips that open up while a card is dragged, so drops still land.
+   steps folded into chips — the lane grid's last row, inside its board — that open up
+   while a card of that lane is dragged, so drops still land (final review).
    Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3 */
 .wf-board-auto-line { margin: 0; font-size: 12.5px; color: var(--slate); }
 .wf-board-hot { padding: 10px 14px; border-radius: var(--r-lg); border: 1px dashed var(--hairline); }
 .wf-board-hot-more { all: unset; margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--signal-text); cursor: pointer; }
 .wf-board-hot-more:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
 .wf-board-empty-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+/* The chip row is the lane grid's last row, full width, inside the board box, so a drop on a chip lands (final review C1). */
+.wf-board-lane > .wf-board-empty-steps { grid-column: 1 / -1; }
 .wf-board-empty-label { margin: 0 4px 0 0; font-size: 12px; font-weight: 600; color: var(--slate); }
 .wf-board-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .wf-board-chips > .kit-col { padding: 4px 10px; min-height: 0; border-radius: var(--r-pill); }
