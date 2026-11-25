@@ -35,9 +35,13 @@ export default function WorkflowPage() {
   const [requested, setRequested] = useState<string | null | undefined>(undefined);
   // Compact header (25 Nov 2026): the explanation waits behind an ⓘ.
   const [about, setAbout] = useState(false);
+  // A link from My board (?card= or ?view=board, 25 Nov 2026) lands on the Board tab.
+  const [view, setView] = useState<"picture" | "board">("picture");
 
   useEffect(() => {
-    setRequested(new URLSearchParams(window.location.search).get("business"));
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("card") || params.get("view") === "board") setView("board");
+    setRequested(params.get("business"));
   }, []);
 
   // Whose workflow: an admin's choice (else the first business with one),
@@ -56,7 +60,7 @@ export default function WorkflowPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root wf-page">
-        <header className="act-head wf-head">
+        <header className="act-head wf-title">
           <h1>{slug ? nameOf(slug) : "Workflow"}</h1>
           <button
             type="button"
@@ -91,7 +95,7 @@ export default function WorkflowPage() {
         ) : !slug || !workflowFor(slug) ? (
           <NoWorkflow />
         ) : (
-          <WorkflowPanel key={slug} slug={slug} />
+          <WorkflowPanel key={slug} slug={slug} initialView={view} />
         )}
       </div>
     </div>

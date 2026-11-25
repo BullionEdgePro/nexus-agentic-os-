@@ -167,3 +167,16 @@ test("the Only mine switch is for staff only, and ?card= opens a card the board 
   assert.match(panel, /\[\.\.\.board\.units, \.\.\.board\.deals\]\.find\(\(c\) => c\.id === wanted\)/);
   assert.match(panel, /if \(card\) \{\s*setOpened\(\{ id: card\.id, el: null \}\);/);
 });
+
+test("the page header is never the hidden arrow-head class (preview, 25 Nov 2026)", () => {
+  // `.wf-head` is the lanes' SVG arrow head (opacity 0 until drawn); a header carrying it vanished.
+  const page = read("app/deck/workflow/page.tsx");
+  assert.match(page, /<header className="act-head wf-title">/);
+  assert.doesNotMatch(page, /className="[^"]*\bwf-head\b/);
+});
+
+test("a link with ?card= or ?view=board lands on the Board tab", () => {
+  const page = read("app/deck/workflow/page.tsx");
+  assert.match(page, /params\.has\("card"\) \|\| params\.get\("view"\) === "board"/);
+  assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} initialView=\{view\} \/>/);
+});

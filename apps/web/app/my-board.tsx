@@ -50,7 +50,7 @@ export function MyBoardView({ summary, error }: { summary: MyBoardSummary | null
     <section className="day-card day-board" id="day-board" aria-labelledby="day-board-title">
       <header className="day-board-head">
         <h2 id="day-board-title">My board</h2>
-        <a className="day-board-open" href="/deck/workflow">
+        <a className="day-board-open" href="/deck/workflow?view=board">
           Open board →
         </a>
       </header>

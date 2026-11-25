@@ -89,7 +89,7 @@ test("the card: my steps, Needs me lines that open the card, and Open board", ()
   const s = sum(board([unit({ id: "r", reference: "Marina 2BR", portals: { bayut: { wanted: true, state: "refused" }, dubizzle: off, property_finder: off } })]));
   const html = render({ summary: s, error: null });
   assert.match(html, /My board/);
-  assert.match(html, /href="\/deck\/workflow"[^>]*>Open board →</);
+  assert.match(html, /href="\/deck\/workflow\?view=board"[^>]*>Open board →</);
   assert.match(html, /Rent units 1/);
   assert.match(html, /Needs me/);
   assert.match(html, /href="\/deck\/workflow\?card=r"[^>]*>Marina 2BR — Bayut refused it</);

@@ -195,7 +195,7 @@ test("the workflow page is titled with the business and draws the panel", () => 
   // Compact header (25 Nov 2026): the business's name, "Workflow" only before one is chosen.
   assert.match(page, /<h1>\{slug \? nameOf\(slug\) : "Workflow"\}<\/h1>/);
   assert.doesNotMatch(page, /Workflow audit/);
-  assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} \/>/);
+  assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} initialView=\{view\} \/>/);
 });
 
 // ---------------------------------------------------------------------------
