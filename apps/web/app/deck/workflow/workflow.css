@@ -8,6 +8,12 @@
 /* ---- the page ------------------------------------------------------------------ */
 
 .wf-page { min-width: 0; }
+/* One-line header, the explanation behind an ⓘ (compact board, 25 Nov 2026). */
+.wf-head { display: flex; align-items: center; gap: 10px; }
+.wf-head h1 { font-size: clamp(24px, 3vw, 32px); }
+.wf-about { all: unset; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pebble); color: var(--slate); font-size: 15px; cursor: pointer; }
+.wf-about[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
+.wf-about:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
 .wf-pills { margin: 4px 0 12px; }
 .wf-verdict { margin: 0 0 18px; font-size: 15px; font-weight: 650; color: var(--ink); }
 .wf-verdict-days { font-weight: 500; color: var(--slate); }
@@ -240,12 +246,12 @@
 .wf-board-bar { display: flex; justify-content: flex-end; }
 .wf-board-status { min-height: 1.2em; margin: 0; font-size: 14px; font-weight: 600; color: var(--warn); }
 .wf-board-status:empty { min-height: 0; }
-.wf-board { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.wf-board { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .wf-board-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
-.wf-board-closed, .wf-board-waiting { padding: 14px 16px; border-radius: var(--r-lg); background: var(--pebble); min-width: 0; }
+.wf-board-closed, .wf-board-waiting { padding: 10px 14px; border-radius: var(--r-lg); background: var(--pebble); min-width: 0; }
 .wf-board-figs { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; column-gap: 18px; margin: 8px 0 0; }
 .wf-board-figs dt { font-size: 12px; font-weight: 600; color: var(--slate); grid-row: 1; }
-.wf-board-figs dd { margin: 0; font-size: 20px; font-weight: 800; color: var(--ink); grid-row: 2; }
+.wf-board-figs dd { margin: 0; font-size: 17px; font-weight: 800; color: var(--ink); grid-row: 2; }
 .wf-board-waiting ol { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .wf-board-wait { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 6px 8px; border-radius: var(--r); cursor: pointer; font-size: 14px; color: var(--ink); }
 .wf-board-wait:hover { background: var(--paper); }
@@ -264,7 +270,25 @@
 .wf-board-hot { flex: 1 1 260px; min-width: 0; }
 .wf-board-hot ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .wf-board-hot li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
-.wf-board-lane { grid-template-columns: repeat(var(--cols), minmax(210px, 1fr)); overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 6px; }
+.wf-board-lane { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+/* Compact board (25 Nov 2026): the steps run by themselves as one quiet line; empty
+   steps folded into chips that open up while a card is dragged, so drops still land.
+   Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3 */
+.wf-board-auto-line { margin: 0; font-size: 12.5px; color: var(--slate); }
+.wf-board-hot { padding: 10px 14px; border-radius: var(--r-lg); border: 1px dashed var(--hairline); }
+.wf-board-hot-more { all: unset; margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--signal-text); cursor: pointer; }
+.wf-board-hot-more:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
+.wf-board-empty-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.wf-board-empty-label { margin: 0 4px 0 0; font-size: 12px; font-weight: 600; color: var(--slate); }
+.wf-board-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wf-board-chips > .kit-col { padding: 4px 10px; min-height: 0; border-radius: var(--r-pill); }
+.wf-board-chips > .kit-col .kit-col-head { gap: 6px; }
+.wf-board-chips > .kit-col .kit-col-head h3 { flex: 0 1 auto; font-size: 13px; }
+.wf-board-chips > .kit-col .kit-col-cards,
+.wf-board-chips > .kit-col .kit-col-drop { display: none; }
+.wf-board-empty-steps.dragging .wf-board-chips { display: grid; width: 100%; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.wf-board-empty-steps.dragging .wf-board-chips > .kit-col { padding: 12px; min-height: 90px; border-radius: var(--r-lg); }
+.wf-board-empty-steps.dragging .wf-board-chips > .kit-col .kit-col-drop { display: block; }
 .wf-board-card { display: flex; flex-direction: column; align-items: stretch; gap: 3px; text-align: left; }
 /* A card says the whole reference and the whole price: the kit cuts its lines to one (preview, 3 Nov 2026). */
 .wf-board-card .kit-card-title,
@@ -286,8 +310,7 @@
   .wf-board-figs { grid-template-columns: repeat(2, auto); }
   .wf-board-figs dt:nth-of-type(n + 3) { grid-row: 3; }
   .wf-board-figs dd:nth-of-type(n + 3) { grid-row: 4; }
-  .wf-board-lane { grid-template-columns: repeat(var(--cols), minmax(78vw, 1fr)); scroll-snap-type: x mandatory; }
-  .wf-board-lane > .kit-col { scroll-snap-align: start; }
+  .wf-board-lane { grid-template-columns: minmax(0, 1fr); }
 }
 /* The card window and adding (workflow board, 3 Nov 2026). */
 .wf-board-detail { display: flex; flex-direction: column; gap: 4px; }

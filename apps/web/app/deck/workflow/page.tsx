@@ -33,6 +33,8 @@ export default function WorkflowPage() {
   const { isOperator, known, mySlug } = useVisibleBusinesses();
   // The admin's ?business=, read once in the browser; undefined until read.
   const [requested, setRequested] = useState<string | null | undefined>(undefined);
+  // Compact header (25 Nov 2026): the explanation waits behind an ⓘ.
+  const [about, setAbout] = useState(false);
 
   useEffect(() => {
     setRequested(new URLSearchParams(window.location.search).get("business"));
@@ -54,14 +56,25 @@ export default function WorkflowPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root wf-page">
-        <header className="act-head">
-          <h1>Workflow{slug ? ` · ${nameOf(slug)}` : ""}</h1>
+        <header className="act-head wf-head">
+          <h1>{slug ? nameOf(slug) : "Workflow"}</h1>
+          <button
+            type="button"
+            className="wf-about"
+            aria-label="About this page"
+            aria-expanded={about}
+            onClick={() => setAbout((v) => !v)}
+          >
+            ⓘ
+          </button>
         </header>
-        <p className="act-lede">
-          The workflow drawn for this business, step by step, against what Nexus actually recorded —
-          conversations, scores, viewings, and the units and deals your team keeps on the Board — then the
-          period&rsquo;s own figures. A step Nexus does not track yet says so, with what tracking it would need.
-        </p>
+        {about ? (
+          <p className="act-lede">
+            The workflow drawn for this business, step by step, against what Nexus actually recorded —
+            conversations, scores, viewings, and the units and deals your team keeps on the Board — then the
+            period&rsquo;s own figures. A step Nexus does not track yet says so, with what tracking it would need.
+          </p>
+        ) : null}
 
         {isOperator && BUSINESSES_WITH_WORKFLOW.length > 0 ? (
           <div className="kit-pills wf-pills" role="group" aria-label="Business">

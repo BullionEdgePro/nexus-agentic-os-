@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useId, type CSSProperties } from "react";
+import { Fragment, useId, useState } from "react";
 import {
   automaticSteps,
   boardColumns,
@@ -13,6 +13,7 @@ import {
   type WorkflowAudit,
 } from "@nexus/shared";
 import { stepFigures } from "@/lib/workflow/step-figures";
+import { HOT_SHOWN, splitColumns } from "@/lib/workflow/board-layout";
 import { BoardColumn, useBoardDrag } from "../../../kit/board";
 import { aed, cardTitle, WorkflowCard } from "./board-card";
 import { isPublished } from "./portals-section";
@@ -26,6 +27,12 @@ import { isPublished } from "./portals-section";
  * A pure render of the board the server sent: a drop asks the same rules the
  * server applies (`boardCanDrop`), and the page shows what the server saved.
  * Spec: docs/superpowers/specs/2026-11-03-sfs-workflow-board-design.md §2, §3
+ *
+ * Compact (25 Nov 2026): the steps holding cards come first and wrap on the
+ * screen — never a sideways scroll; empty steps fold into one row of chips that
+ * stay drop targets (they open up while a card is dragged); the steps Nexus runs
+ * by itself are one line; five hot leads, then "Show all (N)".
+ * Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3
  */
 
 export type AddRequest = { kind: "unit" } | { kind: "deal"; contactId?: string; name?: string | null };
@@ -62,6 +69,7 @@ export function WorkflowBoardView({
 }) {
   const closedId = useId();
   const waitingId = useId();
+  const [allHot, setAllHot] = useState(false);
   const drag = useBoardDrag({
     canDrop: (id, from, to) => boardCanDrop(workflow, board, id, from, to),
     onDrop: onMove,
@@ -115,7 +123,40 @@ export function WorkflowBoardView({
       </div>
 
       {LANES.map(({ lane, title, add, tone }) => {
-        const columns = boardColumns(workflow, lane);
+        const { filled, empty } = splitColumns(boardColumns(workflow, lane), cards, board.hidden);
+        const column = (step: (typeof filled)[number]) => {
+          const here = cards.filter((c) => c.step === step.id);
+          const hidden = lane === "demand" ? board.hidden[step.id as keyof Board["hidden"]] ?? 0 : 0;
+          return (
+            <BoardColumn key={step.id} id={step.id} tone={tone} title={step.name} count={here.length} active={drag.over === step.id}>
+              {here.map((card) => (
+                <WorkflowCard
+                  key={card.id}
+                  card={card}
+                  today={board.today}
+                  now={now}
+                  timezone={timezone}
+                  onOpen={(el) => onOpen(card, el)}
+                  handlers={drag.cardHandlers(card.id, card.step)}
+                  dragging={drag.dragging === card.id}
+                  published={card.kind === "unit" && isPublished(card, board)}
+                  pocketInterest={
+                    card.kind === "deal" &&
+                    board.units.some((u) => u.pocket?.shares.some((s) => s.dealId === card.id && s.interestedAt !== null))
+                  }
+                />
+              ))}
+              {hidden > 0 ? <p className="wf-board-hidden">+{hidden} with colleagues</p> : null}
+            </BoardColumn>
+          );
+        };
+        const auto = automaticSteps(workflow, lane)
+          .map((step) => {
+            const first = audit ? stepFigures(step.id, audit.evidence)[0] : undefined;
+            return first ? `${step.name} ${first.value}` : step.name;
+          })
+          .join(" · ");
+        const hotShown = allHot ? board.hotWaiting : board.hotWaiting.slice(0, HOT_SHOWN);
         return (
           <section key={lane} className="wf-board-lane-wrap" aria-label={title}>
             <div className="wf-board-lane-head">
@@ -125,70 +166,38 @@ export function WorkflowBoardView({
               </button>
             </div>
 
-            <div className="wf-board-auto">
-              <p className="wf-board-auto-note">Runs by itself{audit ? ` · the last ${audit.period.days} days` : ""}</p>
-              <ul className="wf-board-auto-steps">
-                {automaticSteps(workflow, lane).map((step) => {
-                  const first = audit ? stepFigures(step.id, audit.evidence)[0] : undefined;
-                  return (
-                    <li key={step.id} className="wf-board-auto-step">
-                      <span className="wf-board-auto-tag">{step.tag}</span>
-                      <span className="wf-board-auto-name">{step.name}</span>
-                      {first ? (
-                        <span className="wf-board-auto-fig">
-                          <span>{first.label}</span> <b>{first.value}</b>
-                        </span>
-                      ) : null}
+            <p className="wf-board-auto-line">
+              {audit ? `Runs by itself · ${audit.period.days} days: ` : "Runs by itself: "}
+              {auto}
+            </p>
+            {lane === "demand" && board.hotWaiting.length > 0 ? (
+              <div className="wf-board-hot">
+                <h4 className="wf-h3">Hot leads not on the board</h4>
+                <ul>
+                  {hotShown.map((hot) => (
+                    <li key={hot.contactId}>
+                      <span dir="auto">{hot.name ?? "A customer"}</span>
+                      <button type="button" className="kit-pill quiet" onClick={() => onAdd({ kind: "deal", contactId: hot.contactId, name: hot.name })}>
+                        Put on the board
+                      </button>
                     </li>
-                  );
-                })}
-              </ul>
-              {lane === "demand" && board.hotWaiting.length > 0 ? (
-                <div className="wf-board-hot">
-                  <h4 className="wf-h3">Hot leads not on the board</h4>
-                  <ul>
-                    {board.hotWaiting.map((hot) => (
-                      <li key={hot.contactId}>
-                        <span dir="auto">{hot.name ?? "A customer"}</span>
-                        <button type="button" className="kit-pill quiet" onClick={() => onAdd({ kind: "deal", contactId: hot.contactId, name: hot.name })}>
-                          Put on the board
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
+                  ))}
+                </ul>
+                {board.hotWaiting.length > HOT_SHOWN ? (
+                  <button type="button" className="wf-board-hot-more" aria-expanded={allHot} onClick={() => setAllHot((v) => !v)}>
+                    {allHot ? "Show fewer" : `Show all (${board.hotWaiting.length})`}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
 
-            <div className="kit-board wf-board-lane" style={{ "--cols": columns.length } as CSSProperties}>
-              {columns.map((step) => {
-                const here = cards.filter((c) => c.step === step.id);
-                const hidden = lane === "demand" ? board.hidden[step.id as keyof Board["hidden"]] ?? 0 : 0;
-                return (
-                  <BoardColumn key={step.id} id={step.id} tone={tone} title={step.name} count={here.length} active={drag.over === step.id}>
-                    {here.map((card) => (
-                      <WorkflowCard
-                        key={card.id}
-                        card={card}
-                        today={board.today}
-                        now={now}
-                        timezone={timezone}
-                        onOpen={(el) => onOpen(card, el)}
-                        handlers={drag.cardHandlers(card.id, card.step)}
-                        dragging={drag.dragging === card.id}
-                        published={card.kind === "unit" && isPublished(card, board)}
-                        pocketInterest={
-                          card.kind === "deal" &&
-                          board.units.some((u) => u.pocket?.shares.some((s) => s.dealId === card.id && s.interestedAt !== null))
-                        }
-                      />
-                    ))}
-                    {hidden > 0 ? <p className="wf-board-hidden">+{hidden} with colleagues</p> : null}
-                    {here.length === 0 && hidden === 0 ? <p className="wf-board-empty">nothing here</p> : null}
-                  </BoardColumn>
-                );
-              })}
-            </div>
+            {filled.length > 0 ? <div className="kit-board wf-board-lane">{filled.map(column)}</div> : null}
+            {empty.length > 0 ? (
+              <div className={`wf-board-empty-steps${drag.dragging ? " dragging" : ""}`}>
+                <p className="wf-board-empty-label">Empty steps</p>
+                <div className="wf-board-chips">{empty.map(column)}</div>
+              </div>
+            ) : null}
           </section>
         );
       })}

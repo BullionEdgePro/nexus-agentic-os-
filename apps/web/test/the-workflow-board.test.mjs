@@ -94,13 +94,13 @@ const view = (over = {}) =>
 test("the board's columns are the steps that take cards; the first steps stay automatic", () => {
   const html = view();
   const columns = [...html.matchAll(/data-column="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(columns, ["S5", "S6", "S7", "S8", "S9", "S10", "D3", "D4", "D5", "D6", "D7", "D8", "D9"]);
-  // Owner database … Nurture and New lead, AI qualifier: counts from the audit, never a drop target.
-  assert.match(html, /class="wf-board-auto"/);
-  assert.match(html, /Owner database/);
-  assert.match(html, /Contacts in total<\/span> <b>154<\/b>/);
-  assert.match(html, /New leads<\/span> <b>88<\/b>/);
-  assert.match(html, /the last 30 days/);
+  // Compact board (25 Nov 2026): the steps holding cards first, then the empty ones as chips.
+  assert.deepEqual(columns, ["S5", "S9", "S10", "S6", "S7", "S8", "D5", "D3", "D4", "D6", "D7", "D8", "D9"]);
+  // Owner database … Nurture and New lead, AI qualifier: counts from the audit, one line, never a drop target.
+  assert.match(html, /class="wf-board-auto-line"/);
+  assert.match(html, /Owner database 154/);
+  assert.match(html, /New lead 88/);
+  assert.match(html, /Runs by itself · 30 days:/);
 });
 
 test("hot leads wait in the qualifier's strip until someone puts them on the board", () => {
@@ -197,9 +197,10 @@ test("the board panel: a refused move says why, a lost race reloads, a late answ
   assert.match(src, />\s*Try again\s*</);
 });
 
-test("the board's styles are its own, and its lanes scroll inside themselves", () => {
+test("the board's styles are its own, and its lanes wrap on the screen", () => {
   const css = read("app/deck/workflow/workflow.css");
-  assert.match(css, /\.wf-board-lane \{[^}]*overflow-x: auto/);
+  // Compact board (25 Nov 2026): steps wrap; no sideways scroll.
+  assert.match(css, /\.wf-board-lane \{[^}]*auto-fill/);
   assert.match(css, /\.wf-board-expired \{/);
   for (const file of ["app/kit/kit.css", "app/deck/hq/hq.css", "app/deck/deck.css"]) {
     assert.doesNotMatch(read(file), /\.wf-board/, file);

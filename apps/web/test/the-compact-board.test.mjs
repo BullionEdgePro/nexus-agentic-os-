@@ -1,0 +1,124 @@
+/**
+ * The compact board (25 Nov 2026): steps that hold cards come first and wrap
+ * on the screen; empty steps fold into a row of small chips that stay drop
+ * targets; five hot leads, then "Show all (N)"; the "Runs by itself" counts as
+ * one line; a one-line header with the explanation behind an ⓘ.
+ * Spec: docs/superpowers/specs/2026-11-25-compact-sfs-board-design.md §3
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import { REAL_ESTATE_WORKFLOW, boardColumns } from "@nexus/shared";
+import { WorkflowBoardView } from "@/app/deck/workflow/board/board-view";
+import { splitColumns, HOT_SHOWN } from "@/lib/workflow/board-layout";
+
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const NOW = Date.parse("2026-11-25T12:00:00Z");
+const ago = (days) => new Date(NOW - days * 86_400_000).toISOString();
+const ME = { id: "e1", name: "Atif Ali" };
+
+const unit = (over) => ({
+  kind: "unit", id: "u0", step: "S5", inStepSince: ago(0), reference: "Unit", community: null, propertyType: null,
+  bedrooms: null, purpose: null, priceAed: null, cheques: null, ejariReady: false, titleDeed: false, ownerDocs: false,
+  formASignedOn: null, permitNumber: null, permitExpiresOn: null, liveOn: [], owner: null, agent: ME, notes: null,
+  dealIds: [], updatedAt: ago(0), title: null, description: null, sizeSqft: null, bathrooms: null, furnishing: null,
+  city: "Dubai", subCommunity: null, building: null, parking: null, amenities: [], availableFrom: null, photos: [],
+  portals: { bayut: { wanted: false }, dubizzle: { wanted: false }, property_finder: { wanted: false } },
+  bayutLocation: null, pocket: { on: false, since: null, shares: [] },
+  ...over,
+});
+const hot = (n) => Array.from({ length: n }, (_, i) => ({ contactId: `c${i}`, name: `Lead ${i + 1}`, priority: "high", scoredAt: ago(i) }));
+
+const BOARD = {
+  viewer: { employeeId: "e1", seesAll: false },
+  units: [unit({ id: "u1", step: "S6", reference: "Marina Gate 2 · 1204" })],
+  deals: [],
+  hidden: { D5: 2 },
+  hotWaiting: hot(7),
+  closed30: { let: 0, sold: 0, won: 0, commissionAed: 0 },
+  today: "2026-11-25",
+  portalFeed: null,
+  ornSet: false,
+  agentBrns: {},
+};
+const AUDIT = {
+  business: { slug: "sfs-international", name: "SFS International", timezone: "Asia/Dubai" },
+  period: { days: 30, from: "2026-10-05", today: "2026-11-03", bucket: "day" },
+  evidence: {
+    contacts: { total: 154, added: 12, withSource: 97, optedOut: 3, notACustomer: 5, emailOptedOut: 1 },
+    outreach: { sent: 40, delivered: 38, failed: 2 },
+    calls: { answered: 4, noAnswer: 3, voicemail: 1, busy: 0, failed: 0 },
+    reengagement: { sent: 6, replied: 2, optedOut: 1, inCooldown: 4 },
+    leads: { total: 88, pitches: 2, byChannel: { whatsapp: 80 }, bySource: [{ source: "Bayut", count: 30 }] },
+    qualifier: { scored: 59, hot: 12 },
+    replies: { medianMs: 300000, byAi: 50, byPerson: 30, unanswered: 7 },
+    viewings: { booked: 6, held: 4, noShow: 1, cancelled: 1 },
+    won: 2,
+    followUps: { created: 9, done: 5, openNow: 4, overdueNow: 2 },
+    board: {},
+    permits: { advertised: 2, expired: 1 },
+  },
+  series: { leads: [], replyMedian: [], quality: [], viewings: [] },
+  funnel: { leads: 88, scored: 59, hot: 12, booked: 6, held: 4, won: 2 },
+};
+const view = (over = {}) =>
+  renderToStaticMarkup(
+    createElement(WorkflowBoardView, {
+      workflow: REAL_ESTATE_WORKFLOW, board: BOARD, audit: null, now: NOW,
+      onMove: async () => {}, onOpen: () => {}, onAdd: () => {}, ...over,
+    })
+  );
+
+test("splitColumns puts the steps holding cards first, the rest in workflow order", () => {
+  const columns = boardColumns(REAL_ESTATE_WORKFLOW, "supply");
+  const { filled, empty } = splitColumns(columns, BOARD.units, {});
+  assert.deepEqual(filled.map((s) => s.id), ["S6"]);
+  assert.deepEqual(empty.map((s) => s.id), columns.map((s) => s.id).filter((id) => id !== "S6"));
+});
+
+test("a step with colleagues' deals counts as holding cards", () => {
+  const columns = boardColumns(REAL_ESTATE_WORKFLOW, "demand");
+  const { filled } = splitColumns(columns, [], { D5: 2 });
+  assert.deepEqual(filled.map((s) => s.id), ["D5"]);
+});
+
+test("five hot leads show, then Show all (N)", () => {
+  assert.equal(HOT_SHOWN, 5);
+  const html = view();
+  for (let i = 1; i <= 5; i++) assert.match(html, new RegExp(`Lead ${i}<`));
+  assert.doesNotMatch(html, /Lead 6</);
+  assert.match(html, /Show all \(7\)/);
+  assert.doesNotMatch(view({ board: { ...BOARD, hotWaiting: hot(3) } }), /Show all/);
+});
+
+test("empty steps fold into one row of chips that are still drop targets", () => {
+  const html = view();
+  const row = html.slice(html.indexOf("wf-board-empty-steps"));
+  assert.match(html, /class="wf-board-empty-steps[^"]*"/);
+  assert.match(row, /Empty steps/);
+  assert.match(row, /data-column="S5"/);
+  assert.doesNotMatch(row.slice(0, row.indexOf("</section></div>") + 1 || undefined), /data-column="S6"/);
+  assert.doesNotMatch(html, /nothing here/);
+});
+
+test("the steps run by themselves are one line per lane", () => {
+  const html = view({ audit: AUDIT });
+  assert.equal((html.match(/class="wf-board-auto-line"/g) ?? []).length, 2);
+  assert.match(html, /Runs by itself · 30 days:/);
+});
+
+test("the lanes wrap on the screen: no sideways scroll", () => {
+  const css = read("app/deck/workflow/workflow.css");
+  const rule = css.match(/\.wf-board-lane \{[^}]*\}/)?.[0] ?? "";
+  assert.match(rule, /auto-fill/);
+  assert.doesNotMatch(rule, /overflow-x: auto/);
+});
+
+test("the header is one line, the explanation behind an ⓘ", () => {
+  const page = read("app/deck/workflow/page.tsx");
+  assert.match(page, /aria-label="About this page"/);
+  assert.match(page, /aria-expanded=\{about\}/);
+  assert.match(page, /\{about \? \(/);
+});

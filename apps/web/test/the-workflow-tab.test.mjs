@@ -190,9 +190,10 @@ test("the panel asks again on Try again and Refresh, and keeps figures it alread
   assert.match(P, /<WorkflowPulse workflow=\{workflow\} audit=\{shown\} \/>/);
 });
 
-test("the workflow page is titled Workflow and draws the panel", () => {
+test("the workflow page is titled with the business and draws the panel", () => {
   const page = read("app/deck/workflow/page.tsx");
-  assert.match(page, /<h1>Workflow\{/);
+  // Compact header (25 Nov 2026): the business's name, "Workflow" only before one is chosen.
+  assert.match(page, /<h1>\{slug \? nameOf\(slug\) : "Workflow"\}<\/h1>/);
   assert.doesNotMatch(page, /Workflow audit/);
   assert.match(page, /<WorkflowPanel key=\{slug\} slug=\{slug\} \/>/);
 });
