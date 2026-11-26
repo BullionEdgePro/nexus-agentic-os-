@@ -19,6 +19,7 @@ import "../deck.css";
 import "../activity/activity.css";
 import "./tasks.css";
 import { PageHead } from "@/app/kit/page-head";
+import { AddFold } from "@/app/kit/add-fold";
 
 /**
  * Follow-ups — what a conversation left someone to do.
@@ -64,6 +65,12 @@ export default function TasksPage() {
   const [draftNotes, setDraftNotes] = useState("");
   const [draftDue, setDraftDue] = useState("");
   const [draftOwner, setDraftOwner] = useState("");
+  // The add form waits behind "+ Add a follow-up" (26 Nov 2026), and starts open
+  // when a link asks (?add=1, My Day's shortcut), so the list comes first.
+  const [adding, setAdding] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("add") === "1") setAdding(true);
+  }, []);
 
   const load = useCallback(async (slug: BusinessSlug | "", which: TaskStatus | "all") => {
     setLoading(true);
@@ -153,6 +160,9 @@ export default function TasksPage() {
       setDraftDue("");
       setDraftOwner(myEmployeeId && team.some((member) => member.id === myEmployeeId) ? myEmployeeId : "");
       await load(business, status);
+      // Saved: the form folds and the follow-up is in the list. A failed save
+      // never reaches here, so the form stays open with the error and the text.
+      setAdding(false);
     } catch (err) {
       setError(readableError(err));
     } finally {
@@ -206,74 +216,75 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <form className="tk-new" onSubmit={submit}>
-          <h2 className="act-sub-head">Add a follow-up</h2>
-          <div className="tk-row">
-            <label>
-              <span>Business</span>
-              <select
-                value={draftBusiness}
-                onChange={(e) => setDraftBusiness(e.target.value as BusinessSlug | "")}
-                required
-              >
-                <option value="">Choose…</option>
-                {/* SCOPED LIKE THE TABS ABOVE. A dropdown is a switcher wearing
-                    a different hat: an employee offered five businesses here
-                    can pick one the create call then refuses, and the follow-up
-                    they were writing is lost to a 403 they cannot read. */}
-                {visibleBusinesses.map((tenant) => (
-                  <option key={tenant.slug} value={tenant.slug}>
-                    {tenant.name}
+        <AddFold label="Add a follow-up" open={adding} onOpenChange={setAdding}>
+          <form className="tk-new" onSubmit={submit}>
+            <div className="tk-row">
+              <label>
+                <span>Business</span>
+                <select
+                  value={draftBusiness}
+                  onChange={(e) => setDraftBusiness(e.target.value as BusinessSlug | "")}
+                  required
+                >
+                  <option value="">Choose…</option>
+                  {/* SCOPED LIKE THE TABS ABOVE. A dropdown is a switcher wearing
+                      a different hat: an employee offered five businesses here
+                      can pick one the create call then refuses, and the follow-up
+                      they were writing is lost to a 403 they cannot read. */}
+                  {visibleBusinesses.map((tenant) => (
+                    <option key={tenant.slug} value={tenant.slug}>
+                      {tenant.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="tk-grow">
+                <span>What needs doing</span>
+                <input
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                  placeholder="Call Mr Haddad back about the attestation quote"
+                  maxLength={200}
+                  required
+                />
+              </label>
+            </div>
+            <div className="tk-row">
+              <label>
+                <span>Due</span>
+                <input type="datetime-local" value={draftDue} onChange={(e) => setDraftDue(e.target.value)} />
+              </label>
+              <label>
+                <span>Owner</span>
+                <select value={draftOwner} onChange={(e) => setDraftOwner(e.target.value)}>
+                  <option value="">
+                    {draftBusiness
+                      ? team.length === 0
+                        ? "No staff on this business yet"
+                        : "Nobody yet"
+                      : "Choose a business first"}
                   </option>
-                ))}
-              </select>
-            </label>
-            <label className="tk-grow">
-              <span>What needs doing</span>
-              <input
-                value={draftTitle}
-                onChange={(e) => setDraftTitle(e.target.value)}
-                placeholder="Call Mr Haddad back about the attestation quote"
-                maxLength={200}
-                required
-              />
-            </label>
-          </div>
-          <div className="tk-row">
-            <label>
-              <span>Due</span>
-              <input type="datetime-local" value={draftDue} onChange={(e) => setDraftDue(e.target.value)} />
-            </label>
-            <label>
-              <span>Owner</span>
-              <select value={draftOwner} onChange={(e) => setDraftOwner(e.target.value)}>
-                <option value="">
-                  {draftBusiness
-                    ? team.length === 0
-                      ? "No staff on this business yet"
-                      : "Nobody yet"
-                    : "Choose a business first"}
-                </option>
-                {team.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.fullName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="tk-grow">
-              <span>Notes</span>
-              <input
-                value={draftNotes}
-                onChange={(e) => setDraftNotes(e.target.value)}
-                placeholder="Optional — the detail that would not fit above"
-              />
-            </label>
-          </div>
-          <button type="submit" disabled={saving || !draftTitle.trim() || !draftBusiness}>
-            {saving ? "Saving…" : "Add follow-up"}
-          </button>
-        </form>
+                  {team.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="tk-grow">
+                <span>Notes</span>
+                <input
+                  value={draftNotes}
+                  onChange={(e) => setDraftNotes(e.target.value)}
+                  placeholder="Optional — the detail that would not fit above"
+                />
+              </label>
+            </div>
+            <button type="submit" disabled={saving || !draftTitle.trim() || !draftBusiness}>
+              {saving ? "Saving…" : "Add follow-up"}
+            </button>
+          </form>
+        </AddFold>
 
         <BusinessTabs
           value={business}

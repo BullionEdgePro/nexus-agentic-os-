@@ -87,3 +87,46 @@ test("the ⓘ looks like the board's", () => {
   assert.match(css, /\.page-about\[aria-expanded="true"\]/);
   assert.match(css, /\.page-head h1 \{[^}]*clamp\(24px, 3vw, 30px\)/);
 });
+
+// ---- Task 2: Follow-ups and Appointments content-first ---------------------------------------
+import * as fold from "@/app/kit/add-fold";
+import { AddAppointment } from "@/app/deck/bookings/add-appointment";
+
+test("AddFold: shut it is one button; open it shows the form and Cancel", () => {
+  const { AddFold } = fold;
+  assert.equal(typeof AddFold, "function", "app/kit/add-fold exports no AddFold");
+  const shut = render(AddFold, { label: "Add a follow-up", open: false, onOpenChange() {}, children: createElement("form") });
+  assert.match(shut, /<button type="button" class="add-fold-open" aria-expanded="false">\+ Add a follow-up<\/button>/);
+  assert.doesNotMatch(shut, /<form|Cancel/);
+  const open = render(AddFold, { label: "Add a follow-up", open: true, onOpenChange() {}, children: createElement("form") });
+  assert.match(open, /aria-expanded="true"/);
+  assert.match(open, /<form/);
+  assert.match(open, />Cancel</);
+});
+
+test("Follow-ups: the form folds, opens on ?add=1, and closes only after a save", () => {
+  const page = read("app/deck/tasks/page.tsx");
+  assert.match(page, /<AddFold[\s\S]{0,80}label="Add a follow-up"/);
+  assert.match(page, /get\("add"\) === "1"/);
+  assert.match(page, /await createTask\([\s\S]{0,1400}setAdding\(false\)[\s\S]{0,200}\} catch/);
+  assert.doesNotMatch(page, /<h2 className="act-sub-head">Add a follow-up<\/h2>/);
+});
+
+test("the counters are one slim strip", () => {
+  const css = read("app/deck/tasks/tasks.css");
+  assert.match(css, /\.tk-counts \{[^}]*flex-wrap: wrap/);
+  assert.match(css, /\.tk-count \{[^}]*display: inline-flex/);
+  assert.match(css, /\.tk-count strong \{[^}]*font-size: 1[0-6]px/);
+});
+
+test("Appointments: an answer without counts shows zeros, and ?add=1 opens the form", () => {
+  const page = read("app/deck/bookings/page.tsx");
+  assert.match(page, /setCounts\(data\.counts \?\? /);
+  assert.match(page, /startOpen=\{/);
+  assert.match(page, /get\("add"\) === "1"/);
+  const html = render(AddAppointment, {
+    business: "sfs-international", businessName: "SFS International", timezone: "Asia/Dubai",
+    team: [], onCreated() {}, startOpen: true,
+  });
+  assert.match(html, /<form/);
+});

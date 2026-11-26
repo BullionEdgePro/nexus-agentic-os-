@@ -43,6 +43,22 @@
 .page-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .page-head + .act-lede { margin: -6px 0 14px; }
 
+/* An add form folded behind one button (app/kit/add-fold.tsx, 26 Nov 2026): the
+   list first; "+ Add …" opens the form in place, Cancel folds it again. */
+.add-fold-open {
+  all: unset; display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 4px;
+  padding: 8px 16px; border-radius: var(--r-pill); background: var(--ink); color: var(--paper);
+  font-family: var(--sans); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.add-fold-open:hover { opacity: .88; }
+.add-fold-cancel {
+  all: unset; display: inline-flex; margin: 8px 0 4px; padding: 6px 14px; border-radius: var(--r-pill);
+  border: 1px solid var(--hairline-strong); color: var(--slate); font-family: var(--sans);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.add-fold-open:focus-visible,
+.add-fold-cancel:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
+
 .act-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0 16px; }
 .act-tabs button {
   font-family: var(--sans);

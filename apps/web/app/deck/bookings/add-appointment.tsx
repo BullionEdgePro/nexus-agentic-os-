@@ -54,14 +54,21 @@ export function AddAppointment({
   timezone,
   team,
   onCreated,
+  startOpen = false,
 }: {
   business: BusinessSlug;
   businessName: string;
   timezone: string;
   team: TeamMember[];
   onCreated: () => void;
+  /** Open on arrival (`?add=1`, My Day's "Book an appointment", 26 Nov 2026); shut otherwise. */
+  startOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
+  // The page reads ?add=1 after it mounts, so the ask can arrive after the first render.
+  useEffect(() => {
+    if (startOpen) setOpen(true);
+  }, [startOpen]);
   const [contacts, setContacts] = useState<ContactSummary[]>([]);
   const [contactsReadable, setContactsReadable] = useState<boolean | null>(null);
   const [search, setSearch] = useState("");

@@ -82,6 +82,11 @@ export default function BookingsPage() {
    * business ever books the one most likely to be at the wrong hour.
    */
   const [timezones, setTimezones] = useState<Record<string, string>>({});
+  // My Day's "Book an appointment" lands with the form open (?add=1, 26 Nov 2026).
+  const [addOpen, setAddOpen] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("add") === "1") setAddOpen(true);
+  }, []);
 
   const load = useCallback(async (slug: BusinessSlug | "", which: BookingStatus | "all") => {
     setLoading(true);
@@ -90,7 +95,8 @@ export default function BookingsPage() {
     try {
       const data = await getBookings({ business: slug, status: which });
       setBookings(data.bookings);
-      setCounts(data.counts);
+      // An answer without counts shows zeros rather than breaking the page.
+      setCounts(data.counts ?? { upcoming: 0, today: 0, unassigned: 0 });
     } catch (err) {
       setLoadError(readableError(err));
     } finally {
@@ -217,6 +223,7 @@ export default function BookingsPage() {
             timezone={zoneFor(business, timezones, bookings)}
             team={team}
             onCreated={() => void load(business, status)}
+            startOpen={addOpen}
           />
         ) : null}
 
