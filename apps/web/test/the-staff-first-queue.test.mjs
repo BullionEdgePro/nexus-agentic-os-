@@ -38,6 +38,43 @@ test("the Filters count: anything on beyond the staff's own queue view", () => {
   assert.equal(activeFilterCount({ ...base, folder: "late", tag: "villa" }, null), 1);
 });
 
+// ---- Task 2: the page and its styles ----------------------------------------------------------------
+
+test("staff start with Filters folded; the button says how many are on", () => {
+  const page = read("app/inbox/page.tsx");
+  assert.match(page, /filtersStartOpen\(!!myEmployeeId, /);
+  assert.match(page, /localStorage\.getItem\("nexus\.inbox\.filters"\)/);
+  assert.match(page, /try \{\s*localStorage\.setItem\("nexus\.inbox\.filters"/);
+  assert.match(page, /\$\{filtersOpen \? "" : " side-folded"\}/);
+  assert.match(page, /className=\{`ibx-filters-btn\$\{filtersOpen \? " on" : ""\}`\}[\s\S]{0,200}aria-expanded=\{filtersOpen\}/);
+  assert.match(page, /activeFilterCount\(\s*\{ folder, tag: tagFilter, channel: channelFilter, dateRange, stage: stageFilter, owner: ownerFilter \},\s*myEmployeeId \? QUEUE_KEYS : null\s*\)/);
+  assert.match(page, /\{filterCount > 0 \? <span className="ibx-filters-n">\{filterCount\}<\/span> : null\}/);
+  // Decided once the role is known — never on the first render, before it.
+  assert.match(page, /if \(!known \|\| filtersDecided\.current\) return;/);
+});
+
+test("a staff member's own row leaves out the line that names them, on the page", () => {
+  const page = read("app/inbox/page.tsx");
+  assert.match(page, /\{showsAssignee\(conversation, myEmployeeId\) \? \(\s*<span className="ibx-convo-sub">/);
+});
+
+test("folded is folded at every width, and the chips keep one row on a phone", () => {
+  const css = read("app/inbox/inbox.css");
+  assert.match(css, /\.ibx\.side-folded \.ibx-side \{ display: none; \}/);
+  assert.match(css, /\.ibx\.side-folded \{ grid-template-columns: 0 /);
+  assert.match(css, /\.ibx\.side-folded\.no-details \{ grid-template-columns: 0 /);
+  const tablet = css.slice(css.indexOf("@media (max-width: 1100px)"));
+  assert.match(tablet, /\.ibx\.side-folded \{[^}]*grid-template-areas:\s*"bar\s+bar"\s*"list\s+thread"\s*"list\s+thread"/);
+  // Preview, 26 Nov 2026: the wide folded columns (.ibx.side-folded.no-details) outranked the
+  // tablet and phone layouts and squeezed the list to a sliver. Each narrow layout sets its own.
+  assert.match(tablet, /\.ibx\.side-folded,\s*\.ibx\.side-folded\.no-details \{ grid-template-columns: 300px minmax\(0, 1fr\); \}/);
+  const phone = css.slice(css.indexOf("@media (max-width: 760px)"));
+  assert.match(phone, /\.ibx\.side-folded,\s*\.ibx\.side-folded\.no-details \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  // An open chat still takes the whole phone screen.
+  assert.match(phone, /\.ibx\.side-folded:not\(\.has-thread\) \{[^}]*grid-template-areas: "bar" "list"/);
+  assert.match(phone, /\.ibx-chips \{[^}]*flex-wrap: nowrap;[^}]*overflow-x: auto/);
+});
+
 test("a staff member's own row leaves out the line that names them", () => {
   const { showsAssignee } = layout;
   assert.equal(typeof showsAssignee, "function", "lib/inbox-layout exports no showsAssignee");

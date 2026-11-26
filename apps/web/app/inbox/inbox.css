@@ -49,6 +49,22 @@
 }
 .ibx.no-details { grid-template-columns: 232px 330px minmax(0, 1fr) 0; }
 .ibx.no-details .ibx-details { display: none; }
+/* Staff-first (26 Nov 2026): the folders and View filters folded behind
+   "Filters" — the list takes the room. Spec: 2026-11-26-staff-first-my-queue-design.md */
+.ibx.side-folded .ibx-side { display: none; }
+.ibx.side-folded { grid-template-columns: 0 360px minmax(0, 1fr) 316px; }
+.ibx.side-folded.no-details { grid-template-columns: 0 360px minmax(0, 1fr) 0; }
+.ibx-filters-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--hairline-strong); background: transparent; color: var(--slate);
+  font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.ibx-filters-btn.on { background: var(--pebble); color: var(--ink); }
+.ibx-filters-btn:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
+.ibx-filters-n {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--ink); color: var(--marble); font-size: 11px; font-weight: 700;
+}
 
 .ibx button { font-family: var(--sans); }
 .ibx-ic { width: 16px; height: 16px; flex: 0 0 auto; display: block; }
@@ -1432,10 +1448,14 @@
 @media (max-width: 1600px) {
   .ibx { grid-template-columns: 212px 300px minmax(0, 1fr) 290px; }
   .ibx.no-details { grid-template-columns: 212px 300px minmax(0, 1fr) 0; }
+  .ibx.side-folded { grid-template-columns: 0 340px minmax(0, 1fr) 290px; }
+  .ibx.side-folded.no-details { grid-template-columns: 0 340px minmax(0, 1fr) 0; }
 }
 @media (max-width: 1320px) {
   .ibx { grid-template-columns: 210px 300px minmax(0, 1fr) 292px; }
   .ibx.no-details { grid-template-columns: 210px 300px minmax(0, 1fr) 0; }
+  .ibx.side-folded { grid-template-columns: 0 320px minmax(0, 1fr) 292px; }
+  .ibx.side-folded.no-details { grid-template-columns: 0 320px minmax(0, 1fr) 0; }
 }
 
 /* Tablet: the customer panel becomes a drawer over the thread, and the
@@ -1451,6 +1471,16 @@
       "list thread";
   }
   .ibx-side { max-height: 42vh; border-bottom: 1px solid var(--hairline); }
+  /* Folded: the list runs the column's full height. Its own columns, because the
+     wide folded rule (.ibx.side-folded.no-details) outranks .ibx.no-details here. */
+  .ibx.side-folded,
+  .ibx.side-folded.no-details { grid-template-columns: 300px minmax(0, 1fr); }
+  .ibx.side-folded {
+    grid-template-areas:
+      "bar  bar"
+      "list thread"
+      "list thread";
+  }
   .ibx-details {
     position: fixed;
     top: 0;
@@ -1478,6 +1508,15 @@
     min-height: 100dvh;
   }
   .ibx-side { max-height: none; }
+  /* Folded: straight from the stage bar to the chats, one column (the wide folded
+     rules outrank .ibx.no-details). An open chat keeps the whole screen. */
+  .ibx.side-folded,
+  .ibx.side-folded.no-details { grid-template-columns: minmax(0, 1fr); }
+  .ibx.side-folded:not(.has-thread) { grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "bar" "list"; }
+  /* My queue's chips on one row; the row scrolls inside itself, never the page.
+     Scoped to the list so it outranks the base .ibx-chips rule further down. */
+  .ibx-listcol .ibx-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .ibx-listcol .ibx-chip { flex: 0 0 auto; }
   .ibx-side-h,
   .ibx-filters { display: none; }
   .ibx-folders { flex-direction: row; flex-wrap: wrap; gap: 4px; }

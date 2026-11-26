@@ -6,6 +6,7 @@ import type { ConversationSummary, ConversationChannel, MessageDto, TimelineItem
 import { isBusinessScopedUserId, whatsAppAddressLabel } from "@nexus/shared";
 import { suggestReply, polishText, syncGmailInbox, readableError, attachmentUrl } from "@/lib/api";
 import { useInboxStore } from "@/lib/store";
+import { activeFilterCount, filtersStartOpen, showsAssignee } from "@/lib/inbox-layout";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import { AskColleague } from "./ask-colleague";
 import { SnoozeMenu } from "./snooze-menu";
@@ -360,6 +361,32 @@ export default function InboxPage() {
   const [oldestFirst, setOldestFirst] = useState(false);
   // "All chats" is a group that folds away, as in any team inbox.
   const [statusOpen, setStatusOpen] = useState(true);
+  // Staff-first (26 Nov 2026): the folders and View filters fold behind "Filters"
+  // for a staff member — My queue's chips hold their views, and the chats come
+  // first — and stay open for an admin. Decided once the role is known; this
+  // browser's last choice wins.
+  const [filtersOpen, setFiltersOpen] = useState(true);
+  const filtersDecided = useRef(false);
+  useEffect(() => {
+    if (!known || filtersDecided.current) return;
+    filtersDecided.current = true;
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem("nexus.inbox.filters");
+    } catch {
+      /* no storage: the role decides */
+    }
+    setFiltersOpen(filtersStartOpen(!!myEmployeeId, stored));
+  }, [known, myEmployeeId]);
+  function toggleFilters() {
+    const next = !filtersOpen;
+    setFiltersOpen(next);
+    try {
+      localStorage.setItem("nexus.inbox.filters", next ? "open" : "closed");
+    } catch {
+      /* not remembered, still shown */
+    }
+  }
   // The customer panel folds away too, giving the thread the room.
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>("details");
@@ -492,6 +519,12 @@ export default function InboxPage() {
   }, []);
 
   const activeConversation = conversations.find((c) => c.id === selectedConversationId);
+  // How many filters are on beyond the person's ordinary view: the folded
+  // Filters button says so, so nothing is hidden by surprise.
+  const filterCount = activeFilterCount(
+    { folder, tag: tagFilter, channel: channelFilter, dateRange, stage: stageFilter, owner: ownerFilter },
+    myEmployeeId ? QUEUE_KEYS : null
+  );
   const messages = selectedConversationId ? messagesByConversation[selectedConversationId] ?? [] : [];
   const timeline = selectedConversationId ? timelineByConversation[selectedConversationId] ?? [] : [];
   const sla = inboxSettings.slaMinutes;
@@ -764,7 +797,7 @@ export default function InboxPage() {
 
   return (
     <div
-      className={`ibx${detailsOpen ? "" : " no-details"}${activeConversation ? " has-thread" : ""}`}
+      className={`ibx${detailsOpen ? "" : " no-details"}${activeConversation ? " has-thread" : ""}${filtersOpen ? "" : " side-folded"}`}
     >
       {/* Live feed down and retrying. Only for "closed" — "off" (no socket
           configured) and "connecting" are not faults to announce. */}
@@ -807,7 +840,7 @@ export default function InboxPage() {
       </nav>
 
       {/* ---- the sidebar: business, folders, and the View filters ---- */}
-      <aside className="ibx-side" aria-label="Folders">
+      <aside className="ibx-side" id="ibx-side" aria-label="Folders">
         <div className="ibx-side-head">
           <h2 className="ibx-side-title">Inbox</h2>
           <button
@@ -977,6 +1010,19 @@ export default function InboxPage() {
             {myEmployeeId && QUEUE_KEYS.includes(folder) ? "My queue" : FOLDER_TITLE[folder]}
             <span className="ibx-list-count">{visibleConversations.length}</span>
           </h2>
+          {/* The folders and View filters, folded for staff (26 Nov 2026); the count
+              says how many are on, so a folded panel never hides one by surprise. */}
+          <button
+            type="button"
+            className={`ibx-filters-btn${filtersOpen ? " on" : ""}`}
+            title={filtersOpen ? "Hide the folders and filters" : "Show the folders and filters"}
+            aria-controls="ibx-side"
+            aria-expanded={filtersOpen}
+            onClick={toggleFilters}
+          >
+            Filters
+            {filterCount > 0 ? <span className="ibx-filters-n">{filterCount}</span> : null}
+          </button>
           <button
             type="button"
             className={`ibx-iconbtn${searchOpen ? " on" : ""}`}
@@ -1172,14 +1218,17 @@ export default function InboxPage() {
                             </span>
                           ) : null}
                         </span>
-                        <span className="ibx-convo-sub">
-                          <Icon name="broadcast" />
-                          <span>
-                            {conversation.assignedEmployeeName
-                              ? conversation.assignedEmployeeName
-                              : `Unassigned · ${channelLabel(conversation.channel)}`}
+                        {/* Left out on a staff member's own chat: it would only name them (26 Nov 2026). */}
+                        {showsAssignee(conversation, myEmployeeId) ? (
+                          <span className="ibx-convo-sub">
+                            <Icon name="broadcast" />
+                            <span>
+                              {conversation.assignedEmployeeName
+                                ? conversation.assignedEmployeeName
+                                : `Unassigned · ${channelLabel(conversation.channel)}`}
+                            </span>
                           </span>
-                        </span>
+                        ) : null}
                         <span className="ibx-convo-mid">
                           {conversation.lastMessageDirection === "outbound" ? (
                             <span className="ibx-convo-ticks" aria-hidden="true">✓✓</span>
