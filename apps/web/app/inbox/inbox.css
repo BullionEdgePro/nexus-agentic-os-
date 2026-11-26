@@ -543,6 +543,8 @@
 }
 .ibx-wa { margin: 1px 0 0; font-size: 12px; color: var(--mist); font-variant-numeric: tabular-nums; }
 .ibx-head-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+/* ⋯ is for a phone only (piece 3, 26 Nov 2026); wider screens show every control. */
+.ibx-more-btn { display: none; }
 
 .ibx-assignee {
   display: inline-flex;
@@ -1533,6 +1535,23 @@
   .ibx.has-thread .ibx-listcol { display: none; }
   .ibx.has-thread .ibx-thread { display: flex; }
   .ibx-back { display: inline-grid; }
+  /* The open chat's header on a phone is one row (piece 3, 26 Nov 2026): back, the
+     customer, Call, Resolve, the AI / Human switch and ⋯. ⋯ shows the rest and the
+     labels, on their own full-width row. */
+  .ibx-more-btn { display: inline-grid; }
+  .ibx-more-btn span { font-size: 18px; line-height: 1; }
+  .ibx-thread-head:not(.more-open) :is(.ibx-head-details, .ibx-assignee, .ibx-snooze, .ibx-notcust, .ibx-ask) { display: none; }
+  .ibx-thread-head:not(.more-open) + .ibx-thread-tags { display: none; }
+  .ibx-thread-head { gap: 8px; }
+  .ibx-thread-head.more-open { flex-wrap: wrap; }
+  .ibx-thread-head.more-open .ibx-head-actions { flex: 1 1 100%; justify-content: flex-start; }
+  .ibx-who-block { flex: 1 1 0; min-width: 0; }
+  .ibx-callbtn span { display: none; }
+  /* The name gets the room, and the number stays on one line. */
+  .ibx-thread-head .ibx-av.lg { width: 32px; height: 32px; }
+  .ibx-wa { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ibx-wa-ch,
+  .ibx-wa-sep { display: none; }
   .ibx-head-actions .ibx-assignee-name,
   .ibx-resolve span,
   .ibx-handoff-label { display: none; }

@@ -526,6 +526,13 @@ export default function InboxPage() {
     { folder, tag: tagFilter, channel: channelFilter, dateRange, stage: stageFilter, owner: ownerFilter },
     myEmployeeId ? QUEUE_KEYS : null
   );
+  // On a phone an open chat's header is one row (26 Nov 2026, piece 3): ⋯ shows
+  // the rest — customer panel, Assign, Snooze, Not a customer, Ask a colleague —
+  // and the labels. Each chat opens folded.
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [activeConversation?.id]);
   const messages = selectedConversationId ? messagesByConversation[selectedConversationId] ?? [] : [];
   const timeline = selectedConversationId ? timelineByConversation[selectedConversationId] ?? [] : [];
   const sla = inboxSettings.slaMinutes;
@@ -1295,7 +1302,7 @@ export default function InboxPage() {
           </div>
         ) : (
           <>
-            <header className="ibx-thread-head">
+            <header className={`ibx-thread-head${moreOpen ? " more-open" : ""}`}>
               <button
                 type="button"
                 className="ibx-iconbtn ibx-back"
@@ -1308,14 +1315,20 @@ export default function InboxPage() {
               <div className="ibx-who-block">
                 <h1 className="ibx-who">{contactLabel(activeConversation)}</h1>
                 <p className="ibx-wa">
-                  {channelLabel(activeConversation.channel)}
-                  {activeConversation.contactWaId ? ` · ${whatsAppAddressLabel(activeConversation.contactWaId)}` : ""}
+                  {/* On a phone the channel's name gives way to the number (the avatar's badge says it). */}
+                  <span className="ibx-wa-ch">{channelLabel(activeConversation.channel)}</span>
+                  {activeConversation.contactWaId ? (
+                    <>
+                      <span className="ibx-wa-sep"> · </span>
+                      {whatsAppAddressLabel(activeConversation.contactWaId)}
+                    </>
+                  ) : null}
                 </p>
               </div>
               <div className="ibx-head-actions">
                 <button
                   type="button"
-                  className={`ibx-iconbtn${detailsOpen ? " on" : ""}`}
+                  className={`ibx-iconbtn ibx-head-details${detailsOpen ? " on" : ""}`}
                   title={detailsOpen ? "Hide customer details" : "Customer details"}
                   aria-label={detailsOpen ? "Hide customer details" : "Show customer details"}
                   aria-pressed={detailsOpen}
@@ -1431,9 +1444,21 @@ export default function InboxPage() {
                     {activeConversation.isHumanHandoff ? "Human" : "AI on"}
                   </span>
                 </label>
+                {/* Phone only (the CSS shows it there): the rest of the header and the labels. */}
+                <button
+                  type="button"
+                  className="ibx-iconbtn ibx-more-btn"
+                  title={moreOpen ? "Fewer actions" : "More actions"}
+                  aria-label={moreOpen ? "Fewer actions" : "More actions"}
+                  aria-expanded={moreOpen}
+                  aria-controls="ibx-thread-tags"
+                  onClick={() => setMoreOpen((o) => !o)}
+                >
+                  <span aria-hidden="true">⋯</span>
+                </button>
               </div>
             </header>
-            <div className="ibx-thread-tags">
+            <div className="ibx-thread-tags" id="ibx-thread-tags">
               <TagEditor
                 key={activeConversation.id}
                 tags={activeConversation.tags}
