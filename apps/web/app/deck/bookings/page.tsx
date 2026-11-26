@@ -201,6 +201,8 @@ export default function BookingsPage() {
           }
         />
 
+        {/* The counts are the last load's; under a failed one they would be another view's numbers. */}
+        {loadError ? null : (
         <div className="tk-counts">
           <div className="tk-count">
             <strong>{counts.upcoming}</strong>
@@ -215,6 +217,7 @@ export default function BookingsPage() {
             <span>nobody assigned</span>
           </div>
         </div>
+        )}
 
         <BusinessTabs
           value={business}
@@ -264,7 +267,7 @@ export default function BookingsPage() {
           <LoadFailed reason={loadError} onRetry={() => void load(business, status)} />
         ) : null}
 
-        <h2 className="act-sub-head">{heading}</h2>
+        {loadError ? null : <h2 className="act-sub-head">{heading}</h2>}
 
         {loadError ? null : loading ? (
           <PageLoading />

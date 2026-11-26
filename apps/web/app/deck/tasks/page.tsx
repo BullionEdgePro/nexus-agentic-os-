@@ -203,6 +203,8 @@ export default function TasksPage() {
           }
         />
 
+        {/* The counts are the last load's; under a failed one they would be another view's numbers. */}
+        {loadError ? null : (
         <div className="tk-counts">
           <div className="tk-count">
             <strong>{counts.open}</strong>
@@ -217,6 +219,7 @@ export default function TasksPage() {
             <span>nobody&apos;s job</span>
           </div>
         </div>
+        )}
 
         <AddFold label="Add a follow-up" open={adding} onOpenChange={setAdding}>
           <form className="tk-new" onSubmit={submit}>
@@ -319,7 +322,7 @@ export default function TasksPage() {
           <LoadFailed reason={loadError} onRetry={() => void load(business, status)} />
         ) : null}
 
-        <h2 className="act-sub-head">{heading}</h2>
+        {loadError ? null : <h2 className="act-sub-head">{heading}</h2>}
 
         {loadError ? null : loading ? (
           <PageLoading />

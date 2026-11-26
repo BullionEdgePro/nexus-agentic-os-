@@ -106,6 +106,16 @@ test("a failed load says why and offers Try again, which loads the page again", 
   }
 });
 
+test("Follow-ups and Appointments hide their counts and heading under a failed load", () => {
+  // Found in the preview (26 Nov 2026): a failed switch to Zipicka left "7 open · 2 overdue" from
+  // All businesses above the error — another view's numbers under this one's name.
+  for (const name of ["tasks", "bookings"]) {
+    const P = page(name);
+    assert.match(P, /\{loadError \? null : \(\s*<div className="tk-counts">/, `${name}: counts drawn under a failed load`);
+    assert.match(P, /\{loadError \? null : <h2 className="act-sub-head">\{heading\}<\/h2>\}/, `${name}: heading drawn under a failed load`);
+  }
+});
+
 test("notifications: its load is a function Try again can call, still run once on open", () => {
   const P = page("notifications").replace(/\r\n/g, "\n");
   assert.match(P, /const load = useCallback\(/);
