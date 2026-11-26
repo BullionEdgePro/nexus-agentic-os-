@@ -104,37 +104,39 @@ export function MyDay() {
         )}
       </header>
 
-      {/* Where a person starts from here — each one a real screen. */}
+      {/* Where a person starts from here — each one a real screen. Compact chips
+          (26 Nov 2026): the sub-line shows on wide screens and on hover; the two
+          "add" shortcuts land with their form already open (?add=1). */}
       <nav className="day-actions" aria-label="Quick actions">
-        <a href="/inbox" className="day-action">
+        <a href="/inbox" className="day-action" title="Everything assigned to you">
           <Glyph d="M4 5h16v11H8l-4 4V5Z" />
           <span>
             <b>Open my chats</b>
             <small>Everything assigned to you</small>
           </span>
         </a>
-        <a href="/deck/tasks" className="day-action">
+        <a href="/deck/tasks?add=1" className="day-action" title="Promise it, and be reminded">
           <Glyph d="M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" />
           <span>
             <b>Add a follow-up</b>
             <small>Promise it, and be reminded</small>
           </span>
         </a>
-        <a href="/deck/bookings" className="day-action">
+        <a href="/deck/bookings?add=1" className="day-action" title="Phoned, walked in, or asked">
           <Glyph d="M7 3v3m10-3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z" />
           <span>
             <b>Book an appointment</b>
             <small>Phoned, walked in, or asked</small>
           </span>
         </a>
-        <a href="/deck/my-clients" className="day-action">
+        <a href="/deck/my-clients" className="day-action" title="Hand customers straight to you">
           <Glyph d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 3h2m2 0h2m-6 3h6m-6-6h2" />
           <span>
             <b>My link &amp; QR</b>
             <small>Hand customers straight to you</small>
           </span>
         </a>
-        <a href="#log-lead" className="day-action">
+        <a href="#log-lead" className="day-action" title="Won on your own phone">
           <Glyph d="M12 5v14M5 12h14" />
           <span>
             <b>Log a lead</b>

@@ -130,3 +130,24 @@ test("Appointments: an answer without counts shows zeros, and ?add=1 opens the f
   });
   assert.match(html, /<form/);
 });
+
+// ---- Task 3: My Day compact --------------------------------------------------------------------
+
+test("My Day's shortcuts land ready", () => {
+  const day = read("app/my-day.tsx");
+  assert.match(day, /href="\/deck\/tasks\?add=1"/);
+  assert.match(day, /href="\/deck\/bookings\?add=1"/);
+  const chips = (day.match(/className="day-action"/g) ?? []).length;
+  assert.ok(chips >= 5);
+  assert.equal((day.match(/className="day-action" title=/g) ?? []).length, chips, "every shortcut says what it does on hover");
+});
+
+test("My Day is compact: chips that wrap, a smaller greeting, a one-line all-clear", () => {
+  const css = read("app/my-day.css");
+  assert.match(css, /\.day-actions \{[^}]*flex-wrap: wrap/);
+  const h1 = css.match(/\.day-hero h1 \{[^}]*font-size: clamp\([^,]+,[^,]+,\s*(\d+)px\)/);
+  assert.ok(h1 && Number(h1[1]) <= 30, "the greeting is at most 30px");
+  const mark = css.match(/\.day-clear-mark \{[^}]*width: (\d+)px/);
+  assert.ok(mark && Number(mark[1]) <= 24, "the all-clear tick is small");
+  assert.match(css, /@media \(max-width: 1180px\) \{[^@]*\.day-action small \{ display: none; \}/);
+});

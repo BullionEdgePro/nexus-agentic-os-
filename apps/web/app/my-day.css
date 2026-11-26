@@ -24,8 +24,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 24px;
-  padding: 26px 28px;
+  gap: 16px;
+  /* Compact (26 Nov 2026): the greeting no longer fills a phone's first screen. */
+  padding: 18px 22px;
   border-radius: var(--r-lg);
   background:
     radial-gradient(60% 120% at 100% 0%, rgba(94, 196, 255, .35), transparent 70%),
@@ -75,16 +76,16 @@
   font-size: 11.5px;
 }
 .day-hero h1 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-family: var(--display);
-  font-size: clamp(24px, 3vw, 32px);
+  font-size: clamp(22px, 2.6vw, 28px);
   font-weight: 800;
   line-height: 1.12;
   letter-spacing: -.025em;
   color: var(--ink);
   text-wrap: balance;
 }
-.day-lede { margin: 0; max-width: 58ch; font-size: 15px; color: var(--slate); }
+.day-lede { margin: 0; max-width: 58ch; font-size: 14px; color: var(--slate); }
 
 .day-focus { display: flex; gap: 10px; }
 .day-focus-tile {
@@ -92,7 +93,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 14px 16px;
+  padding: 10px 14px;
   border-radius: 16px;
   background: rgba(255, 255, 255, .8);
   border: 1px solid var(--hairline);
@@ -104,7 +105,7 @@
 .day-focus-tile:hover { transform: translateY(-3px); box-shadow: var(--lift); border-color: var(--sky); }
 .day-focus-tile b {
   font-family: var(--display);
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1;
   color: var(--ink);
@@ -116,34 +117,35 @@
 .day-focus-tile.late { border-color: rgba(196, 52, 42, .35); background: var(--crit-soft); }
 .day-focus-tile.late b { color: var(--crit); }
 
+/* The all-clear as one short line with a small tick (26 Nov 2026). */
 .day-clear {
   display: flex;
   align-items: center;
-  gap: 14px;
-  max-width: 380px;
-  padding: 14px 18px;
-  border-radius: 16px;
+  gap: 10px;
+  max-width: 420px;
+  padding: 8px 12px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, .85);
   border: 1px solid var(--good-soft);
   color: var(--good);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 .day-clear p { margin: 0; }
-.day-clear-mark { width: 44px; height: 44px; flex: 0 0 auto; }
+.day-clear-mark { width: 20px; height: 20px; flex: 0 0 auto; }
 .day-clear-mark circle { fill: var(--good-soft); stroke: var(--good); stroke-width: 2.5; stroke-dasharray: 150; stroke-dashoffset: 150; animation: day-draw .7s var(--ease-out) forwards; }
 .day-clear-mark path { fill: none; stroke: var(--good); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: day-draw .45s .55s var(--ease-out) forwards; }
 @keyframes day-draw { to { stroke-dashoffset: 0; } }
 
-/* ---------- quick actions ---------- */
-.day-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+/* ---------- quick actions: compact chips that wrap (26 Nov 2026) ---------- */
+.day-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .day-action {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 13px 14px;
-  border-radius: 14px;
+  gap: 9px;
+  padding: 7px 14px 7px 7px;
+  border-radius: var(--r-pill);
   background: var(--paper);
   border: 1px solid var(--hairline);
   color: var(--ink);
@@ -158,18 +160,18 @@
 .day-action:hover { transform: translateY(-3px); box-shadow: var(--lift); border-color: var(--sky); }
 .day-action:hover .day-action-ic { transform: rotate(-8deg) scale(1.08); }
 .day-action-ic {
-  width: 38px;
-  height: 38px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 50%;
   background: var(--btn-grad);
   color: var(--on-accent);
   box-shadow: 0 8px 16px -8px var(--sky-glow);
   transition: transform .25s var(--ease-spring);
 }
-.day-action-ic svg { width: 19px; height: 19px; }
+.day-action-ic svg { width: 15px; height: 15px; }
 .day-action span { display: flex; flex-direction: column; min-width: 0; }
 .day-action b { font-size: 13.5px; font-weight: 700; }
 .day-action small { font-size: 11.5px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -295,7 +297,7 @@
 
 /* ---------- narrower ---------- */
 @media (max-width: 1180px) {
-  .day-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .day-action small { display: none; }
 }
 @media (max-width: 980px) {
   .day-hero { grid-template-columns: minmax(0, 1fr); }
@@ -306,7 +308,6 @@
   .day-hero { padding: 20px; }
   .day-focus { flex-wrap: wrap; }
   .day-focus-tile { flex: 1 1 90px; min-width: 0; }
-  .day-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .day-stats,
   .day-book.wide .day-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
