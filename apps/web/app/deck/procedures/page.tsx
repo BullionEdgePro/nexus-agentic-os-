@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BusinessTabs } from "@/lib/business-tabs";
+import { BusinessTabs, usePageBusiness } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getProcedures,
@@ -47,7 +47,8 @@ import { PageHead } from "@/app/kit/page-head";
  * the fix for.
  */
 export default function ProceduresPage() {
-  const [business, setBusiness] = useState<BusinessSlug>(TENANTS[0].slug);
+  // Staff open their own business; an admin starts on the first (26 Nov 2026).
+  const { business, ready, setBusiness } = usePageBusiness(TENANTS[0].slug);
   const [procedures, setProcedures] = useState<ProcedureRecord[]>([]);
   const [counts, setCounts] = useState<ProcedureCounts>({ active: 0, drafts: 0, proposals: 0 });
   const [readiness, setReadiness] = useState<InferenceReadiness | null>(null);
@@ -93,10 +94,11 @@ export default function ProceduresPage() {
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     setLastRun(null);
     setEditing(null);
     void load(business);
-  }, [business, load]);
+  }, [ready, business, load]);
 
   async function look() {
     setLooking(true);
@@ -478,7 +480,7 @@ export default function ProceduresPage() {
 
         {/* The order the agent works in, above; the words it uses when it stops
             working, below. Same business, same question, so the same screen. */}
-        <PhrasesSection business={business} />
+        {ready ? <PhrasesSection business={business} /> : null}
       </div>
     </div>
   );

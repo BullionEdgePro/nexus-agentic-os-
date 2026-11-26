@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BusinessTabs } from "@/lib/business-tabs";
+import { BusinessTabs, usePageBusiness } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getForecast,
@@ -49,7 +49,8 @@ import { PageHead } from "@/app/kit/page-head";
  * rather than quietly showing the backtest under an accuracy heading.
  */
 export default function ForecastPage() {
-  const [business, setBusiness] = useState<BusinessSlug>(TENANTS[0].slug);
+  // Staff open their own business; an admin starts on the first (26 Nov 2026).
+  const { business, ready, setBusiness } = usePageBusiness(TENANTS[0].slug);
   const [status, setStatus] = useState<ForecastStatus | null>(null);
   const [upcoming, setUpcoming] = useState<StoredForecast[]>([]);
   const [accuracy, setAccuracy] = useState<ForecastAccuracy[]>([]);
@@ -87,9 +88,10 @@ export default function ForecastPage() {
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     setNote("");
     void load(business);
-  }, [business, load]);
+  }, [ready, business, load]);
 
   async function handleRefresh() {
     setBusy(true);

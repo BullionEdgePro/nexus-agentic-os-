@@ -132,3 +132,36 @@ export function useVisibleBusinesses() {
 
   return { businesses, isOperator, known: role !== null, mySlug: mine, myEmployeeId };
 }
+
+/**
+ * Which business a one-business page opens on (26 Nov 2026, staff-first piece 5).
+ *
+ * Customers, Knowledge, Answer rules and Forecast each started on a fixed
+ * business (Zipicka) and never changed it for an employee, so every member of
+ * staff but Zipicka's was refused by the server ("You don't have access to that
+ * business.") on four pages of their own menu. Now: nothing loads until who is
+ * asking is known; staff get their own business, always; an admin gets the one
+ * they chose, else the fallback.
+ *
+ * Staff whose `getMe` failed are read as employees with no business (fails
+ * closed, above). They get the fallback and `ready`, so the page asks, and the
+ * server's own reason shows with Try again, rather than an outline that never
+ * ends.
+ */
+export function pageBusinessFor(
+  v: { known: boolean; isOperator: boolean; mySlug: string | null },
+  chosen: BusinessSlug | null,
+  fallback: BusinessSlug,
+): { business: BusinessSlug; ready: boolean } {
+  if (!v.known) return { business: fallback, ready: false };
+  if (v.isOperator) return { business: chosen ?? fallback, ready: true };
+  return { business: (v.mySlug as BusinessSlug | null) ?? fallback, ready: true };
+}
+
+/** `pageBusinessFor` with the state it needs. `setBusiness` is an admin's switch; staff cannot switch. */
+export function usePageBusiness(fallback: BusinessSlug) {
+  const visible = useVisibleBusinesses();
+  const [chosen, setChosen] = useState<BusinessSlug | null>(null);
+  const { business, ready } = pageBusinessFor(visible, chosen, fallback);
+  return { business, ready, setBusiness: setChosen as (slug: BusinessSlug) => void, isOperator: visible.isOperator };
+}

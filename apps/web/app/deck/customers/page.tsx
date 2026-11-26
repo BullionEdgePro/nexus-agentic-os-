@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BusinessTabs, useVisibleBusinesses } from "@/lib/business-tabs";
+import { BusinessTabs, usePageBusiness } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   downloadExport,
@@ -62,8 +62,8 @@ import { PageHead } from "@/app/kit/page-head";
 export default function CustomersPage() {
   // The exports are the admin's (the API answers staff "Not found"), so staff
   // are not offered them (24 Oct 2026).
-  const { isOperator } = useVisibleBusinesses();
-  const [business, setBusiness] = useState<BusinessSlug>("zipicka");
+  // Staff open their own business; an admin starts on Zipicka (26 Nov 2026).
+  const { business, ready, setBusiness, isOperator } = usePageBusiness("zipicka");
   const [contacts, setContacts] = useState<ContactSummary[]>([]);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ContactDetail | null>(null);
@@ -91,10 +91,11 @@ export default function CustomersPage() {
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     setSelected(null);
     setMemory(null);
     void load(business, search);
-  }, [business, search, load]);
+  }, [ready, business, search, load]);
 
   /**
    * Download one of the exports.
@@ -196,11 +197,13 @@ export default function CustomersPage() {
         {/* Import sits beside export deliberately. A product that will hand
             you your data and not take it back is a one-way door, and until this
             existed the only way in was one customer at a time. */}
-        <ImportCustomers
-          business={business}
-          businessName={TENANTS.find((t) => t.slug === business)?.name ?? business}
-          onImported={() => void load(business, "")}
-        />
+        {ready ? (
+          <ImportCustomers
+            business={business}
+            businessName={TENANTS.find((t) => t.slug === business)?.name ?? business}
+            onImported={() => void load(business, "")}
+          />
+        ) : null}
 
         {isOperator ? (
         <div className="cu-export">

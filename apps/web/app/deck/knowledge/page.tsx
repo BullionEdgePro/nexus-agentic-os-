@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BusinessTabs } from "@/lib/business-tabs";
+import { BusinessTabs, usePageBusiness } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getKnowledge,
@@ -40,7 +40,8 @@ import { PageHead } from "@/app/kit/page-head";
  *   down" need different responses from the operator.
  */
 export default function KnowledgePage() {
-  const [business, setBusiness] = useState<BusinessSlug>("zipicka");
+  // Staff open their own business; an admin starts on Zipicka (26 Nov 2026).
+  const { business, ready, setBusiness } = usePageBusiness("zipicka");
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -78,10 +79,11 @@ export default function KnowledgePage() {
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     void load(business);
     setConfirming(null);
     setNotice("");
-  }, [business, load]);
+  }, [ready, business, load]);
 
   async function handleAdd(event: React.FormEvent) {
     event.preventDefault();
