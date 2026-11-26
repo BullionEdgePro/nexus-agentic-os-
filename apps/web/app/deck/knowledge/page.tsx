@@ -19,6 +19,7 @@ import "./knowledge.css";
 import { PageLoading, LoadFailed } from "@/app/kit/load-states";
 import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
+import { AddFold } from "@/app/kit/add-fold";
 
 /**
  * What each business's agent actually knows.
@@ -63,6 +64,12 @@ export default function KnowledgePage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [confirming, setConfirming] = useState<KnowledgeSource | null>(null);
+  // The add form waits behind "+ Teach it something" (26 Nov 2026, staff-first
+  // piece 5) so what the agent knows comes first; a link with ?add=1 opens it.
+  const [adding, setAdding] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("add") === "1") setAdding(true);
+  }, []);
 
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
@@ -113,6 +120,9 @@ export default function KnowledgePage() {
       setContent("");
       setFile(null);
       await load(business);
+      // Added: the form folds and the source is in the list. A failed add never
+      // reaches here, so the form stays open with the error and what was typed.
+      setAdding(false);
     } catch (err) {
       setError(readable(err));
     } finally {
@@ -193,8 +203,8 @@ export default function KnowledgePage() {
           </p>
         ) : null}
 
-        <section className="kn-add">
-          <h2 className="act-sub-head">Teach it something</h2>
+        <AddFold label="Teach it something" open={adding} onOpenChange={setAdding}>
+        <section className="kn-add" aria-label="Teach it something">
           <div className="kn-modes">
             <button aria-pressed={mode === "url"} onClick={() => setMode("url")}>
               From a page
@@ -280,6 +290,7 @@ export default function KnowledgePage() {
             </button>
           </form>
         </section>
+        </AddFold>
 
         <h2 className="act-sub-head">
           What it knows{" "}

@@ -7,31 +7,31 @@
  * Every colour comes through the tokens in deck.css, so both themes follow and
  * nothing below hard-codes a hex. */
 
-/* --- the three numbers --- */
+/* --- the three numbers: one slim strip of pills, the same as Follow-ups (26 Nov
+   2026, staff-first piece 5 — they were three tall boxes above the list) --- */
 
 .pr-counts {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin: 20px 0 4px;
+  margin: 6px 0 4px;
 }
 
 .pr-count {
-  flex: 1 1 150px;
   border: 1px solid var(--hairline);
-  border-radius: var(--r);
+  border-radius: var(--r-pill);
   background: var(--paper);
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  padding: 5px 12px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .pr-count strong {
   font-family: var(--display);
-  font-size: 30px;
+  font-size: 15px;
   line-height: 1;
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }

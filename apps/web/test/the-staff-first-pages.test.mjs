@@ -47,3 +47,40 @@ test("Customers, Knowledge, Answer rules and Forecast wait to know who is asking
   assert.match(page("procedures"), /\{ready \? <PhrasesSection business=\{business\} \/> : null\}/);
   assert.match(page("customers"), /\{ready \? \(\s*<ImportCustomers/);
 });
+
+// ---- Task 2: Knowledge and Answer rules — list first, forms folded, slim counters ------------------
+
+/** The source between `<AddFold label="LABEL"` and its `</AddFold>`. */
+function fold(P, label) {
+  const start = P.indexOf(`<AddFold label="${label}"`);
+  assert.ok(start >= 0, `no <AddFold label="${label}"`);
+  return P.slice(start, P.indexOf("</AddFold>", start));
+}
+
+test("Knowledge: Teach it something waits behind a button; ?add=1 opens it; a save closes it", () => {
+  const P = page("knowledge");
+  assert.match(fold(P, "Teach it something"), /<form onSubmit=\{handleAdd\}>/);
+  assert.match(P, /<AddFold label="Teach it something" open=\{adding\} onOpenChange=\{setAdding\}>/);
+  assert.match(P, /get\("add"\) === "1"\) setAdding\(true\)/);
+  assert.match(P, /await load\(business\);\n(\s*\/\/[^\n]*\n)*\s*setAdding\(false\);/, "a successful add does not fold the form");
+  assert.ok(P.indexOf("<AddFold") < P.indexOf('className="kn-list"'), "the fold button sits above the list");
+});
+
+test("Knowledge on a phone: Remove beside the title, the facts on one line under it", () => {
+  const css = read("app/deck/knowledge/knowledge.css");
+  const phone = css.slice(css.indexOf("@media (max-width: 620px)"));
+  assert.match(phone, /\.kn-item \{ grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(phone, /\.kn-remove \{[^}]*grid-column: 2;[^}]*grid-row: 1;/);
+  assert.match(phone, /\.kn-meta \{[^}]*grid-column: 1 \/ -1;[^}]*flex-direction: row;/);
+});
+
+test("Answer rules: Write one yourself waits behind a button; slim counters, hidden under a failed load", () => {
+  const P = page("procedures");
+  assert.match(fold(P, "Write one yourself"), /<form className="pr-new" onSubmit=\{write\}/);
+  assert.match(P, /<AddFold label="Write one yourself" open=\{writing\} onOpenChange=\{setWriting\}>/);
+  assert.match(P, /await load\(business\);\n(\s*\/\/[^\n]*\n)*\s*setWriting\(false\);/, "a successful save does not fold the form");
+  assert.match(P, /\{loadError \? null : \(\s*<div className="pr-counts">/, "counts drawn under a failed load");
+  const css = read("app/deck/procedures/procedures.css");
+  assert.match(css, /\.pr-count \{[^}]*border-radius: var\(--r-pill\);/, ".pr-count is not a pill");
+  assert.match(css, /\.pr-count strong \{[^}]*font-size: 15px;/, "the counter number is still large");
+});

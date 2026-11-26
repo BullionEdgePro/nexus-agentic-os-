@@ -21,6 +21,7 @@ import "./procedures.css";
 import { PageLoading, LoadFailed } from "@/app/kit/load-states";
 import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
+import { AddFold } from "@/app/kit/add-fold";
 
 /**
  * How this business answers — the review screen for procedural memory (F10).
@@ -75,6 +76,8 @@ export default function ProceduresPage() {
   const [newIntent, setNewIntent] = useState("");
   const [newSteps, setNewSteps] = useState("");
   const [saving, setSaving] = useState(false);
+  // "Write one yourself" waits behind a button (26 Nov 2026, staff-first piece 5).
+  const [writing, setWriting] = useState(false);
 
   const load = useCallback(async (slug: BusinessSlug) => {
     setLoading(true);
@@ -148,6 +151,8 @@ export default function ProceduresPage() {
       setNewSteps("");
       setNewIntent("");
       await load(business);
+      // Saved: the form folds and the procedure is in the list; a failed save keeps it open.
+      setWriting(false);
     } catch (err) {
       setError(readableError(err));
     } finally {
@@ -183,6 +188,8 @@ export default function ProceduresPage() {
           includeAll={false}
         />
 
+        {/* The counts are the last load's; under a failed one they would be another business's. */}
+        {loadError ? null : (
         <div className="pr-counts">
           <div className={`pr-count${counts.active > 0 ? " live" : ""}`}>
             <strong>{counts.active}</strong>
@@ -197,6 +204,7 @@ export default function ProceduresPage() {
             <span>suggested changes</span>
           </div>
         </div>
+        )}
 
         <div className="pr-run">
           <button onClick={look} disabled={looking || !readiness?.canRun}>
@@ -439,8 +447,8 @@ export default function ProceduresPage() {
           </ul>
         )}
 
-        <form className="pr-new" onSubmit={write}>
-          <h2 className="act-sub-head">Write one yourself</h2>
+        <AddFold label="Write one yourself" open={writing} onOpenChange={setWriting}>
+        <form className="pr-new" onSubmit={write} aria-label="Write one yourself">
           <p className="pr-new-note">
             The better half of this feature. A procedure someone wrote is authoritative — the
             platform will not propose over the top of it once it is in use.
@@ -469,6 +477,7 @@ export default function ProceduresPage() {
             {saving ? "Saving…" : "Save, switched off"}
           </button>
         </form>
+        </AddFold>
 
         <p className="act-caveat">
           What the platform can see is that nobody had to step in and the customer kept replying.

@@ -200,10 +200,18 @@
 }
 .kn-danger:disabled { opacity: .5; cursor: default; }
 
+/* On a phone (26 Nov 2026, staff-first piece 5): Remove sits beside the title and
+   the facts (status, passages, when) share one line under it — each source was
+   ~185px tall, with a full-width Remove under three stacked lines. */
 @media (max-width: 620px) {
-  .kn-item { grid-template-columns: 1fr; }
-  .kn-meta { align-items: flex-start; }
+  .kn-item { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px 14px; }
+  .kn-main { grid-column: 1; grid-row: 1; }
+  .kn-remove { grid-column: 2; grid-row: 1; align-self: start; padding: 4px 10px; }
+  .kn-meta { grid-column: 1 / -1; grid-row: 2; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 }
+
+/* A breath between "+ Teach it something" and the list it opens above. */
+.act-root > .add-fold-open { margin-bottom: 6px; }
 
 /* Said before the upload, not after the refusal: a scan is the commonest thing
    to try and the least obvious thing to be wrong with. */
