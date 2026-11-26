@@ -364,8 +364,9 @@ export default function InboxPage() {
   // Staff-first (26 Nov 2026): the folders and View filters fold behind "Filters"
   // for a staff member — My queue's chips hold their views, and the chats come
   // first — and stay open for an admin. Decided once the role is known; this
-  // browser's last choice wins.
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  // browser's last choice wins. Folded until then: the panel holds nothing before
+  // the role is known, and starting open made every staff visit jump.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersDecided = useRef(false);
   useEffect(() => {
     if (!known || filtersDecided.current) return;

@@ -51,6 +51,9 @@ test("staff start with Filters folded; the button says how many are on", () => {
   assert.match(page, /\{filterCount > 0 \? <span className="ibx-filters-n">\{filterCount\}<\/span> : null\}/);
   // Decided once the role is known — never on the first render, before it.
   assert.match(page, /if \(!known \|\| filtersDecided\.current\) return;/);
+  // Folded until then (self-review, 26 Nov 2026): starting open made every staff visit
+  // jump as the panel folded; before the role is known the panel holds nothing anyway.
+  assert.match(page, /const \[filtersOpen, setFiltersOpen\] = useState\(false\);/);
 });
 
 test("a staff member's own row leaves out the line that names them, on the page", () => {
