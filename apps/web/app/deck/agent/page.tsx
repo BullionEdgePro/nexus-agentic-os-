@@ -18,6 +18,8 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./agent.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
 
 /**
@@ -173,9 +175,9 @@ export default function AgentPage() {
         />
 
         {loadError ? (
-          <p className="ag-err ag-err-load">{loadError}</p>
+          <LoadFailed reason={loadError} onRetry={() => void load(business)} />
         ) : loading ? (
-          <p className="ag-note">Loading…</p>
+          <PageLoading />
         ) : config ? (
           <>
             {settings ? (

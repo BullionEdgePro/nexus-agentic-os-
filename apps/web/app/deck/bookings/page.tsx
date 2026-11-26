@@ -18,6 +18,8 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../tasks/tasks.css";
 import "./bookings.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
 
 /**
@@ -259,13 +261,13 @@ export default function BookingsPage() {
            * report" when the truth is "nobody could ask". Those are the
            * two silences the operators panel was fixed for this morning.
            */
-          <p className="act-msg">{loadError}</p>
+          <LoadFailed reason={loadError} onRetry={() => void load(business, status)} />
         ) : null}
 
         <h2 className="act-sub-head">{heading}</h2>
 
         {loadError ? null : loading ? (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         ) : bookings.length === 0 ? (
           <div className="act-empty">
             <strong>Nothing here.</strong>

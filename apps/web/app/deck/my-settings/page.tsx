@@ -15,6 +15,8 @@ import "../deck.css";
 import "../activity/activity.css";
 import "./my-settings.css";
 import "../phone-alerts.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PhoneAlerts } from "../phone-alerts";
 import { PageHead } from "@/app/kit/page-head";
 
@@ -76,7 +78,7 @@ export default function MySettingsPage() {
           }
         />
 
-        {loadError ? <p className="act-msg">{loadError}</p> : null}
+        {loadError ? <LoadFailed reason={loadError} onRetry={() => void load()} /> : null}
 
         {me ? (
           me.role === "employee" ? (
@@ -94,7 +96,7 @@ export default function MySettingsPage() {
             </div>
           )
         ) : loadError ? null : (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         )}
       </div>
     </div>
@@ -303,7 +305,7 @@ function SocialCard() {
       {error ? <p className="set-error">{error}</p> : null}
 
       {!rows ? (
-        <p className="set-hint">Loading…</p>
+        <PageLoading rows={2} />
       ) : rows.length === 0 ? (
         <p className="set-empty">Nothing added yet. Add the socials you use for work.</p>
       ) : (

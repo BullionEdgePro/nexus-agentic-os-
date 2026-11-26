@@ -16,6 +16,7 @@ import { fontVariables } from "@/lib/fonts";
 import { ResponseTimes } from "./response-times";
 import "../deck.css";
 import "./activity.css";
+import "../../kit/load-states.css";
 
 /**
  * Staff work — the admin's view of every staff member's work (22 Oct 2026).

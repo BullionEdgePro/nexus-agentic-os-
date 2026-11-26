@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSharedBrain, readableError, type BrainStatus, type SharedPattern } from "@/lib/api";
+import { PageLoading } from "@/app/kit/load-states";
 
 /**
  * The shared brain (F5), made visible for the first time.
@@ -78,7 +79,7 @@ export function BrainSection() {
           </p>
         </div>
       ) : loading ? (
-        <div className="act-empty">Loading…</div>
+        <PageLoading />
       ) : !status ? null : (
         <>
           {/* Can it see anything? Before: does it know anything? */}

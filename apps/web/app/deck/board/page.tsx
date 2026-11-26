@@ -59,6 +59,8 @@ const VIEW_KEY = "nexus.board.view";
 import { useVisibleBusinesses } from "@/lib/business-tabs";
 import "../../kit/kit.css";
 import "./board.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 
 export default function BoardPage() {
   // Staff see their own board (24 Oct 2026): no switcher across businesses
@@ -267,9 +269,9 @@ export default function BoardPage() {
       {actionError ? <p className="bd-err">{actionError}</p> : null}
 
       {loadError ? (
-        <p className="bd-err bd-err-load">{loadError}</p>
+        <LoadFailed reason={loadError} onRetry={() => void load(business)} />
       ) : loading ? (
-        <p className="bd-note">Loading…</p>
+        <PageLoading />
       ) : (
         <div className="kit-board bd-board">
           {COLUMNS.map((column) => (

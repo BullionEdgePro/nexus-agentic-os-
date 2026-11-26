@@ -42,3 +42,74 @@ test("the outline shimmers, and stays still under reduced motion", () => {
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{[^@]*\.kit-skel \{ animation: none; \}/);
   assert.match(css, /\.kit-sr \{[^}]*clip: rect\(0 0 0 0\)/);
 });
+
+// ---- Task 2: every page ----------------------------------------------------------------------------
+
+// The pages whose failed load now offers Try again, and the arguments their effect loads with.
+const RETRY = [
+  ["tasks", "load(business, status)"],
+  ["bookings", "load(business, status)"],
+  ["customers", "load(business, search)"],
+  ["knowledge", "load(business)"],
+  ["procedures", "load(business)"],
+  ["forecast", "load(business)"],
+  ["board", "load(business)"],
+  ["operators", "load(business)"],
+  ["agent", "load(business)"],
+  ["broadcasts", "load(business)"],
+  ["catalogue", "load()"],
+  ["quality", "load(business)"],
+  ["my-settings", "load()"],
+];
+// Outline only: no load of their own to call again (or, for links, an error line its other actions share).
+const OUTLINE_PAGES = ["channels", "links", "workflow"];
+// Sections drawn inside a page; the page they sit on imports the stylesheet.
+const SECTIONS = [
+  ["app/deck/activity/response-times.tsx", "app/deck/activity/page.tsx"],
+  ["app/deck/procedures/phrases-section.tsx", "app/deck/procedures/page.tsx"],
+  ["app/deck/quality/brain-section.tsx", "app/deck/quality/page.tsx"],
+];
+const page = (name) => read(`app/deck/${name}/page.tsx`);
+const IMPORTS_CSS = /import "(\.\.\/)+kit\/load-states\.css";/;
+const BARE_LOADING = />\s*Loading…\s*</;
+
+test("every listed page loads with the outline, never a bare Loading… line", () => {
+  for (const name of [...RETRY.map(([n]) => n), "notifications", ...OUTLINE_PAGES]) {
+    const P = page(name);
+    assert.doesNotMatch(P, BARE_LOADING, `${name} still says a bare Loading…`);
+    assert.match(P, /<PageLoading/, `${name} draws no outline`);
+    assert.match(P, IMPORTS_CSS, `${name} does not import kit/load-states.css`);
+  }
+  for (const [section, host] of SECTIONS) {
+    const S = read(section);
+    assert.doesNotMatch(S, BARE_LOADING, `${section} still says a bare Loading…`);
+    assert.match(S, /<PageLoading/, `${section} draws no outline`);
+    assert.doesNotMatch(S, /\.css";/, `${section} imports a stylesheet (its page does)`);
+    assert.match(read(host), IMPORTS_CSS, `${host} does not import kit/load-states.css`);
+  }
+});
+
+test("a failed load says why and offers Try again, which loads the page again", () => {
+  for (const [name, call] of RETRY) {
+    const P = page(name);
+    assert.ok(
+      P.includes(`<LoadFailed reason={loadError} onRetry={() => void ${call}} />`),
+      `${name}: no <LoadFailed reason={loadError} onRetry={() => void ${call}} />`,
+    );
+    assert.doesNotMatch(P, /\{loadError\}<\/p>/, `${name} still prints the bare reason`);
+    // The stale-data rule stays: nothing from the last load is drawn under the error — either a
+    // `loadError ? null` gate on the content, or the error is the branch drawn instead of it.
+    assert.ok(
+      /loadError \? null/.test(P) || /<LoadFailed reason=\{loadError\} onRetry=\{[^}]*\} \/>\s*\) :/.test(P),
+      `${name} lost its stale-data rule`,
+    );
+  }
+});
+
+test("notifications: its load is a function Try again can call, still run once on open", () => {
+  const P = page("notifications").replace(/\r\n/g, "\n");
+  assert.match(P, /const load = useCallback\(/);
+  assert.match(P, /useEffect\(\(\) => \{\n    load\(\);\n  \}, \[load\]\);/);
+  assert.match(P, /<LoadFailed reason=\{loadError\} onRetry=\{load\} \/>/);
+  assert.doesNotMatch(P, /\{loadError\}<\/p>/);
+});

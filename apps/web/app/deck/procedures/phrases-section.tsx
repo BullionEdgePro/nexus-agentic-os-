@@ -12,6 +12,7 @@ import {
   type PhraseMoment,
   type PhraseMomentInfo,
 } from "@/lib/api";
+import { PageLoading } from "@/app/kit/load-states";
 
 /**
  * What this business says in its own words (045).
@@ -121,7 +122,7 @@ export function PhrasesSection({ business }: { business: BusinessSlug }) {
       {error ? <p className="act-msg">{error}</p> : null}
 
       {loading ? (
-        <div className="act-empty">Loading…</div>
+        <PageLoading />
       ) : (
         moments.map((info) => {
           const forMoment = phrases.filter((phrase) => phrase.moment === info.moment);

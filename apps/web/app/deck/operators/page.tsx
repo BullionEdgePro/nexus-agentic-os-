@@ -18,6 +18,8 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./operators.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { whereToFixIt } from "./where-to-fix-it";
 import { PageHead } from "@/app/kit/page-head";
 
@@ -312,11 +314,11 @@ export default function OperatorsPage() {
            * report" when the truth is "nobody could ask". Those are the
            * two silences the operators panel was fixed for this morning.
            */
-          <p className="act-msg">{loadError}</p>
+          <LoadFailed reason={loadError} onRetry={() => void load(business)} />
         ) : null}
 
         {loadError ? null : loading ? (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         ) : total === 0 ? (
           /*
            * THIS PANEL USED TO ASSERT ITS OWN FRESHNESS.

@@ -18,6 +18,8 @@ import { PhrasesSection } from "./phrases-section";
 import "../deck.css";
 import "../activity/activity.css";
 import "./procedures.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
 
 /**
@@ -233,7 +235,7 @@ export default function ProceduresPage() {
            * report" when the truth is "nobody could ask". Those are the
            * two silences the operators panel was fixed for this morning.
            */
-          <p className="act-msg">{loadError}</p>
+          <LoadFailed reason={loadError} onRetry={() => void load(business)} />
         ) : null}
 
         {readiness?.blockedBecause ? (
@@ -258,7 +260,7 @@ export default function ProceduresPage() {
         <h2 className="act-sub-head">Procedures</h2>
 
         {loadError ? null : loading ? (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         ) : procedures.length === 0 ? (
           <div className="act-empty">
             <strong>None stored.</strong>

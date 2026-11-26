@@ -20,6 +20,8 @@ import { TENANTS, tenantName } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./catalogue.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
 
 /**
@@ -362,11 +364,11 @@ export default function CataloguePage() {
            * report" when the truth is "nobody could ask". Those are the
            * two silences the operators panel was fixed for this morning.
            */
-          <p className="act-msg">{loadError}</p>
+          <LoadFailed reason={loadError} onRetry={() => void load()} />
         ) : null}
 
         {loadError ? null : loading ? (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         ) : items.length === 0 ? (
           <div className="act-empty">
             <strong>Nothing has been published to the catalogue yet.</strong>

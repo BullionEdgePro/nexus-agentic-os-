@@ -7,6 +7,8 @@ import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
 import "./channels.css";
+import { PageLoading } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
 
 /**
@@ -69,7 +71,7 @@ export default function ChannelsPage() {
         {error ? <p className="act-msg">{error}</p> : null}
 
         {loading ? (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         ) : (
           <>
             <p className="ch-count">

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessSlug } from "@nexus/shared";
 import { getResponseTimes, readableError, type StaffResponseTime } from "@/lib/api";
+import { PageLoading } from "@/app/kit/load-states";
 
 /**
  * How fast each person answers a waiting customer — DoubleTick's team
@@ -65,7 +66,7 @@ export function ResponseTimes({ business }: { business: BusinessSlug | "" }) {
       {failed ? (
         <p className="act-msg">{failed}</p>
       ) : rows === null ? (
-        <div className="act-empty">Loading…</div>
+        <PageLoading />
       ) : rows.length === 0 ? (
         <div className="act-empty">No replies from a person in the last {days} days.</div>
       ) : (

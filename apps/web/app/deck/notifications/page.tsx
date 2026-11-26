@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PhoneAlerts } from "../phone-alerts";
 import { fontVariables } from "@/lib/fonts";
 import { getMe, readableError, type Me } from "@/lib/api";
@@ -8,6 +8,8 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../my-settings/my-settings.css";
 import "../phone-alerts.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
 
 /**
@@ -21,11 +23,17 @@ export default function NotificationsPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [loadError, setLoadError] = useState("");
 
-  useEffect(() => {
+  // A function, so Try again can ask again (26 Nov 2026).
+  const load = useCallback(() => {
+    setLoadError("");
     getMe()
       .then(setMe)
       .catch((err) => setLoadError(readableError(err, "Could not load your notifications.")));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className={`deck-root ${fontVariables}`}>
@@ -43,9 +51,9 @@ export default function NotificationsPage() {
           {me ? (
             <PhoneAlerts role={me.role === "employee" ? "employee" : "operator"} />
           ) : loadError ? (
-            <p className="set-error">{loadError}</p>
+            <LoadFailed reason={loadError} onRetry={load} />
           ) : (
-            <p className="set-hint">Loading…</p>
+            <PageLoading />
           )}
         </div>
       </div>

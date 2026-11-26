@@ -24,6 +24,8 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../../kit/kit.css";
 import "./customers.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { PageHead } from "@/app/kit/page-head";
 
 /**
@@ -227,9 +229,9 @@ export default function CustomersPage() {
           // Where the list would be, never above an empty one: an empty list
           // under a failed fetch reads as "no customers", which is the sentence
           // this deck exists not to say by accident.
-          <p className="cu-err cu-err-load">{loadError}</p>
+          <LoadFailed reason={loadError} onRetry={() => void load(business, search)} />
         ) : loading ? (
-          <p className="cu-note">Loading…</p>
+          <PageLoading />
         ) : contacts.length === 0 ? (
           <p className="cu-note">
             {search

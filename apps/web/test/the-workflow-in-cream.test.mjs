@@ -202,7 +202,7 @@ test("the page loads the audit for its period and ignores answers that arrive la
   assert.match(P, /if \(asked !== requestId\.current\) return;/);
   assert.match(P, /The workflow could not be loaded\./);
   assert.match(P, /<NoWorkflow \/>/);
-  assert.match(P, /Loading…/);
+  assert.match(P, /<PageLoading/); // the outline, since 26 Nov 2026 (staff-first piece 4)
   assert.match(P, /const PERIODS: AuditDays\[\] = \[7, 30, 90\];/);
   assert.match(P, /useState<AuditDays>\(30\)/);
   assert.match(P, /aria-pressed=\{d === days\}/);

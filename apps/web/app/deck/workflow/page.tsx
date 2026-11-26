@@ -12,6 +12,8 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../../kit/kit.css";
 import "./workflow.css";
+import { PageLoading } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 
 /**
  * The workflow (2 Nov 2026; one panel with Business HQ's Workflow tab since
@@ -99,7 +101,7 @@ export default function WorkflowPage() {
         ) : null}
 
         {slug === undefined ? (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         ) : !slug || !workflowFor(slug) ? (
           <NoWorkflow />
         ) : (

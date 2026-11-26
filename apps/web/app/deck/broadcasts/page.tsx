@@ -21,6 +21,8 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./broadcasts.css";
+import { PageLoading, LoadFailed } from "@/app/kit/load-states";
+import "../../kit/load-states.css";
 import { CustomerLists, describe } from "./customer-lists";
 import { CampaignControls, EmailCampaignForm } from "../my-campaigns/email-campaign";
 import { TemplateText } from "../my-campaigns/template-text";
@@ -219,7 +221,7 @@ export default function BroadcastsPage() {
         ) : null}
 
         {loading ? (
-          <div className="act-empty">Loading…</div>
+          <PageLoading />
         ) : loadError ? (
           /*
            * SAME RULE AS EVERY OTHER DECK PAGE, arrived at differently.
@@ -232,7 +234,7 @@ export default function BroadcastsPage() {
            * showing one business's under another's name is the wrong answer to
            * the only question this screen exists to answer.
            */
-          <p className="act-msg">{loadError}</p>
+          <LoadFailed reason={loadError} onRetry={() => void load(business)} />
         ) : tab === "email" ? (
           <>
             <section className="bc-compose">
