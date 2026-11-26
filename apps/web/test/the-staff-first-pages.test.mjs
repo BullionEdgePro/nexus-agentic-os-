@@ -74,6 +74,30 @@ test("Knowledge on a phone: Remove beside the title, the facts on one line under
   assert.match(phone, /\.kn-meta \{[^}]*grid-column: 1 \/ -1;[^}]*flex-direction: row;/);
 });
 
+// ---- Task 3: My clients — ⓘ header, the book first, phone rows -------------------------------------
+
+test("My clients: the ⓘ header, and the book before the set-up panels", () => {
+  const P = page("my-clients");
+  assert.match(P, /<PageHead\s+title="My clients"\s+about=/);
+  assert.doesNotMatch(P, /<header className="mc-head">\s*<h1>My clients<\/h1>\s*<p>/, "the long header is still there");
+  assert.ok(P.indexOf('<section className="mc-book">') < P.indexOf("<MyLinkPanel />"), "the book comes after the panels");
+  assert.ok(P.indexOf('<section className="mc-book">') < P.indexOf("<ChannelPanel channel={channel} />"));
+  assert.match(P, /import "\.\.\/activity\/activity\.css";/, "PageHead's styles are not imported");
+  // The page's margins came from `.deck-root:has(> .mc-head)`; without that header it sits in
+  // .act-root like every other page (found in the preview: the title touched the screen's edge).
+  assert.equal((P.match(/<div className="act-root">/g) ?? []).length, 2, "both of the page's returns sit in .act-root");
+  assert.match(P, /clients === null \? \(\s*<PageLoading \/>/, "the book still says a bare Loading line");
+});
+
+test("My clients on a phone: each client is a row that fits, Hand back on the right", () => {
+  const css = read("app/deck/my-clients/my-clients.css");
+  const phone = css.slice(css.indexOf("/* My clients on a phone"));
+  assert.match(phone, /@media \(max-width: 640px\)/);
+  assert.match(phone, /\.deck-root \.mc-table thead \{[^}]*clip: rect\(0 0 0 0\);/, "headers dropped rather than hidden from sight only");
+  assert.match(phone, /\.deck-root \.mc-table tr \{[^}]*display: block;[^}]*position: relative;/);
+  assert.match(phone, /\.deck-root \.mc-table td:last-child \{[^}]*position: absolute;/);
+});
+
 test("Answer rules: Write one yourself waits behind a button; slim counters, hidden under a failed load", () => {
   const P = page("procedures");
   assert.match(fold(P, "Write one yourself"), /<form className="pr-new" onSubmit=\{write\}/);

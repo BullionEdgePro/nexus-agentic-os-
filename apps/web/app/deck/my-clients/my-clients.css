@@ -588,3 +588,44 @@
 .deck-root .cnx-history p {
   margin: 0;
 }
+
+/* My clients on a phone (26 Nov 2026, staff-first piece 5): the table was 471px
+   wide in a 331px column, so half of every row was off screen. Each client is a
+   row that fits — the name on the first line, number · company · last heard on
+   the second, Hand back on the right. The headers stay for screen readers. */
+@media (max-width: 640px) {
+  .deck-root .mc-table thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .deck-root .mc-table,
+  .deck-root .mc-table tbody { display: block; }
+  .deck-root .mc-table tr {
+    display: block;
+    position: relative;
+    padding: 10px 92px 10px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .deck-root .mc-table td {
+    display: inline;
+    padding: 0;
+    border: 0;
+    font-size: 12px;
+    color: var(--slate);
+  }
+  .deck-root .mc-table td:first-child {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .deck-root .mc-table td:nth-child(3)::before,
+  .deck-root .mc-table td:nth-child(4)::before { content: " · "; color: var(--mist); }
+  .deck-root .mc-table td:last-child {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+  }
+}

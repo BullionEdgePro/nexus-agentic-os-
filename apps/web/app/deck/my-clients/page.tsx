@@ -16,7 +16,11 @@ import { WorkingHoursPanel } from "./working-hours";
 import { SocialAccountsPanel } from "./social-accounts";
 import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
+import "../activity/activity.css";
 import "./my-clients.css";
+import "../../kit/load-states.css";
+import { PageHead } from "@/app/kit/page-head";
+import { PageLoading } from "@/app/kit/load-states";
 
 /**
  * A staff member's own client book, and the number their messages leave from.
@@ -83,35 +87,30 @@ export default function MyClientsPage() {
   if (notAStaffMember) {
     return (
       <div className={`deck-root ${fontVariables}`}>
-        <header className="mc-head">
-          <h1>My clients</h1>
-        </header>
-        <p className="mc-empty">{notAStaffMember}</p>
+        <div className="act-root">
+          <PageHead title="My clients" />
+          <p className="mc-empty">{notAStaffMember}</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className={`deck-root ${fontVariables}`}>
-      <header className="mc-head">
-        <h1>My clients</h1>
-        <p>
-          People who are yours rather than the business&rsquo;s. Colleagues cannot see this list;
-          the owner can.
-        </p>
-      </header>
+      <div className="act-root">
+      <PageHead
+        title="My clients"
+        about={
+          <>
+            People who are yours rather than the business&rsquo;s. Colleagues cannot see this list;
+            the owner can.
+          </>
+        }
+      />
 
-      <MyLinkPanel />
-
-      {/* The connect cards moved to their own "Connections" tab, so a staff
-          member managing their channels is not doing it buried under the client
-          book. This page keeps the link, the number they send from, and the book. */}
-      <ChannelPanel channel={channel} />
-
-      <WorkingHoursPanel />
-
-      <SocialAccountsPanel />
-
+      {/* The book first (26 Nov 2026, staff-first piece 5): it is what this page
+          is opened for; the link, the number and the hours are set up once and
+          sit below it. */}
       <section className="mc-book">
         <div className="mc-toolbar">
           <input
@@ -138,7 +137,7 @@ export default function MyClientsPage() {
         {error ? <p className="mc-error">{error}</p> : null}
 
         {clients === null ? (
-          <p className="mc-empty">Loading your book&hellip;</p>
+          <PageLoading />
         ) : clients.length === 0 ? (
           <p className="mc-empty">
             {search
@@ -193,6 +192,18 @@ export default function MyClientsPage() {
           </table>
         )}
       </section>
+
+      <MyLinkPanel />
+
+      {/* The connect cards moved to their own "Connections" tab, so a staff
+          member managing their channels is not doing it buried under the client
+          book. This page keeps the link, the number they send from, and the book. */}
+      <ChannelPanel channel={channel} />
+
+      <WorkingHoursPanel />
+
+      <SocialAccountsPanel />
+      </div>
     </div>
   );
 }
