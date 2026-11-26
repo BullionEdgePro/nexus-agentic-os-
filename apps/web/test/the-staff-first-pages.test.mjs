@@ -98,6 +98,18 @@ test("My clients on a phone: each client is a row that fits, Hand back on the ri
   assert.match(phone, /\.deck-root \.mc-table td:last-child \{[^}]*position: absolute;/);
 });
 
+// ---- Task 4: Customers — denser cards ---------------------------------------------------------------
+
+test("Customers: the badge sits beside the name, number and facts; tighter cards", () => {
+  const css = read("app/deck/customers/customers.css");
+  const dense = css.slice(css.indexOf("/* Denser (26 Nov 2026"));
+  assert.ok(dense.length > 30, "no denser-cards block in customers.css");
+  assert.match(dense, /\.cu-cards \{ gap: 8px; \}/);
+  assert.match(dense, /\.cu-card \{[^}]*display: grid;[^}]*grid-template-columns: 26px minmax\(0, 1fr\);[^}]*padding: 10px 14px;/);
+  assert.match(dense, /\.cu-card-top \{ display: contents; \}/);
+  assert.match(dense, /\.cu-card-top \.kit-initials \{[^}]*grid-row: 1 \/ span 3;/);
+});
+
 test("Answer rules: Write one yourself waits behind a button; slim counters, hidden under a failed load", () => {
   const P = page("procedures");
   assert.match(fold(P, "Write one yourself"), /<form className="pr-new" onSubmit=\{write\}/);

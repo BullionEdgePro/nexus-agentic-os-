@@ -141,6 +141,25 @@
   color: var(--mist);
 }
 
+/* Denser (26 Nov 2026, staff-first piece 5): each customer was ~115px tall on a
+   phone, three to a screen — the badge had a row of its own. The badge now sits
+   beside the name, the number and the facts, and the card is tighter. The facts
+   still wrap, so "25m ago" is never the part cut off. */
+.cu-cards { gap: 8px; }
+.cu-card {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  padding: 10px 14px;
+}
+.cu-card-top { display: contents; }
+.cu-card-top .kit-initials { grid-column: 1; grid-row: 1 / span 3; align-self: start; }
+.cu-card-top .kit-card-title,
+.cu-card > .kit-card-sub,
+.cu-card > .cu-meta { grid-column: 2; }
+.cu-card .cu-meta { margin-top: 2px; gap: 4px 8px; }
+
 /* The profile, in the panel that slides in from the side. */
 .cu-profile-head {
   display: flex;
