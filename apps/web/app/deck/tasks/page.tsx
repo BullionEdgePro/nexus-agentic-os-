@@ -18,6 +18,7 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./tasks.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * Follow-ups — what a conversation left someone to do.
@@ -179,14 +180,16 @@ export default function TasksPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Tasks</h1>
-        </header>
-        <p className="act-lede">
-          What a conversation left someone to do. The handover brief says what the agent already
-          promised a customer; this is the record of who is going to do something about it, and by
-          when.
-        </p>
+        <PageHead
+          title="Tasks"
+          about={
+            <>
+              What a conversation left someone to do. The handover brief says what the agent already
+              promised a customer; this is the record of who is going to do something about it, and by
+              when.
+            </>
+          }
+        />
 
         <div className="tk-counts">
           <div className="tk-count">

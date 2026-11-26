@@ -7,6 +7,7 @@ import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
 import "./channels.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * Where every messaging channel stands — the honest map of the multi-channel inbox.
@@ -54,14 +55,16 @@ export default function ChannelsPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
-        <header className="act-head">
-          <h1>Channels</h1>
-        </header>
-        <p className="act-lede">
-          The ways a customer can reach a business, and where each one stands. Nothing here
-          claims to be connected that is not — a channel goes live the moment its setup is done,
-          and says exactly what that setup is until then.
-        </p>
+        <PageHead
+          title="Channels"
+          about={
+            <>
+              The ways a customer can reach a business, and where each one stands. Nothing here
+              claims to be connected that is not — a channel goes live the moment its setup is done,
+              and says exactly what that setup is until then.
+            </>
+          }
+        />
 
         {error ? <p className="act-msg">{error}</p> : null}
 

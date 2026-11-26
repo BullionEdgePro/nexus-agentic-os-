@@ -24,6 +24,7 @@ import "./broadcasts.css";
 import { CustomerLists, describe } from "./customer-lists";
 import { CampaignControls, EmailCampaignForm } from "../my-campaigns/email-campaign";
 import { TemplateText } from "../my-campaigns/template-text";
+import { PageHead } from "@/app/kit/page-head";
 
 const STATUS_WORDS: Record<string, string> = {
   sending: "sending",
@@ -174,13 +175,15 @@ export default function BroadcastsPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Campaigns</h1>
-        </header>
-        <p className="act-lede">
-          One message to every customer of a business — on WhatsApp, as an approved template from the
-          shared number, or by email from the business mailbox. Each campaign goes on one channel.
-        </p>
+        <PageHead
+          title="Campaigns"
+          about={
+            <>
+              One message to every customer of a business — on WhatsApp, as an approved template from the
+              shared number, or by email from the business mailbox. Each campaign goes on one channel.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}

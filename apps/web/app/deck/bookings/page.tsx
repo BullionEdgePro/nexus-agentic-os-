@@ -18,6 +18,7 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../tasks/tasks.css";
 import "./bookings.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * The diary — appointments the agent actually made.
@@ -168,18 +169,20 @@ export default function BookingsPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Appointments</h1>
-        </header>
         {/* This used to open "What the agent agreed on the business's behalf",
             which stopped being true the moment staff could add one. The second
             sentence is untouched, because it never depended on who started the
             booking — both routes run the same checks. */}
-        <p className="act-lede">
-          What this business has agreed to — by agent, or by whoever took the call. Every one was
-          taken against a live diary and the database refuses two people the same slot, so an
-          appointment appearing here is one somebody can actually keep.
-        </p>
+        <PageHead
+          title="Appointments"
+          about={
+            <>
+              What this business has agreed to — by agent, or by whoever took the call. Every one was
+              taken against a live diary and the database refuses two people the same slot, so an
+              appointment appearing here is one somebody can actually keep.
+            </>
+          }
+        />
 
         <div className="tk-counts">
           <div className="tk-count">

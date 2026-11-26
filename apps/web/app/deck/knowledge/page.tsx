@@ -16,6 +16,7 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./knowledge.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * What each business's agent actually knows.
@@ -139,13 +140,15 @@ export default function KnowledgePage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Knowledge</h1>
-        </header>
-        <p className="act-lede">
-          Everything the agent draws on when it answers a customer. If a reply was wrong, the
-          reason is almost always on this page.
-        </p>
+        <PageHead
+          title="Knowledge"
+          about={
+            <>
+              Everything the agent draws on when it answers a customer. If a reply was wrong, the
+              reason is almost always on this page.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}

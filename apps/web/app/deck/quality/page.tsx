@@ -20,6 +20,7 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../../kit/kit.css";
 import "./quality.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * How well the agent is actually doing.
@@ -121,13 +122,15 @@ export default function QualityPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Agent quality</h1>
-        </header>
-        <p className="act-lede">
-          Measured by what people did, not by what the agent thought of its own answers. A
-          conversation counts as escalated when a human joined it, and contained when nobody had to.
-        </p>
+        <PageHead
+          title="Agent quality"
+          about={
+            <>
+              Measured by what people did, not by what the agent thought of its own answers. A
+              conversation counts as escalated when a human joined it, and contained when nobody had to.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}

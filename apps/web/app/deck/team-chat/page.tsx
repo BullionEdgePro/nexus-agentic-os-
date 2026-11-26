@@ -16,6 +16,7 @@ import { useTeamThread } from "@/lib/use-team-thread";
 import { ThreadMessages } from "../../team-chat-thread";
 import { TeamComposer } from "../../team-chat/composer";
 import { fontVariables } from "@/lib/fonts";
+import { PageHead } from "@/app/kit/page-head";
 import "../deck.css";
 import "../activity/activity.css";
 import "../../team-chat/team-chat.css";
@@ -193,14 +194,14 @@ export default function TeamChatPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root tc-root">
-        <header className="act-head">
-          <h1>Team chat</h1>
-          <p className="act-lede">
-            {me?.isAdmin
+        <PageHead
+          title="Team chat"
+          about={
+            me?.isAdmin
               ? "Every business's team room and every direct chat between its staff. You can write in the team rooms; direct chats are read only."
-              : "Talk to your colleagues: the whole team in one room, or one person directly. Only people who work at your business are here."}
-          </p>
-        </header>
+              : "Talk to your colleagues: the whole team in one room, or one person directly. Only people who work at your business are here."
+          }
+        />
 
         {isOperator ? (
           <BusinessTabs value={business} onChange={(slug) => setBusiness(slug)} includeAll={false} />

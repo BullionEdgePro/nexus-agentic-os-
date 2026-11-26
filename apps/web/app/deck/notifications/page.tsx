@@ -8,6 +8,7 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../my-settings/my-settings.css";
 import "../phone-alerts.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * Phone notifications for whoever is signed in (phone push, 4 Nov 2026; mobile
@@ -29,13 +30,15 @@ export default function NotificationsPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
-        <header className="act-head">
-          <h1>Notifications</h1>
-        </header>
-        <p className="act-lede">
-          Alerts on your phone or computer. Turn them on in each place you want them — on an iPhone, add Nexus to
-          your Home Screen first.
-        </p>
+        <PageHead
+          title="Notifications"
+          about={
+            <>
+              Alerts on your phone or computer. Turn them on in each place you want them — on an iPhone, add Nexus to
+              your Home Screen first.
+            </>
+          }
+        />
         <div className="set-grid">
           {me ? (
             <PhoneAlerts role={me.role === "employee" ? "employee" : "operator"} />

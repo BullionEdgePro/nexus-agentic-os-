@@ -24,6 +24,7 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../../kit/kit.css";
 import "./customers.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * The customer record — the "C" this platform did not have.
@@ -154,13 +155,15 @@ export default function CustomersPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
-        <header className="act-head">
-          <h1>Customers</h1>
-        </header>
-        <p className="act-lede">
-          Everyone this business has spoken to on WhatsApp, most recent first — with what was
-          asked, what the scorer made of it, and what this platform has remembered about them.
-        </p>
+        <PageHead
+          title="Customers"
+          about={
+            <>
+              Everyone this business has spoken to on WhatsApp, most recent first — with what was
+              asked, what the scorer made of it, and what this platform has remembered about them.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}

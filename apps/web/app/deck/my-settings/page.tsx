@@ -16,6 +16,7 @@ import "../activity/activity.css";
 import "./my-settings.css";
 import "../phone-alerts.css";
 import { PhoneAlerts } from "../phone-alerts";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * Your settings — the one place a staff member changes their own details.
@@ -64,14 +65,16 @@ export default function MySettingsPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
-        <header className="act-head">
-          <h1>My settings</h1>
-        </header>
-        <p className="act-lede">
-          Your details, in one place — how you appear to your team, the number your customers reach
-          you on, and the socials your referral link points to. Changes here only ever touch your own
-          account.
-        </p>
+        <PageHead
+          title="My settings"
+          about={
+            <>
+              Your details, in one place — how you appear to your team, the number your customers reach
+              you on, and the socials your referral link points to. Changes here only ever touch your own
+              account.
+            </>
+          }
+        />
 
         {loadError ? <p className="act-msg">{loadError}</p> : null}
 

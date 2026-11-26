@@ -18,6 +18,7 @@ import { PhrasesSection } from "./phrases-section";
 import "../deck.css";
 import "../activity/activity.css";
 import "./procedures.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * How this business answers — the review screen for procedural memory (F10).
@@ -154,16 +155,18 @@ export default function ProceduresPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Answer rules</h1>
-        </header>
-        <p className="act-lede">
-          Knowledge is what a business knows. This is the order it works in — what to establish
-          first, then next, then what to offer — and, further down, the words it uses when it stops
-          answering and hands over. The platform proposes the order from conversations its agent
-          handled without anyone stepping in; nothing here shapes a single reply until somebody
-          switches it on.
-        </p>
+        <PageHead
+          title="Answer rules"
+          about={
+            <>
+              Knowledge is what a business knows. This is the order it works in — what to establish
+              first, then next, then what to offer — and, further down, the words it uses when it stops
+              answering and hands over. The platform proposes the order from conversations its agent
+              handled without anyone stepping in; nothing here shapes a single reply until somebody
+              switches it on.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}

@@ -20,6 +20,7 @@ import { TENANTS, tenantName } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./catalogue.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * The catalogue (F13) — a shelf a business installs FROM, and never publishes
@@ -264,14 +265,16 @@ export default function CataloguePage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Catalogue</h1>
-        </header>
-        <p className="act-lede">
-          Methods, wording and knowledge a business can take on ready-made, instead of writing
-          from nothing. Everything here was written for the platform — no business&apos;s own
-          material is in it, and none can be added to it.
-        </p>
+        <PageHead
+          title="Catalogue"
+          about={
+            <>
+              Methods, wording and knowledge a business can take on ready-made, instead of writing
+              from nothing. Everything here was written for the platform — no business&apos;s own
+              material is in it, and none can be added to it.
+            </>
+          }
+        />
 
         {/* Stated once, plainly, near the top. The alternative — a page that
             quietly never mentions where its contents come from — is the one

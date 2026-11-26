@@ -19,6 +19,7 @@ import "../deck.css";
 import "../activity/activity.css";
 import "./operators.css";
 import { whereToFixIt } from "./where-to-fix-it";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * What is wrong right now, found without anybody asking.
@@ -279,13 +280,15 @@ export default function OperatorsPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Needs attention</h1>
-        </header>
-        <p className="act-lede">
-          Checks that run every ten minutes across every business, whether or not anyone is looking.
-          Nothing here calls an AI — these are rules over what the platform already knows.
-        </p>
+        <PageHead
+          title="Needs attention"
+          about={
+            <>
+              Checks that run every ten minutes across every business, whether or not anyone is looking.
+              Nothing here calls an AI — these are rules over what the platform already knows.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}

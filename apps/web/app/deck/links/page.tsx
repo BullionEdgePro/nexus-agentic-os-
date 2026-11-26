@@ -7,6 +7,7 @@ import { fontVariables } from "@/lib/fonts";
 import "../deck.css";
 import "../activity/activity.css";
 import "./links.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * The link each business hands its own customers.
@@ -129,13 +130,15 @@ export default function LinksPage() {
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
 
-        <header className="act-head">
-          <h1>Customer links</h1>
-        </header>
-        <p className="act-lede">
-          One link per business. A customer who taps it reaches that business&apos;s agent
-          directly — no menu, no being asked which company they mean.
-        </p>
+        <PageHead
+          title="Customer links"
+          about={
+            <>
+              One link per business. A customer who taps it reaches that business&apos;s agent
+              directly — no menu, no being asked which company they mean.
+            </>
+          }
+        />
 
         {error ? <p className="act-msg">{error}</p> : null}
 

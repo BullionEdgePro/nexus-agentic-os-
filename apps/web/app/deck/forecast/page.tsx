@@ -18,6 +18,7 @@ import "../deck.css";
 import "../activity/activity.css";
 import "../../kit/kit.css";
 import "./forecast.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * What's coming — predictive BI (F11).
@@ -116,15 +117,17 @@ export default function ForecastPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
-        <header className="act-head">
-          <h1>Forecast</h1>
-        </header>
-        <p className="act-lede">
-          Projected demand for the next {status?.horizonDays ?? 7} days, and — more to the point —
-          how the last projections actually turned out. Nothing is shown here until the method has
-          been marked against this business&rsquo;s own history, and every figure sits next to what
-          guessing &ldquo;the same weekday last week&rdquo; would have said.
-        </p>
+        <PageHead
+          title="Forecast"
+          about={
+            <>
+              Projected demand for the next {status?.horizonDays ?? 7} days, and — more to the point —
+              how the last projections actually turned out. Nothing is shown here until the method has
+              been marked against this business&rsquo;s own history, and every figure sits next to what
+              guessing &ldquo;the same weekday last week&rdquo; would have said.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}

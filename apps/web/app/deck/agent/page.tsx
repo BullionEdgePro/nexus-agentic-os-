@@ -18,6 +18,7 @@ import { TENANTS } from "@/lib/tenants";
 import "../deck.css";
 import "../activity/activity.css";
 import "./agent.css";
+import { PageHead } from "@/app/kit/page-head";
 
 /**
  * What the agent is told to be.
@@ -150,13 +151,15 @@ export default function AgentPage() {
   return (
     <div className={`deck-root ${fontVariables}`}>
       <div className="act-root">
-        <header className="act-head">
-          <h1>Agent settings</h1>
-        </header>
-        <p className="act-lede">
-          The standing instruction underneath every reply. Knowledge gives it facts and procedures
-          cover particular situations — this is what it is told to be the rest of the time.
-        </p>
+        <PageHead
+          title="Agent settings"
+          about={
+            <>
+              The standing instruction underneath every reply. Knowledge gives it facts and procedures
+              cover particular situations — this is what it is told to be the rest of the time.
+            </>
+          }
+        />
 
         <BusinessTabs
           value={business}
