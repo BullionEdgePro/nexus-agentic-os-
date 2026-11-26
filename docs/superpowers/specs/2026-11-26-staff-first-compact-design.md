@@ -58,7 +58,8 @@ Anti-goals (a failure even if it works):
 
 ### 4.1 `PageHead` (apps/web/app/kit/page-head.tsx)
 - Props: `title` (text), `about` (the explanation, any markup), `children` (actions, optional).
-- Renders `<header className="act-head page-head">` with the `<h1>`, an ⓘ button
+- Renders `<header className="act-head act-titlebar">` (its own class: `.page-head` is
+  deck.css's overview header and would push the ⓘ to the far right) with the `<h1>`, an ⓘ button
   (`aria-label="About this page"`, `aria-expanded`, `aria-controls` the paragraph) when there is
   an `about`, and the actions pushed to the right; then `<p className="act-lede">` carrying the
   explanation with `hidden` until ⓘ is pressed.

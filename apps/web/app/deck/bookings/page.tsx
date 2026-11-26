@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BusinessTabs } from "@/lib/business-tabs";
+import { BusinessTabs, useVisibleBusinesses } from "@/lib/business-tabs";
 import type { BusinessSlug } from "@nexus/shared";
 import {
   getBookings,
@@ -82,6 +82,15 @@ export default function BookingsPage() {
    * business ever books the one most likely to be at the wrong hour.
    */
   const [timezones, setTimezones] = useState<Record<string, string>>({});
+  // A staff member belongs to ONE business, and the tabs only show its name, so it
+  // is chosen here (as Follow-ups does) — without it "Add an appointment", which
+  // lives inside a business, never appeared for staff (preview, 26 Nov 2026).
+  const { businesses: visibleBusinesses, isOperator } = useVisibleBusinesses();
+  useEffect(() => {
+    if (!isOperator && visibleBusinesses.length === 1 && !business) {
+      setBusiness(visibleBusinesses[0]!.slug as BusinessSlug);
+    }
+  }, [isOperator, visibleBusinesses, business]);
   // My Day's "Book an appointment" lands with the form open (?add=1, 26 Nov 2026).
   const [addOpen, setAddOpen] = useState(false);
   useEffect(() => {
@@ -94,8 +103,8 @@ export default function BookingsPage() {
     setLoadError("");
     try {
       const data = await getBookings({ business: slug, status: which });
-      setBookings(data.bookings);
-      // An answer without counts shows zeros rather than breaking the page.
+      // An answer without its list or its counts shows none rather than breaking the page.
+      setBookings(data.bookings ?? []);
       setCounts(data.counts ?? { upcoming: 0, today: 0, unassigned: 0 });
     } catch (err) {
       setLoadError(readableError(err));
@@ -225,6 +234,12 @@ export default function BookingsPage() {
             onCreated={() => void load(business, status)}
             startOpen={addOpen}
           />
+        ) : null}
+        {/* A status change or an assignment that failed says so (26 Nov 2026): it was kept and never drawn. */}
+        {error ? (
+          <p className="act-alert" role="alert">
+            {error}
+          </p>
         ) : null}
 
         {loadError ? (

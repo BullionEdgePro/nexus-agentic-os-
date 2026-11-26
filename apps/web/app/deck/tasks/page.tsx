@@ -285,6 +285,12 @@ export default function TasksPage() {
             </button>
           </form>
         </AddFold>
+        {/* A save or a Done that failed says so (26 Nov 2026): it was kept and never drawn. */}
+        {error ? (
+          <p className="act-alert" role="alert">
+            {error}
+          </p>
+        ) : null}
 
         <BusinessTabs
           value={business}

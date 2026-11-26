@@ -85,7 +85,19 @@ test("every page uses PageHead: no explanation is always on screen", () => {
 test("the ⓘ looks like the board's", () => {
   const css = read("app/deck/activity/activity.css");
   assert.match(css, /\.page-about\[aria-expanded="true"\]/);
-  assert.match(css, /\.page-head h1 \{[^}]*clamp\(24px, 3vw, 30px\)/);
+  assert.match(css, /\.act-titlebar h1 \{[^}]*clamp\(24px, 3vw, 30px\)/);
+});
+
+test("the shared header's class is its own: no other stylesheet pulls the ⓘ away from the title", () => {
+  // Preview, 26 Nov 2026: `.page-head` was already deck.css's overview header
+  // (justify-content: space-between), which threw the ⓘ to the far right.
+  const html = render(head.PageHead, { title: "Tasks", about: "x" });
+  const cls = html.match(/<header class="act-head ([^"]+)"/)?.[1];
+  assert.equal(cls, "act-titlebar");
+  const sheets = readdirSync(new URL("../app", import.meta.url), { recursive: true })
+    .map((f) => `app/${String(f).replace(/\\/g, "/")}`)
+    .filter((f) => f.endsWith(".css") && f !== "app/deck/activity/activity.css");
+  for (const f of sheets) assert.doesNotMatch(read(f), new RegExp(`\\.${cls}\\b`), `${f} also styles .${cls}`);
 });
 
 // ---- Task 2: Follow-ups and Appointments content-first ---------------------------------------
@@ -122,13 +134,28 @@ test("the counters are one slim strip", () => {
 test("Appointments: an answer without counts shows zeros, and ?add=1 opens the form", () => {
   const page = read("app/deck/bookings/page.tsx");
   assert.match(page, /setCounts\(data\.counts \?\? /);
+  // Preview, 26 Nov 2026: an answer without its list broke the page the same way.
+  assert.match(page, /setBookings\(data\.bookings \?\? \[\]\)/);
   assert.match(page, /startOpen=\{/);
   assert.match(page, /get\("add"\) === "1"/);
+  // Preview, 26 Nov 2026: a staff member's one business was never chosen here (the
+  // tabs only show its name), so "Add an appointment" never appeared for staff.
+  assert.match(page, /useVisibleBusinesses\(\)/);
+  assert.match(page, /!isOperator && visibleBusinesses\.length === 1 && !business[\s\S]{0,120}setBusiness\(/);
   const html = render(AddAppointment, {
     business: "sfs-international", businessName: "SFS International", timezone: "Asia/Dubai",
     team: [], onCreated() {}, startOpen: true,
   });
   assert.match(html, /<form/);
+});
+
+test("a failed save or action says so on Follow-ups and Appointments", () => {
+  // Preview, 26 Nov 2026: both pages kept an action's error in state and never drew
+  // it, so a follow-up that failed to save, or a Done that failed, looked like nothing.
+  for (const page of ["app/deck/tasks/page.tsx", "app/deck/bookings/page.tsx"]) {
+    assert.match(read(page), /\{error \? \(?\s*<p className="act-alert" role="alert">\s*\{error\}\s*<\/p>/, `${page} never shows an action's error`);
+  }
+  assert.match(read("app/deck/activity/activity.css"), /\.act-alert \{[^}]*var\(--crit\)/);
 });
 
 // ---- Task 3: My Day compact --------------------------------------------------------------------

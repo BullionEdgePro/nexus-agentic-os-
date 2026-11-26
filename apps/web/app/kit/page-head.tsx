@@ -16,7 +16,8 @@ export function PageHead({ title, about, children }: { title: string; about?: Re
   const id = useId();
   return (
     <>
-      <header className="act-head page-head">
+      {/* Its own class: `.page-head` is deck.css's overview header (space-between). */}
+      <header className="act-head act-titlebar">
         <h1>{title}</h1>
         {about ? (
           <button

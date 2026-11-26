@@ -35,13 +35,13 @@
 /* One header for every page (26 Nov 2026, staff-first compact): the title on one
    line, the explanation behind an ⓘ, the page's actions on the same row — the
    Workflow page's look. Spec: docs/superpowers/specs/2026-11-26-staff-first-compact-design.md §4.1 */
-.page-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 8px 0 14px; }
-.page-head h1 { font-size: clamp(24px, 3vw, 30px); }
+.act-titlebar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 8px 0 14px; }
+.act-titlebar h1 { font-size: clamp(24px, 3vw, 30px); }
 .page-about { all: unset; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pebble); color: var(--slate); font-size: 15px; cursor: pointer; }
 .page-about[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
 .page-about:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
 .page-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.page-head + .act-lede { margin: -6px 0 14px; }
+.act-titlebar + .act-lede { margin: -6px 0 14px; }
 
 /* An add form folded behind one button (app/kit/add-fold.tsx, 26 Nov 2026): the
    list first; "+ Add …" opens the form in place, Cancel folds it again. */
@@ -58,6 +58,9 @@
 }
 .add-fold-open:focus-visible,
 .add-fold-cancel:focus-visible { outline: 3px solid var(--signal-text); outline-offset: 2px; }
+
+/* An action that failed, said where the person is looking (26 Nov 2026). */
+.act-alert { margin: 10px 0; padding: 10px 14px; border-radius: 12px; background: var(--crit-soft); color: var(--crit); font-size: 13.5px; line-height: 1.45; }
 
 .act-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0 16px; }
 .act-tabs button {
