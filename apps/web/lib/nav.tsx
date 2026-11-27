@@ -444,6 +444,48 @@ export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
 ];
 
 /**
+ * The sections a member of staff finds under "More" (27 Nov 2026, staff-first
+ * piece 6). Their menu was 1289px tall on a 768px laptop — ten of seventeen
+ * doors in view, Notifications and Sign out below the fold. The day's work
+ * (Home, Work, People) stays open; what shapes the agent, the reports and their
+ * own settings wait one tap away. An admin's menu is never folded.
+ */
+export const STAFF_MORE_GROUPS = ["AI agent", "Insights", "You"];
+
+export type RailSection<T> = { title: string; items: T[] };
+
+/**
+ * The visible doors in their sections, split into what stays in view (`main`)
+ * and what waits under More (`more`, staff only). A section with no door drops
+ * out; a door no section claims joins `main` under no heading, so a new screen
+ * is never lost because nobody filed it here.
+ */
+export function railSections<T extends { href: string }>(
+  items: T[],
+  role: "operator" | "employee",
+): { main: RailSection<T>[]; more: RailSection<T>[] } {
+  const byHref = new Map(items.map((item) => [item.href, item] as const));
+  const claimed = new Set<string>();
+  const main: RailSection<T>[] = [];
+  const more: RailSection<T>[] = [];
+  for (const group of NAV_GROUPS) {
+    const found = group.hrefs.map((href) => byHref.get(href)).filter((item): item is T => item !== undefined);
+    if (found.length === 0) continue;
+    found.forEach((item) => claimed.add(item.href));
+    const folded = role === "employee" && STAFF_MORE_GROUPS.includes(group.title);
+    (folded ? more : main).push({ title: group.title, items: found });
+  }
+  const stray = items.filter((item) => !claimed.has(item.href));
+  if (stray.length > 0) main.push({ title: "", items: stray });
+  return { main, more };
+}
+
+/** More is open on arrival when the page being shown is one of its doors. */
+export function moreStartsOpen(more: RailSection<{ href: string }>[], current: string): boolean {
+  return more.some((section) => section.items.some((item) => item.href === current));
+}
+
+/**
  * The colour a screen's icon tile wears in the dock (Cream, 1 Nov 2026): its
  * section's, so a section is found by colour before its name is read. The
  * tile colours themselves are in app/console-shell.css, one per section slug.

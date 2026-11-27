@@ -176,7 +176,9 @@ html[data-rail="icons"] .deck-root.shell .rail-collapse svg { transform: scaleX(
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--dock-ink) 50%, transparent);
-  padding: 14px 12px 5px;
+  /* Tighter (27 Nov 2026, staff-first piece 6): rows 48→38px, headings
+     35→26px, so a staff menu fits a 768px laptop with More folded. */
+  padding: 9px 12px 3px;
 }
 .deck-root.shell .rail-brand-row + .rail-search + .rail-group { padding-top: 4px; }
 
@@ -186,7 +188,7 @@ html[data-rail="icons"] .deck-root.shell .rail-collapse svg { transform: scaleX(
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 9px 12px;
+  padding: 5px 12px;
   border-radius: 9999px;
   color: inherit;
   background: transparent;
@@ -202,6 +204,35 @@ html[data-rail="icons"] .deck-root.shell .rail-collapse svg { transform: scaleX(
 .deck-root.shell .shell-rail a:not(.rail-brand):focus-visible {
   outline: 2px solid #E8C24A;
   outline-offset: 1px;
+}
+
+/* Staff: the doors past the day's work wait under More (27 Nov 2026,
+   staff-first piece 6). It reads like a door, and its arrow turns when open. */
+.deck-root.shell .rail-more {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--dock-ink) 72%, transparent);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color .16s, background-color .16s;
+}
+.deck-root.shell .rail-more:hover { color: var(--dock-ink); background: rgba(243, 239, 232, 0.07); }
+.deck-root.shell .rail-more:focus-visible { outline: 2px solid #E8C24A; outline-offset: 1px; }
+.deck-root.shell .rail-more .rail-more-chev { transform-origin: 12px 12px; transition: transform .2s; }
+.deck-root.shell .rail-more[aria-expanded="true"] .rail-more-chev { transform: rotate(180deg); }
+html[data-rail="icons"] .deck-root.shell .rail-more { justify-content: center; padding: 6px; }
+html[data-rail="icons"] .deck-root.shell .rail-more .rail-label { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .deck-root.shell .rail-more .rail-more-chev { transition: none; }
 }
 /* ---------- the icons: glass tiles, a colour per section ----------
    Each icon sits in a small rounded glass tile, like an app on an iPhone
@@ -228,9 +259,9 @@ html[data-rail="icons"] .deck-root.shell .rail-collapse svg { transform: scaleX(
   position: relative;
   display: grid;
   place-items: center;
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 9px;
   color: var(--tile-ink);
   background: linear-gradient(180deg, var(--tile-a) 0%, var(--tile-b) 100%);

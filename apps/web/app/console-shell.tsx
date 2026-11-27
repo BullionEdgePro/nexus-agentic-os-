@@ -16,7 +16,10 @@ import { MotionBoot } from "./motion-boot";
 import { SoundToggle } from "./sound-toggle";
 import { play } from "@/lib/sound";
 import { RAIL_FROM_KEY, RAIL_KEY, readRailMode, type RailMode } from "@/lib/rail";
-import { NAV, NAV_GROUPS, activeHref, toneOf } from "@/lib/nav";
+import { NAV, activeHref, moreStartsOpen, railSections, toneOf, type RailSection } from "@/lib/nav";
+
+/** The browser's last choice for the staff menu's More (27 Nov 2026). */
+const MORE_KEY = "nexus.rail.more";
 import { workflowFor } from "@nexus/shared";
 import { HeaderSearch, WorkMenu, NotificationsMenu, AccountMenu } from "./header-menus";
 import { fontVariables } from "@/lib/fonts";
@@ -106,36 +109,68 @@ export function RailLinks({ role, mySlug = null }: { role: "operator" | "employe
     </a>
   );
 
-  // Render group by group, in the order the sections argue for. An item the
-  // role cannot see drops out; a group left empty by that renders no heading.
-  const visibleSet = new Set(visible.map((i) => i.href));
-  const byHref = new Map(NAV.map((i) => [i.href, i] as const));
-  const grouped = new Set<string>();
+  // Section by section, in the order the sections argue for (railSections in
+  // lib/nav.tsx): a section the role cannot see drops out, and a door no section
+  // claims still renders, under no heading. Staff find AI agent, Insights and
+  // You under More (27 Nov 2026, staff-first piece 6) — their menu was 1289px
+  // on a 768px laptop. The doors stay direct children of the rail, so the
+  // sliding highlight (RailPill) still finds the current one.
+  const sections = railSections(visible, role);
+  const [moreOpen, setMoreOpen] = useState(() => moreStartsOpen(sections.more, current));
+  useEffect(() => {
+    if (moreStartsOpen(sections.more, current)) {
+      setMoreOpen(true);
+      return;
+    }
+    try { if (window.localStorage.getItem(MORE_KEY) === "1") setMoreOpen(true); } catch { /* blocked: stays closed */ }
+    // Recomputed per page; the list itself only changes with the role.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current]);
+  // The doors below More appear and go, so the highlight measures again.
+  useEffect(() => {
+    window.dispatchEvent(new Event("nexus:rail-relayout"));
+  }, [moreOpen]);
+  const toggleMore = () => {
+    const next = !moreOpen;
+    setMoreOpen(next);
+    try { window.localStorage.setItem(MORE_KEY, next ? "1" : "0"); } catch { /* blocked: not remembered */ }
+  };
+
+  const section = (s: RailSection<(typeof NAV)[number]>) => (
+    <Fragment key={s.title || "unfiled"}>
+      {/* A quiet section label, not a control — the heading names the run
+          below it and is skipped by the tab order and the screen reader,
+          which reach the links themselves. */}
+      {s.title ? (
+        <span className="rail-group" aria-hidden="true">
+          {s.title}
+        </span>
+      ) : null}
+      {s.items.map(link)}
+    </Fragment>
+  );
 
   return (
     <>
-      {NAV_GROUPS.map((group) => {
-        const items = group.hrefs
-          .map((href) => byHref.get(href))
-          .filter((item): item is NonNullable<typeof item> => !!item && visibleSet.has(item.href));
-        if (items.length === 0) return null;
-        items.forEach((i) => grouped.add(i.href));
-        return (
-          <Fragment key={group.title}>
-            {/* A quiet section label, not a control — the heading names the run
-                below it and is skipped by the tab order and the screen reader,
-                which reach the links themselves. */}
-            <span className="rail-group" aria-hidden="true">
-              {group.title}
-            </span>
-            {items.map(link)}
-          </Fragment>
-        );
-      })}
+      {sections.main.map(section)}
 
-      {/* Any visible screen that no group claims still gets a door — a new NAV
-          entry must never be invisible just because it was not filed here. */}
-      {visible.filter((item) => !grouped.has(item.href)).map(link)}
+      {sections.more.length > 0 ? (
+        <button
+          type="button"
+          className="rail-more"
+          aria-expanded={moreOpen}
+          title={moreOpen ? "Fewer" : "More"}
+          onClick={toggleMore}
+        >
+          <span className="rail-icon" data-tone="other">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path className="rail-more-chev" d="m7 10 5 5 5-5" />
+            </svg>
+          </span>
+          <span className="rail-label">{moreOpen ? "Fewer" : "More"}</span>
+        </button>
+      ) : null}
+      {moreOpen ? sections.more.map(section) : null}
 
       {/* The account, not a destination (22 Oct 2026): sign-out sat in the
           list like a screen. It now closes the rail, under who is signed in.
@@ -303,10 +338,29 @@ function RailPill() {
     if (!reduce) pill.classList.add("sliding");
     place(current);
 
-    // Follow the link when the dock changes size: shrunk, opened, rotated phone.
-    const resize = new ResizeObserver(() => place(current));
+    // Follow the link when the dock changes size (shrunk, opened, rotated phone)
+    // or its doors change (the staff menu's More opening or closing, 27 Nov
+    // 2026): the current door is found again each time, since closing More
+    // removes it and opening More draws a new one.
+    const follow = () => {
+      const link = nav.querySelector<HTMLElement>(":scope > a.on");
+      if (!link) {
+        delete nav.dataset.pill;
+        return;
+      }
+      if (nav.dataset.pill !== "ready") {
+        pill.classList.remove("sliding");
+        nav.dataset.pill = "ready";
+      }
+      place(link);
+    };
+    const resize = new ResizeObserver(follow);
     resize.observe(nav);
-    return () => resize.disconnect();
+    window.addEventListener("nexus:rail-relayout", follow);
+    return () => {
+      resize.disconnect();
+      window.removeEventListener("nexus:rail-relayout", follow);
+    };
   }, [pathname]);
 
   return <span ref={ref} className="rail-pill" aria-hidden="true" />;
