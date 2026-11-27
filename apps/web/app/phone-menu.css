@@ -28,7 +28,9 @@
   width: 100%;
   max-height: 86vh;
   overflow-y: auto;
-  padding: 16px 16px max(18px, env(safe-area-inset-bottom));
+  /* The tab bar and Ask sit over the sheet's bottom (27 Nov 2026): the last
+     doors and Sign out scroll clear of them. */
+  padding: 16px 16px calc(96px + env(safe-area-inset-bottom));
   border-radius: 22px 22px 0 0;
   background: var(--paper);
   color: var(--ink);
@@ -53,17 +55,32 @@
   cursor: pointer;
 }
 .pmenu-search { width: 100%; text-align: left; margin-bottom: 10px; }
-.pmenu-links { display: grid; gap: 2px; }
+/* The rail's sections, each door with its tile, two to a row (27 Nov 2026,
+   staff-first piece 6) — half the length of the old single column. */
+.pmenu-group {
+  margin: 12px 4px 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+.pmenu-links { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .pmenu-links a,
 .pmenu-signout {
   display: flex;
   align-items: center;
+  gap: 10px;
   min-height: 46px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: 12px;
   color: inherit;
   text-decoration: none;
 }
+.pmenu-links a { min-width: 0; background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.pmenu-links a.on { background: color-mix(in srgb, var(--ink) 10%, transparent); font-weight: 600; }
+.pmenu-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .pmenu-links a:active,
 .pmenu-signout:active { background: rgba(22, 20, 15, 0.06); }
 .pmenu-signout {

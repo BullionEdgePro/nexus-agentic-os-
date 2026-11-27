@@ -18,7 +18,9 @@ const TABS = [
     d: "M17 9h2a2 2 0 0 1 2 2v8l-3-2h-6a2 2 0 0 1-2-2v-1M3 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7l-4 3V5Z",
   },
   { href: "/deck/tasks", label: "Follow-ups", d: "m9 11 3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" },
-  { href: "/", label: "Me", d: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 9c1-4 4-6 8-6s7 2 8 6" },
+  // "Today", with a house (27 Nov 2026, staff-first piece 6): it opens My Day —
+  // labelled "Me" with a person, it read as a profile page.
+  { href: "/", label: "Today", d: "M4 11 12 4l8 7M6 10v9a1 1 0 0 0 1 1h3.5v-5.5h3V20H17a1 1 0 0 0 1-1v-9" },
 ];
 
 export function MobileTabs() {

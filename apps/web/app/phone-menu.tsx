@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { signOutHere } from "@/lib/sign-out";
+import { activeHref, railSections, toneOf } from "@/lib/nav";
 import "./phone-menu.css";
 
 /**
@@ -13,9 +15,16 @@ import "./phone-menu.css";
  * the last. This opens the same doors the dock offers that person (visibleNav,
  * console-shell.tsx), with Search and Sign out. Shown at phone width only, by
  * the toolbar it sits in.
+ *
+ * It reads like the rail (27 Nov 2026, staff-first piece 6): the same sections
+ * in the same order (railSections, all of them — the phone has no More), each
+ * door with its tile, two to a row. It was a flat list of 17 text links in a
+ * different order, and the tab bar covered its bottom.
  */
-export function PhoneMenu({ items }: { items: Array<{ href: string; label: string }> }) {
+export function PhoneMenu({ items }: { items: Array<{ href: string; label: string; icon?: ReactNode }> }) {
   const [open, setOpen] = useState(false);
+  const current = activeHref(usePathname() ?? "/");
+  const { main, more } = railSections(items, "employee");
 
   useEffect(() => {
     if (!open) return;
@@ -53,11 +62,24 @@ export function PhoneMenu({ items }: { items: Array<{ href: string; label: strin
             >
               Search
             </button>
-            <nav className="pmenu-links" aria-label="All pages">
-              {items.map((item) => (
-                <a key={item.href} href={item.href}>
-                  {item.label}
-                </a>
+            <nav className="pmenu-nav" aria-label="All pages">
+              {[...main, ...more].map((section) => (
+                <Fragment key={section.title || "unfiled"}>
+                  {section.title ? <h3 className="pmenu-group">{section.title}</h3> : null}
+                  <div className="pmenu-links">
+                    {section.items.map((item) => (
+                      <a
+                        key={item.href}
+                        href={item.href}
+                        className={item.href === current ? "on" : undefined}
+                        aria-current={item.href === current ? "page" : undefined}
+                      >
+                        <span className="rail-icon" data-tone={toneOf(item.href)}>{item.icon}</span>
+                        <span className="pmenu-label">{item.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                </Fragment>
               ))}
             </nav>
             <a className="pmenu-signout" href="/api/auth/logout" onClick={signOutHere}>

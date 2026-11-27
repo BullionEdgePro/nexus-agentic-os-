@@ -59,6 +59,26 @@ test("the rail draws a More button, remembers it safely, and opens it on a More 
   assert.ok(storage >= 2 && guarded === storage, `localStorage used ${storage}× but guarded ${guarded}×`);
 });
 
+// ---- Task 2: the phone Menu and the Today tab --------------------------------------------------------
+
+test("the phone Menu reads like the rail: its sections, in order, each door with its tile", () => {
+  const M = read("app/phone-menu.tsx");
+  assert.match(M, /railSections\(items, "employee"\)/);
+  assert.match(M, /\[\.\.\.main, \.\.\.more\]/, "the Menu does not show every section");
+  assert.match(M, /className="pmenu-group"/);
+  assert.match(M, /<span className="rail-icon" data-tone=\{toneOf\(item\.href\)\}>\{item\.icon\}<\/span>/);
+  const css = read("app/phone-menu.css");
+  assert.match(css, /\.pmenu-links \{[^}]*grid-template-columns: 1fr 1fr;/, "not two to a row");
+  // The tab bar and Ask sit over the sheet's bottom; the last doors must scroll clear of them.
+  assert.match(css, /\.pmenu-sheet \{[^}]*padding: 16px 16px calc\(96px \+ env\(safe-area-inset-bottom\)\);/);
+});
+
+test("the home tab says Today, not Me", () => {
+  const T = read("app/mobile-tabs.tsx");
+  assert.match(T, /\{ href: "\/", label: "Today",/);
+  assert.doesNotMatch(T, /label: "Me"/);
+});
+
 test("tighter rows: 38px links, 28px tiles, slimmer section headings", () => {
   const css = read("app/console-shell.css");
   assert.match(css, /\.deck-root\.shell \.shell-rail a:not\(\.rail-brand\) \{[^}]*padding: 5px 12px;/);
