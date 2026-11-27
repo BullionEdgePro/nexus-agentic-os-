@@ -24,7 +24,7 @@ import "./phone-menu.css";
 export function PhoneMenu({ items }: { items: Array<{ href: string; label: string; icon?: ReactNode }> }) {
   const [open, setOpen] = useState(false);
   const current = activeHref(usePathname() ?? "/");
-  const { main, more } = railSections(items, "employee");
+  const { main, more } = railSections(items);
 
   useEffect(() => {
     if (!open) return;

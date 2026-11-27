@@ -15,32 +15,38 @@ const titles = (sections) => sections.map((s) => s.title);
 
 // ---- Task 1: the sections and the staff More fold --------------------------------------------------
 
-test("railSections: staff keep Home, Work and People in view; the rest go under More", () => {
-  const { railSections, STAFF_MORE_GROUPS } = nav;
+test("railSections: Home, Work and People stay in view; the rest go under More", () => {
+  const { railSections, MORE_GROUPS } = nav;
   assert.equal(typeof railSections, "function", "lib/nav exports no railSections");
-  assert.deepEqual(STAFF_MORE_GROUPS, ["AI agent", "Insights", "You"]);
+  assert.deepEqual(MORE_GROUPS, ["Grow", "AI agent", "Insights", "Admin", "You"]);
   const staff = railSections(
     items("/", "/inbox", "/deck/tasks", "/deck/customers", "/deck/knowledge", "/deck/forecast", "/deck/my-settings"),
-    "employee",
   );
   assert.deepEqual(titles(staff.main), ["Home", "Work", "People"]);
   assert.deepEqual(titles(staff.more), ["AI agent", "Insights", "You"]);
   assert.deepEqual(staff.more[0].items.map((i) => i.href), ["/deck/knowledge"]);
 });
 
-test("railSections: an admin's menu is never folded; empty sections drop; a stray door still shows", () => {
+test("railSections: an admin's menu folds the same way (27 Nov 2026, owner: \"admin too\")", () => {
   const { railSections } = nav;
-  const admin = railSections(items("/", "/deck/knowledge", "/deck/hq"), "operator");
-  assert.deepEqual(titles(admin.main), ["Home", "AI agent", "Admin"]);
-  assert.deepEqual(admin.more, []);
+  const admin = railSections(
+    items("/", "/inbox", "/deck/tasks", "/deck/activity", "/deck/bulk", "/deck/knowledge", "/deck/quality", "/deck/hq", "/deck/notifications"),
+  );
+  assert.deepEqual(titles(admin.main), ["Home", "Work", "People"]);
+  assert.deepEqual(titles(admin.more), ["Grow", "AI agent", "Insights", "Admin", "You"]);
+});
+
+test("railSections: empty sections drop; a stray door still shows", () => {
+  const { railSections } = nav;
+  assert.deepEqual(titles(railSections(items("/", "/deck/hq")).main), ["Home"]);
   // A door no section claims is never lost: it joins the main run under no heading.
-  const stray = railSections(items("/", "/deck/somewhere-new"), "employee");
+  const stray = railSections(items("/", "/deck/somewhere-new"));
   assert.deepEqual(stray.main.at(-1), { title: "", items: [{ href: "/deck/somewhere-new" }] });
 });
 
 test("moreStartsOpen: open on arrival only when the current page is one of More's doors", () => {
   const { railSections, moreStartsOpen } = nav;
-  const { more } = railSections(items("/", "/deck/knowledge", "/deck/my-settings"), "employee");
+  const { more } = railSections(items("/", "/deck/knowledge", "/deck/my-settings"));
   assert.equal(moreStartsOpen(more, "/deck/knowledge"), true);
   assert.equal(moreStartsOpen(more, "/deck/my-settings"), true);
   assert.equal(moreStartsOpen(more, "/"), false);
@@ -48,7 +54,7 @@ test("moreStartsOpen: open on arrival only when the current page is one of More'
 
 test("the rail draws a More button, remembers it safely, and opens it on a More page", () => {
   const S = read("app/console-shell.tsx");
-  assert.match(S, /railSections\(visible, role\)/);
+  assert.match(S, /railSections\(visible\)/);
   assert.match(S, /<button\s+type="button"\s+className="rail-more"\s+aria-expanded=\{moreOpen\}/);
   assert.match(S, /moreStartsOpen\(/);
   // Storage can throw (private windows, blocked site data): every touch in the rail's links is guarded.
@@ -63,7 +69,7 @@ test("the rail draws a More button, remembers it safely, and opens it on a More 
 
 test("the phone Menu reads like the rail: its sections, in order, each door with its tile", () => {
   const M = read("app/phone-menu.tsx");
-  assert.match(M, /railSections\(items, "employee"\)/);
+  assert.match(M, /railSections\(items\)/);
   assert.match(M, /\[\.\.\.main, \.\.\.more\]/, "the Menu does not show every section");
   assert.match(M, /className="pmenu-group"/);
   assert.match(M, /<span className="rail-icon" data-tone=\{toneOf\(item\.href\)\}>\{item\.icon\}<\/span>/);

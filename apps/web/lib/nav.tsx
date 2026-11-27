@@ -444,25 +444,26 @@ export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
 ];
 
 /**
- * The sections a member of staff finds under "More" (27 Nov 2026, staff-first
- * piece 6). Their menu was 1289px tall on a 768px laptop — ten of seventeen
- * doors in view, Notifications and Sign out below the fold. The day's work
- * (Home, Work, People) stays open; what shapes the agent, the reports and their
- * own settings wait one tap away. An admin's menu is never folded.
+ * The sections found under "More" (27 Nov 2026, staff-first piece 6). A staff
+ * menu was 1289px tall on a 768px laptop — ten of seventeen doors in view,
+ * Notifications and Sign out below the fold — and an admin's 23 doors were
+ * longer still. The day's work (Home, Work, People) stays open for everyone;
+ * reaching out, what shapes the agent, the reports, administration and one's
+ * own settings wait one tap away. The owner asked for the same on the admin
+ * menu ("admin too", 27 Nov 2026); Grow and Admin are sections only an admin has.
  */
-export const STAFF_MORE_GROUPS = ["AI agent", "Insights", "You"];
+export const MORE_GROUPS = ["Grow", "AI agent", "Insights", "Admin", "You"];
 
 export type RailSection<T> = { title: string; items: T[] };
 
 /**
  * The visible doors in their sections, split into what stays in view (`main`)
- * and what waits under More (`more`, staff only). A section with no door drops
- * out; a door no section claims joins `main` under no heading, so a new screen
- * is never lost because nobody filed it here.
+ * and what waits under More (`more`). A section with no door drops out; a door
+ * no section claims joins `main` under no heading, so a new screen is never
+ * lost because nobody filed it here.
  */
 export function railSections<T extends { href: string }>(
   items: T[],
-  role: "operator" | "employee",
 ): { main: RailSection<T>[]; more: RailSection<T>[] } {
   const byHref = new Map(items.map((item) => [item.href, item] as const));
   const claimed = new Set<string>();
@@ -472,8 +473,7 @@ export function railSections<T extends { href: string }>(
     const found = group.hrefs.map((href) => byHref.get(href)).filter((item): item is T => item !== undefined);
     if (found.length === 0) continue;
     found.forEach((item) => claimed.add(item.href));
-    const folded = role === "employee" && STAFF_MORE_GROUPS.includes(group.title);
-    (folded ? more : main).push({ title: group.title, items: found });
+    (MORE_GROUPS.includes(group.title) ? more : main).push({ title: group.title, items: found });
   }
   const stray = items.filter((item) => !claimed.has(item.href));
   if (stray.length > 0) main.push({ title: "", items: stray });

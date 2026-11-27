@@ -111,11 +111,12 @@ export function RailLinks({ role, mySlug = null }: { role: "operator" | "employe
 
   // Section by section, in the order the sections argue for (railSections in
   // lib/nav.tsx): a section the role cannot see drops out, and a door no section
-  // claims still renders, under no heading. Staff find AI agent, Insights and
-  // You under More (27 Nov 2026, staff-first piece 6) — their menu was 1289px
-  // on a 768px laptop. The doors stay direct children of the rail, so the
-  // sliding highlight (RailPill) still finds the current one.
-  const sections = railSections(visible, role);
+  // claims still renders, under no heading. Everything past Home, Work and
+  // People waits under More (27 Nov 2026, staff-first piece 6; admins too, the
+  // same day) — a staff menu was 1289px on a 768px laptop. The doors stay direct
+  // children of the rail, so the sliding highlight (RailPill) still finds the
+  // current one.
+  const sections = railSections(visible);
   const [moreOpen, setMoreOpen] = useState(() => moreStartsOpen(sections.more, current));
   useEffect(() => {
     if (moreStartsOpen(sections.more, current)) {
