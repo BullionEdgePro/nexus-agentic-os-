@@ -205,6 +205,7 @@ export function CardDetail({
   onSharePocket = () => {},
   onRevokePocketShare = () => {},
   onSearchBayut = async () => [],
+  agents = null,
 }: {
   workflow: Workflow;
   card: BoardCard;
@@ -235,6 +236,11 @@ export function CardDetail({
   onRevokePocketShare?: (shareId: string) => void;
   /** Bayut's deep locations for the Listing section's Bayut location (23 Nov 2026). */
   onSearchBayut?: (q: string, city: string) => Promise<BayutLocation[]>;
+  /**
+   * The business's active staff, for a unit card's Agent choice (28 Nov 2026). Null until the
+   * list arrives (or when it could not be read): the card then shows the agent's name, no choice.
+   */
+  agents?: { id: string; name: string }[] | null;
 }) {
   const fields = fieldsFor(card);
   const [draft, setDraft] = useState<Draft>(() => draftOf(card));
@@ -345,9 +351,35 @@ export function CardDetail({
           {stepName(card.step)} · {daysInStepLabel(card.inStepSince, now)} · {card.agent ? card.agent.name : "Nobody yet"}
         </p>
         {card.kind === "unit" ? (
-          <p className="wf-window-sub" dir="auto">
-            {card.owner === null ? "Owner: not recorded" : card.owner.name ? `Owner: ${card.owner.name}` : `Owner: with ${card.agent?.name ?? "a colleague"}`}
-          </p>
+          <>
+            <p className="wf-window-sub" dir="auto">
+              {card.owner === null ? "Owner: not recorded" : card.owner.name ? `Owner: ${card.owner.name}` : `Owner: with ${card.agent?.name ?? "a colleague"}`}
+            </p>
+            {/* The agent, chosen on the card (28 Nov 2026). A unit takes its agent from the staff
+                member who adds it; one an admin adds had nobody and no way to choose, and every
+                portal needs "an agent on the card". Saved at once, as the Bayut location is. */}
+            {canEdit && agents ? (
+              <label className="wf-board-agent">
+                <span>Agent</span>
+                <select
+                  aria-label="Agent"
+                  value={card.agent?.id ?? ""}
+                  onChange={(e) => void onSave({ agentEmployeeId: e.target.value || null })}
+                >
+                  <option value="">Nobody yet</option>
+                  {/* Someone who has left stays the shown choice until it is changed. */}
+                  {card.agent && !agents.some((a) => a.id === card.agent!.id) ? (
+                    <option value={card.agent.id}>{card.agent.name}</option>
+                  ) : null}
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </>
         ) : (
           <p className="wf-window-sub" dir="auto">
             {card.purpose === "rent" ? "Renting" : "Buying"}

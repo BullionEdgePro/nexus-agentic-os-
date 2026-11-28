@@ -9,6 +9,7 @@ import {
   getCardHistory,
   getContacts,
   getMe,
+  getTeam,
   getWorkflowBoard,
   linkBoardUnit,
   moveBoardCard,
@@ -86,6 +87,31 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
   const [onlyMine, setOnlyMine] = useState(false);
   /** A card named by ?card= (from My board on My Day) is opened once, on the first board. */
   const linkedCard = useRef(false);
+  /**
+   * The business's active staff, for a unit card's Agent choice (28 Nov 2026). Null until read,
+   * or when it cannot be: the card then shows the agent's name, no choice.
+   */
+  const [agents, setAgents] = useState<{ id: string; name: string }[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setAgents(null);
+    getTeam(slug)
+      .then((data) => {
+        if (cancelled) return;
+        setAgents(
+          data.employees
+            .filter((member) => member.isActive)
+            .map((member) => ({ id: member.id, name: member.fullName }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setAgents(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
   useEffect(() => {
     let cancelled = false;
     getMe()
@@ -419,6 +445,7 @@ export function WorkflowBoardPanel({ slug, audit }: { slug: BusinessSlug; audit:
             void fromWindow(current, () => revokePocketShare(slug, current.id, shareId), "Link revoked.")
           }
           onSearchBayut={(q, city) => searchBayutLocations(slug, q, city)}
+          agents={agents}
         />
       ) : null}
 

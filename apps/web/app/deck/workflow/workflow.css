@@ -331,6 +331,12 @@
   font: inherit; padding: 8px 10px; border-radius: var(--r); border: 1px solid var(--hairline); background: var(--paper); color: var(--ink); min-width: 0;
 }
 .wf-board-flag { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+/* A unit card's Agent choice, under its title (28 Nov 2026). */
+.wf-board-agent { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; font-size: 13px; font-weight: 600; color: var(--slate); }
+.wf-board-agent select {
+  font: inherit; font-weight: 500; padding: 6px 10px; border-radius: var(--r); border: 1px solid var(--hairline);
+  background: var(--paper); color: var(--ink); min-width: 0; max-width: 100%;
+}
 .wf-board-links { margin: 6px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .wf-board-links li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
 .wf-board-history { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
